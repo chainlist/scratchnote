@@ -25,10 +25,13 @@ pub enum Variant {
 }
 
 impl Variant {
+    /// Qwen publishes these models as safetensors, not GGUF, so the
+    /// quantised builds come from unsloth, which ships both at the sizes the
+    /// spec quotes. Qwen's own `Qwen3-1.7B-GGUF` only has a Q8_0.
     pub fn repo(self) -> &'static str {
         match self {
-            Variant::Default => "Qwen/Qwen3-4B-Instruct-2507-GGUF",
-            Variant::Light => "Qwen/Qwen3-1.7B-GGUF",
+            Variant::Default => "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+            Variant::Light => "unsloth/Qwen3-1.7B-GGUF",
         }
     }
 
@@ -92,6 +95,23 @@ pub fn model_file(root: &std::path::Path, variant: Variant) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// These are the exact paths the download hits. A typo here is a 401 at
+    /// runtime and nothing earlier, because Hugging Face answers 401 for a
+    /// repo that does not exist just as it does for a private one.
+    #[test]
+    fn the_catalog_points_at_the_repos_that_actually_publish_these_files() {
+        assert_eq!(
+            Variant::Default.repo(),
+            "unsloth/Qwen3-4B-Instruct-2507-GGUF"
+        );
+        assert_eq!(
+            Variant::Default.file(),
+            "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+        );
+        assert_eq!(Variant::Light.repo(), "unsloth/Qwen3-1.7B-GGUF");
+        assert_eq!(Variant::Light.file(), "Qwen3-1.7B-Q4_K_M.gguf");
+    }
 
     #[test]
     fn each_variant_names_a_repo_and_a_quantised_file() {

@@ -283,6 +283,7 @@ Counts are derived and recomputed on index rebuild. Aliases are user-editable in
 
 ### 5.2 Model management
 
+- Qwen publishes these models as safetensors, not GGUF, so the quantised builds come from `unsloth/Qwen3-4B-Instruct-2507-GGUF` and `unsloth/Qwen3-1.7B-GGUF`. Qwen's own `Qwen3-1.7B-GGUF` ships only a Q8_0. Hugging Face answers 401 for a repo that does not exist exactly as it does for a private one, so a wrong repo name surfaces as an authorization error rather than a missing one.
 - On first launch, if no model exists, show an onboarding screen: pick Default (4B, ~2.5 GB) or Light (1.7B, ~1.1 GB), then download from Hugging Face with a progress bar, resumable, with SHA-256 verification. Store in `models/`.
 - The app must be fully usable for capture while the model is downloading or absent; notes simply stay `pending`.
 - Record the resolved Hugging Face revision (commit SHA) alongside the downloaded file, so "which build of this model do I have" has an exact answer. Quant repos are re-uploaded in place, so a filename is not an identity.

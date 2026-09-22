@@ -48,7 +48,9 @@ struct Sibling {
 
 #[derive(Deserialize)]
 struct Lfs {
-    oid: String,
+    /// The content hash. Not `oid`, and not the sibling's `blobId`, which is
+    /// a git object id and says nothing about the bytes we download.
+    sha256: String,
     size: u64,
 }
 
@@ -85,7 +87,7 @@ pub async fn lookup(variant: Variant) -> Result<RemoteModel, String> {
         .await
         .map_err(|e| format!("could not reach Hugging Face: {e}"))?
         .error_for_status()
-        .map_err(|e| format!("Hugging Face refused the request: {e}"))?
+        .map_err(|e| describe_lookup_failure(repo, &e))?
         .json()
         .await
         .map_err(|e| format!("unexpected answer from Hugging Face: {e}"))?;
@@ -107,9 +109,21 @@ pub async fn lookup(variant: Variant) -> Result<RemoteModel, String> {
             info.sha
         ),
         revision: info.sha,
-        sha256: lfs.oid.clone(),
+        sha256: lfs.sha256.clone(),
         size: lfs.size,
     })
+}
+
+/// Hugging Face answers 401 both for a private repo and for one that does not
+/// exist, so the raw status is close to useless on its own.
+fn describe_lookup_failure(repo: &str, e: &reqwest::Error) -> String {
+    if e.status() == Some(reqwest::StatusCode::UNAUTHORIZED) {
+        format!(
+            "Hugging Face will not serve {repo}. It answers 401 both for repos              that need an account and for ones that do not exist, and a wrong              repo name is much the likelier of the two."
+        )
+    } else {
+        format!("Hugging Face refused the request: {e}")
+    }
 }
 
 /// Download to `<file>.part`, resuming whatever is already there, verify the
@@ -291,6 +305,29 @@ mod tests {
         assert_eq!(installed(&root, Variant::Light).unwrap().revision, "abc123");
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Hits the network, so it is opt-in: `cargo test -- --ignored`.
+    /// It is the only thing that can catch a repo being renamed or a quant
+    /// being dropped, which otherwise shows up as a 401 in front of the user.
+    #[tokio::test]
+    #[ignore = "reaches Hugging Face"]
+    async fn every_variant_resolves_on_hugging_face() {
+        for variant in [Variant::Default, Variant::Light] {
+            let remote = lookup(variant)
+                .await
+                .unwrap_or_else(|e| panic!("{} did not resolve: {e}", variant.repo()));
+
+            assert_eq!(remote.sha256.len(), 64, "{:?} hash looks wrong", variant);
+            assert!(remote.size > 0, "{:?} has no size", variant);
+            assert!(
+                remote.url.ends_with(variant.file()),
+                "{:?} resolved to {}",
+                variant,
+                remote.url
+            );
+            assert!(!remote.revision.is_empty(), "{:?} has no revision", variant);
+        }
     }
 
     #[tokio::test]

@@ -87,6 +87,26 @@ impl Index {
         self.by_date.values().map(Vec::len).sum()
     }
 
+    /// Every tag occurrence, repeats included, so the caller can count them.
+    pub fn tags(&self) -> Vec<String> {
+        self.by_date
+            .values()
+            .flatten()
+            .flat_map(|entry| entry.tags.iter().cloned())
+            .collect()
+    }
+
+    /// Notes still waiting on enrichment, oldest day first, so the queue can
+    /// be refilled at startup from what the markdown actually says.
+    pub fn pending(&self) -> Vec<(String, String)> {
+        self.by_date
+            .values()
+            .flatten()
+            .filter(|entry| entry.status == Status::Pending)
+            .map(|entry| (entry.id.clone(), entry.date.clone()))
+            .collect()
+    }
+
     pub fn to_jsonl(&self) -> String {
         let mut out = String::new();
         for entry in self.by_date.values().flatten() {

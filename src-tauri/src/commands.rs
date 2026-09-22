@@ -6,6 +6,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use ulid::Ulid;
 
+use crate::enrich::download::{self, RemoteModel};
+use crate::enrich::model::{model_file, ModelStatus, Variant};
+use crate::enrich::queue::{queue_path, Job};
 use crate::state::AppState;
 use crate::storage::daily_file::{self, Note, Status};
 use crate::storage::index::{self, IndexEntry};
@@ -64,8 +67,38 @@ pub async fn save_note(
         .append_index_line(index::index_path(&state.settings.root), line)
         .await?;
 
+    enqueue(&state, note.id.clone(), note.date.clone()).await;
+
     let _ = app.emit("note-updated", serde_json::json!({ "id": note.id }));
     Ok(Some(note))
+}
+
+/// Queue a note for enrichment and nudge the worker. Already-queued notes are
+/// left alone, so saving twice does not enrich twice.
+async fn enqueue(state: &State<'_, AppState>, id: String, date: String) {
+    let queued = match state.queue.lock() {
+        Ok(mut queue) => queue.push(Job::new(id, date)),
+        Err(_) => false,
+    };
+    if !queued {
+        return;
+    }
+    persist_queue(state).await;
+    state.wake.notify_one();
+}
+
+async fn persist_queue(state: &State<'_, AppState>) {
+    let contents = match state.queue.lock() {
+        Ok(queue) => queue.to_json(),
+        Err(_) => return,
+    };
+    if let Err(e) = state
+        .writer
+        .write_index(queue_path(&state.settings.root), contents)
+        .await
+    {
+        log::warn!("could not persist the queue: {e}");
+    }
 }
 
 /// Read straight from the markdown, because the index deliberately carries no
@@ -131,6 +164,11 @@ pub async fn delete_note(
         .write_index(index::index_path(&state.settings.root), contents)
         .await?;
 
+    if let Ok(mut queue) = state.queue.lock() {
+        queue.remove(&id);
+    }
+    persist_queue(&state).await;
+
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     Ok(())
 }
@@ -163,4 +201,86 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
 #[tauri::command]
 pub fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
+}
+
+/// Put a note back in the queue by hand, for the ones that ended up `failed`
+/// (SPEC 5.6).
+#[tauri::command]
+pub async fn retry_enrichment(
+    state: State<'_, AppState>,
+    date: String,
+    id: String,
+) -> Result<(), String> {
+    check_date(&date)?;
+    enqueue(&state, id, date).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn model_status(state: State<'_, AppState>) -> ModelStatus {
+    state.model_status()
+}
+
+/// Which model is on disk, if any, and what revision it came from.
+#[tauri::command]
+pub fn installed_model(state: State<'_, AppState>) -> Option<download::InstalledModel> {
+    for variant in [Variant::Default, Variant::Light] {
+        if let Some(record) = download::installed(&state.settings.root, variant) {
+            return Some(record);
+        }
+    }
+    None
+}
+
+/// Fetch a model and load it. Capture keeps working throughout; notes simply
+/// stay pending until this finishes (SPEC 5.2).
+#[tauri::command]
+pub async fn download_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    variant: Variant,
+) -> Result<(), String> {
+    let root = state.settings.root.clone();
+    let remote: RemoteModel = download::lookup(variant).await?;
+
+    set_status(&app, &state, ModelStatus::Downloading { percent: 0 });
+    let progress_app = app.clone();
+    let result = download::fetch(&root, variant, &remote, move |percent| {
+        let _ = progress_app.emit(
+            "model-status",
+            serde_json::json!({ "state": "downloading", "percent": percent }),
+        );
+    })
+    .await;
+
+    if let Err(e) = result {
+        set_status(&app, &state, ModelStatus::Absent);
+        return Err(e);
+    }
+
+    load_model(&app, &state, variant)
+}
+
+/// Load a model that is already on disk. Lazy loading on the first job is the
+/// normal path (SPEC 5.1); this is the eager one, after a download.
+pub fn load_model(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    variant: Variant,
+) -> Result<(), String> {
+    let path = model_file(&state.settings.root, variant);
+    let backend = crate::enrich::llama::LlamaCpp::load(&path)?;
+
+    if let Ok(mut slot) = state.backend.write() {
+        *slot = Some(std::sync::Arc::new(backend));
+    }
+    set_status(app, state, ModelStatus::Loaded);
+    // Anything that was waiting on a model can go now.
+    state.wake.notify_one();
+    Ok(())
+}
+
+fn set_status(app: &AppHandle, state: &State<'_, AppState>, status: ModelStatus) {
+    state.set_model_status(status.clone());
+    let _ = app.emit("model-status", &status);
 }

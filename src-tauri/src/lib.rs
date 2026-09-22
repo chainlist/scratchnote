@@ -1,4 +1,5 @@
 mod commands;
+mod enrich;
 mod settings;
 mod state;
 mod storage;
@@ -11,6 +12,10 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::ShortcutState;
 
+use enrich::download;
+use enrich::model::ModelStatus;
+use enrich::queue::{Job, Queue};
+use enrich::worker;
 use settings::Settings;
 use state::AppState;
 use storage::index;
@@ -38,6 +43,10 @@ pub fn run() {
             commands::list_days,
             commands::delete_note,
             commands::rebuild_index,
+            commands::retry_enrichment,
+            commands::model_status,
+            commands::installed_model,
+            commands::download_model,
             commands::today,
             hide_capture,
         ])
@@ -60,12 +69,37 @@ pub fn run() {
             let refreshed = stale.then(|| loaded.to_jsonl());
             log::info!("index holds {} notes", loaded.len());
 
+            // A model on disk is not loaded until the first job needs it
+            // (SPEC 5.1), so "idle" rather than "loaded" at startup.
+            let status = if download::installed_variant(&root).is_some() {
+                ModelStatus::Idle
+            } else {
+                ModelStatus::Absent
+            };
+
+            // The queue survives restarts, and anything still pending in the
+            // markdown is re-queued in case the queue file was lost.
+            let mut queue = Queue::load(&root);
+            for (id, date) in loaded.pending() {
+                queue.push(Job::new(id, date));
+            }
+            log::info!("{} notes waiting on enrichment", queue.len());
+
+            let wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
             let writer = Writer::spawn();
             app.manage(AppState {
                 settings,
                 writer: writer.clone(),
                 index: std::sync::RwLock::new(loaded),
+                queue: std::sync::Mutex::new(queue),
+                backend: std::sync::RwLock::new(None),
+                model_status: std::sync::RwLock::new(status),
+                wake: wake.clone(),
             });
+
+            worker::spawn(app.handle().clone(), wake.clone());
+            // Kick the worker in case the queue came back non-empty.
+            wake.notify_one();
 
             if let Some(contents) = refreshed {
                 let path = index::index_path(&root);

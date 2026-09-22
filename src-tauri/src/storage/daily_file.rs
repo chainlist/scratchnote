@@ -176,6 +176,47 @@ pub fn remove_note(content: &str, id: &str) -> Option<String> {
     Some(out)
 }
 
+/// What enrichment, or a manual edit, changes about a note. The body is never
+/// touched here, so the hash stays valid.
+#[derive(Debug, Clone)]
+pub struct NotePatch {
+    pub subject: Option<String>,
+    pub summary: Option<String>,
+    pub tags: Vec<String>,
+    pub status: Status,
+}
+
+/// Rewrite one note's block in place, keeping its body and every byte of the
+/// file outside that block. Returns `None` when the id is not in this file.
+pub fn update_note(content: &str, id: &str, patch: &NotePatch) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    let (start, end) = find_block(&lines, id)?;
+
+    let mut note = build_note(lines[start].trim(), &lines[start + 1..end], "", "")?;
+    note.subject = patch.subject.clone();
+    note.summary = patch.summary.clone();
+    note.tags = patch.tags.clone();
+    note.status = patch.status;
+
+    let replacement = render_note(&note);
+    let newline = if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+
+    let mut out: Vec<&str> = Vec::with_capacity(lines.len());
+    out.extend_from_slice(&lines[..start]);
+    out.extend(replacement.lines());
+    out.extend_from_slice(&lines[end + 1..]);
+
+    let mut joined = out.join(newline);
+    if !joined.is_empty() {
+        joined.push_str(newline);
+    }
+    Some(joined)
+}
+
 /// Line span of the block carrying `id`, opener and end marker included.
 fn find_block(lines: &[&str], id: &str) -> Option<(usize, usize)> {
     let mut start = None;
@@ -509,6 +550,76 @@ mod tests {
     fn does_not_remove_a_block_whose_end_marker_is_missing() {
         let doc = "<!-- sn:note id=01AAA time=08:00 status=pending hash=dead -->\n### (untitled)\nno end marker\n";
         assert!(remove_note(doc, "01AAA").is_none());
+    }
+
+    fn enrich_patch() -> NotePatch {
+        NotePatch {
+            subject: Some("Rollback plan for ArgoCD sync issue".to_string()),
+            summary: Some("Pin the chart version and roll back staging.".to_string()),
+            tags: vec!["argocd".to_string(), "staging".to_string()],
+            status: Status::Done,
+        }
+    }
+
+    #[test]
+    fn enrichment_replaces_the_metadata_and_keeps_the_body() {
+        let before = pending("01BBB", "09:00", "the body\nover two lines");
+        let doc = append_note("", &before, DATE);
+
+        let out = update_note(&doc, "01BBB", &enrich_patch()).expect("id is present");
+        let after = parse_one(&out);
+
+        assert_eq!(after.body, before.body, "the body must be untouched");
+        assert_eq!(after.hash, before.hash, "the hash describes the body");
+        assert_eq!(after.id, before.id);
+        assert_eq!(after.time, before.time);
+        assert_eq!(after.status, Status::Done);
+        assert_eq!(
+            after.subject.as_deref(),
+            Some("Rollback plan for ArgoCD sync issue")
+        );
+        assert_eq!(after.tags, vec!["argocd", "staging"]);
+    }
+
+    #[test]
+    fn enrichment_leaves_other_notes_and_user_prose_alone() {
+        let doc = day_with_prose();
+        let out = update_note(&doc, "01BBB", &enrich_patch()).expect("id is present");
+
+        assert!(out.starts_with("# 2026-09-22\n\nmy own notes here\n"));
+        assert!(out.contains("stray prose the user typed"));
+
+        let notes = parse_notes(&out, DATE, FILE);
+        assert_eq!(notes.len(), 3);
+        assert_eq!(notes[0].subject, None, "01AAA should be untouched");
+        assert_eq!(notes[2].subject, None, "01CCC should be untouched");
+        assert_eq!(notes[1].status, Status::Done);
+    }
+
+    #[test]
+    fn enrichment_round_trips_through_the_parser() {
+        let doc = append_note("", &pending("01BBB", "09:00", "body"), DATE);
+        let out = update_note(&doc, "01BBB", &enrich_patch()).unwrap();
+
+        // Rendering what we parsed back must produce the same bytes.
+        assert_eq!(
+            render_note(&parse_one(&out)),
+            out.trim_start_matches("# 2026-09-22\n\n")
+        );
+    }
+
+    #[test]
+    fn enrichment_keeps_crlf() {
+        let doc = append_note("", &pending("01BBB", "09:00", "body"), DATE).replace('\n', "\r\n");
+        let out = update_note(&doc, "01BBB", &enrich_patch()).unwrap();
+        assert!(!out.replace("\r\n", "").contains('\n'));
+        assert_eq!(parse_one(&out).status, Status::Done);
+    }
+
+    #[test]
+    fn updating_an_unknown_id_changes_nothing() {
+        let doc = day_with_prose();
+        assert!(update_note(&doc, "01ZZZ", &enrich_patch()).is_none());
     }
 
     #[test]

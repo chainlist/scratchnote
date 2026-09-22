@@ -52,3 +52,37 @@ export const onIndexRebuilt = (handler: () => void): Promise<UnlistenFn> =>
 /** Fired by the backend each time the capture window is brought up. */
 export const onCaptureShown = (handler: () => void): Promise<UnlistenFn> =>
 	listen('capture-shown', () => handler());
+
+export type ModelState = 'absent' | 'downloading' | 'loaded' | 'idle';
+
+export interface ModelStatus {
+	state: ModelState;
+	/** Only present while downloading. */
+	percent?: number;
+}
+
+export interface InstalledModel {
+	repo: string;
+	file: string;
+	/** Hugging Face commit the weights came from; quant repos are re-uploaded in place. */
+	revision: string;
+	sha256: string;
+}
+
+export type ModelVariant = 'default' | 'light';
+
+export const modelStatus = () => invoke<ModelStatus>('model_status');
+
+export const installedModel = () => invoke<InstalledModel | null>('installed_model');
+
+export const downloadModel = (variant: ModelVariant) => invoke<void>('download_model', { variant });
+
+export const retryEnrichment = (date: string, id: string) =>
+	invoke<void>('retry_enrichment', { date, id });
+
+/** Fired when a note has been labelled and written back. */
+export const onNoteEnriched = (handler: (id: string) => void): Promise<UnlistenFn> =>
+	listen<{ id: string }>('note-enriched', (event) => handler(event.payload.id));
+
+export const onModelStatus = (handler: (status: ModelStatus) => void): Promise<UnlistenFn> =>
+	listen<ModelStatus>('model-status', (event) => handler(event.payload));

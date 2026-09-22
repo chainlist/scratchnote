@@ -1,0 +1,21 @@
+# Enrichment output schema (SPEC 5.3) as a llama.cpp grammar.
+#
+# Sampling against this means the model cannot emit anything but a conforming
+# object: all three fields present, in this order, lengths already bounded.
+# Parsing the result is then a formality, which is what the "zero parse
+# failures" criterion in SPEC 11 asks for.
+#
+# The limits below are mirrored by the constants in grammar.rs and a test
+# fails if the two drift apart.
+
+root    ::= "{" ws "\"subject\"" ws ":" ws subject ws "," ws "\"summary\"" ws ":" ws summary ws "," ws "\"tags\"" ws ":" ws tags ws "}"
+
+subject ::= "\"" char{1,60} "\""
+summary ::= "\"" char{1,140} "\""
+
+# One tag written out, then up to four more: the 1 to 5 from the spec.
+tags    ::= "[" ws tag (ws "," ws tag){0,4} ws "]"
+tag     ::= "\"" char{1,30} "\""
+
+char    ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4})
+ws      ::= [ \t\n]*

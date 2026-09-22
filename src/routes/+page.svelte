@@ -4,19 +4,25 @@
 		deleteNote,
 		getDay,
 		listDays,
+		modelStatus,
 		onIndexRebuilt,
+		onModelStatus,
+		onNoteEnriched,
 		onNoteUpdated,
 		today,
 		type DaySummary,
+		type ModelStatus,
 		type Note
 	} from '$lib/api';
 	import DayList from '$lib/components/DayList.svelte';
 	import NoteCard from '$lib/components/NoteCard.svelte';
+	import Onboarding from '$lib/components/Onboarding.svelte';
 
 	let days = $state<DaySummary[]>([]);
 	let notes = $state<Note[]>([]);
 	let selected = $state('');
 	let error = $state<string | null>(null);
+	let model = $state<ModelStatus>({ state: 'absent' });
 
 	async function refresh() {
 		try {
@@ -50,6 +56,11 @@
 			off.push(onNoteUpdated(() => void refresh()));
 			// The watcher fires this when a daily file is edited outside the app.
 			off.push(onIndexRebuilt(() => void refresh()));
+			// Enrichment finishing rewrites the note, so the card has to reload.
+			off.push(onNoteEnriched(() => void refresh()));
+
+			model = await modelStatus();
+			off.push(onModelStatus((status) => (model = status)));
 		})();
 		return () => off.forEach((p) => void p.then((stop) => stop()));
 	});
@@ -74,6 +85,10 @@
 
 	<main class="flex-1 overflow-y-auto p-6">
 		<h2 class="mb-4 text-lg font-semibold">{heading}</h2>
+
+		{#if model.state === 'absent' || model.state === 'downloading'}
+			<Onboarding status={model} />
+		{/if}
 
 		{#if error}
 			<p class="rounded border border-red-900 bg-red-950 p-3 text-sm text-red-300">{error}</p>

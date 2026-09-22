@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{mpsc, oneshot};
 
-use super::daily_file::{self, Note};
+use super::daily_file::{self, Note, NotePatch};
 use super::fingerprint;
 
 /// Fingerprint of the last content the app wrote to each path.
@@ -31,6 +31,14 @@ enum WriteRequest {
     DeleteNote {
         path: PathBuf,
         id: String,
+        /// False when the file or the id is not there.
+        reply: oneshot::Sender<io::Result<bool>>,
+    },
+    /// Rewrite one note's metadata in place, for enrichment and manual edits.
+    UpdateNote {
+        path: PathBuf,
+        id: String,
+        patch: Box<NotePatch>,
         /// False when the file or the id is not there.
         reply: oneshot::Sender<io::Result<bool>>,
     },
@@ -75,6 +83,14 @@ impl Writer {
                     WriteRequest::DeleteNote { path, id, reply } => {
                         let _ = reply.send(delete_note(&path, &id, &seen).await);
                     }
+                    WriteRequest::UpdateNote {
+                        path,
+                        id,
+                        patch,
+                        reply,
+                    } => {
+                        let _ = reply.send(update_note(&path, &id, &patch, &seen).await);
+                    }
                     WriteRequest::WriteIndex {
                         path,
                         contents,
@@ -116,6 +132,26 @@ impl Writer {
         let (reply, response) = oneshot::channel();
         self.send(WriteRequest::DeleteNote { path, id, reply }, response)
             .await
+    }
+
+    /// Returns false when the file or the id is not there.
+    pub async fn update_note(
+        &self,
+        path: PathBuf,
+        id: String,
+        patch: NotePatch,
+    ) -> Result<bool, String> {
+        let (reply, response) = oneshot::channel();
+        self.send(
+            WriteRequest::UpdateNote {
+                path,
+                id,
+                patch: Box::new(patch),
+                reply,
+            },
+            response,
+        )
+        .await
     }
 
     pub async fn write_index(&self, path: PathBuf, contents: String) -> Result<(), String> {
@@ -168,6 +204,26 @@ async fn delete_note(path: &Path, id: &str, seen: &SelfWrites) -> io::Result<boo
         Err(e) => return Err(e),
     };
     match daily_file::remove_note(&existing, id) {
+        Some(updated) => {
+            write_atomic(path, &updated, seen).await?;
+            Ok(true)
+        }
+        None => Ok(false),
+    }
+}
+
+async fn update_note(
+    path: &Path,
+    id: &str,
+    patch: &NotePatch,
+    seen: &SelfWrites,
+) -> io::Result<bool> {
+    let existing = match tokio::fs::read_to_string(path).await {
+        Ok(contents) => contents,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    match daily_file::update_note(&existing, id, patch) {
         Some(updated) => {
             write_atomic(path, &updated, seen).await?;
             Ok(true)

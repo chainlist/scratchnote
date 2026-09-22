@@ -190,6 +190,57 @@ mod tests {
         assert!(enrich("note", &Vocabulary::default(), &backend).is_err());
     }
 
+    /// SPEC 12's optional integration test, and the only thing that checks
+    /// SPEC 11's "zero parse failures" against a real sampler rather than a
+    /// stub. Needs a downloaded model; run with `cargo test -- --ignored`.
+    #[test]
+    #[ignore = "needs a downloaded model"]
+    fn the_real_model_returns_schema_valid_json_for_every_sample() {
+        use crate::enrich::download;
+        use crate::enrich::llama::LlamaCpp;
+        use crate::enrich::model::model_file;
+
+        let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
+        else {
+            eprintln!("no home directory, skipping");
+            return;
+        };
+        let root = std::path::PathBuf::from(home).join("Scratchnote");
+
+        let Some(variant) = download::installed_variant(&root) else {
+            eprintln!("no model installed, skipping");
+            return;
+        };
+
+        let backend = LlamaCpp::load(&model_file(&root, variant)).expect("the model should load");
+        let vocabulary = Vocabulary::default();
+
+        for body in samples().iter().take(5) {
+            let out = enrich(body, &vocabulary, &backend)
+                .unwrap_or_else(|e| panic!("{body:?} failed: {e}"));
+
+            assert!(!out.subject.trim().is_empty(), "empty subject for {body:?}");
+            assert!(!out.summary.trim().is_empty(), "empty summary for {body:?}");
+            assert!(
+                (1..=5).contains(&out.tags.len()),
+                "{} tags for {body:?}: {:?}",
+                out.tags.len(),
+                out.tags
+            );
+            for tag in &out.tags {
+                assert!(
+                    tag.chars().all(|c| c.is_alphanumeric() || c == '-'),
+                    "tag {tag:?} is not normalised for {body:?}"
+                );
+            }
+            eprintln!(
+                "{body:?}
+  -> {} | {:?}",
+                out.subject, out.tags
+            );
+        }
+    }
+
     #[test]
     fn the_failed_patch_keeps_what_was_already_there() {
         let mut note = pending("01AAA", "body");

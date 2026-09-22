@@ -80,8 +80,10 @@ impl LlamaCpp {
         let mut decoder = encoding_rs::UTF_8.new_decoder();
 
         for position in (tokens.len() as i32..).take(MAX_OUTPUT_TOKENS as usize) {
+            // `sample` already accepts the token internally. Accepting it
+            // again here advances the grammar twice per token, which desyncs
+            // its stacks and aborts inside llama_grammar_reject_candidates.
             let token = sampler.sample(&context, -1);
-            sampler.accept(token);
 
             if self.model.is_eog_token(token) {
                 break;

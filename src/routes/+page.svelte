@@ -4,6 +4,7 @@
 		deleteNote,
 		getDay,
 		listDays,
+		onIndexRebuilt,
 		onNoteUpdated,
 		today,
 		type DaySummary,
@@ -41,14 +42,16 @@
 	}
 
 	onMount(() => {
-		let unlisten: Promise<() => void> | undefined;
+		const off: Promise<() => void>[] = [];
 		void (async () => {
 			selected = await today();
 			await refresh();
 			// A note saved from the capture window lands in another webview.
-			unlisten = onNoteUpdated(() => void refresh());
+			off.push(onNoteUpdated(() => void refresh()));
+			// The watcher fires this when a daily file is edited outside the app.
+			off.push(onIndexRebuilt(() => void refresh()));
 		})();
-		return () => void unlisten?.then((off) => off());
+		return () => off.forEach((p) => void p.then((stop) => stop()));
 	});
 
 	const heading = $derived(

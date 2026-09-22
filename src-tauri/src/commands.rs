@@ -1,5 +1,5 @@
-//! Tauri commands. Milestone 1 covers capture and browsing only; enrichment,
-//! search and editing commands arrive with their milestones.
+//! Tauri commands. Milestones 1 and 2 cover capture, browsing and the index;
+//! enrichment, tags and search arrive with their milestones.
 
 use chrono::Local;
 use serde::Serialize;
@@ -8,7 +8,8 @@ use ulid::Ulid;
 
 use crate::state::AppState;
 use crate::storage::daily_file::{self, Note, Status};
-use crate::storage::day_path;
+use crate::storage::index::{self, IndexEntry};
+use crate::storage::{check_date, day_path, relative_day_path};
 
 #[derive(Debug, Serialize)]
 pub struct DaySummary {
@@ -34,7 +35,7 @@ pub async fn save_note(
     let note = Note {
         id: Ulid::generate().to_string(),
         time: now.format("%H:%M").to_string(),
-        file: crate::storage::relative_day_path(&date),
+        file: relative_day_path(&date),
         subject: None,
         summary: None,
         tags: Vec::new(),
@@ -49,60 +50,58 @@ pub async fn save_note(
         .append_note(day_path(&state.settings.root, &date), date, note.clone())
         .await?;
 
+    // A new note only ever adds a line, so the index is appended rather than
+    // rewritten. This is the capture path and it has a latency budget.
+    let entry = IndexEntry::from(&note);
+    let line = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
+    state
+        .index
+        .write()
+        .map_err(|_| "index lock poisoned".to_string())?
+        .push(entry);
+    state
+        .writer
+        .append_index_line(index::index_path(&state.settings.root), line)
+        .await?;
+
     let _ = app.emit("note-updated", serde_json::json!({ "id": note.id }));
     Ok(Some(note))
 }
 
+/// Read straight from the markdown, because the index deliberately carries no
+/// bodies and the day view shows them.
 #[tauri::command]
 pub async fn get_day(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
     check_date(&date)?;
-    let mut notes = read_day(&state, &date).await?;
+    let path = day_path(&state.settings.root, &date);
+    let contents = match tokio::fs::read_to_string(&path).await {
+        Ok(contents) => contents,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e.to_string()),
+    };
+    let mut notes = daily_file::parse_notes(&contents, &date, &relative_day_path(&date));
     notes.sort_by(|a, b| a.time.cmp(&b.time));
     Ok(notes)
 }
 
-/// Days that have a file on disk, newest first. Milestone 2 replaces this
-/// directory walk with the index.
 #[tauri::command]
 pub async fn list_days(state: State<'_, AppState>) -> Result<Vec<DaySummary>, String> {
-    let notes_dir = state.settings.root.join("notes");
-    let mut days = Vec::new();
-
-    let mut years = match tokio::fs::read_dir(&notes_dir).await {
-        Ok(entries) => entries,
-        Err(_) => return Ok(days),
-    };
-    while let Some(year) = years.next_entry().await.map_err(|e| e.to_string())? {
-        if !year.path().is_dir() {
-            continue;
-        }
-        let mut files = tokio::fs::read_dir(year.path())
-            .await
-            .map_err(|e| e.to_string())?;
-        while let Some(file) = files.next_entry().await.map_err(|e| e.to_string())? {
-            let path = file.path();
-            let Some(date) = path.file_stem().and_then(|s| s.to_str()) else {
-                continue;
-            };
-            if path.extension().and_then(|e| e.to_str()) != Some("md") || check_date(date).is_err()
-            {
-                continue;
-            }
-            let date = date.to_string();
-            let count = read_day(&state, &date).await?.len();
-            days.push(DaySummary { date, count });
-        }
-    }
-
-    days.sort_by(|a, b| b.date.cmp(&a.date));
-    Ok(days)
+    let days = state
+        .index
+        .read()
+        .map_err(|_| "index lock poisoned".to_string())?
+        .days();
+    Ok(days
+        .into_iter()
+        .map(|(date, count)| DaySummary { date, count })
+        .collect())
 }
 
 /// Remove a note from its day file.
 ///
 /// The spec's signature is `delete_note(id)`, which needs the index to resolve
-/// an id to a file. Until milestone 2 builds that, the caller passes the date
-/// it already has rather than making this walk every daily file on disk.
+/// an id to a file. The caller passes the date it already has rather than
+/// making this search every day in the index.
 #[tauri::command]
 pub async fn delete_note(
     app: AppHandle,
@@ -111,69 +110,57 @@ pub async fn delete_note(
     id: String,
 ) -> Result<(), String> {
     check_date(&date)?;
-    let deleted = state
-        .writer
-        .delete_note(day_path(&state.settings.root, &date), id.clone())
-        .await?;
-    if !deleted {
+    let path = day_path(&state.settings.root, &date);
+    if !state.writer.delete_note(path.clone(), id.clone()).await? {
         return Err(format!("no note {id} in {date}"));
     }
+
+    // A delete rewrites the day file, so the day's entries are reparsed and
+    // the whole index written back (SPEC 4.4).
+    let entries = index::parse_day(&path, &date);
+    let contents = {
+        let mut idx = state
+            .index
+            .write()
+            .map_err(|_| "index lock poisoned".to_string())?;
+        idx.replace_day(&date, entries);
+        idx.to_jsonl()
+    };
+    state
+        .writer
+        .write_index(index::index_path(&state.settings.root), contents)
+        .await?;
+
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     Ok(())
+}
+
+/// Reparse every markdown file and replace the cache. Returns how many notes
+/// the rebuilt index holds.
+#[tauri::command]
+pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
+    let root = state.settings.root.clone();
+    let rebuilt = tauri::async_runtime::spawn_blocking(move || index::rebuild(&root))
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let count = rebuilt.len();
+    let contents = rebuilt.to_jsonl();
+    *state
+        .index
+        .write()
+        .map_err(|_| "index lock poisoned".to_string())? = rebuilt;
+
+    state
+        .writer
+        .write_index(index::index_path(&state.settings.root), contents)
+        .await?;
+
+    let _ = app.emit("index-rebuilt", ());
+    Ok(count)
 }
 
 #[tauri::command]
 pub fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
-}
-
-async fn read_day(state: &State<'_, AppState>, date: &str) -> Result<Vec<Note>, String> {
-    let path = day_path(&state.settings.root, date);
-    let contents = match tokio::fs::read_to_string(&path).await {
-        Ok(contents) => contents,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(e.to_string()),
-    };
-    Ok(daily_file::parse_notes(
-        &contents,
-        date,
-        &crate::storage::relative_day_path(date),
-    ))
-}
-
-/// Guards the `YYYY-MM-DD` shape the file layout is built on, so a bad date
-/// cannot reach into the filesystem.
-fn check_date(date: &str) -> Result<(), String> {
-    let ok = date.len() == 10
-        && date.as_bytes()[4] == b'-'
-        && date.as_bytes()[7] == b'-'
-        && date.char_indices().all(|(i, c)| {
-            if i == 4 || i == 7 {
-                c == '-'
-            } else {
-                c.is_ascii_digit()
-            }
-        });
-    if ok {
-        Ok(())
-    } else {
-        Err(format!("not a YYYY-MM-DD date: {date}"))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::check_date;
-
-    #[test]
-    fn accepts_a_well_formed_date() {
-        assert!(check_date("2026-09-22").is_ok());
-    }
-
-    #[test]
-    fn rejects_anything_that_could_escape_the_notes_directory() {
-        for bad in ["", "2026-9-22", "2026/09/22", "../../etc", "2026-09-2x"] {
-            assert!(check_date(bad).is_err(), "{bad} should be rejected");
-        }
-    }
 }

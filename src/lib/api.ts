@@ -39,8 +39,15 @@ export const today = () => invoke<string>('today');
 
 export const hideCapture = () => invoke<void>('hide_capture');
 
+/** Reparses every markdown file and replaces the cache. Returns the note count. */
+export const rebuildIndex = () => invoke<number>('rebuild_index');
+
 export const onNoteUpdated = (handler: (id: string) => void): Promise<UnlistenFn> =>
 	listen<{ id: string }>('note-updated', (event) => handler(event.payload.id));
+
+/** Fired after a rebuild, and after the watcher picks up an external edit. */
+export const onIndexRebuilt = (handler: () => void): Promise<UnlistenFn> =>
+	listen('index-rebuilt', () => handler());
 
 /** Fired by the backend each time the capture window is brought up. */
 export const onCaptureShown = (handler: () => void): Promise<UnlistenFn> =>

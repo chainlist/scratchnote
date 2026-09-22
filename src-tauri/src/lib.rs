@@ -2,6 +2,7 @@ mod commands;
 mod settings;
 mod state;
 mod storage;
+mod watcher;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -12,6 +13,7 @@ use tauri_plugin_global_shortcut::ShortcutState;
 
 use settings::Settings;
 use state::AppState;
+use storage::index;
 use storage::writer::Writer;
 
 const CAPTURE: &str = "capture";
@@ -35,6 +37,7 @@ pub fn run() {
             commands::get_day,
             commands::list_days,
             commands::delete_note,
+            commands::rebuild_index,
             commands::today,
             hide_capture,
         ])
@@ -49,14 +52,41 @@ pub fn run() {
 
             let settings = Settings::load(app.handle());
             let hotkey = settings.capture_hotkey.clone();
+            let root = settings.root.clone();
+
+            // Load the cache, reparsing any day whose file is newer. Done
+            // before the windows exist so the first list_days is already right.
+            let (loaded, stale) = index::load(&root);
+            let refreshed = stale.then(|| loaded.to_jsonl());
+            log::info!("index holds {} notes", loaded.len());
+
+            let writer = Writer::spawn();
             app.manage(AppState {
                 settings,
-                writer: Writer::spawn(),
+                writer: writer.clone(),
+                index: std::sync::RwLock::new(loaded),
             });
+
+            if let Some(contents) = refreshed {
+                let path = index::index_path(&root);
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = writer.write_index(path, contents).await {
+                        log::warn!("could not write the index back: {e}");
+                    }
+                });
+            }
 
             build_capture_window(app.handle())?;
             build_tray(app.handle())?;
             keep_main_window_alive(app.handle());
+
+            // Held in state purely to keep it alive; dropping it stops watching.
+            match watcher::start(app.handle().clone(), root) {
+                Ok(watching) => {
+                    app.manage(watching);
+                }
+                Err(e) => log::error!("could not watch the notes directory: {e}"),
+            }
 
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;

@@ -43,6 +43,22 @@ Never hand-write configuration files (`package.json`, `svelte.config.js`, `vite.
 
 Editing a generated file is allowed only for the specific changes listed in this section, and only after the installer has created it. If a step seems to need a config file that no installer produced, stop and ask instead of creating it.
 
+### Step 0: Windows build prerequisites
+`llama-cpp-2` compiles llama.cpp from source, so the machine needs a native
+toolchain before milestone 3. None of this is required for milestones 0 to 2.
+
+- **LLVM**, for the `libclang` that `bindgen` loads. `winget install LLVM.LLVM`.
+- **An MSVC C++ toolset that CMake can find.** CMake selects the newest
+  registered Visual Studio instance and does not check whether it actually has
+  a C++ toolset, so an IDE installed without the "Desktop development with C++"
+  workload makes the build fail with `could not find any instance of Visual
+  Studio` even when another install has a perfectly good compiler. Either give
+  the newest instance that workload, or set
+  `CMAKE_GENERATOR="Visual Studio 17 2022"` to point CMake at an older one.
+
+`vswhere -all` lists every registered instance; without `-all` it hides Build
+Tools installs, which makes a working toolchain look absent.
+
 ### Step 1: Create the SvelteKit app with `sv create`
 
 ```bash

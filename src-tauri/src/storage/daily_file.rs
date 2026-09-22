@@ -1,0 +1,385 @@
+//! Parser and renderer for the daily markdown file, the source of truth.
+//!
+//! Note blocks are delimited by `<!-- sn:note ... -->` / `<!-- sn:end -->`.
+//! Parsing relies only on those markers, so anything the user writes between
+//! blocks is never interpreted and never touched.
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+const NOTE_OPEN: &str = "<!-- sn:note ";
+const NOTE_END: &str = "<!-- sn:end -->";
+const UNTITLED: &str = "(untitled)";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Status {
+    Pending,
+    Done,
+    Failed,
+    Manual,
+}
+
+impl Status {
+    fn as_str(self) -> &'static str {
+        match self {
+            Status::Pending => "pending",
+            Status::Done => "done",
+            Status::Failed => "failed",
+            Status::Manual => "manual",
+        }
+    }
+
+    fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "pending" => Some(Status::Pending),
+            "done" => Some(Status::Done),
+            "failed" => Some(Status::Failed),
+            "manual" => Some(Status::Manual),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Note {
+    pub id: String,
+    pub date: String,
+    pub time: String,
+    pub file: String,
+    pub subject: Option<String>,
+    pub summary: Option<String>,
+    pub tags: Vec<String>,
+    pub status: Status,
+    pub hash: String,
+    pub body: String,
+}
+
+/// First 8 hex chars of SHA-256 over the trimmed body.
+pub fn body_hash(body: &str) -> String {
+    let digest = Sha256::digest(body.trim().as_bytes());
+    digest[..4].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+pub fn render_note(note: &Note) -> String {
+    let mut out = format!(
+        "{}id={} time={} status={} hash={} -->\n",
+        NOTE_OPEN,
+        note.id,
+        note.time,
+        note.status.as_str(),
+        note.hash
+    );
+    out.push_str("### ");
+    out.push_str(note.subject.as_deref().unwrap_or(UNTITLED));
+    out.push('\n');
+    if let Some(summary) = &note.summary {
+        out.push_str("> ");
+        out.push_str(summary);
+        out.push('\n');
+        out.push_str("> ");
+        for (i, tag) in note.tags.iter().enumerate() {
+            if i > 0 {
+                out.push(' ');
+            }
+            out.push('#');
+            out.push_str(tag);
+        }
+        out.push_str("\n\n");
+    }
+    out.push_str(note.body.trim_end());
+    out.push('\n');
+    out.push_str(NOTE_END);
+    out.push('\n');
+    out
+}
+
+/// Append a rendered note, preserving every existing byte of the file.
+pub fn append_note(existing: &str, note: &Note, date: &str) -> String {
+    let mut out = if existing.trim().is_empty() {
+        format!("# {date}\n")
+    } else {
+        existing.to_string()
+    };
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    if !out.ends_with("\n\n") {
+        out.push('\n');
+    }
+    out.push_str(&render_note(note));
+    out
+}
+
+/// Parse every well-formed note block. Malformed blocks are skipped rather
+/// than guessed at, so a broken marker costs one note and not the whole day.
+pub fn parse_notes(content: &str, date: &str, file: &str) -> Vec<Note> {
+    let mut notes = Vec::new();
+    let mut open: Option<(&str, Vec<&str>)> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(NOTE_OPEN) && trimmed.ends_with("-->") {
+            // A second opener before an end marker means the previous block was
+            // never closed; drop it.
+            open = Some((trimmed, Vec::new()));
+        } else if trimmed == NOTE_END {
+            if let Some((header, block)) = open.take() {
+                if let Some(note) = build_note(header, &block, date, file) {
+                    notes.push(note);
+                }
+            }
+        } else if let Some((_, block)) = open.as_mut() {
+            block.push(line);
+        }
+    }
+
+    notes
+}
+
+fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<Note> {
+    let attrs = header.strip_prefix(NOTE_OPEN)?.strip_suffix("-->")?.trim();
+
+    let (mut id, mut time, mut status, mut hash) = (None, None, None, None);
+    for pair in attrs.split_whitespace() {
+        match pair.split_once('=') {
+            Some(("id", v)) => id = Some(v.to_string()),
+            Some(("time", v)) => time = Some(v.to_string()),
+            Some(("status", v)) => status = Status::parse(v),
+            Some(("hash", v)) => hash = Some(v.to_string()),
+            _ => {}
+        }
+    }
+
+    let (subject, summary, tags, body) = parse_block(block);
+
+    Some(Note {
+        id: id?,
+        date: date.to_string(),
+        time: time?,
+        file: file.to_string(),
+        subject,
+        summary,
+        tags,
+        status: status.unwrap_or(Status::Pending),
+        hash: hash.unwrap_or_else(|| body_hash(&body)),
+        body,
+    })
+}
+
+fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, Vec<String>, String) {
+    let mut rest = block;
+
+    let subject = match rest.first().and_then(|l| l.strip_prefix("### ")) {
+        Some(raw) => {
+            let raw = raw.trim();
+            rest = &rest[1..];
+            if raw == UNTITLED {
+                None
+            } else {
+                Some(raw.to_string())
+            }
+        }
+        None => None,
+    };
+
+    // The enrichment block is exactly two blockquote lines, the second holding
+    // the tags. Requiring that shape keeps a body that merely starts with a
+    // quote from being swallowed.
+    let mut summary = None;
+    let mut tags = Vec::new();
+    if rest.len() >= 2 && rest[0].starts_with("> ") && rest[1].starts_with("> #") {
+        summary = Some(rest[0][2..].trim().to_string());
+        tags = rest[1][2..]
+            .split_whitespace()
+            .map(|t| t.trim_start_matches('#'))
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        rest = &rest[2..];
+    }
+
+    if rest.first().is_some_and(|l| l.trim().is_empty()) {
+        rest = &rest[1..];
+    }
+
+    (
+        subject,
+        summary,
+        tags,
+        rest.join("\n").trim_end().to_string(),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FILE: &str = "notes/2026/2026-09-22.md";
+    const DATE: &str = "2026-09-22";
+
+    fn pending(id: &str, time: &str, body: &str) -> Note {
+        Note {
+            id: id.to_string(),
+            date: DATE.to_string(),
+            time: time.to_string(),
+            file: FILE.to_string(),
+            subject: None,
+            summary: None,
+            tags: Vec::new(),
+            status: Status::Pending,
+            hash: body_hash(body),
+            body: body.to_string(),
+        }
+    }
+
+    fn enriched() -> Note {
+        Note {
+            subject: Some("Rollback plan for ArgoCD sync issue".to_string()),
+            summary: Some(
+                "Decided to pin the chart version and roll back staging before Friday.".to_string(),
+            ),
+            tags: vec![
+                "argocd".to_string(),
+                "deployment".to_string(),
+                "staging".to_string(),
+            ],
+            status: Status::Done,
+            ..pending(
+                "01J8Z3K6Q9X2",
+                "14:32",
+                "Talked with the team, the auto-sync broke staging again.\nWe pin the chart version and roll back before Friday release.",
+            )
+        }
+    }
+
+    fn parse_one(content: &str) -> Note {
+        let notes = parse_notes(content, DATE, FILE);
+        assert_eq!(notes.len(), 1, "expected one note in {content:?}");
+        notes.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn hash_is_eight_hex_chars_over_the_trimmed_body() {
+        let h = body_hash("  hello  ");
+        assert_eq!(h.len(), 8);
+        assert_eq!(h, body_hash("hello"));
+        assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn round_trips_a_pending_note() {
+        let note = pending(
+            "01J8Z4P1M7T0",
+            "15:10",
+            "Buy a new USB-C hub for the homelab",
+        );
+        assert_eq!(parse_one(&render_note(&note)), note);
+    }
+
+    #[test]
+    fn round_trips_an_enriched_note() {
+        let note = enriched();
+        assert_eq!(parse_one(&render_note(&note)), note);
+    }
+
+    #[test]
+    fn round_trips_a_multiline_body() {
+        let note = pending(
+            "01J8Z4P1M7T1",
+            "09:01",
+            "line one\n\nline three\n### not a heading",
+        );
+        assert_eq!(parse_one(&render_note(&note)), note);
+    }
+
+    #[test]
+    fn renders_the_layout_given_in_the_spec() {
+        let note = enriched();
+        let expected = format!(
+            concat!(
+                "<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 status=done hash={} -->\n",
+                "### Rollback plan for ArgoCD sync issue\n",
+                "> Decided to pin the chart version and roll back staging before Friday.\n",
+                "> #argocd #deployment #staging\n",
+                "\n",
+                "Talked with the team, the auto-sync broke staging again.\n",
+                "We pin the chart version and roll back before Friday release.\n",
+                "<!-- sn:end -->\n",
+            ),
+            note.hash
+        );
+        assert_eq!(render_note(&note), expected);
+    }
+
+    #[test]
+    fn renders_a_pending_note_without_a_summary_block() {
+        let rendered = render_note(&pending("01J8Z4P1M7T0", "15:10", "Buy a USB-C hub"));
+        assert!(rendered.contains("### (untitled)\nBuy a USB-C hub\n"));
+        assert!(!rendered.lines().any(|l| l.starts_with("> ")));
+    }
+
+    #[test]
+    fn preserves_user_text_between_blocks() {
+        let mut doc = String::from("# 2026-09-22\n\nmy own notes here\n\n");
+        doc.push_str(&render_note(&pending("01AAA", "08:00", "first")));
+        doc.push_str("\nstray prose the user typed\n\n");
+        doc.push_str(&render_note(&pending("01BBB", "09:00", "second")));
+
+        let notes = parse_notes(&doc, DATE, FILE);
+        assert_eq!(notes.len(), 2);
+        assert_eq!(notes[0].body, "first");
+        assert_eq!(notes[1].body, "second");
+
+        // Appending must leave every earlier byte alone.
+        let appended = append_note(&doc, &pending("01CCC", "10:00", "third"), DATE);
+        assert!(appended.starts_with(&doc));
+        assert!(appended.contains("stray prose the user typed"));
+    }
+
+    #[test]
+    fn a_body_starting_with_a_blockquote_is_not_read_as_enrichment() {
+        let note = pending("01DDD", "11:00", "> quoted thought\n> and more");
+        let parsed = parse_one(&render_note(&note));
+        assert_eq!(parsed.summary, None);
+        assert_eq!(parsed, note);
+    }
+
+    #[test]
+    fn skips_a_block_with_no_end_marker() {
+        let doc = format!(
+            "# 2026-09-22\n\n<!-- sn:note id=01EEE time=08:00 status=pending hash=deadbeef -->\n### (untitled)\ndangling\n\n{}",
+            render_note(&pending("01FFF", "09:00", "intact"))
+        );
+        let notes = parse_notes(&doc, DATE, FILE);
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].id, "01FFF");
+    }
+
+    #[test]
+    fn skips_a_block_missing_required_attributes() {
+        let doc =
+            "<!-- sn:note time=08:00 status=pending -->\n### (untitled)\nno id\n<!-- sn:end -->\n";
+        assert!(parse_notes(doc, DATE, FILE).is_empty());
+    }
+
+    #[test]
+    fn defaults_unknown_status_to_pending_and_recomputes_a_missing_hash() {
+        let doc = "<!-- sn:note id=01GGG time=08:00 status=wat -->\n### (untitled)\nbody text\n<!-- sn:end -->\n";
+        let note = parse_one(doc);
+        assert_eq!(note.status, Status::Pending);
+        assert_eq!(note.hash, body_hash("body text"));
+    }
+
+    #[test]
+    fn parses_an_empty_file_as_no_notes() {
+        assert!(parse_notes("", DATE, FILE).is_empty());
+        assert!(parse_notes("# 2026-09-22\n", DATE, FILE).is_empty());
+    }
+
+    #[test]
+    fn appends_a_day_header_to_a_new_file() {
+        let out = append_note("", &pending("01HHH", "08:00", "first"), DATE);
+        assert!(out.starts_with("# 2026-09-22\n\n<!-- sn:note "));
+    }
+}

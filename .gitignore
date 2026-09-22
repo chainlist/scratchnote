@@ -21,3 +21,8 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Tauri build output (also ignored by src-tauri/.gitignore; listed here so
+# eslint, which reads this file, skips it too)
+/src-tauri/target/
+/src-tauri/gen/

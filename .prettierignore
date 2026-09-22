@@ -7,3 +7,12 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Build output
+/build/
+/src-tauri/target/
+/src-tauri/gen/
+
+# Owned by the Tauri CLI, which rewrites them on `tauri add`
+/src-tauri/tauri.conf.json
+/src-tauri/capabilities/

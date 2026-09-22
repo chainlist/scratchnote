@@ -28,6 +28,12 @@ export const getDay = (date: string) => invoke<Note[]>('get_day', { date });
 
 export const listDays = () => invoke<DaySummary[]>('list_days');
 
+/**
+ * The spec's signature is `delete_note(id)`; the date comes along until the
+ * milestone 2 index can resolve an id to a file on its own.
+ */
+export const deleteNote = (date: string, id: string) => invoke<void>('delete_note', { date, id });
+
 /** Today in the local timezone, matching how the backend picks a daily file. */
 export const today = () => invoke<string>('today');
 

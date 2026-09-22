@@ -98,6 +98,30 @@ pub async fn list_days(state: State<'_, AppState>) -> Result<Vec<DaySummary>, St
     Ok(days)
 }
 
+/// Remove a note from its day file.
+///
+/// The spec's signature is `delete_note(id)`, which needs the index to resolve
+/// an id to a file. Until milestone 2 builds that, the caller passes the date
+/// it already has rather than making this walk every daily file on disk.
+#[tauri::command]
+pub async fn delete_note(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    date: String,
+    id: String,
+) -> Result<(), String> {
+    check_date(&date)?;
+    let deleted = state
+        .writer
+        .delete_note(day_path(&state.settings.root, &date), id.clone())
+        .await?;
+    if !deleted {
+        return Err(format!("no note {id} in {date}"));
+    }
+    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    Ok(())
+}
+
 #[tauri::command]
 pub fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()

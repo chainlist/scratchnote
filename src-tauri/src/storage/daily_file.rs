@@ -137,6 +137,68 @@ pub fn parse_notes(content: &str, date: &str, file: &str) -> Vec<Note> {
     notes
 }
 
+/// Remove one note block by id. Works on lines rather than reparsing and
+/// re-rendering the file, so every other byte, including the user's own prose
+/// and any hand edits inside other blocks, is carried across verbatim.
+/// Returns `None` when the id is not in this file.
+pub fn remove_note(content: &str, id: &str) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    let (start, end) = find_block(&lines, id)?;
+
+    // Also take the blank line the writer puts between blocks, or deleting
+    // would leave a growing gap. Prefer the one after the block; fall back to
+    // the one before it when the block was last.
+    let mut first = start;
+    let mut last = end;
+    if lines.get(end + 1).is_some_and(|l| l.trim().is_empty()) {
+        last = end + 1;
+    } else if end + 1 == lines.len() && start > 0 && lines[start - 1].trim().is_empty() {
+        first = start - 1;
+    }
+
+    // `lines()` strips line endings, so rejoin with whatever the file used.
+    // An external Windows editor may well have rewritten it as CRLF.
+    let newline = if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let kept: Vec<&str> = lines[..first]
+        .iter()
+        .chain(&lines[last + 1..])
+        .copied()
+        .collect();
+
+    let mut out = kept.join(newline);
+    if !out.is_empty() {
+        out.push_str(newline);
+    }
+    Some(out)
+}
+
+/// Line span of the block carrying `id`, opener and end marker included.
+fn find_block(lines: &[&str], id: &str) -> Option<(usize, usize)> {
+    let mut start = None;
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(NOTE_OPEN) && trimmed.ends_with("-->") {
+            // A non-matching opener clears the candidate, which also drops a
+            // previous block that was never closed.
+            start = header_id(trimmed).filter(|found| *found == id).map(|_| i);
+        } else if trimmed == NOTE_END {
+            if let Some(start) = start {
+                return Some((start, i));
+            }
+        }
+    }
+    None
+}
+
+fn header_id(header: &str) -> Option<&str> {
+    let attrs = header.strip_prefix(NOTE_OPEN)?.strip_suffix("-->")?.trim();
+    attrs.split_whitespace().find_map(|p| p.strip_prefix("id="))
+}
+
 fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<Note> {
     let attrs = header.strip_prefix(NOTE_OPEN)?.strip_suffix("-->")?.trim();
 
@@ -375,6 +437,78 @@ mod tests {
     fn parses_an_empty_file_as_no_notes() {
         assert!(parse_notes("", DATE, FILE).is_empty());
         assert!(parse_notes("# 2026-09-22\n", DATE, FILE).is_empty());
+    }
+
+    /// Three notes with the user's own prose wrapped around them.
+    fn day_with_prose() -> String {
+        let mut doc = String::from("# 2026-09-22\n\nmy own notes here\n\n");
+        doc.push_str(&render_note(&pending("01AAA", "08:00", "first")));
+        doc.push('\n');
+        doc.push_str(&render_note(&pending("01BBB", "09:00", "second")));
+        doc.push_str("\nstray prose the user typed\n\n");
+        doc.push_str(&render_note(&pending("01CCC", "10:00", "third")));
+        doc
+    }
+
+    #[test]
+    fn removes_only_the_named_block() {
+        let out = remove_note(&day_with_prose(), "01BBB").expect("id is present");
+        let left = parse_notes(&out, DATE, FILE);
+        assert_eq!(
+            left.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(),
+            ["01AAA", "01CCC"]
+        );
+        assert!(!out.contains("01BBB"));
+    }
+
+    #[test]
+    fn removing_a_block_keeps_the_user_prose_around_it() {
+        let out = remove_note(&day_with_prose(), "01BBB").expect("id is present");
+        assert!(out.starts_with("# 2026-09-22\n\nmy own notes here\n"));
+        assert!(out.contains("stray prose the user typed"));
+    }
+
+    #[test]
+    fn removing_a_block_does_not_leave_a_growing_gap() {
+        let out = remove_note(&day_with_prose(), "01BBB").expect("id is present");
+        assert!(!out.contains("\n\n\n"), "blank lines piled up:\n{out}");
+    }
+
+    #[test]
+    fn removes_the_last_block_without_stranding_a_blank_line() {
+        let out = remove_note(&day_with_prose(), "01CCC").expect("id is present");
+        assert!(out.ends_with("stray prose the user typed\n"), "got:\n{out}");
+    }
+
+    #[test]
+    fn removes_the_only_block() {
+        let doc = append_note("", &pending("01AAA", "08:00", "alone"), DATE);
+        let out = remove_note(&doc, "01AAA").expect("id is present");
+        assert_eq!(out, "# 2026-09-22\n");
+        assert!(parse_notes(&out, DATE, FILE).is_empty());
+    }
+
+    #[test]
+    fn keeps_crlf_when_the_file_uses_it() {
+        let doc = day_with_prose().replace('\n', "\r\n");
+        let out = remove_note(&doc, "01BBB").expect("id is present");
+        assert!(out.contains("\r\n"));
+        assert!(
+            !out.replace("\r\n", "").contains('\n'),
+            "a bare LF survived in a CRLF file"
+        );
+        assert_eq!(parse_notes(&out, DATE, FILE).len(), 2);
+    }
+
+    #[test]
+    fn returns_none_for_an_id_that_is_not_there() {
+        assert!(remove_note(&day_with_prose(), "01ZZZ").is_none());
+    }
+
+    #[test]
+    fn does_not_remove_a_block_whose_end_marker_is_missing() {
+        let doc = "<!-- sn:note id=01AAA time=08:00 status=pending hash=dead -->\n### (untitled)\nno end marker\n";
+        assert!(remove_note(doc, "01AAA").is_none());
     }
 
     #[test]

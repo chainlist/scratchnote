@@ -34,6 +34,7 @@ pub fn run() {
             commands::save_note,
             commands::get_day,
             commands::list_days,
+            commands::delete_note,
             commands::today,
             hide_capture,
         ])

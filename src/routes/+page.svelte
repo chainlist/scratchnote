@@ -1,6 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getDay, listDays, onNoteUpdated, today, type DaySummary, type Note } from '$lib/api';
+	import {
+		deleteNote,
+		getDay,
+		listDays,
+		onNoteUpdated,
+		today,
+		type DaySummary,
+		type Note
+	} from '$lib/api';
 	import DayList from '$lib/components/DayList.svelte';
 	import NoteCard from '$lib/components/NoteCard.svelte';
 
@@ -21,6 +29,15 @@
 	async function select(date: string) {
 		selected = date;
 		await refresh();
+	}
+
+	async function remove(note: Note) {
+		try {
+			await deleteNote(note.date, note.id);
+			await refresh();
+		} catch (e) {
+			error = String(e);
+		}
 	}
 
 	onMount(() => {
@@ -66,7 +83,7 @@
 		{:else}
 			<ul class="flex flex-col gap-3">
 				{#each notes as note (note.id)}
-					<li><NoteCard {note} /></li>
+					<li><NoteCard {note} ondelete={remove} /></li>
 				{/each}
 			</ul>
 		{/if}

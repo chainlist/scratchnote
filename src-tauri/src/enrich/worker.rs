@@ -14,7 +14,6 @@ use crate::storage::daily_file::{self, Status};
 use crate::storage::{day_path, index, relative_day_path};
 
 use super::model::{Backend, TIMEOUT_SECS};
-use super::normalize::Vocabulary;
 use super::queue::{queue_path, Job};
 use super::runner;
 
@@ -107,7 +106,7 @@ async fn run(app: &AppHandle, job: Job, backend: Arc<dyn Backend>) {
         return;
     }
 
-    let vocabulary = vocabulary(app);
+    let vocabulary = state.vocabulary();
     let body = note.body.clone();
     let started_with = note.hash.clone();
 
@@ -165,22 +164,6 @@ fn read_note(path: &std::path::Path, job: &Job) -> Option<daily_file::Note> {
         .find(|note| note.id == job.id)
 }
 
-/// Tags already in use, so the model reaches for those before inventing more.
-/// Milestone 4 replaces this with `tags.json`.
-fn vocabulary(app: &AppHandle) -> Vocabulary {
-    let state = app.state::<AppState>();
-    let mut counts = std::collections::HashMap::new();
-    if let Ok(index) = state.index.read() {
-        for tag in index.tags() {
-            *counts.entry(tag).or_insert(0) += 1;
-        }
-    }
-    Vocabulary {
-        counts,
-        aliases: Default::default(),
-    }
-}
-
 async fn write_back(app: &AppHandle, job: &Job, patch: &daily_file::NotePatch) {
     let state = app.state::<AppState>();
     let path = day_path(&state.settings.root, &job.date);
@@ -195,18 +178,13 @@ async fn write_back(app: &AppHandle, job: &Job, patch: &daily_file::NotePatch) {
     }
 
     let entries = index::parse_day(&path, &job.date);
-    let contents = {
+    {
         let Ok(mut idx) = state.index.write() else {
             return;
         };
         idx.replace_day(&job.date, entries);
-        idx.to_jsonl()
-    };
-    if let Err(e) = state
-        .writer
-        .write_index(index::index_path(&state.settings.root), contents)
-        .await
-    {
+    }
+    if let Err(e) = state.persist_index().await {
         log::warn!("could not persist the index after enriching: {e}");
     }
 }

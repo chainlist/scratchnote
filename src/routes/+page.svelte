@@ -4,11 +4,13 @@
 		deleteNote,
 		getDay,
 		listDays,
+		listTags,
 		modelStatus,
 		onIndexRebuilt,
 		onModelStatus,
 		onNoteEnriched,
 		onNoteUpdated,
+		search,
 		today,
 		type DaySummary,
 		type ModelStatus,
@@ -17,25 +19,69 @@
 	import DayList from '$lib/components/DayList.svelte';
 	import NoteCard from '$lib/components/NoteCard.svelte';
 	import Onboarding from '$lib/components/Onboarding.svelte';
+	import SearchBar from '$lib/components/SearchBar.svelte';
+	import TagList from '$lib/components/TagList.svelte';
 
 	let days = $state<DaySummary[]>([]);
 	let notes = $state<Note[]>([]);
 	let selected = $state('');
 	let error = $state<string | null>(null);
 	let model = $state<ModelStatus>({ state: 'absent' });
+	let tags = $state<[string, number][]>([]);
+	let query = $state('');
+	let results = $state<Note[]>([]);
 
-	async function refresh() {
+	const searching = $derived(query.trim() !== '');
+	const activeTags = $derived(
+		query
+			.split(/\s+/)
+			.filter((token) => token.startsWith('#'))
+			.map((token) => token.slice(1).toLowerCase())
+	);
+
+	// Only the latest query's answer is kept, so a slow reply to an earlier
+	// keystroke cannot overwrite a newer one.
+	let searchRun = 0;
+	async function runSearch() {
+		const run = ++searchRun;
+		if (!searching) {
+			results = [];
+			return;
+		}
 		try {
-			[days, notes] = await Promise.all([listDays(), getDay(selected)]);
-			error = null;
+			const found = await search(query);
+			if (run === searchRun) results = found;
 		} catch (e) {
 			error = String(e);
 		}
 	}
 
+	$effect(() => {
+		void query;
+		void runSearch();
+	});
+
+	async function refresh() {
+		try {
+			[days, notes, tags] = await Promise.all([listDays(), getDay(selected), listTags()]);
+			error = null;
+		} catch (e) {
+			error = String(e);
+		}
+		await runSearch();
+	}
+
 	async function select(date: string) {
 		selected = date;
+		query = '';
 		await refresh();
+	}
+
+	/** Adds the tag to the search, or takes it out again if it is already there. */
+	function toggleTag(tag: string) {
+		const tokens = query.split(/\s+/).filter(Boolean);
+		const kept = tokens.filter((token) => token.toLowerCase() !== `#${tag}`);
+		query = (kept.length === tokens.length ? [...tokens, `#${tag}`] : kept).join(' ');
 	}
 
 	async function remove(note: Note) {
@@ -80,11 +126,25 @@
 <div class="flex h-screen bg-neutral-950 text-neutral-100">
 	<aside class="w-56 shrink-0 overflow-y-auto border-r border-neutral-800 p-3">
 		<h1 class="mb-4 px-2 text-sm font-semibold">Scratchnote</h1>
-		<DayList {days} {selected} onselect={select} />
+		<div class="flex flex-col gap-6">
+			<DayList {days} selected={searching ? '' : selected} onselect={select} />
+			<TagList {tags} active={activeTags} onselect={toggleTag} />
+		</div>
 	</aside>
 
 	<main class="flex-1 overflow-y-auto p-6">
-		<h2 class="mb-4 text-lg font-semibold">{heading}</h2>
+		<div class="mb-4">
+			<SearchBar bind:value={query} />
+		</div>
+
+		<h2 class="mb-4 text-lg font-semibold">
+			{#if searching}
+				{results.length}
+				{results.length === 1 ? 'result' : 'results'}
+			{:else}
+				{heading}
+			{/if}
+		</h2>
 
 		{#if model.state === 'absent' || model.state === 'downloading'}
 			<Onboarding status={model} />
@@ -94,14 +154,24 @@
 			<p class="rounded border border-red-900 bg-red-950 p-3 text-sm text-red-300">{error}</p>
 		{/if}
 
-		{#if notes.length === 0}
+		{#if searching}
+			{#if results.length === 0}
+				<p class="text-sm text-neutral-600">No notes match.</p>
+			{:else}
+				<ul class="flex flex-col gap-3">
+					{#each results as note (note.id)}
+						<li><NoteCard {note} ondelete={remove} ontag={toggleTag} showDate /></li>
+					{/each}
+				</ul>
+			{/if}
+		{:else if notes.length === 0}
 			<p class="text-sm text-neutral-600">
 				Nothing captured. Press Ctrl+Shift+Space to write a note.
 			</p>
 		{:else}
 			<ul class="flex flex-col gap-3">
 				{#each notes as note (note.id)}
-					<li><NoteCard {note} ondelete={remove} /></li>
+					<li><NoteCard {note} ondelete={remove} ontag={toggleTag} /></li>
 				{/each}
 			</ul>
 		{/if}

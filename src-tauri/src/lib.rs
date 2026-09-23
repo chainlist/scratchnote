@@ -1,5 +1,6 @@
 mod commands;
 mod enrich;
+mod search;
 mod settings;
 mod state;
 mod storage;
@@ -18,8 +19,8 @@ use enrich::queue::{Job, Queue};
 use enrich::worker;
 use settings::Settings;
 use state::AppState;
-use storage::index;
 use storage::writer::Writer;
+use storage::{index, tags};
 
 const CAPTURE: &str = "capture";
 const MAIN: &str = "main";
@@ -41,6 +42,8 @@ pub fn run() {
             commands::save_note,
             commands::get_day,
             commands::list_days,
+            commands::list_tags,
+            commands::search,
             commands::delete_note,
             commands::rebuild_index,
             commands::retry_enrichment,
@@ -66,7 +69,9 @@ pub fn run() {
             // Load the cache, reparsing any day whose file is newer. Done
             // before the windows exist so the first list_days is already right.
             let (loaded, stale) = index::load(&root);
-            let refreshed = stale.then(|| loaded.to_jsonl());
+            // tags.json is written alongside the index, so a missing one means
+            // the counts were never written, not that there are no tags.
+            let refresh = stale || !tags::tags_path(&root).exists();
             log::info!("index holds {} notes", loaded.len());
 
             // A model on disk is not loaded until the first job needs it
@@ -86,11 +91,11 @@ pub fn run() {
             log::info!("{} notes waiting on enrichment", queue.len());
 
             let wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
-            let writer = Writer::spawn();
             app.manage(AppState {
                 settings,
-                writer: writer.clone(),
+                writer: Writer::spawn(),
                 index: std::sync::RwLock::new(loaded),
+                aliases: std::sync::RwLock::new(tags::load_aliases(&root)),
                 queue: std::sync::Mutex::new(queue),
                 backend: std::sync::RwLock::new(None),
                 model_status: std::sync::RwLock::new(status),
@@ -101,10 +106,10 @@ pub fn run() {
             // Kick the worker in case the queue came back non-empty.
             wake.notify_one();
 
-            if let Some(contents) = refreshed {
-                let path = index::index_path(&root);
+            if refresh {
+                let app = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = writer.write_index(path, contents).await {
+                    if let Err(e) = app.state::<AppState>().persist_index().await {
                         log::warn!("could not write the index back: {e}");
                     }
                 });

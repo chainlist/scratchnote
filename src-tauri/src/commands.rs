@@ -1,5 +1,4 @@
-//! Tauri commands. Milestones 1 and 2 cover capture, browsing and the index;
-//! enrichment, tags and search arrive with their milestones.
+//! Tauri commands, SPEC 8.
 
 use chrono::Local;
 use serde::Serialize;
@@ -12,6 +11,7 @@ use crate::enrich::queue::{queue_path, Job};
 use crate::state::AppState;
 use crate::storage::daily_file::{self, Note, Status};
 use crate::storage::index::{self, IndexEntry};
+use crate::storage::tags;
 use crate::storage::{check_date, day_path, relative_day_path};
 
 #[derive(Debug, Serialize)]
@@ -151,18 +151,12 @@ pub async fn delete_note(
     // A delete rewrites the day file, so the day's entries are reparsed and
     // the whole index written back (SPEC 4.4).
     let entries = index::parse_day(&path, &date);
-    let contents = {
-        let mut idx = state
-            .index
-            .write()
-            .map_err(|_| "index lock poisoned".to_string())?;
-        idx.replace_day(&date, entries);
-        idx.to_jsonl()
-    };
     state
-        .writer
-        .write_index(index::index_path(&state.settings.root), contents)
-        .await?;
+        .index
+        .write()
+        .map_err(|_| "index lock poisoned".to_string())?
+        .replace_day(&date, entries);
+    state.persist_index().await?;
 
     if let Ok(mut queue) = state.queue.lock() {
         queue.remove(&id);
@@ -183,19 +177,41 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
         .map_err(|e| e.to_string())?;
 
     let count = rebuilt.len();
-    let contents = rebuilt.to_jsonl();
     *state
         .index
         .write()
         .map_err(|_| "index lock poisoned".to_string())? = rebuilt;
-
-    state
-        .writer
-        .write_index(index::index_path(&state.settings.root), contents)
-        .await?;
+    // Aliases are hand-edited in tags.json, so a rebuild is also when edits
+    // made there are picked up.
+    if let Ok(mut aliases) = state.aliases.write() {
+        *aliases = tags::load_aliases(&state.settings.root);
+    }
+    state.persist_index().await?;
 
     let _ = app.emit("index-rebuilt", ());
     Ok(count)
+}
+
+/// Every tag in use with how many notes carry it, most used first.
+#[tauri::command]
+pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<(String, u32)>, String> {
+    let counts = state
+        .index
+        .read()
+        .map_err(|_| "index lock poisoned".to_string())?
+        .tag_counts();
+    Ok(tags::by_count(&counts))
+}
+
+/// Words and `#tag` filters across every day (SPEC 6).
+#[tauri::command]
+pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, String> {
+    let aliases = state.aliases();
+    let idx = state
+        .index
+        .read()
+        .map_err(|_| "index lock poisoned".to_string())?;
+    Ok(crate::search::search(&idx, &query, &aliases))
 }
 
 #[tauri::command]

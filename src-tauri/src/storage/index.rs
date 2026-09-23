@@ -5,7 +5,7 @@
 //! day whose file is newer than the cache. Deleting `.scratchnote/` costs
 //! nothing but the time to reparse.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 use super::daily_file::{self, Note, Status};
 use super::{check_date, relative_day_path};
 
-/// One note, minus its body. Search loads bodies separately (SPEC 6).
+/// One note. The body is held in memory for search (SPEC 6) but never written
+/// to `index.jsonl`, which stays a small metadata cache.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IndexEntry {
     pub id: String,
@@ -26,10 +27,24 @@ pub struct IndexEntry {
     pub tags: Vec<String>,
     pub status: Status,
     pub hash: String,
+    #[serde(skip)]
+    pub body: String,
+    /// Subject, summary and body folded for matching, computed once here so a
+    /// search does not fold ten thousand bodies per keystroke.
+    #[serde(skip)]
+    pub folded: String,
 }
 
 impl From<&Note> for IndexEntry {
     fn from(note: &Note) -> Self {
+        let folded = crate::search::fold(&format!(
+            "{}
+{}
+{}",
+            note.subject.as_deref().unwrap_or(""),
+            note.summary.as_deref().unwrap_or(""),
+            note.body
+        ));
         Self {
             id: note.id.clone(),
             date: note.date.clone(),
@@ -40,6 +55,25 @@ impl From<&Note> for IndexEntry {
             tags: note.tags.clone(),
             status: note.status,
             hash: note.hash.clone(),
+            body: note.body.clone(),
+            folded,
+        }
+    }
+}
+
+impl IndexEntry {
+    pub fn to_note(&self) -> Note {
+        Note {
+            id: self.id.clone(),
+            date: self.date.clone(),
+            time: self.time.clone(),
+            file: self.file.clone(),
+            subject: self.subject.clone(),
+            summary: self.summary.clone(),
+            tags: self.tags.clone(),
+            status: self.status,
+            hash: self.hash.clone(),
+            body: self.body.clone(),
         }
     }
 }
@@ -87,13 +121,31 @@ impl Index {
         self.by_date.values().map(Vec::len).sum()
     }
 
-    /// Every tag occurrence, repeats included, so the caller can count them.
-    pub fn tags(&self) -> Vec<String> {
-        self.by_date
-            .values()
-            .flatten()
-            .flat_map(|entry| entry.tags.iter().cloned())
-            .collect()
+    /// How many notes carry each tag. Derived, like everything else here.
+    pub fn tag_counts(&self) -> HashMap<String, u32> {
+        let mut counts = HashMap::new();
+        for tag in self.entries().flat_map(|entry| entry.tags.iter()) {
+            *counts.entry(tag.clone()).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = &IndexEntry> {
+        self.by_date.values().flatten()
+    }
+
+    /// Fill in bodies for a day whose metadata came from the cache, which by
+    /// design never holds them.
+    fn attach_bodies(&mut self, date: &str, parsed: Vec<IndexEntry>) {
+        let Some(cached) = self.by_date.get_mut(date) else {
+            return;
+        };
+        for entry in cached {
+            if let Some(fresh) = parsed.iter().find(|p| p.id == entry.id) {
+                entry.body = fresh.body.clone();
+                entry.folded = fresh.folded.clone();
+            }
+        }
     }
 
     /// Notes still waiting on enrichment, oldest day first, so the queue can
@@ -202,10 +254,14 @@ pub fn load(root: &Path) -> (Index, bool) {
     let files = daily_files(root);
     let mut changed = false;
 
+    // Every file is read either way, because search needs the bodies in
+    // memory (SPEC 6). The mtime only decides whose metadata to trust.
     for (date, file) in &files {
         if modified_at(file) > cached_at {
             index.replace_day(date, parse_day(file, date));
             changed = true;
+        } else {
+            index.attach_bodies(date, parse_day(file, date));
         }
     }
 
@@ -295,6 +351,42 @@ mod tests {
         );
         assert_eq!(value["file"], "notes/2026/2026-09-22.md");
         assert_eq!(value["status"], "pending");
+    }
+
+    #[test]
+    fn bodies_come_back_from_the_markdown_when_the_cache_is_fresh() {
+        let root = scratch_root("fresh-cache-bodies");
+        write_day(
+            &root,
+            "2026-09-22",
+            &[note("01AAA", "2026-09-22", "08:00", "the body")],
+        );
+        let cache = index_path(&root);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, rebuild(&root).to_jsonl()).unwrap();
+
+        let (index, changed) = load(&root);
+        assert!(!changed, "a fresh cache needs no write back");
+        let entry = index.entries().next().unwrap();
+        assert_eq!(entry.body, "the body");
+        assert!(entry.folded.contains("the body"));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn counts_each_tag_once_per_note() {
+        let mut index = Index::default();
+        let mut a = note("01AAA", "2026-09-22", "08:00", "a");
+        a.tags = vec!["infra".into(), "k8s".into()];
+        let mut b = note("01BBB", "2026-09-23", "08:00", "b");
+        b.tags = vec!["infra".into()];
+        index.push(IndexEntry::from(&a));
+        index.push(IndexEntry::from(&b));
+
+        let counts = index.tag_counts();
+        assert_eq!(counts["infra"], 2);
+        assert_eq!(counts["k8s"], 1);
     }
 
     #[test]

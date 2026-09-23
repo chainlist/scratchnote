@@ -1,5 +1,6 @@
 pub mod daily_file;
 pub mod index;
+pub mod tags;
 pub mod writer;
 
 use std::path::{Path, PathBuf};

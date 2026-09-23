@@ -28,6 +28,12 @@ export const getDay = (date: string) => invoke<Note[]>('get_day', { date });
 
 export const listDays = () => invoke<DaySummary[]>('list_days');
 
+/** Every tag in use and how many notes carry it, most used first. */
+export const listTags = () => invoke<[string, number][]>('list_tags');
+
+/** Words must all appear; `#tag` tokens are AND filters. Newest first. */
+export const search = (query: string) => invoke<Note[]>('search', { query });
+
 /**
  * The spec's signature is `delete_note(id)`; the date comes along until the
  * milestone 2 index can resolve an id to a file on its own.

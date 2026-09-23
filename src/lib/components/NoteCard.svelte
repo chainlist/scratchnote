@@ -1,7 +1,18 @@
 <script lang="ts">
 	import type { Note } from '$lib/api';
 
-	let { note, ondelete }: { note: Note; ondelete: (note: Note) => void } = $props();
+	let {
+		note,
+		ondelete,
+		ontag,
+		showDate = false
+	}: {
+		note: Note;
+		ondelete: (note: Note) => void;
+		ontag: (tag: string) => void;
+		/** Search results span days, so each card says which one. */
+		showDate?: boolean;
+	} = $props();
 
 	// The status chip is also the delete affordance: clicking it swaps the
 	// label to Delete, and clicking again removes the note. Deleting rewrites
@@ -27,7 +38,9 @@
 	onmouseleave={() => (armed = false)}
 >
 	<header class="mb-1 flex items-baseline gap-3">
-		<time class="font-mono text-xs text-neutral-500">{note.time}</time>
+		<time class="font-mono text-xs text-neutral-500">
+			{#if showDate}<span class="mr-1">{note.date}</span>{/if}{note.time}
+		</time>
 		<h3 class="flex-1 text-sm font-medium text-neutral-100">
 			{note.subject ?? 'Untitled'}
 		</h3>
@@ -57,8 +70,14 @@
 	{#if note.tags.length > 0}
 		<ul class="mb-2 flex flex-wrap gap-1">
 			{#each note.tags as tag (tag)}
-				<li class="rounded bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-400">
-					#{tag}
+				<li>
+					<button
+						type="button"
+						onclick={() => ontag(tag)}
+						class="cursor-pointer rounded bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200"
+					>
+						#{tag}
+					</button>
 				</li>
 			{/each}
 		</ul>

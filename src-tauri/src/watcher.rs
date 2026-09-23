@@ -104,14 +104,9 @@ fn reindex(app: &AppHandle, path: &Path) -> bool {
 
     // Persist the refreshed cache. Failing to write it is not fatal: the file
     // is derived, and startup reparses anything newer than it.
-    let contents = match state.index.read() {
-        Ok(idx) => idx.to_jsonl(),
-        Err(_) => return false,
-    };
-    let writer = state.writer.clone();
-    let index_file = index::index_path(&state.settings.root);
+    let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = writer.write_index(index_file, contents).await {
+        if let Err(e) = app.state::<AppState>().persist_index().await {
             log::warn!("could not persist the index after an external edit: {e}");
         }
     });

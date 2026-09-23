@@ -34,8 +34,8 @@ const GENRE_TAGS: [&str; 11] = [
     "comparison",
 ];
 
-/// What the tags are normalised against. Milestone 4 fills this from
-/// `tags.json`; until then it is whatever the index already holds.
+/// What the tags are normalised against: counts from the index, aliases from
+/// `tags.json`.
 #[derive(Debug, Default)]
 pub struct Vocabulary {
     pub counts: HashMap<String, u32>,
@@ -94,7 +94,7 @@ fn drop_genre_tags(tags: Vec<String>) -> Vec<String> {
 /// Step 1. Lowercase, trim, strip a leading `#`, spaces and underscores become
 /// hyphens, and anything that is not a letter, digit or hyphen goes. Letters
 /// are Unicode, so `réunion` survives intact.
-fn clean(raw: &str) -> Option<String> {
+pub(crate) fn clean(raw: &str) -> Option<String> {
     let mut cleaned = String::with_capacity(raw.len());
     let mut last_was_hyphen = false;
 

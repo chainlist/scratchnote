@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod bench;
 pub mod download;
 pub mod grammar;
 pub mod idle;

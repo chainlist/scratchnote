@@ -217,7 +217,7 @@ mod tests {
             aliases: Default::default(),
         };
 
-        let cases: [(&str, &[&str]); 2] = [
+        let cases: [(&str, &[&str]); 3] = [
             (
                 "Translation issue with the API request, and prefer to go from API to pure json file",
                 &["translation", "api", "json"],
@@ -225,6 +225,10 @@ mod tests {
             (
                 "The grammar crashed because sampler.accept was called twice per token in the Rust decode loop of llama.cpp",
                 &["grammar", "rust"],
+            ),
+            (
+                "Is Scratchnote app replacing Balise? I don't think so, they don't serve de same purpose. Though they are complementary",
+                &["scratchnote", "balise"],
             ),
         ];
 
@@ -243,7 +247,9 @@ mod tests {
                 }
             }
             assert!(
-                !out.tags.iter().any(|t| t == "issue" || t == "sync"),
+                !out.tags
+                    .iter()
+                    .any(|t| ["issue", "sync", "comparison"].contains(&t.as_str())),
                 "a genre tag survived: {:?}",
                 out.tags
             );
@@ -257,6 +263,60 @@ mod tests {
   "
             )
         );
+    }
+
+    /// An existing tag is a spelling to reuse, not a list to pick from. With a
+    /// real vocabulary on offer, a note about a memory leak came back tagged
+    /// `tools` and `ux` because those were there, and without `memory` or
+    /// `leak`. Needs a model; `cargo test -- --ignored`.
+    #[test]
+    #[ignore = "needs a downloaded model"]
+    fn does_not_pad_with_existing_tags_that_do_not_fit() {
+        let Some(backend) = load_installed_model() else {
+            return;
+        };
+
+        // The vocabulary as it stood when the bad tags appeared.
+        let vocabulary = Vocabulary {
+            counts: [
+                ("test", 4u32),
+                ("plan", 3),
+                ("scratchnote", 2),
+                ("sync", 2),
+                ("tools", 2),
+                ("ux", 2),
+                ("argocd", 1),
+                ("balise", 1),
+                ("bandwidth", 1),
+                ("documentation", 1),
+                ("migration", 1),
+                ("primeng", 1),
+                ("rollback", 1),
+                ("translation", 1),
+            ]
+            .into_iter()
+            .map(|(t, c)| (t.to_string(), c))
+            .collect(),
+            aliases: Default::default(),
+        };
+
+        let note = "memory burst usage of Scratchnote to check if there's a memory leak";
+        let out = enrich(note, &vocabulary, backend.as_ref()).expect("should label");
+        eprintln!("{note}\n  -> {} | {:?}", out.subject, out.tags);
+
+        assert!(out.tags.iter().any(|t| t == "scratchnote"), "{:?}", out.tags);
+        assert!(
+            out.tags.iter().any(|t| t.contains("memory") || t.contains("leak")),
+            "the topic is missing: {:?}",
+            out.tags
+        );
+        for unrelated in ["tools", "ux"] {
+            assert!(
+                !out.tags.iter().any(|t| t == unrelated),
+                "padded with {unrelated}: {:?}",
+                out.tags
+            );
+        }
     }
 
     /// Shared by the tests that need real weights.

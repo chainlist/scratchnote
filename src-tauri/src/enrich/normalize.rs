@@ -20,8 +20,18 @@ const FUZZY_MIN_LEN: usize = 5;
 /// are in the vocabulary the prompt's "reuse an existing tag" pull keeps
 /// electing them for everything. The prompt already discourages these; this
 /// makes it certain.
-const GENRE_TAGS: [&str; 9] = [
-    "issue", "plan", "update", "sync", "task", "note", "todo", "misc", "general",
+const GENRE_TAGS: [&str; 11] = [
+    "issue",
+    "plan",
+    "update",
+    "sync",
+    "task",
+    "note",
+    "todo",
+    "misc",
+    "general",
+    "question",
+    "comparison",
 ];
 
 /// What the tags are normalised against. Milestone 4 fills this from
@@ -277,7 +287,10 @@ mod tests {
     fn drops_tags_that_name_the_kind_of_note() {
         let vocabulary = Vocabulary::default();
         assert_eq!(
-            normalized(&["issue", "grammar", "sync", "llama"], &vocabulary),
+            normalized(
+                &["issue", "grammar", "sync", "comparison", "llama"],
+                &vocabulary
+            ),
             vec!["grammar", "llama"]
         );
     }

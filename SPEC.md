@@ -325,10 +325,16 @@ You label short personal notes. Return JSON only.
 - subject: a short title, max 8 words, no trailing punctuation.
 - summary: one sentence, max 20 words, stating the key point or action.
 - tags: 1 to 5 lowercase tags, single words or kebab-case. Tag what the note is
-  about: technologies, tools, projects, people, places, topics. Do not tag what
-  kind of note it is, such as issue, plan, update, sync, task or note.
-Reuse a tag from the EXISTING TAGS list when it genuinely describes this note.
-When none of them fit, make a new tag rather than forcing a poor match.
+  about: technologies, tools, projects, people, places, topics. When the note
+  names a specific project, product, tool, person or place, tag it by that name,
+  then add the topics it covers. Prefer the specific name over a broad category
+  like tools or software.
+  Do not tag what kind of note it is, such as issue, plan, update, sync, task,
+  note, question or comparison.
+First decide the note's topics from its own words. EXISTING TAGS only tells
+you how a topic is already spelled: when one of your topics is there, use that
+spelling. Never add a tag just because it is in the list. When none of them fit,
+make a new tag rather than forcing a poor match.
 Write subject and summary in the same language as the note.
 ```
 
@@ -351,7 +357,8 @@ Applied to every tag the model returns, in order:
 4. If a new tag is within Levenshtein distance 1 of an existing tag of length ≥ 5, map it to the existing one.
 5. Deduplicate; cap at 5.
 6. Drop tags that name the kind of note rather than its subject (`issue`, `plan`,
-   `update`, `sync`, `task`, `note`, `todo`, `misc`, `general`), unless that would
+   `update`, `sync`, `task`, `note`, `todo`, `misc`, `general`, `question`,
+   `comparison`), unless that would
    leave the note with none. These are worthless for browsing because every note
    is one of them, and once a few are in the vocabulary the "reuse an existing
    tag" instruction keeps electing them for everything. The prompt discourages

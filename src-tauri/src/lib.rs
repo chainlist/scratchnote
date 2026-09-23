@@ -16,7 +16,7 @@ use tauri_plugin_global_shortcut::ShortcutState;
 use enrich::download;
 use enrich::model::ModelStatus;
 use enrich::queue::{Job, Queue};
-use enrich::worker;
+use enrich::{idle, worker};
 use settings::Settings;
 use state::AppState;
 use storage::writer::Writer;
@@ -114,10 +114,12 @@ pub fn run() {
                 backend: std::sync::RwLock::new(None),
                 model_status: std::sync::RwLock::new(status),
                 swapping: std::sync::atomic::AtomicBool::new(false),
+                last_used: std::sync::Mutex::new(std::time::Instant::now()),
                 wake: wake.clone(),
             });
 
             worker::spawn(app.handle().clone(), wake.clone());
+            idle::spawn(app.handle().clone());
             // Kick the worker in case the queue came back non-empty.
             wake.notify_one();
 

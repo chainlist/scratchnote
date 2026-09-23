@@ -519,6 +519,8 @@ pub fn load_model(
     if let Ok(mut slot) = state.backend.write() {
         *slot = Some(std::sync::Arc::new(backend));
     }
+    // Otherwise the idle unload counts from the last job, however long ago.
+    state.mark_used();
     set_status(app, state, ModelStatus::Loaded);
     // Anything that was waiting on a model can go now.
     state.wake.notify_one();
@@ -528,15 +530,8 @@ pub fn load_model(
 /// Drop the loaded model. The next job loads whatever the settings now point
 /// at, so this is also how a model switch takes effect.
 fn unload_model(app: &AppHandle, state: &State<'_, AppState>) {
-    if let Ok(mut slot) = state.backend.write() {
-        *slot = None;
-    }
-    let status = if state.active_model().is_some() {
-        ModelStatus::Idle
-    } else {
-        ModelStatus::Absent
-    };
-    set_status(app, state, status);
+    let status = state.unload_model();
+    let _ = app.emit("model-status", &status);
 }
 
 fn set_status(app: &AppHandle, state: &State<'_, AppState>, status: ModelStatus) {

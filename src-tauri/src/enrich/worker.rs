@@ -37,7 +37,10 @@ pub fn spawn(app: AppHandle, wake: Wake) {
                 continue;
             };
 
+            let state = app.state::<AppState>();
+            state.mark_used();
             run(&app, job, backend).await;
+            state.mark_used();
         }
     });
 }

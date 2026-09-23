@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::Instant;
 
 use crate::enrich::download::{self, ActiveModel};
 use crate::enrich::model::{Backend, ModelStatus};
@@ -36,11 +37,35 @@ pub struct AppState {
     /// to be unloaded for that on Windows, and this keeps the worker from
     /// loading it straight back.
     pub swapping: AtomicBool,
+    /// When the worker last started or finished a job, for the idle unload in
+    /// SPEC 5.1.
+    pub last_used: Mutex<Instant>,
     /// Nudges the worker when a job is queued or a model becomes available.
     pub wake: Wake,
 }
 
 impl AppState {
+    /// Drop the loaded model and say what state that leaves. A job still
+    /// holding it finishes first, since it owns its own reference.
+    pub fn unload_model(&self) -> ModelStatus {
+        if let Ok(mut slot) = self.backend.write() {
+            *slot = None;
+        }
+        let status = if self.active_model().is_some() {
+            ModelStatus::Idle
+        } else {
+            ModelStatus::Absent
+        };
+        self.set_model_status(status.clone());
+        status
+    }
+
+    pub fn mark_used(&self) {
+        if let Ok(mut last) = self.last_used.lock() {
+            *last = Instant::now();
+        }
+    }
+
     pub fn set_model_status(&self, status: ModelStatus) {
         if let Ok(mut current) = self.model_status.write() {
             *current = status;

@@ -22,6 +22,9 @@ pub struct Settings {
     pub model_variant: Variant,
     /// A GGUF file of the user's own, used instead of `model_variant`.
     pub model_path: Option<PathBuf>,
+    /// Unload the model after this many minutes without a job (SPEC 5.1).
+    /// Zero keeps it loaded.
+    pub idle_unload_minutes: u32,
 }
 
 impl Default for Settings {
@@ -32,6 +35,7 @@ impl Default for Settings {
             hide_immediately: true,
             model_variant: Variant::Default,
             model_path: None,
+            idle_unload_minutes: 10,
         }
     }
 }

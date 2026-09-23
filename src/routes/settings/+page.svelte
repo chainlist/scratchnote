@@ -31,7 +31,8 @@
 		captureHotkey: '',
 		hideImmediately: true,
 		modelVariant: 'default',
-		modelPath: null
+		modelPath: null,
+		idleUnloadMinutes: 10
 	});
 	let customPath = $state('');
 	let info = $state<ModelInfo | null>(null);
@@ -51,15 +52,17 @@
 		captureHotkey: s.captureHotkey,
 		hideImmediately: s.hideImmediately,
 		modelVariant: s.modelVariant,
-		modelPath: s.modelPath
+		modelPath: s.modelPath,
+		idleUnloadMinutes: s.idleUnloadMinutes
 	});
-	// Model choices apply as soon as they are picked, so only these three wait
-	// on the Save button.
+	// Model choices apply as soon as they are picked, so only these wait on
+	// the Save button.
 	const dirty = $derived(
 		view !== null &&
 			(draft.root !== view.root ||
 				draft.captureHotkey !== view.captureHotkey ||
-				draft.hideImmediately !== view.hideImmediately)
+				draft.hideImmediately !== view.hideImmediately ||
+				draft.idleUnloadMinutes !== view.idleUnloadMinutes)
 	);
 	const restartNeeded = $derived(view !== null && view.root !== view.activeRoot);
 
@@ -274,6 +277,20 @@
 				{#if !draft.hideImmediately}
 					<p class="-mt-3 pl-6 text-xs text-neutral-500">It shows "Saved" for a second first.</p>
 				{/if}
+
+				<label class="flex items-center gap-2 text-sm text-neutral-300">
+					Unload the model after
+					<input
+						type="number"
+						min="0"
+						bind:value={draft.idleUnloadMinutes}
+						class="{field} w-20 font-mono"
+					/>
+					idle minutes
+				</label>
+				<p class="-mt-3 text-xs text-neutral-500">
+					Frees its memory; the next note loads it again. 0 keeps it loaded.
+				</p>
 
 				<div>
 					<button type="button" onclick={save} disabled={!dirty} class={button}>Save</button>

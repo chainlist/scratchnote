@@ -158,6 +158,8 @@ export interface Settings {
 	modelVariant: ModelVariant;
 	/** A GGUF file of the user's own, used instead of modelVariant. */
 	modelPath: string | null;
+	/** Unload the model after this many idle minutes; 0 keeps it loaded. */
+	idleUnloadMinutes: number;
 }
 
 export interface SettingsView extends Settings {

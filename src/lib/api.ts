@@ -110,3 +110,33 @@ export const onNoteEnriched = (handler: (id: string) => void): Promise<UnlistenF
 
 export const onModelStatus = (handler: (status: ModelStatus) => void): Promise<UnlistenFn> =>
 	listen<ModelStatus>('model-status', (event) => handler(event.payload));
+
+export interface Settings {
+	root: string;
+	captureHotkey: string;
+	/** Hide the capture window on save rather than showing "Saved" first. */
+	hideImmediately: boolean;
+}
+
+export interface SettingsView extends Settings {
+	/** The root this run is using; differs from `root` until the next launch. */
+	activeRoot: string;
+}
+
+export const getSettings = () => invoke<SettingsView>('get_settings');
+
+export const setSettings = (settings: Settings) =>
+	invoke<SettingsView>('set_settings', { settings });
+
+export const getAliases = () => invoke<Record<string, string>>('get_aliases');
+
+/** Returns the aliases as cleaned and saved. */
+export const setAliases = (aliases: Record<string, string>) =>
+	invoke<Record<string, string>>('set_aliases', { aliases });
+
+export const onSettingsChanged = (handler: (settings: Settings) => void): Promise<UnlistenFn> =>
+	listen<Settings>('settings-changed', (event) => handler(event.payload));
+
+/** Fired by the tray's Settings entry. */
+export const onOpenSettings = (handler: () => void): Promise<UnlistenFn> =>
+	listen('open-settings', () => handler());

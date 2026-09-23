@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::enrich::normalize;
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 struct TagFile {
@@ -33,6 +35,28 @@ pub fn load_aliases(root: &Path) -> HashMap<String, String> {
             HashMap::new()
         }
     }
+}
+
+/// Aliases as typed in settings, cleaned like any other tag. Aliases resolve
+/// once, not transitively, so a target that is itself an alias is refused
+/// rather than left to resolve to the wrong thing.
+pub fn clean_aliases(raw: &HashMap<String, String>) -> Result<HashMap<String, String>, String> {
+    let mut aliases = HashMap::new();
+    for (from, to) in raw {
+        let (Some(from), Some(to)) = (normalize::clean(from), normalize::clean(to)) else {
+            return Err(format!("\"{from}\" → \"{to}\" is not a valid tag pair"));
+        };
+        if from != to {
+            aliases.insert(from, to);
+        }
+    }
+    if let Some((from, to)) = aliases.iter().find(|(_, to)| aliases.contains_key(*to)) {
+        return Err(format!(
+            "{from} points at {to}, which is itself an alias; point it at {} instead",
+            aliases[to]
+        ));
+    }
+    Ok(aliases)
 }
 
 /// Sorted keys, so the file diffs cleanly for anyone syncing it with git.
@@ -112,6 +136,20 @@ mod tests {
         assert_eq!(load_aliases(&root)["k8s"], "kubernetes");
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cleans_alias_pairs_and_drops_ones_that_point_at_themselves() {
+        let cleaned =
+            clean_aliases(&aliases(&[("#K8s", "Kubernetes"), ("infra", "infra")])).unwrap();
+        assert_eq!(cleaned, aliases(&[("k8s", "kubernetes")]));
+    }
+
+    #[test]
+    fn refuses_an_alias_chain_and_an_empty_side() {
+        let chain = clean_aliases(&aliases(&[("k8s", "kube"), ("kube", "kubernetes")]));
+        assert!(chain.unwrap_err().contains("point it at kubernetes"));
+        assert!(clean_aliases(&aliases(&[("k8s", "!!")])).is_err());
     }
 
     #[test]

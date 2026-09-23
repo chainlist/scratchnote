@@ -1,18 +1,25 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { hideCapture, onCaptureShown, saveNote } from '$lib/api';
+	import { getSettings, hideCapture, onCaptureShown, onSettingsChanged, saveNote } from '$lib/api';
 
 	let draft = $state('');
 	let saving = $state(false);
 	let error = $state<string | null>(null);
+	let saved = $state(false);
+	// SPEC 3.1: hiding at once is the default; the toast is opt-in.
+	let hideImmediately = true;
 	let input: HTMLTextAreaElement;
 
 	onMount(() => {
 		input?.focus();
 		// The window is hidden, never closed, so this component stays mounted
 		// and the draft survives an Esc.
-		const unlisten = onCaptureShown(() => input?.focus());
-		return () => void unlisten.then((off) => off());
+		const unlisten = [
+			onCaptureShown(() => input?.focus()),
+			onSettingsChanged((settings) => (hideImmediately = settings.hideImmediately))
+		];
+		void getSettings().then((settings) => (hideImmediately = settings.hideImmediately));
+		return () => unlisten.forEach((p) => void p.then((off) => off()));
 	});
 
 	async function save() {
@@ -26,6 +33,11 @@
 		try {
 			await saveNote(draft);
 			draft = '';
+			if (!hideImmediately) {
+				saved = true;
+				await new Promise((resolve) => setTimeout(resolve, 1000));
+				saved = false;
+			}
 			await hideCapture();
 		} catch (e) {
 			error = String(e);
@@ -63,6 +75,6 @@
 		{:else}
 			<span>Ctrl+Enter to save, Esc to dismiss</span>
 		{/if}
-		<span>{saving ? 'Saving…' : ''}</span>
+		<span>{saved ? 'Saved' : saving ? 'Saving…' : ''}</span>
 	</div>
 </div>

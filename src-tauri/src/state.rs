@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::enrich::model::{Backend, ModelStatus};
@@ -11,7 +12,11 @@ use crate::storage::tags;
 use crate::storage::writer::Writer;
 
 pub struct AppState {
-    pub settings: Settings,
+    /// The notes root for this run. A new one chosen in settings applies on
+    /// the next launch, since the index, queue and watcher are all bound to it.
+    pub root: PathBuf,
+    /// What settings.json says now, for the parts that apply live.
+    pub settings: RwLock<Settings>,
     pub writer: Writer,
     /// The derived cache from SPEC 4.4. Guards are held only for the length of
     /// a read or a swap, never across an await.
@@ -66,7 +71,7 @@ impl AppState {
                 .map_err(|_| "index lock poisoned".to_string())?;
             (idx.to_jsonl(), idx.tag_counts())
         };
-        let root = &self.settings.root;
+        let root = &self.root;
         self.writer
             .write_index(index::index_path(root), jsonl)
             .await?;

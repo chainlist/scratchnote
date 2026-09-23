@@ -53,6 +53,10 @@ pub fn run() {
             commands::installed_model,
             commands::download_model,
             commands::today,
+            commands::get_settings,
+            commands::set_settings,
+            commands::get_aliases,
+            commands::set_aliases,
             hide_capture,
         ])
         .setup(|app| {
@@ -94,7 +98,8 @@ pub fn run() {
 
             let wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
             app.manage(AppState {
-                settings,
+                root: root.clone(),
+                settings: std::sync::RwLock::new(settings),
                 writer: Writer::spawn(),
                 index: std::sync::RwLock::new(loaded),
                 aliases: std::sync::RwLock::new(tags::load_aliases(&root)),
@@ -205,8 +210,9 @@ fn keep_main_window_alive(app: &AppHandle) {
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let new_note = MenuItem::with_id(app, "new_note", "New note", true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Scratchnote", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&new_note, &open, &quit])?;
+    let menu = Menu::with_items(app, &[&new_note, &open, &settings, &quit])?;
 
     TrayIconBuilder::with_id("tray")
         .icon(app.default_window_icon().unwrap().clone())
@@ -216,6 +222,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "new_note" => toggle_capture(app),
             "open" => show_main(app),
+            "settings" => {
+                show_main(app);
+                let _ = app.emit_to(MAIN, "open-settings", ());
+            }
             "quit" => app.exit(0),
             _ => {}
         })

@@ -59,8 +59,8 @@ fn backend(app: &AppHandle) -> Option<Arc<dyn Backend>> {
         }
     }
 
-    let variant = super::download::installed_variant(&state.settings.root)?;
-    let path = super::model::model_file(&state.settings.root, variant);
+    let variant = super::download::installed_variant(&state.root)?;
+    let path = super::model::model_file(&state.root, variant);
     log::info!("loading {}", path.display());
 
     match super::llama::LlamaCpp::load(&path) {
@@ -91,7 +91,7 @@ fn put_back_unchanged(app: &AppHandle, job: Job) {
 
 async fn run(app: &AppHandle, job: Job, backend: Arc<dyn Backend>) {
     let state = app.state::<AppState>();
-    let path = day_path(&state.settings.root, &job.date);
+    let path = day_path(&state.root, &job.date);
 
     let Some(note) = read_note(&path, &job) else {
         // The note is gone; so is the job.
@@ -170,7 +170,7 @@ fn read_note(path: &std::path::Path, job: &Job) -> Option<daily_file::Note> {
 
 async fn write_back(app: &AppHandle, job: &Job, patch: &daily_file::NotePatch) {
     let state = app.state::<AppState>();
-    let path = day_path(&state.settings.root, &job.date);
+    let path = day_path(&state.root, &job.date);
 
     if let Err(e) = state
         .writer
@@ -201,7 +201,7 @@ async fn persist_queue(app: &AppHandle) {
     };
     if let Err(e) = state
         .writer
-        .write_index(queue_path(&state.settings.root), contents)
+        .write_index(queue_path(&state.root), contents)
         .await
     {
         log::warn!("could not persist the queue: {e}");

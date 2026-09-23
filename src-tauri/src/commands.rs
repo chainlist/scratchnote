@@ -9,6 +9,7 @@ use crate::enrich::download::{self, RemoteModel};
 use crate::enrich::model::{model_file, ModelStatus, Variant};
 use crate::enrich::normalize;
 use crate::enrich::queue::{queue_path, Job};
+use crate::settings::Settings;
 use crate::state::AppState;
 use crate::storage::daily_file::{self, Note, NotePatch, Status};
 use crate::storage::index::{self, IndexEntry};
@@ -51,7 +52,7 @@ pub async fn save_note(
 
     state
         .writer
-        .append_note(day_path(&state.settings.root, &date), date, note.clone())
+        .append_note(day_path(&state.root, &date), date, note.clone())
         .await?;
 
     // A new note only ever adds a line, so the index is appended rather than
@@ -65,7 +66,7 @@ pub async fn save_note(
         .push(entry);
     state
         .writer
-        .append_index_line(index::index_path(&state.settings.root), line)
+        .append_index_line(index::index_path(&state.root), line)
         .await?;
 
     enqueue(&state, note.id.clone(), note.date.clone()).await;
@@ -95,7 +96,7 @@ async fn persist_queue(state: &State<'_, AppState>) {
     };
     if let Err(e) = state
         .writer
-        .write_index(queue_path(&state.settings.root), contents)
+        .write_index(queue_path(&state.root), contents)
         .await
     {
         log::warn!("could not persist the queue: {e}");
@@ -107,7 +108,7 @@ async fn persist_queue(state: &State<'_, AppState>) {
 #[tauri::command]
 pub async fn get_day(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
     check_date(&date)?;
-    let path = day_path(&state.settings.root, &date);
+    let path = day_path(&state.root, &date);
     let contents = match tokio::fs::read_to_string(&path).await {
         Ok(contents) => contents,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -144,7 +145,7 @@ pub async fn delete_note(
     id: String,
 ) -> Result<(), String> {
     check_date(&date)?;
-    let path = day_path(&state.settings.root, &date);
+    let path = day_path(&state.root, &date);
     if !state.writer.delete_note(path.clone(), id.clone()).await? {
         return Err(format!("no note {id} in {date}"));
     }
@@ -188,7 +189,7 @@ pub async fn update_note(
         return Ok(current);
     }
 
-    let path = day_path(&state.settings.root, &date);
+    let path = day_path(&state.root, &date);
     if !state.writer.replace_body(path, id.clone(), body).await? {
         return Err(format!("no note {id} in {date}"));
     }
@@ -238,7 +239,7 @@ pub async fn update_note_meta(
         tags,
         status: Status::Manual,
     };
-    let path = day_path(&state.settings.root, &date);
+    let path = day_path(&state.root, &date);
     if !state.writer.update_note(path, id.clone(), patch).await? {
         return Err(format!("no note {id} in {date}"));
     }
@@ -255,7 +256,7 @@ pub async fn update_note_meta(
 }
 
 async fn read_note(state: &State<'_, AppState>, date: &str, id: &str) -> Result<Note, String> {
-    let contents = tokio::fs::read_to_string(day_path(&state.settings.root, date))
+    let contents = tokio::fs::read_to_string(day_path(&state.root, date))
         .await
         .map_err(|e| e.to_string())?;
     daily_file::parse_notes(&contents, date, &relative_day_path(date))
@@ -266,7 +267,7 @@ async fn read_note(state: &State<'_, AppState>, date: &str, id: &str) -> Result<
 
 /// After rewriting a day file: reparse the day and write the index back.
 async fn reindex_day(state: &State<'_, AppState>, date: &str) -> Result<(), String> {
-    let entries = index::parse_day(&day_path(&state.settings.root, date), date);
+    let entries = index::parse_day(&day_path(&state.root, date), date);
     state
         .index
         .write()
@@ -279,7 +280,7 @@ async fn reindex_day(state: &State<'_, AppState>, date: &str) -> Result<(), Stri
 /// the rebuilt index holds.
 #[tauri::command]
 pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
-    let root = state.settings.root.clone();
+    let root = state.root.clone();
     let rebuilt = tauri::async_runtime::spawn_blocking(move || index::rebuild(&root))
         .await
         .map_err(|e| e.to_string())?;
@@ -292,7 +293,7 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
     // Aliases are hand-edited in tags.json, so a rebuild is also when edits
     // made there are picked up.
     if let Ok(mut aliases) = state.aliases.write() {
-        *aliases = tags::load_aliases(&state.settings.root);
+        *aliases = tags::load_aliases(&state.root);
     }
     state.persist_index().await?;
 
@@ -322,6 +323,94 @@ pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, St
     Ok(crate::search::search(&idx, &query, &aliases))
 }
 
+/// Settings as saved, plus the root this run is actually using, so the screen
+/// can say when a new root is waiting on a restart.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsView {
+    #[serde(flatten)]
+    pub settings: Settings,
+    pub active_root: std::path::PathBuf,
+}
+
+#[tauri::command]
+pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> {
+    let settings = state
+        .settings
+        .read()
+        .map_err(|_| "settings lock poisoned".to_string())?
+        .clone();
+    Ok(SettingsView {
+        settings,
+        active_root: state.root.clone(),
+    })
+}
+
+/// Save settings (SPEC 7). The hotkey is rebound straight away; a new notes
+/// root is saved but only used from the next launch.
+#[tauri::command]
+pub async fn set_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: Settings,
+) -> Result<SettingsView, String> {
+    settings.validate()?;
+    let old_hotkey = state
+        .settings
+        .read()
+        .map_err(|_| "settings lock poisoned".to_string())?
+        .capture_hotkey
+        .clone();
+
+    if settings.capture_hotkey != old_hotkey {
+        use tauri_plugin_global_shortcut::GlobalShortcutExt;
+        let shortcuts = app.global_shortcut();
+        // Bind the new one first, so a key the OS refuses leaves the old one
+        // working instead of leaving no hotkey at all.
+        shortcuts
+            .register(settings.capture_hotkey.as_str())
+            .map_err(|e| format!("cannot use {} as the hotkey: {e}", settings.capture_hotkey))?;
+        let _ = shortcuts.unregister(old_hotkey.as_str());
+    }
+
+    state
+        .writer
+        .write_index(crate::settings::file(&app), settings.to_json())
+        .await?;
+    *state
+        .settings
+        .write()
+        .map_err(|_| "settings lock poisoned".to_string())? = settings.clone();
+
+    // The capture window reads hideImmediately from this.
+    let _ = app.emit("settings-changed", &settings);
+    Ok(SettingsView {
+        settings,
+        active_root: state.root.clone(),
+    })
+}
+
+#[tauri::command]
+pub fn get_aliases(state: State<'_, AppState>) -> std::collections::BTreeMap<String, String> {
+    state.aliases().into_iter().collect()
+}
+
+/// Replace the tag aliases (SPEC 4.5). They steer tags from now on; tags
+/// already written into notes are left as they are.
+#[tauri::command]
+pub async fn set_aliases(
+    state: State<'_, AppState>,
+    aliases: std::collections::HashMap<String, String>,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let cleaned = tags::clean_aliases(&aliases)?;
+    *state
+        .aliases
+        .write()
+        .map_err(|_| "aliases lock poisoned".to_string())? = cleaned.clone();
+    state.persist_index().await?;
+    Ok(cleaned.into_iter().collect())
+}
+
 #[tauri::command]
 pub fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
@@ -349,7 +438,7 @@ pub fn model_status(state: State<'_, AppState>) -> ModelStatus {
 #[tauri::command]
 pub fn installed_model(state: State<'_, AppState>) -> Option<download::InstalledModel> {
     for variant in [Variant::Default, Variant::Light] {
-        if let Some(record) = download::installed(&state.settings.root, variant) {
+        if let Some(record) = download::installed(&state.root, variant) {
             return Some(record);
         }
     }
@@ -364,7 +453,7 @@ pub async fn download_model(
     state: State<'_, AppState>,
     variant: Variant,
 ) -> Result<(), String> {
-    let root = state.settings.root.clone();
+    let root = state.root.clone();
     let remote: RemoteModel = download::lookup(variant).await?;
 
     set_status(&app, &state, ModelStatus::Downloading { percent: 0 });
@@ -392,7 +481,7 @@ pub fn load_model(
     state: &State<'_, AppState>,
     variant: Variant,
 ) -> Result<(), String> {
-    let path = model_file(&state.settings.root, variant);
+    let path = model_file(&state.root, variant);
     let backend = crate::enrich::llama::LlamaCpp::load(&path)?;
 
     if let Ok(mut slot) = state.backend.write() {

@@ -1,5 +1,5 @@
-//! Settings live at `<root>/.scratchnote/settings.json`. Milestone 1 only
-//! reads them; the editor comes with the settings screen.
+//! Settings live at `~/Scratchnote/.scratchnote/settings.json` (SPEC 7),
+//! wherever the notes root itself points.
 
 use std::path::{Path, PathBuf};
 
@@ -46,6 +46,29 @@ impl Settings {
         }
         settings
     }
+
+    /// Check what the settings screen sent before anything is saved.
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.root.is_absolute() {
+            return Err(format!(
+                "the notes folder must be a full path, not {}",
+                self.root.display()
+            ));
+        }
+        if self.capture_hotkey.trim().is_empty() {
+            return Err("the capture hotkey cannot be empty".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".to_string())
+    }
+}
+
+/// The file `Settings::load` reads.
+pub fn file(app: &AppHandle) -> PathBuf {
+    settings_path(&default_root(app))
 }
 
 fn default_root(app: &AppHandle) -> PathBuf {
@@ -60,4 +83,52 @@ fn default_root(app: &AppHandle) -> PathBuf {
 
 fn settings_path(root: &Path) -> PathBuf {
     root.join(".scratchnote").join("settings.json")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid() -> Settings {
+        Settings {
+            root: std::env::temp_dir().join("Scratchnote"),
+            ..Settings::default()
+        }
+    }
+
+    #[test]
+    fn round_trips_through_json_in_camel_case() {
+        let settings = Settings {
+            hide_immediately: false,
+            ..valid()
+        };
+        let json = settings.to_json();
+        assert!(json.contains("\"captureHotkey\""));
+        assert!(json.contains("\"hideImmediately\": false"));
+        let back: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.root, settings.root);
+        assert!(!back.hide_immediately);
+    }
+
+    #[test]
+    fn a_file_missing_fields_falls_back_to_defaults() {
+        let back: Settings = serde_json::from_str(r#"{"hideImmediately":false}"#).unwrap();
+        assert_eq!(back.capture_hotkey, DEFAULT_HOTKEY);
+        assert!(!back.hide_immediately);
+    }
+
+    #[test]
+    fn rejects_a_relative_root_and_an_empty_hotkey() {
+        assert!(valid().validate().is_ok());
+        let relative = Settings {
+            root: PathBuf::from("notes"),
+            ..valid()
+        };
+        assert!(relative.validate().is_err());
+        let no_hotkey = Settings {
+            capture_hotkey: "  ".to_string(),
+            ..valid()
+        };
+        assert!(no_hotkey.validate().is_err());
+    }
 }

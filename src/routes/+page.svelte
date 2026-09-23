@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import {
 		deleteNote,
 		getDay,
@@ -10,6 +12,7 @@
 		onModelStatus,
 		onNoteEnriched,
 		onNoteUpdated,
+		onOpenSettings,
 		retryEnrichment,
 		search,
 		today,
@@ -135,6 +138,7 @@
 			off.push(onIndexRebuilt(() => void refresh()));
 			// Enrichment finishing rewrites the note, so the card has to reload.
 			off.push(onNoteEnriched(() => void refresh()));
+			off.push(onOpenSettings(() => void goto(resolve('/settings/'))));
 
 			model = await modelStatus();
 			off.push(onModelStatus((status) => (model = status)));
@@ -156,7 +160,12 @@
 
 <div class="flex h-screen bg-neutral-950 text-neutral-100">
 	<aside class="w-56 shrink-0 overflow-y-auto border-r border-neutral-800 p-3">
-		<h1 class="mb-4 px-2 text-sm font-semibold">Scratchnote</h1>
+		<div class="mb-4 flex items-baseline justify-between px-2">
+			<h1 class="text-sm font-semibold">Scratchnote</h1>
+			<a href={resolve('/settings/')} class="text-xs text-neutral-500 hover:text-neutral-200"
+				>Settings</a
+			>
+		</div>
 		<div class="flex flex-col gap-6">
 			<DayList {days} selected={searching ? '' : selected} onselect={select} />
 			<TagList {tags} active={activeTags} onselect={toggleTag} />

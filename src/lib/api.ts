@@ -106,6 +106,9 @@ export interface ModelInfo {
 
 export const modelInfo = () => invoke<ModelInfo>('model_info');
 
+/** GPUs the model can run on. Empty in a CPU-only build or with no usable device. */
+export const gpuDevices = () => invoke<string[]>('gpu_devices');
+
 export type UpdateCheck =
 	| { state: 'upToDate'; revision: string }
 	| { state: 'newer'; installed: string; latest: string }
@@ -160,6 +163,8 @@ export interface Settings {
 	modelPath: string | null;
 	/** Unload the model after this many idle minutes; 0 keeps it loaded. */
 	idleUnloadMinutes: number;
+	/** Run the model on the GPU when one is available. */
+	useGpu: boolean;
 }
 
 export interface SettingsView extends Settings {

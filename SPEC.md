@@ -60,6 +60,27 @@ Studio` even when another install has a perfectly good compiler. Either give
 `vswhere -all` lists every registered instance; without `-all` it hides Build
 Tools installs, which makes a working toolchain look absent.
 
+**GPU builds (optional).** The `gpu` Cargo feature compiles llama.cpp's Vulkan
+backend, which runs on NVIDIA, AMD, Intel and Adreno GPUs with only the
+driver installed on the user's machine, and falls back to the CPU when no
+device is found. macOS gets Metal without asking. On Windows the build needs:
+
+- **The Vulkan SDK**, for the shader compiler: `winget install KhronosGroup.VulkanSDK`.
+- **Ninja, from an MSVC developer shell.** The Visual Studio generator cannot
+  install the shader generator llama.cpp builds along the way. Ninja ships
+  with the Build Tools; run `vcvars64.bat` first so CMake finds `cl`.
+- **A short target directory.** The shader generator is built deep inside
+  `target/`, past MSBuild's 260 character limit.
+
+```bat
+call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+set VULKAN_SDK=C:\VulkanSDK\1.4.357.0
+set PATH=%VULKAN_SDK%\Bin;%PATH%
+set CMAKE_GENERATOR=Ninja
+set CARGO_TARGET_DIR=%USERPROFILE%\snv
+cargo build --features gpu
+```
+
 ### Step 1: Create the SvelteKit app with `sv create`
 
 ```bash

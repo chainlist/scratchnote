@@ -363,8 +363,11 @@ pub async fn set_settings(
         let _ = shortcuts.unregister(old.capture_hotkey.as_str());
     }
 
-    let model_changed =
-        settings.model_variant != old.model_variant || settings.model_path != old.model_path;
+    // A different model, or the same one on different hardware, takes a
+    // reload either way.
+    let model_changed = settings.model_variant != old.model_variant
+        || settings.model_path != old.model_path
+        || settings.use_gpu != old.use_gpu;
     save_settings(&app, &state, settings.clone()).await?;
     if model_changed {
         unload_model(&app, &state);
@@ -459,6 +462,12 @@ pub struct ModelInfo {
     pub light: Option<download::InstalledModel>,
 }
 
+/// GPUs the model could run on, for the settings toggle. Empty means CPU only.
+#[tauri::command]
+pub fn gpu_devices() -> Vec<String> {
+    crate::enrich::llama::gpu_devices()
+}
+
 #[tauri::command]
 pub fn model_info(state: State<'_, AppState>) -> ModelInfo {
     let active = state.active_model();
@@ -514,7 +523,7 @@ pub fn load_model(
     variant: Variant,
 ) -> Result<(), String> {
     let path = model_file(&state.root, variant);
-    let backend = crate::enrich::llama::LlamaCpp::load(&path)?;
+    let backend = crate::enrich::llama::LlamaCpp::load_with(&path, state.use_gpu())?;
 
     if let Ok(mut slot) = state.backend.write() {
         *slot = Some(std::sync::Arc::new(backend));

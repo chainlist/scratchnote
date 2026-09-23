@@ -25,6 +25,8 @@ pub struct Settings {
     /// Unload the model after this many minutes without a job (SPEC 5.1).
     /// Zero keeps it loaded.
     pub idle_unload_minutes: u32,
+    /// Run the model on the GPU when one is available.
+    pub use_gpu: bool,
 }
 
 impl Default for Settings {
@@ -36,6 +38,7 @@ impl Default for Settings {
             model_variant: Variant::Default,
             model_path: None,
             idle_unload_minutes: 10,
+            use_gpu: true,
         }
     }
 }

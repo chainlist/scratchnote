@@ -18,31 +18,57 @@ use super::model::{Backend, CONTEXT_TOKENS, MAX_OUTPUT_TOKENS, TEMPERATURE};
 pub struct LlamaCpp {
     backend: LlamaBackend,
     model: LlamaModel,
+    use_gpu: bool,
     /// llama.cpp contexts are not re-entrant, and the queue runs one job at a
     /// time anyway, so one guarded context is enough.
     lock: Mutex<()>,
 }
 
 impl LlamaCpp {
-    /// Loads the weights once and keeps them resident (SPEC 5.1). GPU layers
-    /// are offloaded when the build supports it, otherwise this is CPU.
+    /// Loads the weights once and keeps them resident (SPEC 5.1), on the GPU
+    /// when the build has a GPU backend and a device is found. The app goes
+    /// through `load_with` and its setting; tests take the default.
+    #[cfg(test)]
     pub fn load(path: &std::path::Path) -> Result<Self, String> {
+        Self::load_with(path, true)
+    }
+
+    /// `use_gpu: false` keeps every layer and every op on the CPU, even in a
+    /// build with a GPU backend.
+    pub fn load_with(path: &std::path::Path, use_gpu: bool) -> Result<Self, String> {
         let backend =
             LlamaBackend::init().map_err(|e| format!("llama.cpp would not start: {e}"))?;
 
-        let params = LlamaModelParams::default().with_n_gpu_layers(u32::MAX);
+        let params = if use_gpu {
+            LlamaModelParams::default().with_n_gpu_layers(u32::MAX)
+        } else {
+            // Zero layers alone is not enough: with a GPU device still attached,
+            // llama.cpp stages CPU work through the GPU driver's host buffers
+            // and skips its repacked CPU kernels, which made CPU mode about
+            // half again slower than a CPU-only build. No devices at all gets
+            // the plain CPU path.
+            LlamaModelParams::default()
+                .with_n_gpu_layers(0)
+                .with_devices(&[])
+                .map_err(|e| format!("could not keep the model off the GPU: {e}"))?
+        };
         let model = LlamaModel::load_from_file(&backend, path, &params)
             .map_err(|e| format!("could not load {}: {e}", path.display()))?;
 
         Ok(Self {
             backend,
             model,
+            use_gpu,
             lock: Mutex::new(()),
         })
     }
 
     fn run(&self, prompt: &str, grammar: &str) -> Result<String, String> {
-        let params = LlamaContextParams::default().with_n_ctx(NonZeroU32::new(CONTEXT_TOKENS));
+        // With no layers on the GPU, llama.cpp would still send large prompt
+        // batches there unless op offload is off too.
+        let params = LlamaContextParams::default()
+            .with_n_ctx(NonZeroU32::new(CONTEXT_TOKENS))
+            .with_op_offload(self.use_gpu);
         let mut context = self
             .model
             .new_context(&self.backend, params)
@@ -106,6 +132,17 @@ impl LlamaCpp {
 
         Ok(out)
     }
+}
+
+/// The GPUs llama.cpp can use, by name. Empty in a CPU-only build, or when
+/// the machine has no device the compiled backend supports.
+pub fn gpu_devices() -> Vec<String> {
+    use llama_cpp_2::LlamaBackendDeviceType::{Gpu, IntegratedGpu};
+    llama_cpp_2::list_llama_ggml_backend_devices()
+        .into_iter()
+        .filter(|d| matches!(d.device_type, Gpu | IntegratedGpu))
+        .map(|d| d.description)
+        .collect()
 }
 
 impl Backend for LlamaCpp {

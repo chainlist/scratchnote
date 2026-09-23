@@ -7,6 +7,7 @@
 		downloadModel,
 		getAliases,
 		getSettings,
+		gpuDevices,
 		MODEL_CHOICES,
 		modelInfo,
 		modelStatus,
@@ -32,7 +33,8 @@
 		hideImmediately: true,
 		modelVariant: 'default',
 		modelPath: null,
-		idleUnloadMinutes: 10
+		idleUnloadMinutes: 10,
+		useGpu: true
 	});
 	let customPath = $state('');
 	let info = $state<ModelInfo | null>(null);
@@ -41,6 +43,7 @@
 	let checking = $state(false);
 	/** Download progress of an update, null when none is running. */
 	let updating = $state<number | null>(null);
+	let gpus = $state<string[]>([]);
 	let aliases = $state<{ from: string; to: string }[]>([]);
 	let launchAtLogin = $state(false);
 	let recording = $state(false);
@@ -53,7 +56,8 @@
 		hideImmediately: s.hideImmediately,
 		modelVariant: s.modelVariant,
 		modelPath: s.modelPath,
-		idleUnloadMinutes: s.idleUnloadMinutes
+		idleUnloadMinutes: s.idleUnloadMinutes,
+		useGpu: s.useGpu
 	});
 	// Model choices apply as soon as they are picked, so only these wait on
 	// the Save button.
@@ -89,6 +93,7 @@
 				aliases = Object.entries(await getAliases()).map(([from, to]) => ({ from, to }));
 				launchAtLogin = await isEnabled();
 				model = await modelStatus();
+				gpus = await gpuDevices();
 				await refreshModels();
 			} catch (e) {
 				say(String(e), true);
@@ -99,6 +104,17 @@
 
 	async function refreshModels() {
 		info = await modelInfo();
+	}
+
+	/** Applies at once: the model is unloaded and the next note reloads it. */
+	async function setGpu(useGpu: boolean) {
+		if (!view) return;
+		try {
+			view = await setSettings({ ...editable(view), useGpu });
+			draft.useGpu = view.useGpu;
+		} catch (e) {
+			say(String(e), true);
+		}
 	}
 
 	async function download(variant: ModelVariant) {
@@ -381,6 +397,23 @@
 						<span class="text-amber-400">The custom file is missing, so notes stay pending.</span>
 					{:else}
 						No model installed. Notes stay pending until one is.
+					{/if}
+				</p>
+
+				<label class="flex items-center gap-2 text-sm text-neutral-300">
+					<input
+						type="checkbox"
+						checked={view.useGpu && gpus.length > 0}
+						disabled={gpus.length === 0}
+						onchange={(e) => setGpu(e.currentTarget.checked)}
+					/>
+					Use the GPU
+				</label>
+				<p class="-mt-2 pl-6 text-xs text-neutral-500">
+					{#if gpus.length === 0}
+						No GPU available: this build runs on the CPU only, or no supported device was found.
+					{:else}
+						{gpus.join(', ')}. Much faster and lighter on the CPU; off keeps everything on the CPU.
 					{/if}
 				</p>
 

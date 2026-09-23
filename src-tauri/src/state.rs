@@ -82,6 +82,10 @@ impl AppState {
         )
     }
 
+    pub fn use_gpu(&self) -> bool {
+        self.settings.read().map(|s| s.use_gpu).unwrap_or(true)
+    }
+
     pub fn aliases(&self) -> HashMap<String, String> {
         self.aliases
             .read()

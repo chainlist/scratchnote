@@ -68,7 +68,7 @@ fn backend(app: &AppHandle) -> Option<Arc<dyn Backend>> {
     let path = state.active_model()?.path;
     log::info!("loading {}", path.display());
 
-    match super::llama::LlamaCpp::load(&path) {
+    match super::llama::LlamaCpp::load_with(&path, state.use_gpu()) {
         Ok(loaded) => {
             let backend: Arc<dyn Backend> = Arc::new(loaded);
             if let Ok(mut slot) = state.backend.write() {

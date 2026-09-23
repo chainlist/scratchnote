@@ -51,6 +51,7 @@ pub fn run() {
             commands::retry_enrichment,
             commands::model_status,
             commands::model_info,
+            commands::gpu_devices,
             commands::download_model,
             commands::check_model_update,
             commands::update_model,

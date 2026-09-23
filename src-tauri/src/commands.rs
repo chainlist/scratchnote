@@ -335,19 +335,14 @@ pub struct SettingsView {
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> {
-    let settings = state
-        .settings
-        .read()
-        .map_err(|_| "settings lock poisoned".to_string())?
-        .clone();
     Ok(SettingsView {
-        settings,
+        settings: current_settings(&state)?,
         active_root: state.root.clone(),
     })
 }
 
-/// Save settings (SPEC 7). The hotkey is rebound straight away; a new notes
-/// root is saved but only used from the next launch.
+/// Save settings (SPEC 7). The hotkey and the model switch straight away; a
+/// new notes root is saved but only used from the next launch.
 #[tauri::command]
 pub async fn set_settings(
     app: AppHandle,
@@ -355,14 +350,9 @@ pub async fn set_settings(
     settings: Settings,
 ) -> Result<SettingsView, String> {
     settings.validate()?;
-    let old_hotkey = state
-        .settings
-        .read()
-        .map_err(|_| "settings lock poisoned".to_string())?
-        .capture_hotkey
-        .clone();
+    let old = current_settings(&state)?;
 
-    if settings.capture_hotkey != old_hotkey {
+    if settings.capture_hotkey != old.capture_hotkey {
         use tauri_plugin_global_shortcut::GlobalShortcutExt;
         let shortcuts = app.global_shortcut();
         // Bind the new one first, so a key the OS refuses leaves the old one
@@ -370,24 +360,47 @@ pub async fn set_settings(
         shortcuts
             .register(settings.capture_hotkey.as_str())
             .map_err(|e| format!("cannot use {} as the hotkey: {e}", settings.capture_hotkey))?;
-        let _ = shortcuts.unregister(old_hotkey.as_str());
+        let _ = shortcuts.unregister(old.capture_hotkey.as_str());
     }
 
+    let model_changed =
+        settings.model_variant != old.model_variant || settings.model_path != old.model_path;
+    save_settings(&app, &state, settings.clone()).await?;
+    if model_changed {
+        unload_model(&app, &state);
+        state.wake.notify_one();
+    }
+
+    Ok(SettingsView {
+        settings,
+        active_root: state.root.clone(),
+    })
+}
+
+fn current_settings(state: &State<'_, AppState>) -> Result<Settings, String> {
+    Ok(state
+        .settings
+        .read()
+        .map_err(|_| "settings lock poisoned".to_string())?
+        .clone())
+}
+
+async fn save_settings(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    settings: Settings,
+) -> Result<(), String> {
     state
         .writer
-        .write_index(crate::settings::file(&app), settings.to_json())
+        .write_index(crate::settings::file(app), settings.to_json())
         .await?;
     *state
         .settings
         .write()
         .map_err(|_| "settings lock poisoned".to_string())? = settings.clone();
-
     // The capture window reads hideImmediately from this.
     let _ = app.emit("settings-changed", &settings);
-    Ok(SettingsView {
-        settings,
-        active_root: state.root.clone(),
-    })
+    Ok(())
 }
 
 #[tauri::command]
@@ -434,19 +447,31 @@ pub fn model_status(state: State<'_, AppState>) -> ModelStatus {
     state.model_status()
 }
 
-/// Which model is on disk, if any, and what revision it came from.
-#[tauri::command]
-pub fn installed_model(state: State<'_, AppState>) -> Option<download::InstalledModel> {
-    for variant in [Variant::Default, Variant::Light] {
-        if let Some(record) = download::installed(&state.root, variant) {
-            return Some(record);
-        }
-    }
-    None
+/// What the settings screen shows about models: the one in use, and the
+/// record of each variant the app has fetched.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInfo {
+    pub active_path: Option<std::path::PathBuf>,
+    /// `None` for a custom GGUF file.
+    pub active_variant: Option<Variant>,
+    pub default: Option<download::InstalledModel>,
+    pub light: Option<download::InstalledModel>,
 }
 
-/// Fetch a model and load it. Capture keeps working throughout; notes simply
-/// stay pending until this finishes (SPEC 5.2).
+#[tauri::command]
+pub fn model_info(state: State<'_, AppState>) -> ModelInfo {
+    let active = state.active_model();
+    ModelInfo {
+        active_path: active.as_ref().map(|a| a.path.clone()),
+        active_variant: active.and_then(|a| a.variant),
+        default: download::installed(&state.root, Variant::Default),
+        light: download::installed(&state.root, Variant::Light),
+    }
+}
+
+/// Fetch a model, make it the one in use, and load it. Capture keeps working
+/// throughout; notes simply stay pending until this finishes (SPEC 5.2).
 #[tauri::command]
 pub async fn download_model(
     app: AppHandle,
@@ -456,6 +481,9 @@ pub async fn download_model(
     let root = state.root.clone();
     let remote: RemoteModel = download::lookup(variant).await?;
 
+    // Fetching a second variant leaves the first one working meanwhile, so a
+    // failure goes back to that rather than to "absent".
+    let before = state.model_status();
     set_status(&app, &state, ModelStatus::Downloading { percent: 0 });
     let progress_app = app.clone();
     let result = download::fetch(&root, variant, &remote, move |percent| {
@@ -467,10 +495,14 @@ pub async fn download_model(
     .await;
 
     if let Err(e) = result {
-        set_status(&app, &state, ModelStatus::Absent);
+        set_status(&app, &state, before);
         return Err(e);
     }
 
+    let mut settings = current_settings(&state)?;
+    settings.model_variant = variant;
+    settings.model_path = None;
+    save_settings(&app, &state, settings).await?;
     load_model(&app, &state, variant)
 }
 
@@ -493,7 +525,96 @@ pub fn load_model(
     Ok(())
 }
 
+/// Drop the loaded model. The next job loads whatever the settings now point
+/// at, so this is also how a model switch takes effect.
+fn unload_model(app: &AppHandle, state: &State<'_, AppState>) {
+    if let Ok(mut slot) = state.backend.write() {
+        *slot = None;
+    }
+    let status = if state.active_model().is_some() {
+        ModelStatus::Idle
+    } else {
+        ModelStatus::Absent
+    };
+    set_status(app, state, status);
+}
+
 fn set_status(app: &AppHandle, state: &State<'_, AppState>, status: ModelStatus) {
     state.set_model_status(status.clone());
     let _ = app.emit("model-status", &status);
+}
+
+/// The app's own variant in use, with its record. A custom GGUF file has no
+/// revision to compare, so it is never checked (SPEC 5.2).
+fn checkable_model(
+    state: &State<'_, AppState>,
+) -> Result<(Variant, download::InstalledModel), String> {
+    let active = state
+        .active_model()
+        .ok_or_else(|| "no model is installed".to_string())?;
+    let variant = active
+        .variant
+        .ok_or_else(|| "a custom GGUF file is not checked for updates".to_string())?;
+    let installed = download::installed(&state.root, variant)
+        .ok_or_else(|| "the installed model has no record of its revision".to_string())?;
+    Ok((variant, installed))
+}
+
+/// SPEC 5.2: only ever run from the settings button. A failure is reported,
+/// never raised, and has no effect on enrichment. The `Result` is only there
+/// because Tauri requires one of async commands; it is always `Ok`.
+#[tauri::command]
+pub async fn check_model_update(
+    state: State<'_, AppState>,
+) -> Result<download::UpdateCheck, String> {
+    let (variant, installed) = match checkable_model(&state) {
+        Ok(found) => found,
+        Err(reason) => return Ok(download::UpdateCheck::Failed { reason }),
+    };
+    Ok(match download::lookup(variant).await {
+        Ok(remote) => download::compare(&installed, &remote),
+        Err(reason) => download::UpdateCheck::Failed { reason },
+    })
+}
+
+/// Fetch the current revision of the model in use and swap it in. The old
+/// file stays loaded and in use until the new one has downloaded and passed
+/// its hash (SPEC 5.2).
+#[tauri::command]
+pub async fn update_model(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+
+    let (variant, installed) = checkable_model(&state)?;
+    let remote = download::lookup(variant).await?;
+    if remote.revision == installed.revision {
+        return Ok(());
+    }
+
+    let progress_app = app.clone();
+    download::download_verified(&state.root, variant, &remote, move |percent| {
+        let _ = progress_app.emit("model-update", serde_json::json!({ "percent": percent }));
+    })
+    .await?;
+
+    // Windows will not replace a file that a loaded model has mapped, so let
+    // go of it, and give a job still holding it a moment to finish.
+    state.swapping.store(true, Ordering::SeqCst);
+    unload_model(&app, &state);
+    let mut result = Err(String::new());
+    for _ in 0..30 {
+        result = download::install(&state.root, variant, &remote).await;
+        if result.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    state.swapping.store(false, Ordering::SeqCst);
+    state.wake.notify_one();
+
+    result.map_err(|e| {
+        format!(
+            "the new model is downloaded and verified but could not replace the old one ({e}). \
+             Try again in a moment; it will not download again."
+        )
+    })
 }

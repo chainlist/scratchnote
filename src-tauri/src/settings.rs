@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+use crate::enrich::model::Variant;
+
 pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +18,10 @@ pub struct Settings {
     /// Hide the capture window the moment a note is saved, rather than
     /// showing a "Saved" toast first.
     pub hide_immediately: bool,
+    /// Which of the app's own models to use.
+    pub model_variant: Variant,
+    /// A GGUF file of the user's own, used instead of `model_variant`.
+    pub model_path: Option<PathBuf>,
 }
 
 impl Default for Settings {
@@ -24,6 +30,8 @@ impl Default for Settings {
             root: PathBuf::from("."),
             capture_hotkey: DEFAULT_HOTKEY.to_string(),
             hide_immediately: true,
+            model_variant: Variant::Default,
+            model_path: None,
         }
     }
 }
@@ -57,6 +65,14 @@ impl Settings {
         }
         if self.capture_hotkey.trim().is_empty() {
             return Err("the capture hotkey cannot be empty".to_string());
+        }
+        if let Some(path) = &self.model_path {
+            let is_gguf = path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"));
+            if !path.is_file() || !is_gguf {
+                return Err(format!("{} is not a .gguf file", path.display()));
+            }
         }
         Ok(())
     }
@@ -130,5 +146,24 @@ mod tests {
             ..valid()
         };
         assert!(no_hotkey.validate().is_err());
+    }
+
+    #[test]
+    fn a_custom_model_must_be_an_existing_gguf_file() {
+        let dir = std::env::temp_dir().join("scratchnote-settings-gguf");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let with = |path: PathBuf| Settings {
+            model_path: Some(path),
+            ..valid()
+        };
+
+        assert!(with(dir.join("missing.gguf")).validate().is_err());
+        std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+        assert!(with(dir.join("notes.txt")).validate().is_err());
+        std::fs::write(dir.join("mine.GGUF"), b"x").unwrap();
+        assert!(with(dir.join("mine.GGUF")).validate().is_ok());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

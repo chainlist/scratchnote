@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, RwLock};
 
+use crate::enrich::download::{self, ActiveModel};
 use crate::enrich::model::{Backend, ModelStatus};
 use crate::enrich::normalize::Vocabulary;
 use crate::enrich::queue::Queue;
@@ -30,6 +32,10 @@ pub struct AppState {
     /// browsing and search all work without one (SPEC 11).
     pub backend: RwLock<Option<Arc<dyn Backend>>>,
     pub model_status: RwLock<ModelStatus>,
+    /// Set while a new model file is being moved into place. The old one has
+    /// to be unloaded for that on Windows, and this keeps the worker from
+    /// loading it straight back.
+    pub swapping: AtomicBool,
     /// Nudges the worker when a job is queued or a model becomes available.
     pub wake: Wake,
 }
@@ -39,6 +45,16 @@ impl AppState {
         if let Ok(mut current) = self.model_status.write() {
             *current = status;
         }
+    }
+
+    /// The model file enrichment should load, per the current settings.
+    pub fn active_model(&self) -> Option<ActiveModel> {
+        let settings = self.settings.read().ok()?;
+        download::active_model(
+            &self.root,
+            settings.model_variant,
+            settings.model_path.as_deref(),
+        )
     }
 
     pub fn aliases(&self) -> HashMap<String, String> {

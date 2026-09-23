@@ -126,10 +126,29 @@ fn describe_lookup_failure(repo: &str, e: &reqwest::Error) -> String {
     }
 }
 
-/// Download to `<file>.part`, resuming whatever is already there, verify the
-/// hash, then move it into place. The old file stays usable until the new one
-/// has passed, so a failed update never leaves the app without a model.
+/// Download, verify and move into place, for a model that is not loaded.
 pub async fn fetch<F>(
+    root: &Path,
+    variant: Variant,
+    remote: &RemoteModel,
+    on_progress: F,
+) -> Result<(), String>
+where
+    F: FnMut(u8),
+{
+    download_verified(root, variant, remote, on_progress).await?;
+    install(root, variant, remote).await
+}
+
+fn part_path(root: &Path, variant: Variant) -> PathBuf {
+    model_file(root, variant).with_extension("gguf.part")
+}
+
+/// Download to `<file>.part`, resuming whatever is already there, and verify
+/// the hash. The current file is not touched, so the old model stays in use
+/// until `install` swaps the new one in (SPEC 5.2). A `.part` that is already
+/// complete is only re-hashed, which makes a retried install cheap.
+pub async fn download_verified<F>(
     root: &Path,
     variant: Variant,
     remote: &RemoteModel,
@@ -138,8 +157,7 @@ pub async fn fetch<F>(
 where
     F: FnMut(u8),
 {
-    let target = model_file(root, variant);
-    let part = target.with_extension("gguf.part");
+    let part = part_path(root, variant);
     tokio::fs::create_dir_all(models_dir(root))
         .await
         .map_err(|e| format!("could not create the models directory: {e}"))?;
@@ -201,7 +219,16 @@ where
             remote.sha256
         ));
     }
+    on_progress(100);
+    Ok(())
+}
 
+/// Move a verified `.part` over the model and record its revision. On Windows
+/// this fails while the old file is still memory-mapped by a loaded model, so
+/// the caller unloads first.
+pub async fn install(root: &Path, variant: Variant, remote: &RemoteModel) -> Result<(), String> {
+    let part = part_path(root, variant);
+    let target = model_file(root, variant);
     tokio::fs::rename(&part, &target)
         .await
         .map_err(|e| format!("could not move the model into place: {e}"))?;
@@ -216,9 +243,58 @@ where
     tokio::fs::write(sidecar_path(root, variant), sidecar)
         .await
         .map_err(|e| format!("could not record which model this is: {e}"))?;
-
-    on_progress(100);
     Ok(())
+}
+
+/// The file enrichment should load, and the variant it is when the app
+/// fetched it. `None` for a custom GGUF, which has no revision to check.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveModel {
+    pub path: PathBuf,
+    pub variant: Option<Variant>,
+}
+
+/// SPEC 5.2: a custom GGUF path wins when set, then the chosen variant, then
+/// whichever variant is on disk. A custom path that has gone missing is not
+/// papered over with another model; notes wait until it is fixed.
+pub fn active_model(root: &Path, chosen: Variant, custom: Option<&Path>) -> Option<ActiveModel> {
+    if let Some(path) = custom {
+        return path.is_file().then(|| ActiveModel {
+            path: path.to_path_buf(),
+            variant: None,
+        });
+    }
+    let variant = if is_installed(root, chosen) {
+        chosen
+    } else {
+        installed_variant(root)?
+    };
+    Some(ActiveModel {
+        path: model_file(root, variant),
+        variant: Some(variant),
+    })
+}
+
+/// SPEC 8: `up-to-date | newer(revision) | failed(reason)`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum UpdateCheck {
+    UpToDate { revision: String },
+    Newer { installed: String, latest: String },
+    Failed { reason: String },
+}
+
+pub fn compare(installed: &InstalledModel, remote: &RemoteModel) -> UpdateCheck {
+    if installed.revision == remote.revision {
+        UpdateCheck::UpToDate {
+            revision: installed.revision.clone(),
+        }
+    } else {
+        UpdateCheck::Newer {
+            installed: installed.revision.clone(),
+            latest: remote.revision.clone(),
+        }
+    }
 }
 
 pub fn percent_of(done: u64, total: u64) -> u8 {
@@ -304,6 +380,128 @@ mod tests {
         assert!(is_installed(&root, Variant::Light));
         assert_eq!(installed(&root, Variant::Light).unwrap().revision, "abc123");
 
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    fn record(variant: Variant, revision: &str) -> InstalledModel {
+        InstalledModel {
+            repo: variant.repo().to_string(),
+            file: variant.file().to_string(),
+            revision: revision.to_string(),
+            sha256: "deadbeef".to_string(),
+        }
+    }
+
+    fn fake_install(root: &Path, variant: Variant) {
+        std::fs::create_dir_all(models_dir(root)).unwrap();
+        std::fs::write(model_file(root, variant), b"weights").unwrap();
+        std::fs::write(
+            sidecar_path(root, variant),
+            serde_json::to_string(&record(variant, "abc123")).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("scratchnote-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+        root
+    }
+
+    #[test]
+    fn the_chosen_variant_is_used_when_it_is_installed() {
+        let root = scratch("active-chosen");
+        fake_install(&root, Variant::Default);
+        fake_install(&root, Variant::Light);
+        let active = active_model(&root, Variant::Light, None).unwrap();
+        assert_eq!(active.variant, Some(Variant::Light));
+        assert_eq!(active.path, model_file(&root, Variant::Light));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn falls_back_to_whatever_variant_is_on_disk() {
+        let root = scratch("active-fallback");
+        assert_eq!(active_model(&root, Variant::Default, None), None);
+        fake_install(&root, Variant::Light);
+        let active = active_model(&root, Variant::Default, None).unwrap();
+        assert_eq!(active.variant, Some(Variant::Light));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_custom_file_wins_and_is_never_swapped_for_another_when_missing() {
+        let root = scratch("active-custom");
+        fake_install(&root, Variant::Default);
+        let custom = root.join("mine.gguf");
+
+        assert_eq!(
+            active_model(&root, Variant::Default, Some(&custom)),
+            None,
+            "a missing custom file must not silently fall back"
+        );
+        std::fs::write(&custom, b"weights").unwrap();
+        let active = active_model(&root, Variant::Default, Some(&custom)).unwrap();
+        assert_eq!(active.path, custom);
+        assert_eq!(active.variant, None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn compares_revisions_not_files() {
+        let remote = |revision: &str| RemoteModel {
+            revision: revision.to_string(),
+            sha256: "x".to_string(),
+            size: 1,
+            url: String::new(),
+        };
+        let installed = record(Variant::Light, "abc123");
+        assert_eq!(
+            compare(&installed, &remote("abc123")),
+            UpdateCheck::UpToDate {
+                revision: "abc123".into()
+            }
+        );
+        assert_eq!(
+            compare(&installed, &remote("def456")),
+            UpdateCheck::Newer {
+                installed: "abc123".into(),
+                latest: "def456".into()
+            }
+        );
+    }
+
+    /// A finished `.part` is verified and installed without the network, so
+    /// retrying an install that failed on a locked file costs a hash, not a
+    /// second download.
+    #[tokio::test]
+    async fn a_complete_part_file_installs_without_downloading_again() {
+        let root = scratch("install-part");
+        fake_install(&root, Variant::Light);
+        std::fs::write(part_path(&root, Variant::Light), b"hello").unwrap();
+        let remote = RemoteModel {
+            revision: "def456".to_string(),
+            sha256: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824".to_string(),
+            size: 5,
+            url: "http://unreachable.invalid/never".to_string(),
+        };
+
+        download_verified(&root, Variant::Light, &remote, |_| {})
+            .await
+            .expect("no request should be made");
+        assert_eq!(
+            std::fs::read(model_file(&root, Variant::Light)).unwrap(),
+            b"weights",
+            "the old model stays until install"
+        );
+
+        install(&root, Variant::Light, &remote).await.unwrap();
+        assert_eq!(
+            std::fs::read(model_file(&root, Variant::Light)).unwrap(),
+            b"hello"
+        );
+        assert_eq!(installed(&root, Variant::Light).unwrap().revision, "def456");
+        assert!(!part_path(&root, Variant::Light).exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 

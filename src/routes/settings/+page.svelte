@@ -3,22 +3,58 @@
 	import { resolve } from '$app/paths';
 	import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
 	import {
+		checkModelUpdate,
+		downloadModel,
 		getAliases,
 		getSettings,
+		MODEL_CHOICES,
+		modelInfo,
+		modelStatus,
+		onModelStatus,
+		onModelUpdateProgress,
+		onSettingsChanged,
 		rebuildIndex,
 		setAliases,
 		setSettings,
-		type SettingsView
+		updateModel,
+		type ModelInfo,
+		type ModelStatus,
+		type ModelVariant,
+		type Settings,
+		type SettingsView,
+		type UpdateCheck
 	} from '$lib/api';
 
 	let view = $state<SettingsView | null>(null);
-	let draft = $state({ root: '', captureHotkey: '', hideImmediately: true });
+	let draft = $state<Settings>({
+		root: '',
+		captureHotkey: '',
+		hideImmediately: true,
+		modelVariant: 'default',
+		modelPath: null
+	});
+	let customPath = $state('');
+	let info = $state<ModelInfo | null>(null);
+	let model = $state<ModelStatus>({ state: 'absent' });
+	let update = $state<UpdateCheck | null>(null);
+	let checking = $state(false);
+	/** Download progress of an update, null when none is running. */
+	let updating = $state<number | null>(null);
 	let aliases = $state<{ from: string; to: string }[]>([]);
 	let launchAtLogin = $state(false);
 	let recording = $state(false);
 	let rebuilding = $state(false);
 	let message = $state<{ text: string; error: boolean } | null>(null);
 
+	const editable = (s: Settings): Settings => ({
+		root: s.root,
+		captureHotkey: s.captureHotkey,
+		hideImmediately: s.hideImmediately,
+		modelVariant: s.modelVariant,
+		modelPath: s.modelPath
+	});
+	// Model choices apply as soon as they are picked, so only these three wait
+	// on the Save button.
 	const dirty = $derived(
 		view !== null &&
 			(draft.root !== view.root ||
@@ -27,20 +63,88 @@
 	);
 	const restartNeeded = $derived(view !== null && view.root !== view.activeRoot);
 
-	onMount(async () => {
+	onMount(() => {
+		const off = [
+			onModelStatus((status) => {
+				model = status;
+				if (status.state !== 'downloading') void refreshModels();
+			}),
+			onModelUpdateProgress((percent) => (updating = percent)),
+			// A finished download makes that model the one in use.
+			onSettingsChanged((settings) => {
+				if (!view) return;
+				view = { ...view, ...settings };
+				draft.modelVariant = settings.modelVariant;
+				draft.modelPath = settings.modelPath;
+			})
+		];
+		void (async () => {
+			try {
+				view = await getSettings();
+				draft = editable(view);
+				customPath = view.modelPath ?? '';
+				aliases = Object.entries(await getAliases()).map(([from, to]) => ({ from, to }));
+				launchAtLogin = await isEnabled();
+				model = await modelStatus();
+				await refreshModels();
+			} catch (e) {
+				say(String(e), true);
+			}
+		})();
+		return () => off.forEach((p) => void p.then((stop) => stop()));
+	});
+
+	async function refreshModels() {
+		info = await modelInfo();
+	}
+
+	async function download(variant: ModelVariant) {
 		try {
-			view = await getSettings();
-			draft = {
-				root: view.root,
-				captureHotkey: view.captureHotkey,
-				hideImmediately: view.hideImmediately
-			};
-			aliases = Object.entries(await getAliases()).map(([from, to]) => ({ from, to }));
-			launchAtLogin = await isEnabled();
+			await downloadModel(variant);
+			say('Model downloaded and in use.');
 		} catch (e) {
 			say(String(e), true);
 		}
-	});
+	}
+
+	async function check() {
+		checking = true;
+		update = null;
+		try {
+			update = await checkModelUpdate();
+		} finally {
+			checking = false;
+		}
+	}
+
+	async function applyUpdate() {
+		updating = 0;
+		try {
+			await updateModel();
+			update = null;
+			await refreshModels();
+			say('Model updated.');
+		} catch (e) {
+			say(String(e), true);
+		} finally {
+			updating = null;
+		}
+	}
+
+	async function useModel(modelVariant: ModelVariant, modelPath: string | null) {
+		if (!view) return;
+		try {
+			view = await setSettings({ ...editable(view), modelVariant, modelPath });
+			draft.modelVariant = view.modelVariant;
+			draft.modelPath = view.modelPath;
+			update = null;
+			await refreshModels();
+		} catch (e) {
+			say(String(e), true);
+		}
+	}
+
+	const short = (revision: string) => revision.slice(0, 7);
 
 	function say(text: string, error = false) {
 		message = { text, error };
@@ -179,6 +283,114 @@
 					<input type="checkbox" checked={launchAtLogin} onchange={toggleLaunchAtLogin} />
 					Launch at login
 				</label>
+			</section>
+
+			<section class="flex flex-col gap-3">
+				<h2 class="text-xs font-medium tracking-wide text-neutral-500 uppercase">Model</h2>
+
+				{#each MODEL_CHOICES as choice (choice.variant)}
+					{@const record = info?.[choice.variant] ?? null}
+					<div class="flex items-center gap-2 text-sm">
+						<input
+							type="radio"
+							name="model"
+							id="model-{choice.variant}"
+							checked={view.modelPath === null && info?.activeVariant === choice.variant}
+							disabled={!record}
+							onchange={() => useModel(choice.variant, null)}
+						/>
+						<label for="model-{choice.variant}" class="flex-1 text-neutral-300">
+							{choice.name}
+							<span class="text-xs text-neutral-500">{choice.note}</span>
+						</label>
+						{#if record}
+							<span class="font-mono text-xs text-neutral-500" title={record.revision}>
+								{short(record.revision)}
+							</span>
+						{:else}
+							<button
+								type="button"
+								onclick={() => download(choice.variant)}
+								disabled={model.state === 'downloading'}
+								class={button}
+							>
+								Download {choice.size}
+							</button>
+						{/if}
+					</div>
+				{/each}
+
+				<div class="flex items-center gap-2 text-sm">
+					<input
+						type="radio"
+						name="model"
+						id="model-custom"
+						checked={view.modelPath !== null}
+						disabled={view.modelPath === null && customPath.trim() === ''}
+						onchange={() => useModel(view!.modelVariant, customPath)}
+					/>
+					<label for="model-custom" class="text-neutral-300">Custom GGUF file</label>
+				</div>
+				<div class="flex gap-2 pl-6">
+					<input
+						bind:value={customPath}
+						placeholder="C:\models\my-model.gguf"
+						spellcheck="false"
+						class="{field} font-mono"
+					/>
+					<button
+						type="button"
+						onclick={() => useModel(view!.modelVariant, customPath)}
+						disabled={customPath.trim() === '' || customPath === view.modelPath}
+						class={button}
+					>
+						Use
+					</button>
+				</div>
+
+				{#if model.state === 'downloading'}
+					<div class="h-1.5 overflow-hidden rounded-full bg-neutral-800">
+						<div
+							class="h-full rounded-full bg-neutral-300 transition-[width] duration-300"
+							style="width: {model.percent ?? 0}%"
+						></div>
+					</div>
+				{/if}
+
+				<p class="text-xs text-neutral-500">
+					{#if info?.activePath}
+						In use: <span class="font-mono">{info.activePath}</span>
+					{:else if view.modelPath !== null}
+						<span class="text-amber-400">The custom file is missing, so notes stay pending.</span>
+					{:else}
+						No model installed. Notes stay pending until one is.
+					{/if}
+				</p>
+
+				{#if info?.activeVariant && view.modelPath === null}
+					<div class="flex flex-wrap items-center gap-3">
+						<button
+							type="button"
+							onclick={check}
+							disabled={checking || updating !== null}
+							class={button}
+						>
+							{checking ? 'Checking' : 'Check for updates'}
+						</button>
+						{#if updating !== null}
+							<span class="text-xs text-neutral-400">Downloading the update: {updating}%</span>
+						{:else if update?.state === 'upToDate'}
+							<span class="text-xs text-neutral-400">Up to date ({short(update.revision)}).</span>
+						{:else if update?.state === 'newer'}
+							<span class="text-xs text-neutral-300">
+								{short(update.latest)} is out; you have {short(update.installed)}.
+							</span>
+							<button type="button" onclick={applyUpdate} class={button}>Update</button>
+						{:else if update?.state === 'failed'}
+							<span class="text-xs text-amber-400">Could not check: {update.reason}</span>
+						{/if}
+					</div>
+				{/if}
 			</section>
 
 			<section class="flex flex-col gap-3">

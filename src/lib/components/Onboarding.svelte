@@ -1,25 +1,10 @@
 <script lang="ts">
-	import { downloadModel, type ModelStatus, type ModelVariant } from '$lib/api';
+	import { downloadModel, MODEL_CHOICES, type ModelStatus, type ModelVariant } from '$lib/api';
 
 	let { status }: { status: ModelStatus } = $props();
 
 	let error = $state<string | null>(null);
 	let starting = $state<ModelVariant | null>(null);
-
-	const choices: { variant: ModelVariant; name: string; size: string; note: string }[] = [
-		{
-			variant: 'default',
-			name: 'Default',
-			size: '~2.5 GB',
-			note: 'Qwen3 4B. Better labels, wants more RAM.'
-		},
-		{
-			variant: 'light',
-			name: 'Light',
-			size: '~1.1 GB',
-			note: 'Qwen3 1.7B. Quicker, kinder to a small machine.'
-		}
-	];
 
 	async function start(variant: ModelVariant) {
 		starting = variant;
@@ -54,7 +39,7 @@
 		</p>
 
 		<div class="flex flex-wrap gap-2">
-			{#each choices as choice (choice.variant)}
+			{#each MODEL_CHOICES as choice (choice.variant)}
 				<button
 					type="button"
 					onclick={() => start(choice.variant)}

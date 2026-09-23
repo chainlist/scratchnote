@@ -59,8 +59,10 @@ fn backend(app: &AppHandle) -> Option<Arc<dyn Backend>> {
         }
     }
 
-    let variant = super::download::installed_variant(&state.root)?;
-    let path = super::model::model_file(&state.root, variant);
+    if state.swapping.load(std::sync::atomic::Ordering::SeqCst) {
+        return None;
+    }
+    let path = state.active_model()?.path;
     log::info!("loading {}", path.display());
 
     match super::llama::LlamaCpp::load(&path) {

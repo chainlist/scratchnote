@@ -50,8 +50,10 @@ pub fn run() {
             commands::rebuild_index,
             commands::retry_enrichment,
             commands::model_status,
-            commands::installed_model,
+            commands::model_info,
             commands::download_model,
+            commands::check_model_update,
+            commands::update_model,
             commands::today,
             commands::get_settings,
             commands::set_settings,
@@ -82,7 +84,12 @@ pub fn run() {
 
             // A model on disk is not loaded until the first job needs it
             // (SPEC 5.1), so "idle" rather than "loaded" at startup.
-            let status = if download::installed_variant(&root).is_some() {
+            let active = download::active_model(
+                &root,
+                settings.model_variant,
+                settings.model_path.as_deref(),
+            );
+            let status = if active.is_some() {
                 ModelStatus::Idle
             } else {
                 ModelStatus::Absent
@@ -106,6 +113,7 @@ pub fn run() {
                 queue: std::sync::Mutex::new(queue),
                 backend: std::sync::RwLock::new(None),
                 model_status: std::sync::RwLock::new(status),
+                swapping: std::sync::atomic::AtomicBool::new(false),
                 wake: wake.clone(),
             });
 

@@ -77,9 +77,48 @@ export interface InstalledModel {
 
 export type ModelVariant = 'default' | 'light';
 
+export const MODEL_CHOICES: { variant: ModelVariant; name: string; size: string; note: string }[] =
+	[
+		{
+			variant: 'default',
+			name: 'Default',
+			size: '~2.5 GB',
+			note: 'Qwen3 4B. Better labels, wants more RAM.'
+		},
+		{
+			variant: 'light',
+			name: 'Light',
+			size: '~1.1 GB',
+			note: 'Qwen3 1.7B. Quicker, kinder to a small machine.'
+		}
+	];
+
 export const modelStatus = () => invoke<ModelStatus>('model_status');
 
-export const installedModel = () => invoke<InstalledModel | null>('installed_model');
+export interface ModelInfo {
+	/** The file enrichment loads, or null when there is nothing usable. */
+	activePath: string | null;
+	/** Null for a custom GGUF file. */
+	activeVariant: ModelVariant | null;
+	default: InstalledModel | null;
+	light: InstalledModel | null;
+}
+
+export const modelInfo = () => invoke<ModelInfo>('model_info');
+
+export type UpdateCheck =
+	| { state: 'upToDate'; revision: string }
+	| { state: 'newer'; installed: string; latest: string }
+	| { state: 'failed'; reason: string };
+
+/** Only ever called from the settings button (SPEC 5.2). */
+export const checkModelUpdate = () => invoke<UpdateCheck>('check_model_update');
+
+/** The old model stays in use until the new one is downloaded and verified. */
+export const updateModel = () => invoke<void>('update_model');
+
+export const onModelUpdateProgress = (handler: (percent: number) => void): Promise<UnlistenFn> =>
+	listen<{ percent: number }>('model-update', (event) => handler(event.payload.percent));
 
 export const downloadModel = (variant: ModelVariant) => invoke<void>('download_model', { variant });
 
@@ -116,6 +155,9 @@ export interface Settings {
 	captureHotkey: string;
 	/** Hide the capture window on save rather than showing "Saved" first. */
 	hideImmediately: boolean;
+	modelVariant: ModelVariant;
+	/** A GGUF file of the user's own, used instead of modelVariant. */
+	modelPath: string | null;
 }
 
 export interface SettingsView extends Settings {

@@ -75,7 +75,7 @@ fn bench_cold_batch() {
 
     mark("load_begin", serde_json::json!({}));
     let started = Instant::now();
-    // SN_BENCH_GPU=0 measures the CPU path in a GPU build.
+    // SN_BENCH_GPU=0 measures the CPU path, as the settings toggle does.
     let use_gpu = std::env::var("SN_BENCH_GPU").map_or(true, |v| v != "0");
     let backend: Box<dyn Backend> =
         Box::new(LlamaCpp::load_with(&path, use_gpu).expect("model loads"));

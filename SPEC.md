@@ -60,26 +60,32 @@ Studio` even when another install has a perfectly good compiler. Either give
 `vswhere -all` lists every registered instance; without `-all` it hides Build
 Tools installs, which makes a working toolchain look absent.
 
-**GPU builds (optional).** The `gpu` Cargo feature compiles llama.cpp's Vulkan
-backend, which runs on NVIDIA, AMD, Intel and Adreno GPUs with only the
-driver installed on the user's machine, and falls back to the CPU when no
-device is found. macOS gets Metal without asking. On Windows the build needs:
+**GPU support.** Every build compiles llama.cpp's Vulkan backend (Metal on
+macOS), which runs on NVIDIA, AMD, Intel and Adreno GPUs with only the driver
+installed on the user's machine, and falls back to the CPU when no device is
+found. The dependency lines come from `cargo add`:
+
+```bash
+cargo add llama-cpp-2@0.1.156 --features vulkan --target 'cfg(any(windows, target_os = "linux"))'
+cargo add llama-cpp-2@0.1.156 --features metal --target 'cfg(target_os = "macos")'
+```
+
+`src-tauri/.cargo/config.toml` is the one hand-written configuration file,
+allowed as an exception to the rule above because no installer produces it.
+It holds a single `[env]` entry, `CMAKE_GENERATOR = "Ninja"`, and nothing else
+may be added to it without asking.
+
+Building needs, once per machine:
 
 - **The Vulkan SDK**, for the shader compiler: `winget install KhronosGroup.VulkanSDK`.
-- **Ninja, from an MSVC developer shell.** The Visual Studio generator cannot
-  install the shader generator llama.cpp builds along the way. Ninja ships
-  with the Build Tools; run `vcvars64.bat` first so CMake finds `cl`.
-- **A short target directory.** The shader generator is built deep inside
-  `target/`, past MSBuild's 260 character limit.
-
-```bat
-call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-set VULKAN_SDK=C:\VulkanSDK\1.4.357.0
-set PATH=%VULKAN_SDK%\Bin;%PATH%
-set CMAKE_GENERATOR=Ninja
-set CARGO_TARGET_DIR=%USERPROFILE%\snv
-cargo build --features gpu
-```
+  Its installer sets `VULKAN_SDK`; open a new shell afterwards.
+- **Ninja on `PATH`**: `winget install Ninja-build.Ninja`. The config file
+  above selects it, because the Visual Studio generator cannot install the
+  shader generator llama.cpp builds along the way. No developer shell is needed.
+- **A short `CARGO_TARGET_DIR` on Windows**, such as `%USERPROFILE%\.snb`.
+  The shader generator is a nested CMake project deep inside the build
+  directory, and at the repository's own `target/` its paths pass the 260
+  character limit that `cl.exe` still enforces. 19 characters works; 47 does not.
 
 ### Step 1: Create the SvelteKit app with `sv create`
 
@@ -189,7 +195,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 Opened from tray icon or app launch. Three areas:
 
 1. **Sidebar**: list of days (newest first, grouped by month), and a tag list with counts, sorted by count.
-2. **Day view** (default: today): all notes of the selected day in chronological order. Each note card shows time, subject, summary, tags as chips, and the body. A small status badge shows `pending` / `failed` if enrichment is not done. Clicking a tag chip filters by that tag.
+2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Subject, summary and tags are not displayed; they exist for search and indexing. Edit, re-run and delete (with the enrichment status) appear on hover.
 3. **Search bar** at the top: full-text over body, subject, summary; supports `#tag` tokens as filters (e.g. `#infra kubernetes`). Results are note cards across all days.
 
 Note actions (on hover): edit body inline, edit tags manually, re-run enrichment, delete.

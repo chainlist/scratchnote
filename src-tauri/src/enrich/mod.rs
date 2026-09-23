@@ -1,3 +1,14 @@
+/// What the model wrote, short enough for one log line. A failed parse is
+/// only diagnosable with the output in hand.
+pub fn excerpt(raw: &str) -> String {
+    const LIMIT: usize = 300;
+    let mut out: String = raw.chars().take(LIMIT).collect();
+    if raw.chars().count() > LIMIT {
+        out.push_str("...");
+    }
+    format!("{out:?}")
+}
+
 #[cfg(test)]
 mod bench;
 pub mod download;
@@ -29,8 +40,12 @@ impl Enrichment {
     /// as the stub used in tests.
     pub fn parse(raw: &str) -> Result<Self, String> {
         let trimmed = raw.trim();
-        let mut parsed: Enrichment =
-            serde_json::from_str(trimmed).map_err(|e| format!("not the expected JSON: {e}"))?;
+        let mut parsed: Enrichment = serde_json::from_str(trimmed).map_err(|e| {
+            format!(
+                "not the expected JSON ({e}), the model returned {}",
+                excerpt(trimmed)
+            )
+        })?;
 
         parsed.subject = clamp(parsed.subject.trim(), MAX_SUBJECT);
         parsed.summary = clamp(parsed.summary.trim(), MAX_SUMMARY);
@@ -68,6 +83,15 @@ fn clamp(value: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_parse_failure_quotes_what_the_model_returned() {
+        let err =
+            Enrichment::parse(r#"{"subject":"cut","summary":"off","tags":["a"]"#).unwrap_err();
+        assert!(err.contains(r#"\"tags\":[\"a\"]"#), "{err}");
+        let long = "x".repeat(1000);
+        assert!(Enrichment::parse(&long).unwrap_err().ends_with("...\""));
+    }
 
     #[test]
     fn parses_what_the_grammar_produces() {

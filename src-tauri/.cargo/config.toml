@@ -1,0 +1,6 @@
+[env]
+# llama.cpp's Vulkan backend builds a shader generator as a nested CMake
+# project, which the Visual Studio generator cannot install. Ninja can, and
+# unlike a developer shell it needs nothing set up beforehand: CMake finds
+# MSVC through the cmake crate.
+CMAKE_GENERATOR = "Ninja"

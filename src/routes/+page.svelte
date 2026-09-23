@@ -84,11 +84,22 @@
 		await refresh();
 	}
 
-	/** Adds the tag to the search, or takes it out again if it is already there. */
-	function toggleTag(tag: string) {
+	/**
+	 * A plain click filters on this tag alone, or clears it if it already was
+	 * the only one. With `additive`, the tag is added to the search or taken
+	 * out again. Words that are not tags are kept either way.
+	 */
+	function toggleTag(tag: string, additive = false) {
 		const tokens = query.split(/\s+/).filter(Boolean);
 		const kept = tokens.filter((token) => token.toLowerCase() !== `#${tag}`);
-		query = (kept.length === tokens.length ? [...tokens, `#${tag}`] : kept).join(' ');
+		const selected = kept.length !== tokens.length;
+		if (additive) {
+			query = (selected ? kept : [...tokens, `#${tag}`]).join(' ');
+			return;
+		}
+		const words = tokens.filter((token) => !token.startsWith('#'));
+		const alone = selected && activeTags.length === 1;
+		query = (alone ? words : [...words, `#${tag}`]).join(' ');
 	}
 
 	async function save(note: Note, edit: NoteEdit): Promise<boolean> {
@@ -173,58 +184,53 @@
 	</aside>
 
 	<main class="flex-1 overflow-y-auto p-6">
-		<div class="mb-4">
-			<SearchBar bind:value={query} />
-		</div>
+		<div class="mx-auto max-w-2xl">
+			<div class="mb-4">
+				<SearchBar bind:value={query} />
+			</div>
 
-		<h2 class="mb-4 text-lg font-semibold">
-			{#if searching}
-				{results.length}
-				{results.length === 1 ? 'result' : 'results'}
-			{:else}
-				{heading}
+			<h2 class="mb-4 text-lg font-semibold">
+				{#if searching}
+					{results.length}
+					{results.length === 1 ? 'result' : 'results'}
+				{:else}
+					{heading}
+				{/if}
+			</h2>
+
+			{#if model.state === 'absent' || model.state === 'downloading'}
+				<Onboarding status={model} />
 			{/if}
-		</h2>
 
-		{#if model.state === 'absent' || model.state === 'downloading'}
-			<Onboarding status={model} />
-		{/if}
+			{#if error}
+				<p class="rounded border border-red-900 bg-red-950 p-3 text-sm text-red-300">{error}</p>
+			{/if}
 
-		{#if error}
-			<p class="rounded border border-red-900 bg-red-950 p-3 text-sm text-red-300">{error}</p>
-		{/if}
-
-		{#if searching}
-			{#if results.length === 0}
-				<p class="text-sm text-neutral-600">No notes match.</p>
+			{#if searching}
+				{#if results.length === 0}
+					<p class="text-sm text-neutral-600">No notes match.</p>
+				{:else}
+					<ul class="divide-y divide-neutral-900">
+						{#each results as note (note.id)}
+							<li>
+								<NoteCard {note} ondelete={remove} onsave={save} onretry={retry} showDate />
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			{:else if notes.length === 0}
+				<p class="text-sm text-neutral-600">
+					Nothing captured. Press Ctrl+Shift+Space to write a note.
+				</p>
 			{:else}
-				<ul class="flex flex-col gap-3">
-					{#each results as note (note.id)}
+				<ul class="divide-y divide-neutral-900">
+					{#each notes as note (note.id)}
 						<li>
-							<NoteCard
-								{note}
-								ondelete={remove}
-								ontag={toggleTag}
-								onsave={save}
-								onretry={retry}
-								showDate
-							/>
+							<NoteCard {note} ondelete={remove} onsave={save} onretry={retry} />
 						</li>
 					{/each}
 				</ul>
 			{/if}
-		{:else if notes.length === 0}
-			<p class="text-sm text-neutral-600">
-				Nothing captured. Press Ctrl+Shift+Space to write a note.
-			</p>
-		{:else}
-			<ul class="flex flex-col gap-3">
-				{#each notes as note (note.id)}
-					<li>
-						<NoteCard {note} ondelete={remove} ontag={toggleTag} onsave={save} onretry={retry} />
-					</li>
-				{/each}
-			</ul>
-		{/if}
+		</div>
 	</main>
 </div>

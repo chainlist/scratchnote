@@ -411,7 +411,7 @@
 				</label>
 				<p class="-mt-2 pl-6 text-xs text-neutral-500">
 					{#if gpus.length === 0}
-						No GPU available: this build runs on the CPU only, or no supported device was found.
+						No supported GPU found, so the model runs on the CPU.
 					{:else}
 						{gpus.join(', ')}. Much faster and lighter on the CPU; off keeps everything on the CPU.
 					{/if}

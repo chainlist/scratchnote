@@ -105,6 +105,9 @@ impl LlamaCpp {
         // tokens, which matters as soon as a note is not plain ASCII.
         let mut decoder = encoding_rs::UTF_8.new_decoder();
 
+        // The grammar only allows end-of-generation once the object is closed,
+        // so running out of tokens is the one way an answer comes back short.
+        let mut finished = false;
         for position in (tokens.len() as i32..).take(MAX_OUTPUT_TOKENS as usize) {
             // `sample` already accepts the token internally. Accepting it
             // again here advances the grammar twice per token, which desyncs
@@ -112,6 +115,7 @@ impl LlamaCpp {
             let token = sampler.sample(&context, -1);
 
             if self.model.is_eog_token(token) {
+                finished = true;
                 break;
             }
             out.push_str(
@@ -130,12 +134,18 @@ impl LlamaCpp {
                 .map_err(|e| format!("could not decode: {e}"))?;
         }
 
+        if !finished {
+            return Err(format!(
+                "stopped at the {MAX_OUTPUT_TOKENS} token limit before the answer was complete: {}",
+                super::excerpt(&out)
+            ));
+        }
         Ok(out)
     }
 }
 
-/// The GPUs llama.cpp can use, by name. Empty in a CPU-only build, or when
-/// the machine has no device the compiled backend supports.
+/// The GPUs llama.cpp can use, by name. Empty when the machine has no device
+/// the compiled backend supports.
 pub fn gpu_devices() -> Vec<String> {
     use llama_cpp_2::LlamaBackendDeviceType::{Gpu, IntegratedGpu};
     llama_cpp_2::list_llama_ggml_backend_devices()

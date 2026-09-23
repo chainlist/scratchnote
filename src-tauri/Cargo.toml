@@ -35,21 +35,15 @@ futures-util = "0.3.34"
 reqwest = { version = "0.13.3", default-features = false, features = ["rustls", "stream", "json"] }
 encoding_rs = "0.8.35"
 
-# Metal needs nothing beyond Xcode, so macOS always gets the GPU.
-[target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-2 = { version = "0.1.156", features = ["metal"] }
-
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
 
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+llama-cpp-2 = { version = "0.1.156", features = ["vulkan"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+llama-cpp-2 = { version = "0.1.156", features = ["metal"] }
+
 [dev-dependencies]
 filetime = "0.2.29"
-
-[features]
-# GPU offload through Vulkan: NVIDIA, AMD, Intel and Adreno on Windows and
-# Linux, with only the GPU driver needed at runtime. Without a usable device
-# llama.cpp falls back to the CPU. Building it needs the Vulkan SDK, and on
-# Windows the Ninja generator from an MSVC developer shell with a short
-# CARGO_TARGET_DIR; see SPEC.md, Step 0.
-gpu = ["llama-cpp-2/vulkan"]

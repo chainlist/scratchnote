@@ -7,7 +7,8 @@
 		tags: [string, number][];
 		/** Tags currently filtered on, highlighted in the list. */
 		active: string[];
-		onselect: (tag: string) => void;
+		/** `additive` is true when Ctrl (Cmd on macOS) is held. */
+		onselect: (tag: string, additive: boolean) => void;
 	} = $props();
 </script>
 
@@ -19,7 +20,7 @@
 				<li>
 					<button
 						type="button"
-						onclick={() => onselect(tag)}
+						onclick={(event) => onselect(tag, event.ctrlKey || event.metaKey)}
 						class="flex w-full items-baseline justify-between rounded px-2 py-1 text-left text-sm
 							{active.includes(tag)
 							? 'bg-neutral-800 text-neutral-100'

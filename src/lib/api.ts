@@ -106,7 +106,7 @@ export interface ModelInfo {
 
 export const modelInfo = () => invoke<ModelInfo>('model_info');
 
-/** GPUs the model can run on. Empty in a CPU-only build or with no usable device. */
+/** GPUs the model can run on. Empty when the machine has no usable device. */
 export const gpuDevices = () => invoke<string[]>('gpu_devices');
 
 export type UpdateCheck =

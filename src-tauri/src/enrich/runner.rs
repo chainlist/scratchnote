@@ -304,9 +304,15 @@ mod tests {
         let out = enrich(note, &vocabulary, backend.as_ref()).expect("should label");
         eprintln!("{note}\n  -> {} | {:?}", out.subject, out.tags);
 
-        assert!(out.tags.iter().any(|t| t == "scratchnote"), "{:?}", out.tags);
         assert!(
-            out.tags.iter().any(|t| t.contains("memory") || t.contains("leak")),
+            out.tags.iter().any(|t| t == "scratchnote"),
+            "{:?}",
+            out.tags
+        );
+        assert!(
+            out.tags
+                .iter()
+                .any(|t| t.contains("memory") || t.contains("leak")),
             "the topic is missing: {:?}",
             out.tags
         );

@@ -462,7 +462,8 @@ pub struct ModelInfo {
     pub light: Option<download::InstalledModel>,
 }
 
-/// GPUs the model could run on, for the settings toggle. Empty means CPU only.
+/// GPUs the model could run on, for the settings toggle. Empty means the
+/// machine has none the build can use, so the model runs on the CPU.
 #[tauri::command]
 pub fn gpu_devices() -> Vec<String> {
     crate::enrich::llama::gpu_devices()

@@ -4,14 +4,12 @@
 	let {
 		note,
 		ondelete,
-		ontag,
 		onsave,
 		onretry,
 		showDate = false
 	}: {
 		note: Note;
 		ondelete: (note: Note) => void;
-		ontag: (tag: string) => void;
 		/** Resolves true once saved; false keeps the editor open. */
 		onsave: (note: Note, edit: NoteEdit) => Promise<boolean>;
 		onretry: (note: Note) => void;
@@ -21,32 +19,26 @@
 
 	let editing = $state(false);
 	let saving = $state(false);
-	let draft = $state<{ body: string; subject: string; tags: string }>({
-		body: '',
-		subject: '',
-		tags: ''
-	});
+	let draft = $state('');
 
 	// Re-running a manual note would be skipped anyway, and a pending one is
 	// already in the queue.
 	let canRetry = $derived(note.status === 'done' || note.status === 'failed');
 
 	function startEditing() {
-		draft = {
-			body: note.body,
-			subject: note.subject ?? '',
-			tags: note.tags.map((tag) => `#${tag}`).join(' ')
-		};
+		draft = note.body;
 		editing = true;
 	}
 
 	async function save() {
 		if (saving) return;
 		saving = true;
+		// Subject and tags only feed search, so they are handed back unchanged
+		// and stay with the model.
 		const saved = await onsave(note, {
-			body: draft.body,
-			subject: draft.subject,
-			tags: draft.tags.split(/[\s,]+/).filter(Boolean)
+			body: draft,
+			subject: note.subject ?? '',
+			tags: note.tags
 		});
 		saving = false;
 		if (saved) editing = false;
@@ -54,8 +46,6 @@
 
 	const action =
 		'cursor-pointer rounded px-1.5 py-0.5 text-[10px] tracking-wide text-neutral-400 uppercase hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50';
-	const field =
-		'w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none';
 
 	function onEditKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -87,101 +77,59 @@
 </script>
 
 <article
-	class="group rounded-lg border border-neutral-800 bg-neutral-900 p-4"
+	class="group relative grid grid-cols-[4.5rem_1fr] gap-x-5 py-4"
 	onmouseleave={() => (armed = false)}
 >
-	<header class="mb-1 flex items-baseline gap-3">
-		<time class="font-mono text-xs text-neutral-500">
-			{#if showDate}<span class="mr-1">{note.date}</span>{/if}{note.time}
-		</time>
-		<h3 class="flex-1 text-sm font-medium text-neutral-100">
-			{note.subject ?? 'Untitled'}
-		</h3>
-		{#if !editing}
-			<div class="flex gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-				{#if canRetry}
-					<button type="button" onclick={() => onretry(note)} class={action}>Re-run</button>
-				{/if}
-				<button type="button" onclick={startEditing} class={action}>Edit</button>
-			</div>
-		{/if}
-		<button
-			type="button"
-			onclick={onChipClick}
-			onblur={() => (armed = false)}
-			aria-label={name}
-			title={name}
-			class="cursor-pointer rounded px-1.5 py-0.5 text-[10px] tracking-wide uppercase
-				ring-neutral-600 transition group-hover:ring-1 focus-visible:ring-1
-				{armed
-				? 'bg-red-900 text-red-100'
-				: note.status === 'failed'
-					? 'bg-red-950 text-red-400'
-					: 'bg-neutral-800 text-neutral-400'}
-				{placeholder && !armed ? 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100' : ''}"
-		>
-			{label}
-		</button>
-	</header>
+	<time class="pt-1 text-right font-mono text-xs leading-5 text-neutral-600">
+		{#if showDate}<span class="block">{note.date}</span>{/if}{note.time}
+	</time>
 
-	{#if editing}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div class="flex flex-col gap-2" onkeydown={onEditKeydown}>
-			<input
-				bind:value={draft.subject}
-				placeholder="Subject"
-				aria-label="Subject"
-				spellcheck="false"
-				class={field}
-			/>
-			<input
-				bind:value={draft.tags}
-				placeholder="#tags separated by spaces"
-				aria-label="Tags"
-				spellcheck="false"
-				class="{field} font-mono text-xs"
-			/>
-			<textarea
-				bind:value={draft.body}
-				rows={Math.min(12, Math.max(3, draft.body.split('\n').length))}
-				aria-label="Body"
-				spellcheck="false"
-				class="{field} resize-y leading-relaxed"></textarea>
-			<div class="flex items-center justify-between text-[11px] text-neutral-500">
-				<span>Subject or tags edited here are never overwritten by the model.</span>
-				<span class="flex gap-1">
+	<div class="min-w-0">
+		{#if editing}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="flex flex-col gap-2" onkeydown={onEditKeydown}>
+				<textarea
+					bind:value={draft}
+					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
+					aria-label="Body"
+					spellcheck="false"
+					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[15px] leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
+				></textarea>
+				<div class="flex justify-end gap-1">
 					<button type="button" onclick={() => (editing = false)} class={action}>Cancel</button>
 					<button type="button" onclick={save} disabled={saving} class={action}>
 						{saving ? 'Saving' : 'Save'}
 					</button>
-				</span>
+				</div>
 			</div>
+		{:else}
+			<p class="text-[15px] leading-7 whitespace-pre-wrap text-neutral-200">{note.body}</p>
+		{/if}
+	</div>
+
+	{#if !editing}
+		<div
+			class="absolute top-3 right-0 flex gap-1 bg-neutral-950 pl-2 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
+		>
+			{#if canRetry}
+				<button type="button" onclick={() => onretry(note)} class={action}>Re-run</button>
+			{/if}
+			<button type="button" onclick={startEditing} class={action}>Edit</button>
+			<button
+				type="button"
+				onclick={onChipClick}
+				onblur={() => (armed = false)}
+				aria-label={name}
+				title={name}
+				class="cursor-pointer rounded px-1.5 py-0.5 text-[10px] tracking-wide uppercase
+					{armed
+					? 'bg-red-900 text-red-100'
+					: note.status === 'failed'
+						? 'bg-red-950 text-red-400'
+						: 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'}"
+			>
+				{label}
+			</button>
 		</div>
-	{:else}
-		{@render view()}
 	{/if}
 </article>
-
-{#snippet view()}
-	{#if note.summary}
-		<p class="mb-2 text-xs text-neutral-400">{note.summary}</p>
-	{/if}
-
-	{#if note.tags.length > 0}
-		<ul class="mb-2 flex flex-wrap gap-1">
-			{#each note.tags as tag (tag)}
-				<li>
-					<button
-						type="button"
-						onclick={() => ontag(tag)}
-						class="cursor-pointer rounded bg-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200"
-					>
-						#{tag}
-					</button>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-
-	<p class="text-sm leading-relaxed whitespace-pre-wrap text-neutral-300">{note.body}</p>
-{/snippet}

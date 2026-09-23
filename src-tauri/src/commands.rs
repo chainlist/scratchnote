@@ -7,9 +7,10 @@ use ulid::Ulid;
 
 use crate::enrich::download::{self, RemoteModel};
 use crate::enrich::model::{model_file, ModelStatus, Variant};
+use crate::enrich::normalize;
 use crate::enrich::queue::{queue_path, Job};
 use crate::state::AppState;
-use crate::storage::daily_file::{self, Note, Status};
+use crate::storage::daily_file::{self, Note, NotePatch, Status};
 use crate::storage::index::{self, IndexEntry};
 use crate::storage::tags;
 use crate::storage::{check_date, day_path, relative_day_path};
@@ -165,6 +166,113 @@ pub async fn delete_note(
 
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     Ok(())
+}
+
+/// Edit a note's body in the app. A changed body goes back to the model,
+/// unless the user has taken the note over (SPEC 4.2).
+#[tauri::command]
+pub async fn update_note(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    date: String,
+    id: String,
+    body: String,
+) -> Result<Note, String> {
+    check_date(&date)?;
+    let body = body.trim().to_string();
+    if body.is_empty() {
+        return Err("a note cannot be empty; delete it instead".to_string());
+    }
+    let current = read_note(&state, &date, &id).await?;
+    if current.body == body {
+        return Ok(current);
+    }
+
+    let path = day_path(&state.settings.root, &date);
+    if !state.writer.replace_body(path, id.clone(), body).await? {
+        return Err(format!("no note {id} in {date}"));
+    }
+    reindex_day(&state, &date).await?;
+    if current.status != Status::Manual {
+        enqueue(&state, id.clone(), date.clone()).await;
+    }
+
+    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    read_note(&state, &date, &id).await
+}
+
+/// Set a note's subject and tags by hand. The note becomes `manual`, which
+/// enrichment never overwrites (SPEC 4.2). `None` keeps the current value.
+#[tauri::command]
+pub async fn update_note_meta(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    date: String,
+    id: String,
+    subject: Option<String>,
+    tags: Option<Vec<String>>,
+) -> Result<Note, String> {
+    check_date(&date)?;
+    let current = read_note(&state, &date, &id).await?;
+
+    let subject = match subject {
+        // The subject is the note's heading, so it has to stay on one line.
+        Some(raw) => {
+            Some(raw.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|s| !s.is_empty())
+        }
+        None => current.subject.clone(),
+    };
+    let tags = match tags {
+        Some(raw) => normalize::manual(&raw, &state.vocabulary()),
+        None => current.tags.clone(),
+    };
+    // The file keeps a summary and its tags as one two-line block, and that
+    // block cannot be written with the tag line empty.
+    if tags.is_empty() && current.summary.is_some() {
+        return Err("keep at least one tag".to_string());
+    }
+
+    let patch = NotePatch {
+        subject,
+        summary: current.summary.clone(),
+        tags,
+        status: Status::Manual,
+    };
+    let path = day_path(&state.settings.root, &date);
+    if !state.writer.update_note(path, id.clone(), patch).await? {
+        return Err(format!("no note {id} in {date}"));
+    }
+    reindex_day(&state, &date).await?;
+
+    // Nothing left for the model to do with it.
+    if let Ok(mut queue) = state.queue.lock() {
+        queue.remove(&id);
+    }
+    persist_queue(&state).await;
+
+    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    read_note(&state, &date, &id).await
+}
+
+async fn read_note(state: &State<'_, AppState>, date: &str, id: &str) -> Result<Note, String> {
+    let contents = tokio::fs::read_to_string(day_path(&state.settings.root, date))
+        .await
+        .map_err(|e| e.to_string())?;
+    daily_file::parse_notes(&contents, date, &relative_day_path(date))
+        .into_iter()
+        .find(|note| note.id == id)
+        .ok_or_else(|| format!("no note {id} in {date}"))
+}
+
+/// After rewriting a day file: reparse the day and write the index back.
+async fn reindex_day(state: &State<'_, AppState>, date: &str) -> Result<(), String> {
+    let entries = index::parse_day(&day_path(&state.settings.root, date), date);
+    state
+        .index
+        .write()
+        .map_err(|_| "index lock poisoned".to_string())?
+        .replace_day(date, entries);
+    state.persist_index().await
 }
 
 /// Reparse every markdown file and replace the cache. Returns how many notes

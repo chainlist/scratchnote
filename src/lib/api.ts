@@ -86,6 +86,24 @@ export const downloadModel = (variant: ModelVariant) => invoke<void>('download_m
 export const retryEnrichment = (date: string, id: string) =>
 	invoke<void>('retry_enrichment', { date, id });
 
+/** What the note card's editor hands back. */
+export interface NoteEdit {
+	body: string;
+	subject: string;
+	tags: string[];
+}
+
+/** Replace a note's body. A changed body is re-enriched unless the note is manual. */
+export const updateNote = (date: string, id: string, body: string) =>
+	invoke<Note>('update_note', { date, id, body });
+
+/** Set subject and tags by hand, which makes the note manual. Omitted fields are kept. */
+export const updateNoteMeta = (
+	date: string,
+	id: string,
+	meta: { subject?: string; tags?: string[] }
+) => invoke<Note>('update_note_meta', { date, id, ...meta });
+
 /** Fired when a note has been labelled and written back. */
 export const onNoteEnriched = (handler: (id: string) => void): Promise<UnlistenFn> =>
 	listen<{ id: string }>('note-enriched', (event) => handler(event.payload.id));

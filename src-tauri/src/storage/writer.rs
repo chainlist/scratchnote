@@ -42,6 +42,14 @@ enum WriteRequest {
         /// False when the file or the id is not there.
         reply: oneshot::Sender<io::Result<bool>>,
     },
+    /// Swap one note's body after the user edits it in the app.
+    ReplaceBody {
+        path: PathBuf,
+        id: String,
+        body: String,
+        /// False when the file or the id is not there.
+        reply: oneshot::Sender<io::Result<bool>>,
+    },
     /// Whole-file rewrite of index.jsonl, for updates, deletes and rebuilds.
     WriteIndex {
         path: PathBuf,
@@ -90,6 +98,14 @@ impl Writer {
                         reply,
                     } => {
                         let _ = reply.send(update_note(&path, &id, &patch, &seen).await);
+                    }
+                    WriteRequest::ReplaceBody {
+                        path,
+                        id,
+                        body,
+                        reply,
+                    } => {
+                        let _ = reply.send(replace_body(&path, &id, &body, &seen).await);
                     }
                     WriteRequest::WriteIndex {
                         path,
@@ -147,6 +163,26 @@ impl Writer {
                 path,
                 id,
                 patch: Box::new(patch),
+                reply,
+            },
+            response,
+        )
+        .await
+    }
+
+    /// Returns false when the file or the id is not there.
+    pub async fn replace_body(
+        &self,
+        path: PathBuf,
+        id: String,
+        body: String,
+    ) -> Result<bool, String> {
+        let (reply, response) = oneshot::channel();
+        self.send(
+            WriteRequest::ReplaceBody {
+                path,
+                id,
+                body,
                 reply,
             },
             response,
@@ -218,12 +254,32 @@ async fn update_note(
     patch: &NotePatch,
     seen: &SelfWrites,
 ) -> io::Result<bool> {
+    rewrite_note(path, seen, |existing| {
+        daily_file::update_note(existing, id, patch)
+    })
+    .await
+}
+
+async fn replace_body(path: &Path, id: &str, body: &str, seen: &SelfWrites) -> io::Result<bool> {
+    rewrite_note(path, seen, |existing| {
+        daily_file::replace_body(existing, id, body)
+    })
+    .await
+}
+
+/// Read, edit one note block, write back. False when the file is missing or
+/// `edit` did not find the note.
+async fn rewrite_note(
+    path: &Path,
+    seen: &SelfWrites,
+    edit: impl FnOnce(&str) -> Option<String>,
+) -> io::Result<bool> {
     let existing = match tokio::fs::read_to_string(path).await {
         Ok(contents) => contents,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
         Err(e) => return Err(e),
     };
-    match daily_file::update_note(&existing, id, patch) {
+    match edit(&existing) {
         Some(updated) => {
             write_atomic(path, &updated, seen).await?;
             Ok(true)

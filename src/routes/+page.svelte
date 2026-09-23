@@ -10,10 +10,14 @@
 		onModelStatus,
 		onNoteEnriched,
 		onNoteUpdated,
+		retryEnrichment,
 		search,
 		today,
+		updateNote,
+		updateNoteMeta,
 		type DaySummary,
 		type ModelStatus,
+		type NoteEdit,
 		type Note
 	} from '$lib/api';
 	import DayList from '$lib/components/DayList.svelte';
@@ -82,6 +86,33 @@
 		const tokens = query.split(/\s+/).filter(Boolean);
 		const kept = tokens.filter((token) => token.toLowerCase() !== `#${tag}`);
 		query = (kept.length === tokens.length ? [...tokens, `#${tag}`] : kept).join(' ');
+	}
+
+	async function save(note: Note, edit: NoteEdit): Promise<boolean> {
+		const tags = edit.tags.map((tag) => tag.replace(/^#+/, '')).filter(Boolean);
+		const bodyChanged = edit.body.trim() !== note.body;
+		// Only a real change to subject or tags takes the note away from the
+		// model, so an edit to the body alone leaves it to be re-enriched.
+		const metaChanged =
+			edit.subject.trim() !== (note.subject ?? '') || tags.join(' ') !== note.tags.join(' ');
+		try {
+			if (bodyChanged) await updateNote(note.date, note.id, edit.body);
+			if (metaChanged) await updateNoteMeta(note.date, note.id, { subject: edit.subject, tags });
+			error = null;
+			await refresh();
+			return true;
+		} catch (e) {
+			error = String(e);
+			return false;
+		}
+	}
+
+	async function retry(note: Note) {
+		try {
+			await retryEnrichment(note.date, note.id);
+		} catch (e) {
+			error = String(e);
+		}
 	}
 
 	async function remove(note: Note) {
@@ -160,7 +191,16 @@
 			{:else}
 				<ul class="flex flex-col gap-3">
 					{#each results as note (note.id)}
-						<li><NoteCard {note} ondelete={remove} ontag={toggleTag} showDate /></li>
+						<li>
+							<NoteCard
+								{note}
+								ondelete={remove}
+								ontag={toggleTag}
+								onsave={save}
+								onretry={retry}
+								showDate
+							/>
+						</li>
 					{/each}
 				</ul>
 			{/if}
@@ -171,7 +211,9 @@
 		{:else}
 			<ul class="flex flex-col gap-3">
 				{#each notes as note (note.id)}
-					<li><NoteCard {note} ondelete={remove} ontag={toggleTag} /></li>
+					<li>
+						<NoteCard {note} ondelete={remove} ontag={toggleTag} onsave={save} onretry={retry} />
+					</li>
 				{/each}
 			</ul>
 		{/if}

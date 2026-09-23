@@ -130,6 +130,10 @@ async fn run(app: &AppHandle, job: Job, backend: Arc<dyn Backend>) {
                     log::info!("{} changed while enriching, requeuing", job.id);
                     put_back_unchanged(app, job);
                 }
+                // The user set the subject or tags by hand in the meantime.
+                Some(current) if current.status == Status::Manual => {
+                    log::info!("{} was edited by hand while enriching, dropping", job.id);
+                }
                 Some(_) => {
                     write_back(app, &job, &runner::patch(&enrichment)).await;
                     let _ = app.emit("note-enriched", serde_json::json!({ "id": job.id }));

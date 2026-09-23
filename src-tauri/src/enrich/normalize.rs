@@ -76,6 +76,21 @@ pub fn normalize(raw: &[String], vocabulary: &Vocabulary) -> Vec<String> {
     drop_genre_tags(out)
 }
 
+/// Tags typed by the user: cleaned and resolved through aliases so they land
+/// in the same vocabulary, but never merged, singularised, dropped or capped.
+/// The user asked for exactly these.
+pub fn manual(raw: &[String], vocabulary: &Vocabulary) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for tag in raw {
+        let Some(tag) = clean(tag) else { continue };
+        let tag = resolve_alias(tag, vocabulary);
+        if !out.contains(&tag) {
+            out.push(tag);
+        }
+    }
+    out
+}
+
 /// Step 6. Remove tags that describe the kind of note, unless that would leave
 /// the note with none: a bad tag still beats no tag at all.
 fn drop_genre_tags(tags: Vec<String>) -> Vec<String> {
@@ -184,6 +199,22 @@ mod tests {
                 .map(|(from, to)| (from.to_string(), to.to_string()))
                 .collect(),
         }
+    }
+
+    #[test]
+    fn manual_tags_are_cleaned_and_aliased_but_otherwise_kept() {
+        let vocabulary = vocabulary(
+            &[("meeting", 4), ("kubernetes", 2)],
+            &[("k8s", "kubernetes")],
+        );
+        let raw: Vec<String> = ["#K8s", "meetings", "plan", "Home Lab", "!!!", "k8s"]
+            .iter()
+            .map(|t| t.to_string())
+            .collect();
+        assert_eq!(
+            manual(&raw, &vocabulary),
+            vec!["kubernetes", "meetings", "plan", "home-lab"]
+        );
     }
 
     fn normalized(raw: &[&str], vocabulary: &Vocabulary) -> Vec<String> {

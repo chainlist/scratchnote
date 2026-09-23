@@ -45,6 +45,8 @@ pub fn run() {
             commands::list_tags,
             commands::search,
             commands::delete_note,
+            commands::update_note,
+            commands::update_note_meta,
             commands::rebuild_index,
             commands::retry_enrichment,
             commands::model_status,

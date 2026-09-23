@@ -73,9 +73,16 @@ pub fn render_note(note: &Note) -> String {
     out.push_str("### ");
     out.push_str(note.subject.as_deref().unwrap_or(UNTITLED));
     out.push('\n');
-    if let Some(summary) = &note.summary {
-        out.push_str("> ");
-        out.push_str(summary);
+    // Tags set by hand on a note the model never reached have no summary to
+    // go with them, so the summary line is left bare rather than dropped.
+    if note.summary.is_some() || !note.tags.is_empty() {
+        match note.summary.as_deref().filter(|s| !s.is_empty()) {
+            Some(summary) => {
+                out.push_str("> ");
+                out.push_str(summary);
+            }
+            None => out.push('>'),
+        }
         out.push('\n');
         out.push_str("> ");
         for (i, tag) in note.tags.iter().enumerate() {
@@ -189,14 +196,29 @@ pub struct NotePatch {
 /// Rewrite one note's block in place, keeping its body and every byte of the
 /// file outside that block. Returns `None` when the id is not in this file.
 pub fn update_note(content: &str, id: &str, patch: &NotePatch) -> Option<String> {
+    rewrite_block(content, id, |note| {
+        note.subject = patch.subject.clone();
+        note.summary = patch.summary.clone();
+        note.tags = patch.tags.clone();
+        note.status = patch.status;
+    })
+}
+
+/// Swap one note's body, and its hash with it, leaving the metadata and every
+/// byte outside the block alone. Returns `None` when the id is not in this file.
+pub fn replace_body(content: &str, id: &str, body: &str) -> Option<String> {
+    rewrite_block(content, id, |note| {
+        note.body = body.trim().to_string();
+        note.hash = body_hash(body);
+    })
+}
+
+fn rewrite_block(content: &str, id: &str, edit: impl FnOnce(&mut Note)) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
     let (start, end) = find_block(&lines, id)?;
 
     let mut note = build_note(lines[start].trim(), &lines[start + 1..end], "", "")?;
-    note.subject = patch.subject.clone();
-    note.summary = patch.summary.clone();
-    note.tags = patch.tags.clone();
-    note.status = patch.status;
+    edit(&mut note);
 
     let replacement = render_note(&note);
     let newline = if content.contains("\r\n") {
@@ -291,8 +313,9 @@ fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, Vec<String>, 
     // quote from being swallowed.
     let mut summary = None;
     let mut tags = Vec::new();
-    if rest.len() >= 2 && rest[0].starts_with("> ") && rest[1].starts_with("> #") {
-        summary = Some(rest[0][2..].trim().to_string());
+    let quote = |line: &str| line.starts_with("> ") || line.trim_end() == ">";
+    if rest.len() >= 2 && quote(rest[0]) && rest[1].starts_with("> #") {
+        summary = Some(rest[0][1..].trim().to_string()).filter(|s| !s.is_empty());
         tags = rest[1][2..]
             .split_whitespace()
             .map(|t| t.trim_start_matches('#'))
@@ -620,6 +643,50 @@ mod tests {
     fn updating_an_unknown_id_changes_nothing() {
         let doc = day_with_prose();
         assert!(update_note(&doc, "01ZZZ", &enrich_patch()).is_none());
+    }
+
+    #[test]
+    fn hand_set_tags_survive_on_a_note_with_no_summary() {
+        let note = Note {
+            subject: Some("Hub shopping".to_string()),
+            tags: vec!["homelab".to_string()],
+            status: Status::Manual,
+            ..pending("01J8Z4P1M7T0", "15:10", "Buy a new USB-C hub")
+        };
+        let rendered = render_note(&note);
+        assert!(rendered.contains("### Hub shopping\n>\n> #homelab\n\nBuy"));
+        assert_eq!(parse_one(&rendered), note);
+    }
+
+    #[test]
+    fn a_bare_summary_line_with_trailing_spaces_still_parses() {
+        let doc = "<!-- sn:note id=01AAA time=08:00 status=manual hash=dead -->\n### s\n>   \n> #infra\n\nbody\n<!-- sn:end -->\n";
+        let note = parse_one(doc);
+        assert_eq!(note.summary, None);
+        assert_eq!(note.tags, vec!["infra"]);
+        assert_eq!(note.body, "body");
+    }
+
+    #[test]
+    fn replacing_the_body_rehashes_and_keeps_the_metadata() {
+        let before = enriched();
+        let doc = format!("# {DATE}\n\nmy prose\n\n{}", render_note(&before));
+
+        let out = replace_body(&doc, &before.id, "  a new body\n").expect("id is present");
+        assert!(out.starts_with("# 2026-09-22\n\nmy prose\n"));
+
+        let after = parse_one(&out);
+        assert_eq!(after.body, "a new body");
+        assert_eq!(after.hash, body_hash("a new body"));
+        assert_eq!(after.subject, before.subject);
+        assert_eq!(after.summary, before.summary);
+        assert_eq!(after.tags, before.tags);
+        assert_eq!(after.status, before.status);
+    }
+
+    #[test]
+    fn replacing_the_body_of_an_unknown_id_changes_nothing() {
+        assert!(replace_body(&day_with_prose(), "01ZZZ", "x").is_none());
     }
 
     #[test]

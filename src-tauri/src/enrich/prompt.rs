@@ -12,8 +12,11 @@ pub const SYSTEM: &str = "\
 You label short personal notes. Return JSON only.
 - subject: a short title, max 8 words, no trailing punctuation.
 - summary: one sentence, max 20 words, stating the key point or action.
-- tags: 1 to 5 lowercase tags, single words or kebab-case.
-Strongly prefer tags from the EXISTING TAGS list. Only create a new tag if none fit.
+- tags: 1 to 5 lowercase tags, single words or kebab-case. Tag what the note is
+  about: technologies, tools, projects, people, places, topics. Do not tag what
+  kind of note it is, such as issue, plan, update, sync, task or note.
+Reuse a tag from the EXISTING TAGS list when it genuinely describes this note.
+When none of them fit, make a new tag rather than forcing a poor match.
 Write subject and summary in the same language as the note.";
 
 pub fn user_message(body: &str, existing_tags: &[String]) -> String {
@@ -68,6 +71,11 @@ mod tests {
         assert!(SYSTEM.contains("max 8 words"));
         assert!(SYSTEM.contains("max 20 words"));
         assert!(SYSTEM.contains("1 to 5 lowercase tags"));
+        // The two things that keep the vocabulary useful rather than merely
+        // small: tag the subject matter, and never force-fit an existing tag.
+        assert!(SYSTEM.contains("Tag what the note is"));
+        assert!(SYSTEM.contains("Do not tag what"));
+        assert!(SYSTEM.contains("rather than forcing a poor match"));
         assert!(SYSTEM.contains("same language as the note"));
     }
 

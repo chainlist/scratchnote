@@ -44,6 +44,7 @@ Never hand-write configuration files (`package.json`, `svelte.config.js`, `vite.
 Editing a generated file is allowed only for the specific changes listed in this section, and only after the installer has created it. If a step seems to need a config file that no installer produced, stop and ask instead of creating it.
 
 ### Step 0: Windows build prerequisites
+
 `llama-cpp-2` compiles llama.cpp from source, so the machine needs a native
 toolchain before milestone 3. None of this is required for milestones 0 to 2.
 
@@ -52,7 +53,7 @@ toolchain before milestone 3. None of this is required for milestones 0 to 2.
   registered Visual Studio instance and does not check whether it actually has
   a C++ toolset, so an IDE installed without the "Desktop development with C++"
   workload makes the build fail with `could not find any instance of Visual
-  Studio` even when another install has a perfectly good compiler. Either give
+Studio` even when another install has a perfectly good compiler. Either give
   the newest instance that workload, or set
   `CMAKE_GENERATOR="Visual Studio 17 2022"` to point CMake at an older one.
 
@@ -323,8 +324,11 @@ System:
 You label short personal notes. Return JSON only.
 - subject: a short title, max 8 words, no trailing punctuation.
 - summary: one sentence, max 20 words, stating the key point or action.
-- tags: 1 to 5 lowercase tags, single words or kebab-case.
-Strongly prefer tags from the EXISTING TAGS list. Only create a new tag if none fit.
+- tags: 1 to 5 lowercase tags, single words or kebab-case. Tag what the note is
+  about: technologies, tools, projects, people, places, topics. Do not tag what
+  kind of note it is, such as issue, plan, update, sync, task or note.
+Reuse a tag from the EXISTING TAGS list when it genuinely describes this note.
+When none of them fit, make a new tag rather than forcing a poor match.
 Write subject and summary in the same language as the note.
 ```
 
@@ -346,6 +350,12 @@ Applied to every tag the model returns, in order:
 3. Naive singularization for English (`meetings` → `meeting`) only if the singular form already exists in the vocabulary.
 4. If a new tag is within Levenshtein distance 1 of an existing tag of length ≥ 5, map it to the existing one.
 5. Deduplicate; cap at 5.
+6. Drop tags that name the kind of note rather than its subject (`issue`, `plan`,
+   `update`, `sync`, `task`, `note`, `todo`, `misc`, `general`), unless that would
+   leave the note with none. These are worthless for browsing because every note
+   is one of them, and once a few are in the vocabulary the "reuse an existing
+   tag" instruction keeps electing them for everything. The prompt discourages
+   them; this step makes it certain.
 
 ### 5.6 Queue
 

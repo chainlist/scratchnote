@@ -15,6 +15,15 @@ use super::grammar::{MAX_TAG, MAX_TAGS};
 /// than a typo (`ci` and `cd`, `dev` and `ops`), so step 4 leaves them alone.
 const FUZZY_MIN_LEN: usize = 5;
 
+/// Words that name the kind of note rather than what it is about. They are
+/// worthless for browsing, because every note is one of them, and once a few
+/// are in the vocabulary the prompt's "reuse an existing tag" pull keeps
+/// electing them for everything. The prompt already discourages these; this
+/// makes it certain.
+const GENRE_TAGS: [&str; 9] = [
+    "issue", "plan", "update", "sync", "task", "note", "todo", "misc", "general",
+];
+
 /// What the tags are normalised against. Milestone 4 fills this from
 /// `tags.json`; until then it is whatever the index already holds.
 #[derive(Debug, Default)]
@@ -54,7 +63,22 @@ pub fn normalize(raw: &[String], vocabulary: &Vocabulary) -> Vec<String> {
         }
     }
 
-    out
+    drop_genre_tags(out)
+}
+
+/// Step 6. Remove tags that describe the kind of note, unless that would leave
+/// the note with none: a bad tag still beats no tag at all.
+fn drop_genre_tags(tags: Vec<String>) -> Vec<String> {
+    let kept: Vec<String> = tags
+        .iter()
+        .filter(|tag| !GENRE_TAGS.contains(&tag.as_str()))
+        .cloned()
+        .collect();
+    if kept.is_empty() {
+        tags
+    } else {
+        kept
+    }
 }
 
 /// Step 1. Lowercase, trim, strip a leading `#`, spaces and underscores become
@@ -247,6 +271,34 @@ mod tests {
         let vocabulary = Vocabulary::default();
         let many = ["a1", "b2", "c3", "d4", "e5", "f6", "g7"];
         assert_eq!(normalized(&many, &vocabulary).len(), MAX_TAGS);
+    }
+
+    #[test]
+    fn drops_tags_that_name_the_kind_of_note() {
+        let vocabulary = Vocabulary::default();
+        assert_eq!(
+            normalized(&["issue", "grammar", "sync", "llama"], &vocabulary),
+            vec!["grammar", "llama"]
+        );
+    }
+
+    #[test]
+    fn keeps_a_genre_tag_when_it_is_all_there_is() {
+        let vocabulary = Vocabulary::default();
+        // A poor tag still beats leaving the note untagged.
+        assert_eq!(
+            normalized(&["issue", "plan"], &vocabulary),
+            vec!["issue", "plan"]
+        );
+    }
+
+    #[test]
+    fn a_genre_word_inside_a_longer_tag_is_left_alone() {
+        let vocabulary = Vocabulary::default();
+        assert_eq!(
+            normalized(&["issue-tracker", "release-plan"], &vocabulary),
+            vec!["issue-tracker", "release-plan"]
+        );
     }
 
     #[test]

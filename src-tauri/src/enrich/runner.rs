@@ -190,6 +190,94 @@ mod tests {
         assert!(enrich("note", &Vocabulary::default(), &backend).is_err());
     }
 
+    /// A technical note should be tagged with what it is about, not with
+    /// what kind of note it is. Needs a model; `cargo test -- --ignored`.
+    #[test]
+    #[ignore = "needs a downloaded model"]
+    fn tags_a_technical_note_topically() {
+        const NOTE: &str = "\
+All five passed. The grammar is doing its job, output was valid JSON every time,
+and normalisation cleaned up what came back.
+
+Your 4B model downloaded cleanly too (2.5 GB plus its revision sidecar), so the
+download and verification path is confirmed end to end as well. 100 offline
+tests pass, clippy clean.
+
+Two honest caveats
+
+Speed. 35s covered model load plus five notes on CPU, so roughly 3-5s per note
+once loaded. The under-3s figure assumes GPU offload; this build is CPU-only.
+
+A wasteful allocation I noticed but did not change. llama.rs creates a fresh
+context per note, which reallocates a 576 MiB KV cache each time. Worth doing
+when we look at the idle-unload work in M5.
+
+what was the issue?
+
+The crash line was GGML_ASSERT(!stacks.empty()) in llama.cpp grammar code.
+The cause: I had sampler.accept(token) after sampler.sample(). But
+llama_sampler_sample already calls llama_sampler_accept internally, so every
+token was accepted twice. The grammar is a state machine tracking where you are
+inside the JSON, and each accept advances it one step. Within a few tokens its
+position matched nothing valid, every candidate was rejected, the parse stacks
+emptied, and the assert fired. The fix was deleting that one line.
+
+Why 100 tests missed it: every test ran against StubBackend, which ignores the
+grammar argument entirely and returns a canned string.";
+
+        let Some(backend) = load_installed_model() else {
+            return;
+        };
+        // The vocabulary a few generic tags have already polluted, which is
+        // the situation the prompt has to cope with.
+        let vocabulary = Vocabulary {
+            counts: [
+                ("plan", 4u32),
+                ("test", 4),
+                ("sync", 3),
+                ("issue", 2),
+                ("rollback", 1),
+                ("argocd", 1),
+            ]
+            .into_iter()
+            .map(|(t, c)| (t.to_string(), c))
+            .collect(),
+            aliases: Default::default(),
+        };
+        let out = enrich(NOTE, &vocabulary, backend.as_ref()).expect("should label");
+        eprintln!("subject: {}", out.subject);
+        eprintln!("tags:    {:?}", out.tags);
+
+        // These describe the genre of the note, not its subject matter.
+        const GENERIC: [&str; 10] = [
+            "issue", "plan", "sync", "task", "note", "update", "work", "todo", "fix", "bug",
+        ];
+        let generic: Vec<&String> = out
+            .tags
+            .iter()
+            .filter(|t| GENERIC.contains(&t.as_str()))
+            .collect();
+        assert!(
+            generic.len() < out.tags.len(),
+            "every tag is a genre word: {:?}",
+            out.tags
+        );
+    }
+
+    /// Shared by the tests that need real weights.
+    fn load_installed_model() -> Option<Box<dyn Backend>> {
+        use crate::enrich::download;
+        use crate::enrich::llama::LlamaCpp;
+        use crate::enrich::model::model_file;
+
+        let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
+        let root = std::path::PathBuf::from(home).join("Scratchnote");
+        let variant = download::installed_variant(&root)?;
+        Some(Box::new(
+            LlamaCpp::load(&model_file(&root, variant)).expect("the model should load"),
+        ))
+    }
+
     /// SPEC 12's optional integration test, and the only thing that checks
     /// SPEC 11's "zero parse failures" against a real sampler rather than a
     /// stub. Needs a downloaded model; run with `cargo test -- --ignored`.

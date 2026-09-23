@@ -190,46 +190,18 @@ mod tests {
         assert!(enrich("note", &Vocabulary::default(), &backend).is_err());
     }
 
-    /// A technical note should be tagged with what it is about, not with
-    /// what kind of note it is. Needs a model; `cargo test -- --ignored`.
+    /// A note should be tagged with what it is about, including the project or
+    /// broad subject it belongs to, not with what kind of note it is.
+    /// Needs a model; `cargo test -- --ignored`.
     #[test]
     #[ignore = "needs a downloaded model"]
     fn tags_a_technical_note_topically() {
-        const NOTE: &str = "\
-All five passed. The grammar is doing its job, output was valid JSON every time,
-and normalisation cleaned up what came back.
-
-Your 4B model downloaded cleanly too (2.5 GB plus its revision sidecar), so the
-download and verification path is confirmed end to end as well. 100 offline
-tests pass, clippy clean.
-
-Two honest caveats
-
-Speed. 35s covered model load plus five notes on CPU, so roughly 3-5s per note
-once loaded. The under-3s figure assumes GPU offload; this build is CPU-only.
-
-A wasteful allocation I noticed but did not change. llama.rs creates a fresh
-context per note, which reallocates a 576 MiB KV cache each time. Worth doing
-when we look at the idle-unload work in M5.
-
-what was the issue?
-
-The crash line was GGML_ASSERT(!stacks.empty()) in llama.cpp grammar code.
-The cause: I had sampler.accept(token) after sampler.sample(). But
-llama_sampler_sample already calls llama_sampler_accept internally, so every
-token was accepted twice. The grammar is a state machine tracking where you are
-inside the JSON, and each accept advances it one step. Within a few tokens its
-position matched nothing valid, every candidate was rejected, the parse stacks
-emptied, and the assert fired. The fix was deleting that one line.
-
-Why 100 tests missed it: every test ran against StubBackend, which ignores the
-grammar argument entirely and returns a canned string.";
-
         let Some(backend) = load_installed_model() else {
             return;
         };
-        // The vocabulary a few generic tags have already polluted, which is
-        // the situation the prompt has to cope with.
+
+        // The vocabulary a few generic tags have already polluted, which is the
+        // situation the prompt has to cope with.
         let vocabulary = Vocabulary {
             counts: [
                 ("plan", 4u32),
@@ -244,23 +216,46 @@ grammar argument entirely and returns a canned string.";
             .collect(),
             aliases: Default::default(),
         };
-        let out = enrich(NOTE, &vocabulary, backend.as_ref()).expect("should label");
-        eprintln!("subject: {}", out.subject);
-        eprintln!("tags:    {:?}", out.tags);
 
-        // These describe the genre of the note, not its subject matter.
-        const GENERIC: [&str; 10] = [
-            "issue", "plan", "sync", "task", "note", "update", "work", "todo", "fix", "bug",
+        let cases: [(&str, &[&str]); 2] = [
+            (
+                "Translation issue with the API request, and prefer to go from API to pure json file",
+                &["translation", "api", "json"],
+            ),
+            (
+                "The grammar crashed because sampler.accept was called twice per token in the Rust decode loop of llama.cpp",
+                &["grammar", "rust"],
+            ),
         ];
-        let generic: Vec<&String> = out
-            .tags
-            .iter()
-            .filter(|t| GENERIC.contains(&t.as_str()))
-            .collect();
+
+        let mut missing = Vec::new();
+        for (note, wanted) in cases {
+            let out = enrich(note, &vocabulary, backend.as_ref()).expect("should label");
+            eprintln!(
+                "{note}
+  -> {} | {:?}",
+                out.subject, out.tags
+            );
+
+            for topic in wanted {
+                if !out.tags.iter().any(|tag| tag == topic) {
+                    missing.push(format!("{topic:?} for {note:?} (got {:?})", out.tags));
+                }
+            }
+            assert!(
+                !out.tags.iter().any(|t| t == "issue" || t == "sync"),
+                "a genre tag survived: {:?}",
+                out.tags
+            );
+        }
         assert!(
-            generic.len() < out.tags.len(),
-            "every tag is a genre word: {:?}",
-            out.tags
+            missing.is_empty(),
+            "missing topical tags:
+  {}",
+            missing.join(
+                "
+  "
+            )
         );
     }
 

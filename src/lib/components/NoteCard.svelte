@@ -6,6 +6,7 @@
 		ondelete,
 		onsave,
 		onretry,
+		ontag,
 		showDate = false
 	}: {
 		note: Note;
@@ -13,6 +14,8 @@
 		/** Resolves true once saved; false keeps the editor open. */
 		onsave: (note: Note, edit: NoteEdit) => Promise<boolean>;
 		onretry: (note: Note) => void;
+		/** Filter on a tag, as a click on it in the card does. */
+		ontag: (tag: string) => void;
 		/** Search results span days, so each card says which one. */
 		showDate?: boolean;
 	} = $props();
@@ -149,10 +152,17 @@
 
 		{#if note.tags.length > 0}
 			<ul
-				class="pointer-events-none absolute right-3 bottom-2 flex gap-1.5 bg-neutral-900 pl-2 font-mono text-[0.625rem] text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
+				class="absolute right-3 bottom-2 flex gap-1.5 bg-neutral-900 pl-2 font-mono text-[0.625rem] text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
 			>
 				{#each note.tags as tag (tag)}
-					<li>#{tag}</li>
+					<li>
+						<button
+							type="button"
+							onclick={() => ontag(tag)}
+							title="Show #{tag} notes"
+							class="cursor-pointer hover:text-neutral-200">#{tag}</button
+						>
+					</li>
 				{/each}
 			</ul>
 		{/if}

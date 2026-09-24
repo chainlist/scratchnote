@@ -43,6 +43,7 @@ pub fn run() {
             commands::get_day,
             commands::list_days,
             commands::list_tags,
+            commands::list_categories,
             commands::search,
             commands::delete_note,
             commands::update_note,

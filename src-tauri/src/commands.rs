@@ -13,7 +13,7 @@ use crate::settings::Settings;
 use crate::state::AppState;
 use crate::storage::daily_file::{self, Note, NotePatch, Status};
 use crate::storage::index::{self, IndexEntry};
-use crate::storage::tags;
+use crate::storage::{categories, tags};
 use crate::storage::{check_date, day_path, relative_day_path};
 
 #[derive(Debug, Serialize)]
@@ -364,6 +364,18 @@ pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<(String, u32)>, Strin
         .map_err(|_| "index lock poisoned".to_string())?
         .tag_counts();
     Ok(tags::by_count(&counts))
+}
+
+/// The categories notes are filed under, with how many carry each, most used
+/// first. Categories no note carries yet are left out.
+#[tauri::command]
+pub fn list_categories(state: State<'_, AppState>) -> Result<Vec<(String, u32)>, String> {
+    let counts = state
+        .index
+        .read()
+        .map_err(|_| "index lock poisoned".to_string())?
+        .tag_counts();
+    Ok(categories::in_use(&categories::load(&state.root), &counts))
 }
 
 /// Words and `#tag` filters across every day (SPEC 6).

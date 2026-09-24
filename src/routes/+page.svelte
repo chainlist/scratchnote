@@ -5,6 +5,7 @@
 		enrichBusy,
 		enrichProgress,
 		getDay,
+		listCategories,
 		listDays,
 		listTags,
 		modelStatus,
@@ -32,7 +33,8 @@
 	import Onboarding from '$lib/components/Onboarding.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
 	import Settings from '$lib/components/Settings.svelte';
-	import TagList from '$lib/components/TagList.svelte';
+	import TagFilters from '$lib/components/TagFilters.svelte';
+	import CategoryList from '$lib/components/CategoryList.svelte';
 	import WindowControls from '$lib/components/WindowControls.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -46,6 +48,7 @@
 	let busy = $state(false);
 	let progress = $state<EnrichProgress | null>(null);
 	let tags = $state<[string, number][]>([]);
+	let categories = $state<[string, number][]>([]);
 	let query = $state('');
 	let results = $state<Note[]>([]);
 	let settingsOpen = $state(false);
@@ -86,7 +89,12 @@
 
 	async function refresh() {
 		try {
-			[days, notes, tags] = await Promise.all([listDays(), getDay(selected), listTags()]);
+			[days, notes, tags, categories] = await Promise.all([
+				listDays(),
+				getDay(selected),
+				listTags(),
+				listCategories()
+			]);
 			error = null;
 		} catch (e) {
 			error = String(e);
@@ -214,7 +222,7 @@
 		</div>
 		<div class="flex min-h-0 flex-1 flex-col gap-6">
 			<DayCalendar {days} selected={searching ? '' : selected} onselect={select} />
-			<TagList {tags} active={activeTags} onselect={toggleTag} />
+			<CategoryList {categories} active={activeTags} onselect={toggleTag} />
 		</div>
 		<ModelStatusBar status={model} {busy} {progress} />
 	</aside>
@@ -226,7 +234,7 @@
 		<div class="flex-1 overflow-y-auto px-6 pb-6">
 			<div class="mx-auto max-w-2xl">
 				<div class="mb-4">
-					<SearchBar bind:value={query} />
+					<SearchBar bind:value={query} {tags} />
 				</div>
 
 				<h2 class="mb-4 text-lg font-semibold">
@@ -237,6 +245,15 @@
 						{heading}
 					{/if}
 				</h2>
+
+				{#if searching}
+					<TagFilters
+						active={activeTags}
+						{results}
+						onremove={(tag) => toggleTag(tag, true)}
+						onadd={(tag) => toggleTag(tag, true)}
+					/>
+				{/if}
 
 				{#if model.state === 'absent' || model.state === 'downloading'}
 					<Onboarding status={model} />
@@ -257,7 +274,14 @@
 						<ul>
 							{#each results as note (note.id)}
 								<li>
-									<NoteCard {note} ondelete={remove} onsave={save} onretry={retry} showDate />
+									<NoteCard
+										{note}
+										ondelete={remove}
+										onsave={save}
+										onretry={retry}
+										ontag={toggleTag}
+										showDate
+									/>
 								</li>
 							{/each}
 						</ul>
@@ -270,7 +294,13 @@
 					<ul>
 						{#each notes as note (note.id)}
 							<li>
-								<NoteCard {note} ondelete={remove} onsave={save} onretry={retry} />
+								<NoteCard
+									{note}
+									ondelete={remove}
+									onsave={save}
+									onretry={retry}
+									ontag={toggleTag}
+								/>
 							</li>
 						{/each}
 					</ul>

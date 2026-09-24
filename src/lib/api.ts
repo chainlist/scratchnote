@@ -31,6 +31,12 @@ export const listDays = () => invoke<DaySummary[]>('list_days');
 /** Every tag in use and how many notes carry it, most used first. */
 export const listTags = () => invoke<[string, number][]>('list_tags');
 
+/**
+ * The categories notes are filed under, with how many carry each, most used
+ * first. A category is also a tag, so `#category` filters on it.
+ */
+export const listCategories = () => invoke<[string, number][]>('list_categories');
+
 /** Words must all appear; `#tag` tokens are AND filters. Newest first. */
 export const search = (query: string) => invoke<Note[]>('search', { query });
 

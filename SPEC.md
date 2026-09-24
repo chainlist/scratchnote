@@ -194,7 +194,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 
 Opened from tray icon or app launch. Three areas:
 
-1. **Sidebar**: list of days (newest first, grouped by month), and a tag list with counts, sorted by count.
+1. **Sidebar**: a day picker, and the categories in use with counts, sorted by count. Tags are too many and too fluid to browse as a list, so they are reached from search instead: `#` completes tag names, a note's tags filter on click, and search results offer the tags they share as chips to narrow down.
 2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Subject, summary and tags are not displayed; they exist for search and indexing. Edit, re-run and delete (with the enrichment status) appear on hover.
 3. **Search bar** at the top: full-text over body, subject, summary; supports `#tag` tokens as filters (e.g. `#infra kubernetes`). Results are note cards across all days.
 
@@ -455,7 +455,7 @@ src/
     +page.svelte      # main window
     capture/+page.svelte   # quick capture window (Tauri window loads /capture)
     settings/+page.svelte
-  lib/components/ (NoteCard, DayList, TagList, SearchBar, Onboarding)
+  lib/components/ (NoteCard, DayCalendar, CategoryList, TagFilters, SearchBar, Onboarding)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/api.ts          # typed wrappers around Tauri invoke/listen
 ```

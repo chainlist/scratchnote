@@ -4,6 +4,7 @@
 //! the model finds nothing in it that fits. It is read afresh for every note,
 //! so an edit applies from the next one on.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::enrich::normalize;
@@ -63,6 +64,18 @@ pub fn with_added(root: &Path, category: &str) -> Option<String> {
     }
     list.push(category.to_string());
     Some(render(&list))
+}
+
+/// The categories that at least one note carries, with how many do, most
+/// used first. A category is a tag on the note, so the tag counts say it.
+pub fn in_use(list: &[String], counts: &HashMap<String, u32>) -> Vec<(String, u32)> {
+    let mut used: Vec<(String, u32)> = list
+        .iter()
+        .filter_map(|c| counts.get(c).map(|n| (c.clone(), *n)))
+        .filter(|(_, n)| *n > 0)
+        .collect();
+    used.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    used
 }
 
 fn read(root: &Path) -> Option<Vec<String>> {
@@ -131,6 +144,23 @@ mod tests {
             vec!["movie", "podcast"]
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn lists_only_categories_in_use_most_used_first() {
+        let list: Vec<String> = ["movie", "game", "book", "food"].map(String::from).to_vec();
+        let counts: HashMap<String, u32> = [("game", 3), ("movie", 5), ("food", 3), ("argocd", 9)]
+            .iter()
+            .map(|(k, v)| (k.to_string(), *v))
+            .collect();
+        assert_eq!(
+            in_use(&list, &counts),
+            vec![
+                ("movie".to_string(), 5),
+                ("food".to_string(), 3),
+                ("game".to_string(), 3)
+            ]
+        );
     }
 
     #[test]

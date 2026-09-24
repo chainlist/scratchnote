@@ -4,8 +4,95 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import XIcon from '@lucide/svelte/icons/x';
 
-	let { value = $bindable() }: { value: string } = $props();
+	let {
+		value = $bindable(),
+		tags
+	}: {
+		value: string;
+		/** Every tag with its count, most used first, offered as `#` completions. */
+		tags: [string, number][];
+	} = $props();
+
+	/** Completions shown at once. */
+	const LIMIT = 8;
+
 	let input = $state<HTMLInputElement | null>(null);
+	let caret = $state(0);
+	let highlighted = $state(0);
+	// Escape hides the list without clearing the query; typing brings it back.
+	let dismissed = $state(false);
+
+	/** The `#` token the caret is in, as its start, end and text after the `#`. */
+	const token = $derived.by(() => {
+		const start = value.lastIndexOf(' ', caret - 1) + 1;
+		const next = value.indexOf(' ', caret);
+		const end = next === -1 ? value.length : next;
+		const text = value.slice(start, end);
+		return text.startsWith('#') ? { start, end, prefix: text.slice(1).toLowerCase() } : null;
+	});
+
+	// Tags already in the query are not offered again. Names starting with
+	// the prefix come before names that only contain it, each most used first.
+	const suggestions = $derived.by(() => {
+		if (!token || dismissed) return [];
+		const used = new Set(
+			value
+				.split(/\s+/)
+				.filter((t) => t.startsWith('#'))
+				.map((t) => t.slice(1).toLowerCase())
+		);
+		const starts: [string, number][] = [];
+		const contains: [string, number][] = [];
+		for (const entry of tags) {
+			const name = entry[0];
+			// The token being typed is in `used` too, so a complete one drops out.
+			if (used.has(name)) continue;
+			if (name.startsWith(token.prefix)) starts.push(entry);
+			else if (name.includes(token.prefix)) contains.push(entry);
+		}
+		return [...starts, ...contains].slice(0, LIMIT);
+	});
+
+	$effect(() => {
+		void suggestions;
+		highlighted = 0;
+	});
+
+	function track() {
+		caret = input?.selectionStart ?? value.length;
+	}
+
+	function complete(tag: string) {
+		if (!token) return;
+		const after = value.slice(token.end).replace(/^ /, '');
+		const before = value.slice(0, token.start);
+		value = `${before}#${tag} ${after}`;
+		const at = before.length + tag.length + 2;
+		caret = at;
+		// Set after Svelte writes the new value into the field.
+		queueMicrotask(() => input?.setSelectionRange(at, at));
+	}
+
+	function onkeydown(event: KeyboardEvent) {
+		if (suggestions.length > 0) {
+			if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+				event.preventDefault();
+				const step = event.key === 'ArrowDown' ? 1 : -1;
+				highlighted = (highlighted + step + suggestions.length) % suggestions.length;
+				return;
+			}
+			if (event.key === 'Enter' || event.key === 'Tab') {
+				event.preventDefault();
+				complete(suggestions[highlighted][0]);
+				return;
+			}
+			if (event.key === 'Escape') {
+				dismissed = true;
+				return;
+			}
+		}
+		if (event.key === 'Escape') value = '';
+	}
 </script>
 
 <div class="relative">
@@ -17,11 +104,20 @@
 		bind:ref={input}
 		type="search"
 		bind:value
-		onkeydown={(e) => {
-			if (e.key === 'Escape') value = '';
+		{onkeydown}
+		oninput={() => {
+			dismissed = false;
+			track();
 		}}
-		placeholder="Search notes, #tag to filter"
+		onclick={track}
+		onkeyup={track}
+		onfocus={track}
+		onblur={() => (dismissed = true)}
+		placeholder="Search notes, # for tags"
 		aria-label="Search notes"
+		aria-autocomplete="list"
+		aria-controls="tag-suggestions"
+		aria-expanded={suggestions.length > 0}
 		spellcheck="false"
 		class="px-8 [&::-webkit-search-cancel-button]:appearance-none"
 	/>
@@ -38,5 +134,36 @@
 		>
 			<XIcon />
 		</Button>
+	{/if}
+
+	{#if suggestions.length > 0}
+		<ul
+			id="tag-suggestions"
+			role="listbox"
+			aria-label="Tags"
+			class="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+		>
+			{#each suggestions as [tag, count], i (tag)}
+				<li role="option" aria-selected={i === highlighted}>
+					<!-- mousedown, not click, so the field keeps focus and its caret. -->
+					<button
+						type="button"
+						tabindex="-1"
+						onmousedown={(event) => {
+							event.preventDefault();
+							complete(tag);
+						}}
+						onmouseenter={() => (highlighted = i)}
+						class={[
+							'flex h-7 w-full items-center justify-between rounded-sm px-2 text-left text-sm',
+							i === highlighted ? 'bg-accent text-accent-foreground' : 'text-muted-foreground'
+						]}
+					>
+						<span class="truncate">#{tag}</span>
+						<span class="font-mono text-xs text-muted-foreground">{count}</span>
+					</button>
+				</li>
+			{/each}
+		</ul>
 	{/if}
 </div>

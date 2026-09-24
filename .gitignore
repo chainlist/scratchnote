@@ -26,3 +26,6 @@ vite.config.ts.timestamp-*
 # eslint, which reads this file, skips it too)
 /src-tauri/target/
 /src-tauri/gen/
+# Paraglide
+src/lib/paraglide
+project.inlang/cache/

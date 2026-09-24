@@ -1,3 +1,4 @@
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -13,12 +14,19 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			adapter: adapter({ fallback: 'index.html' })
+		}),
+
+		paraglideVitePlugin({
+			project: './project.inlang',
+			outdir: './src/lib/paraglide',
+			emitTsDeclarations: true
 		})
 	],
 	server: {
 		// Tauri's devUrl is pinned to 5173, so fail loudly instead of silently
 		// moving to another port and leaving the app window blank.
 		strictPort: true,
+
 		watch: {
 			// Never watch the Rust side: cargo holds build artifacts open while it
 			// compiles, which makes the watcher crash with EBUSY on Windows.

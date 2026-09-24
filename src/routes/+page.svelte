@@ -20,7 +20,6 @@
 		onOpenSettings,
 		onSpacesChanged,
 		retryEnrichment,
-		search,
 		setTrayLabels,
 		splitCategory,
 		today,
@@ -35,20 +34,21 @@
 		type Note
 	} from '$lib/api';
 	import Chat from '$lib/components/Chat.svelte';
+	import CommandCenter from '$lib/components/CommandCenter.svelte';
 	import DayCalendar from '$lib/components/DayCalendar.svelte';
 	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
 	import NoteCard from '$lib/components/NoteCard.svelte';
 	import NoteEditor from '$lib/components/NoteEditor.svelte';
 	import Onboarding from '$lib/components/Onboarding.svelte';
-	import SearchBar from '$lib/components/SearchBar.svelte';
 	import Settings from '$lib/components/Settings.svelte';
-	import TagFilters from '$lib/components/TagFilters.svelte';
-	import CategoryList from '$lib/components/CategoryList.svelte';
 	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
 	import WindowControls from '$lib/components/WindowControls.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
+	import XIcon from '@lucide/svelte/icons/x';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
 
@@ -68,47 +68,19 @@
 	/** The note waiting on the delete confirmation. */
 	let deleting = $state<Note | null>(null);
 	let removing = $state(false);
+	/** The command center's query, kept between openings. */
 	let query = $state('');
-	let results = $state<Note[]>([]);
+	let paletteOpen = $state(false);
 	let settingsOpen = $state(false);
 	let spaces = $state<SpacesView | null>(null);
 
-	// macOS keeps its native traffic lights over the sidebar; elsewhere the
-	// window is undecorated and draws its own controls.
+	// macOS keeps its native traffic lights over the top left corner;
+	// elsewhere the window is undecorated and draws its own controls.
 	const mac = navigator.userAgent.includes('Mac');
 
-	/** The notes, or a chat with the model about the open space's index. */
-	let view = $state<'notes' | 'chat'>('notes');
+	/** The chat about the open space's index, floating over the day. */
+	let chatOpen = $state(false);
 	const canChat = $derived(model.state === 'loaded' || model.state === 'idle');
-	const searching = $derived(query.trim() !== '');
-	const activeTags = $derived(
-		query
-			.split(/\s+/)
-			.filter((token) => token.startsWith('#'))
-			.map((token) => token.slice(1).toLowerCase())
-	);
-
-	// Only the latest query's answer is kept, so a slow reply to an earlier
-	// keystroke cannot overwrite a newer one.
-	let searchRun = 0;
-	async function runSearch() {
-		const run = ++searchRun;
-		if (!searching) {
-			results = [];
-			return;
-		}
-		try {
-			const found = await search(query);
-			if (run === searchRun) results = found;
-		} catch (e) {
-			error = String(e);
-		}
-	}
-
-	$effect(() => {
-		void query;
-		void runSearch();
-	});
 
 	async function refresh() {
 		try {
@@ -124,13 +96,10 @@
 		} catch (e) {
 			error = String(e);
 		}
-		await runSearch();
 	}
 
 	async function select(date: string) {
-		view = 'notes';
 		selected = date;
-		query = '';
 		await refresh();
 	}
 
@@ -138,8 +107,8 @@
 	let blinking = $state<string | null>(null);
 	let blinkTimer: ReturnType<typeof setTimeout> | undefined;
 
-	/** Open a cited note's day, bring the note into view and blink it. */
-	async function openCited(entry: IndexEntry) {
+	/** Open a note's day, bring the note into view and blink it. */
+	async function openCited(entry: Pick<IndexEntry, 'id' | 'date'>) {
 		await select(entry.date);
 		// Cleared first so a second click on the same note blinks it again.
 		blinking = null;
@@ -154,22 +123,17 @@
 		blinkTimer = setTimeout(() => (blinking = null), 1400);
 	}
 
-	/**
-	 * A plain click filters on this tag alone, or clears it if it already was
-	 * the only one. With `additive`, the tag is added to the search or taken
-	 * out again. Words that are not tags are kept either way.
-	 */
-	function toggleTag(tag: string, additive = false) {
-		const tokens = query.split(/\s+/).filter(Boolean);
-		const kept = tokens.filter((token) => token.toLowerCase() !== `#${tag}`);
-		const selected = kept.length !== tokens.length;
-		if (additive) {
-			query = (selected ? kept : [...tokens, `#${tag}`]).join(' ');
-			return;
+	/** A tag clicked on a card opens the command center filtered on it. */
+	function openTag(tag: string) {
+		query = `#${tag} `;
+		paletteOpen = true;
+	}
+
+	function onWindowKeydown(event: KeyboardEvent) {
+		if (event.key === '/' && (event.ctrlKey || event.metaKey)) {
+			event.preventDefault();
+			paletteOpen = !paletteOpen;
 		}
-		const words = tokens.filter((token) => !token.startsWith('#'));
-		const alone = selected && activeTags.length === 1;
-		query = (alone ? words : [...words, `#${tag}`]).join(' ');
 	}
 
 	/** The inline editor: the body alone, which leaves the labels to the model. */
@@ -299,13 +263,26 @@
 	);
 </script>
 
-<div class="flex h-screen bg-neutral-950 text-neutral-100">
-	<aside class="flex w-56 shrink-0 flex-col gap-4 border-r bg-muted/40 p-3">
-		<div
-			data-tauri-drag-region="deep"
-			class={['flex items-center justify-between', mac ? 'pl-16' : 'pl-2']}
-		>
-			<SpaceSwitcher view={spaces} />
+<svelte:window onkeydown={onWindowKeydown} />
+
+<div class="flex h-screen flex-col bg-neutral-950 text-neutral-100">
+	<header
+		data-tauri-drag-region="deep"
+		class={['flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}
+	>
+		<SpaceSwitcher view={spaces} />
+		<div class="ml-auto flex items-center gap-1">
+			<Button
+				variant="ghost"
+				size="sm"
+				onclick={() => (paletteOpen = true)}
+				aria-label={m.search_label()}
+				title={m.search_label()}
+				class="text-muted-foreground hover:text-foreground"
+			>
+				<SearchIcon />
+				<kbd class="font-mono text-xs">{mac ? '⌘' : 'Ctrl'} /</kbd>
+			</Button>
 			<Button
 				variant="ghost"
 				size="icon-sm"
@@ -316,119 +293,107 @@
 			>
 				<SettingsIcon />
 			</Button>
-		</div>
-		<div class="flex min-h-0 flex-1 flex-col gap-6">
-			<DayCalendar
-				{days}
-				selected={searching || view === 'chat' ? '' : selected}
-				onselect={select}
-			/>
-			<CategoryList {categories} active={activeTags} onselect={toggleTag} />
-		</div>
-		<ModelStatusBar status={model} {busy} {progress} />
-	</aside>
-
-	<main class="flex min-w-0 flex-1 flex-col">
-		<div data-tauri-drag-region class="flex h-10 shrink-0 items-center justify-end px-2">
 			{#if !mac}<WindowControls />{/if}
 		</div>
-		{#if view === 'chat'}
-			<!-- Another space has another index, so a switch starts a new chat. -->
-			{#key spaces?.active}
-				<Chat
-					space={spaces?.active ?? ''}
-					onclose={() => (view = 'notes')}
-					onopen={(entry) => void openCited(entry)}
-				/>
-			{/key}
-		{:else}
-			<div class="flex-1 overflow-y-auto px-6 pb-6">
-				<div class="mx-auto max-w-2xl">
-					<div class="mb-4">
-						<SearchBar
-							bind:value={query}
-							{tags}
-							{canChat}
-							modelOff={model.state === 'disabled'}
-							onchat={() => (view = 'chat')}
-						/>
-					</div>
+	</header>
 
-					<h2 class="mb-4 text-lg font-semibold">
-						{#if searching}
-							{m.page_results({ count: results.length })}
-						{:else}
-							{heading}
-						{/if}
-					</h2>
-
-					{#if searching}
-						<TagFilters
-							active={activeTags}
-							{results}
-							onremove={(tag) => toggleTag(tag, true)}
-							onadd={(tag) => toggleTag(tag, true)}
-						/>
-					{/if}
-
-					{#if model.state === 'absent' || model.state === 'downloading'}
-						<Onboarding status={model} />
-					{/if}
-
-					{#if error}
-						<p
-							class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-						>
-							{error}
-						</p>
-					{/if}
-
-					{#if searching}
-						{#if results.length === 0}
-							<p class="text-sm text-neutral-600">{m.page_no_match()}</p>
-						{:else}
-							<ul>
-								{#each results as note (note.id)}
-									<li>
-										<NoteCard
-											{note}
-											onedit={(n) => (editing = n)}
-											ondelete={(n) => (deleting = n)}
-											onsave={saveBody}
-											onretry={retry}
-											ontag={toggleTag}
-											showDate
-										/>
-									</li>
-								{/each}
-							</ul>
-						{/if}
-					{:else if notes.length === 0}
-						<p class="text-sm text-neutral-600">
-							{m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })}
-						</p>
-					{:else}
-						<ul>
-							{#each notes as note (note.id)}
-								<li>
-									<NoteCard
-										{note}
-										onedit={(n) => (editing = n)}
-										ondelete={(n) => (deleting = n)}
-										onsave={saveBody}
-										onretry={retry}
-										ontag={toggleTag}
-										blink={note.id === blinking}
-									/>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</div>
+	<main class="min-h-0 flex-1 overflow-y-auto px-6 pb-28">
+		<div class="mx-auto max-w-3xl">
+			<div class="mt-6 mb-8 flex items-center gap-2">
+				<DayCalendar {days} {selected} onselect={select} />
+				<h1 class="text-3xl font-semibold tracking-tight">{heading}</h1>
 			</div>
-		{/if}
+
+			{#if model.state === 'absent' || model.state === 'downloading'}
+				<Onboarding status={model} />
+			{/if}
+
+			{#if error}
+				<p
+					class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+				>
+					{error}
+				</p>
+			{/if}
+
+			{#if notes.length === 0}
+				<p class="text-base text-neutral-600">
+					{m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })}
+				</p>
+			{:else}
+				<ul>
+					{#each notes as note (note.id)}
+						<li>
+							<NoteCard
+								{note}
+								onedit={(n) => (editing = n)}
+								ondelete={(n) => (deleting = n)}
+								onsave={saveBody}
+								onretry={retry}
+								ontag={openTag}
+								blink={note.id === blinking}
+							/>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</div>
 	</main>
 </div>
+
+<div class="fixed bottom-3 left-3 z-30">
+	<ModelStatusBar status={model} {busy} {progress} />
+</div>
+
+{#if chatOpen}
+	<section
+		aria-label={m.chat_title()}
+		class="fixed right-6 bottom-16 z-40 flex h-[min(40rem,calc(100vh-7rem))] w-[min(26rem,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl"
+	>
+		<!-- Another space has another index, so a switch starts a new chat. -->
+		{#key spaces?.active}
+			<Chat
+				space={spaces?.active ?? ''}
+				onclose={() => (chatOpen = false)}
+				onopen={(entry) => void openCited(entry)}
+			/>
+		{/key}
+	</section>
+{/if}
+
+<!-- A disabled button shows no title, so the wrapper carries it. -->
+<span
+	class="fixed right-6 bottom-2 z-40"
+	title={chatOpen
+		? m.common_close()
+		: canChat
+			? m.search_chat_title()
+			: model.state === 'disabled'
+				? m.search_chat_model_off()
+				: m.search_chat_disabled()}
+>
+	<Button
+		onclick={() => (chatOpen = !chatOpen)}
+		disabled={!canChat && !chatOpen}
+		aria-label={chatOpen ? m.common_close() : m.search_chat_label()}
+		aria-expanded={chatOpen}
+		class="size-12 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-5"
+	>
+		{#if chatOpen}<XIcon />{:else}<SparklesIcon />{/if}
+	</Button>
+</span>
+
+<CommandCenter
+	bind:open={paletteOpen}
+	bind:query
+	{tags}
+	{categories}
+	{canChat}
+	onpick={(note) => void openCited(note)}
+	ontoday={async () => void select(await today())}
+	onchat={() => (chatOpen = true)}
+	onsettings={() => (settingsOpen = true)}
+/>
 
 <NoteEditor
 	bind:note={editing}

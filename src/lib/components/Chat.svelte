@@ -148,9 +148,9 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col">
-	<header class="mx-auto flex w-full max-w-2xl items-center gap-2 px-6 pb-3">
+	<header class="flex items-center gap-2 border-b py-2 pr-2 pl-4">
 		<SparklesIcon class="size-4 text-primary" />
-		<h2 class="min-w-0 flex-1 truncate text-lg font-semibold">
+		<h2 class="min-w-0 flex-1 truncate text-base font-semibold">
 			{m.chat_title()}
 			<span class="font-normal text-muted-foreground">{m.chat_about({ space })}</span>
 		</h2>
@@ -164,18 +164,18 @@
 			variant="ghost"
 			size="icon-sm"
 			onclick={onclose}
-			aria-label={m.chat_back()}
-			title={m.chat_back()}
+			aria-label={m.common_close()}
+			title={m.common_close()}
 			class="text-muted-foreground hover:text-foreground"
 		>
 			<XIcon />
 		</Button>
 	</header>
 
-	<div bind:this={scroller} class="min-h-0 flex-1 overflow-y-auto px-6">
-		<div class="mx-auto flex max-w-2xl flex-col gap-5 pb-6">
+	<div bind:this={scroller} class="min-h-0 flex-1 overflow-y-auto px-4">
+		<div class="flex flex-col gap-5 py-4">
 			{#if turns.length === 0}
-				<div class="mt-8 flex flex-col gap-4 text-sm text-muted-foreground">
+				<div class="flex flex-col gap-4 text-sm text-muted-foreground">
 					<p>{m.chat_intro({ space })}</p>
 					{#if warming}
 						<p class="animate-pulse text-xs">{m.chat_reading_space({ space })}</p>
@@ -275,7 +275,7 @@
 		</div>
 	</div>
 
-	<div class="mx-auto w-full max-w-2xl px-6 pb-6">
+	<div class="px-3 pb-3">
 		<div
 			class="flex items-end gap-2 rounded-xl border bg-muted/40 p-2 focus-within:border-neutral-600"
 		>

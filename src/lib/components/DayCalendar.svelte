@@ -23,16 +23,6 @@
 	const locale = $derived(getLocale());
 	const withNotes = $derived(new Set(days.map((day) => day.date)));
 	const value = $derived(selected ? parseDate(selected) : undefined);
-	const label = $derived(
-		selected
-			? new Date(`${selected}T00:00:00`).toLocaleDateString(locale, {
-					weekday: 'short',
-					day: 'numeric',
-					month: 'short',
-					year: 'numeric'
-				})
-			: m.calendar_pick()
-	);
 
 	function pick(date: DateValue | undefined) {
 		if (!date) return;
@@ -44,9 +34,15 @@
 <Popover.Root bind:open>
 	<Popover.Trigger>
 		{#snippet child({ props })}
-			<Button {...props} variant="outline" class="w-full justify-start font-normal">
+			<Button
+				{...props}
+				variant="ghost"
+				size="icon-sm"
+				aria-label={m.calendar_pick()}
+				title={m.calendar_pick()}
+				class="text-muted-foreground hover:text-foreground"
+			>
 				<CalendarIcon />
-				{label}
 			</Button>
 		{/snippet}
 	</Popover.Trigger>

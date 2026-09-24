@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -6,29 +5,24 @@ use std::time::Instant;
 
 use crate::enrich::download::{self, ActiveModel};
 use crate::enrich::model::{Backend, ModelStatus};
-use crate::enrich::normalize::Vocabulary;
-use crate::enrich::queue::Queue;
 use crate::enrich::worker::Wake;
 use crate::settings::Settings;
-use crate::storage::index::{self, Index};
-use crate::storage::{categories, tags};
+use crate::spaces::{Registry, Space};
 use crate::storage::writer::Writer;
 
 pub struct AppState {
     /// The notes root for this run. A new one chosen in settings applies on
-    /// the next launch, since the index, queue and watcher are all bound to it.
+    /// the next launch, since the spaces, queues and watchers are all bound
+    /// to it. Models and settings live here; notes live in the spaces.
     pub root: PathBuf,
     /// What settings.json says now, for the parts that apply live.
     pub settings: RwLock<Settings>,
     pub writer: Writer,
-    /// The derived cache from SPEC 4.4. Guards are held only for the length of
-    /// a read or a swap, never across an await.
-    pub index: RwLock<Index>,
-    /// The user's half of `tags.json` (SPEC 4.5), read at startup and again on
-    /// a rebuild.
-    pub aliases: RwLock<HashMap<String, String>>,
-    /// Pending enrichment jobs (SPEC 5.6).
-    pub queue: Mutex<Queue>,
+    /// Every space, the default one first. Each keeps its own notes, tags,
+    /// categories and queue.
+    pub spaces: RwLock<Vec<Arc<Space>>>,
+    /// What spaces.json says: which space is open, and the default's name.
+    pub registry: RwLock<Registry>,
     /// `None` until a model is loaded. Absent is a normal state: capture,
     /// browsing and search all work without one (SPEC 11).
     pub backend: RwLock<Option<Arc<dyn Backend>>>,
@@ -65,7 +59,7 @@ impl AppState {
             return None;
         }
         let done = self.batch_done.load(Ordering::SeqCst);
-        let queued = self.queue.lock().map(|queue| queue.len()).unwrap_or(0);
+        let queued: usize = self.all_spaces().iter().map(|s| s.queued()).sum();
         Some(Progress {
             current: done + 1,
             total: done + 1 + queued,
@@ -113,47 +107,40 @@ impl AppState {
         self.settings.read().map(|s| s.use_gpu).unwrap_or(true)
     }
 
-    pub fn aliases(&self) -> HashMap<String, String> {
-        self.aliases
+    /// The open space, which every note command acts on.
+    pub fn space(&self) -> Result<Arc<Space>, String> {
+        let active = self
+            .registry
             .read()
-            .map(|aliases| aliases.clone())
-            .unwrap_or_default()
+            .map_err(|_| "spaces lock poisoned".to_string())?
+            .active
+            .clone();
+        // The default space is first and always there.
+        self.find_space(&active)
+            .or_else(|| self.spaces.read().ok()?.first().cloned())
+            .ok_or_else(|| "no space is open".to_string())
     }
 
-    /// What enrichment normalises against (SPEC 5.5).
-    pub fn vocabulary(&self) -> Vocabulary {
-        Vocabulary {
-            counts: self
-                .index
-                .read()
-                .map(|idx| idx.tag_counts())
-                .unwrap_or_default(),
-            aliases: self.aliases(),
-            categories: categories::load(&self.root),
+    pub fn find_space(&self, name: &str) -> Option<Arc<Space>> {
+        self.spaces
+            .read()
+            .ok()?
+            .iter()
+            .find(|s| s.name == name)
+            .cloned()
+    }
+
+    /// The open space first, so its notes are enriched before the others.
+    pub fn all_spaces(&self) -> Vec<Arc<Space>> {
+        let mut all = self
+            .spaces
+            .read()
+            .map(|spaces| spaces.clone())
+            .unwrap_or_default();
+        if let Ok(active) = self.space() {
+            all.sort_by_key(|s| !Arc::ptr_eq(s, &active));
         }
-    }
-
-    /// Write `index.jsonl` and `tags.json` from what is in memory. The tag
-    /// counts are derived from the index, so they are rewritten whenever it is
-    /// and the two never drift apart.
-    pub async fn persist_index(&self) -> Result<(), String> {
-        let (jsonl, counts) = {
-            let idx = self
-                .index
-                .read()
-                .map_err(|_| "index lock poisoned".to_string())?;
-            (idx.to_jsonl(), idx.tag_counts())
-        };
-        let root = &self.root;
-        self.writer
-            .write_index(index::index_path(root), jsonl)
-            .await?;
-        self.writer
-            .write_index(
-                tags::tags_path(root),
-                tags::render(&counts, &self.aliases()),
-            )
-            .await
+        all
     }
 
     pub fn model_status(&self) -> ModelStatus {

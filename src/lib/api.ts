@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type NoteStatus = 'pending' | 'done' | 'failed' | 'manual';
@@ -31,8 +31,75 @@ export const listDays = () => invoke<DaySummary[]>('list_days');
 /** Every tag in use and how many notes carry it, most used first. */
 export const listTags = () => invoke<[string, number][]>('list_tags');
 
+/**
+ * The categories notes are filed under, with how many carry each, most used
+ * first. A category is also a tag, so `#category` filters on it.
+ */
+export const listCategories = () => invoke<[string, number][]>('list_categories');
+
+/** Every category on the list, used or not, in the list's order. */
+export const categoryNames = () => invoke<string[]>('category_names');
+
+/**
+ * A note's category and its other tags. The category is the first tag, and
+ * only when it is on the list, as the backend reads it.
+ */
+export function splitCategory(names: string[], tags: string[]): [string, string[]] {
+	const [first, ...rest] = tags;
+	return first !== undefined && names.includes(first) ? [first, rest] : ['', tags];
+}
+
 /** Words must all appear; `#tag` tokens are AND filters. Newest first. */
 export const search = (query: string) => invoke<Note[]>('search', { query });
+
+/** One line of `index.jsonl`, parsed. The index holds no bodies. */
+export type IndexEntry = Omit<Note, 'body'>;
+
+/** One turn of a chat. */
+export interface ChatMessage {
+	role: 'user' | 'assistant';
+	content: string;
+}
+
+/** What a reply sends, in order: the notes, pieces of text, then done. */
+export type ChatEvent =
+	/** The index the model reads, numbered as it sees it: note n is notes[n - 1]. */
+	| { kind: 'notes'; notes: IndexEntry[] }
+	| { kind: 'token'; text: string }
+	/** The reply is complete or was stopped; the note numbers it cites. */
+	| { kind: 'done'; cited: number[] };
+
+/**
+ * Reply to the last message, streamed to `onEvent`. The model reads the open
+ * space's `index.jsonl` and nothing else. Resolves once the reply is done.
+ */
+export function chat(messages: ChatMessage[], onEvent: (event: ChatEvent) => void) {
+	const channel = new Channel<ChatEvent>();
+	channel.onmessage = onEvent;
+	return invoke<void>('chat', { messages, onEvent: channel });
+}
+
+/** End the reply being written; it finishes with what it has so far. */
+export const stopChat = () => invoke<void>('stop_chat');
+
+/** Read the open space's index into the model ahead of the first message. */
+export const warmChat = () => invoke<void>('warm_chat');
+
+/**
+ * A reply split into text and citations: `[12]` and `[3, 7]` become the note
+ * numbers they name. Anything else in brackets stays text.
+ */
+export function splitCitations(text: string): (string | number[])[] {
+	const parts: (string | number[])[] = [];
+	let last = 0;
+	for (const match of text.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
+		if (match.index > last) parts.push(text.slice(last, match.index));
+		parts.push(match[1].split(',').map((n) => Number(n.trim())));
+		last = match.index + match[0].length;
+	}
+	if (last < text.length) parts.push(text.slice(last));
+	return parts;
+}
 
 /**
  * The spec's signature is `delete_note(id)`; the date comes along until the
@@ -137,10 +204,12 @@ export const downloadModel = (variant: ModelVariant) => invoke<void>('download_m
 export const retryEnrichment = (date: string, id: string) =>
 	invoke<void>('retry_enrichment', { date, id });
 
-/** What the note card's editor hands back. */
+/** What the note editor hands back. `tags` leaves out the category. */
 export interface NoteEdit {
 	body: string;
 	subject: string;
+	/** Empty for none. */
+	category: string;
 	tags: string[];
 }
 
@@ -148,11 +217,15 @@ export interface NoteEdit {
 export const updateNote = (date: string, id: string, body: string) =>
 	invoke<Note>('update_note', { date, id, body });
 
-/** Set subject and tags by hand, which makes the note manual. Omitted fields are kept. */
+/**
+ * Set subject, category and tags by hand, which makes the note manual so the
+ * model leaves it alone from then on. Omitted fields are kept; `tags` are the
+ * ones besides the category, and an empty category clears it.
+ */
 export const updateNoteMeta = (
 	date: string,
 	id: string,
-	meta: { subject?: string; tags?: string[] }
+	meta: { subject?: string; category?: string; tags?: string[] }
 ) => invoke<Note>('update_note_meta', { date, id, ...meta });
 
 /** Fired when a note has been labelled and written back. */
@@ -224,3 +297,36 @@ export const onSettingsChanged = (handler: (settings: Settings) => void): Promis
 /** Fired by the tray's Settings entry. */
 export const onOpenSettings = (handler: () => void): Promise<UnlistenFn> =>
 	listen('open-settings', () => handler());
+
+export interface SpaceSummary {
+	/** Also the space's folder name under `spaces/`. */
+	name: string;
+	/** The space at the notes root, which cannot be deleted. */
+	isDefault: boolean;
+	notes: number;
+}
+
+export interface SpacesView {
+	/** The open space, which every note command acts on. */
+	active: string;
+	/** The default space first, then the rest by name. */
+	spaces: SpaceSummary[];
+}
+
+export const listSpaces = () => invoke<SpacesView>('list_spaces');
+
+/** Makes the space and opens it. */
+export const createSpace = (name: string) => invoke<SpacesView>('create_space', { name });
+
+/** Renames the space's folder too. */
+export const renameSpace = (name: string, newName: string) =>
+	invoke<SpacesView>('rename_space', { name, newName });
+
+/** Moves the space's folder to `.scratchnote/trash/`, so nothing is lost. */
+export const deleteSpace = (name: string) => invoke<SpacesView>('delete_space', { name });
+
+export const setActiveSpace = (name: string) => invoke<SpacesView>('set_active_space', { name });
+
+/** Fired to every window when a space is opened, made, renamed or deleted. */
+export const onSpacesChanged = (handler: (view: SpacesView) => void): Promise<UnlistenFn> =>
+	listen<SpacesView>('spaces-changed', (event) => handler(event.payload));

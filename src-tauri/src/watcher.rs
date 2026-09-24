@@ -7,12 +7,14 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{EventKind, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 
+use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::{check_date, fingerprint, index};
 
@@ -20,10 +22,10 @@ use crate::storage::{check_date, fingerprint, index};
 /// reparsing. Well inside the one second the spec allows.
 const QUIET: Duration = Duration::from_millis(250);
 
-/// Returns the watcher, which the caller must keep alive. Dropping it stops
-/// the watching.
-pub fn start(app: AppHandle, root: PathBuf) -> notify::Result<RecommendedWatcher> {
-    let notes_dir = root.join("notes");
+/// Watch one space's notes. The watcher is stored on the space, so retiring
+/// the space stops it, and the processing task ends with it.
+pub fn start(app: AppHandle, space: &Arc<Space>) -> notify::Result<()> {
+    let notes_dir = space.root.join("notes");
     // notify cannot watch a directory that is not there yet.
     if let Err(e) = std::fs::create_dir_all(&notes_dir) {
         log::warn!("could not create {}: {e}", notes_dir.display());
@@ -52,11 +54,14 @@ pub fn start(app: AppHandle, root: PathBuf) -> notify::Result<RecommendedWatcher
     })?;
 
     watcher.watch(&notes_dir, RecursiveMode::Recursive)?;
-    tauri::async_runtime::spawn(process(app, rx));
-    Ok(watcher)
+    if let Ok(mut slot) = space.watcher.lock() {
+        *slot = Some(watcher);
+    }
+    tauri::async_runtime::spawn(process(app, Arc::downgrade(space), rx));
+    Ok(())
 }
 
-async fn process(app: AppHandle, mut rx: mpsc::UnboundedReceiver<PathBuf>) {
+async fn process(app: AppHandle, space: Weak<Space>, mut rx: mpsc::UnboundedReceiver<PathBuf>) {
     let mut batch: HashSet<PathBuf> = HashSet::new();
 
     while let Some(first) = rx.recv().await {
@@ -66,9 +71,12 @@ async fn process(app: AppHandle, mut rx: mpsc::UnboundedReceiver<PathBuf>) {
             batch.insert(path);
         }
 
+        let Some(space) = space.upgrade().filter(|s| !s.is_retired()) else {
+            return;
+        };
         let mut touched = false;
         for path in batch.drain() {
-            touched |= reindex(&app, &path);
+            touched |= reindex(&app, &space, &path);
         }
         if touched {
             let _ = app.emit("index-rebuilt", ());
@@ -77,7 +85,7 @@ async fn process(app: AppHandle, mut rx: mpsc::UnboundedReceiver<PathBuf>) {
 }
 
 /// Reparse one daily file into the index. Returns whether anything changed.
-fn reindex(app: &AppHandle, path: &Path) -> bool {
+fn reindex(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     let Some(date) = path.file_stem().and_then(|s| s.to_str()) else {
         return false;
     };
@@ -96,7 +104,7 @@ fn reindex(app: &AppHandle, path: &Path) -> bool {
 
     let entries = index::parse_day(path, &date);
     {
-        let Ok(mut idx) = state.index.write() else {
+        let Ok(mut idx) = space.index.write() else {
             return false;
         };
         idx.replace_day(&date, entries);
@@ -105,13 +113,14 @@ fn reindex(app: &AppHandle, path: &Path) -> bool {
     // Persist the refreshed cache. Failing to write it is not fatal: the file
     // is derived, and startup reparses anything newer than it.
     let app = app.clone();
+    let owned = space.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = app.state::<AppState>().persist_index().await {
+        if let Err(e) = owned.persist_index(&app.state::<AppState>().writer).await {
             log::warn!("could not persist the index after an external edit: {e}");
         }
     });
 
-    log::info!("reindexed {date} after an external edit");
+    log::info!("reindexed {date} in {} after an external edit", space.name);
     true
 }
 

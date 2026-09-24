@@ -10,6 +10,10 @@ use serde::{Deserialize, Serialize};
 
 /// SPEC 5.1.
 pub const CONTEXT_TOKENS: u32 = 4096;
+/// The context a chat reads the whole index in, with room for the talk.
+/// Around 200 notes fit; its cache costs about 1.2 GB with the 4B model, and
+/// only once a chat has started.
+pub const LONG_CONTEXT_TOKENS: u32 = 8192;
 pub const TEMPERATURE: f32 = 0.2;
 pub const MAX_OUTPUT_TOKENS: u32 = 200;
 /// SPEC 5.6: a job that takes longer than this counts as a failure.
@@ -57,6 +61,30 @@ pub enum ModelStatus {
 /// the output cannot be anything but the enrichment object.
 pub trait Backend: Send + Sync {
     fn generate(&self, prompt: &str, grammar: &str) -> Result<String, String>;
+
+    /// Free text, no grammar, handed to `on_piece` as it is written, in a
+    /// larger context of its own whose cache enrichment never touches. A
+    /// long start that stays the same from one call to the next, such as the
+    /// whole index, is then only read once. Stops early when `on_piece`
+    /// returns false, and returns what was written.
+    ///
+    /// Stubs answer in one piece, from `generate`.
+    fn stream_long(
+        &self,
+        prompt: &str,
+        _max_tokens: u32,
+        on_piece: &mut dyn FnMut(&str) -> bool,
+    ) -> Result<String, String> {
+        let out = self.generate(prompt, "")?;
+        on_piece(&out);
+        Ok(out)
+    }
+
+    /// Read a prompt into that context's cache without answering, so a
+    /// `stream_long` that starts with it only reads the rest.
+    fn prefill_long(&self, _prompt: &str) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// Returns fixed JSON without loading anything, for the golden tests in

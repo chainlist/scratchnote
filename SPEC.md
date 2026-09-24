@@ -185,7 +185,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 ### 3.1 Quick Capture window
 
 - Global hotkey (default `Ctrl+Shift+Space`, `Cmd+Shift+Space` on macOS, configurable) toggles a small, borderless, always-on-top window centered on the active screen.
-- Contains a single multiline plain-text input, auto-focused.
+- Contains a single multiline plain-text input, auto-focused. The note goes into the open space, which the footer names when there is more than one.
 - `Cmd/Ctrl+Enter`: save and hide window. `Esc`: hide without saving (draft is kept in memory and restored next open). Empty input + save = no-op.
 - After save, a subtle toast "Saved" appears for 1s before hiding (or hide immediately; make it a setting, default immediate).
 - The capture window must open in under 150ms; keep it a pre-created hidden window, never create on demand.
@@ -194,7 +194,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 
 Opened from tray icon or app launch. Three areas:
 
-1. **Sidebar**: list of days (newest first, grouped by month), and a tag list with counts, sorted by count.
+1. **Sidebar**: the space switcher (see 4.6), a day picker, and the categories in use with counts, sorted by count. Tags are too many and too fluid to browse as a list, so they are reached from search instead: `#` completes tag names, a note's tags filter on click, and search results offer the tags they share as chips to narrow down.
 2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Subject, summary and tags are not displayed; they exist for search and indexing. Edit, re-run and delete (with the enrichment status) appear on hover.
 3. **Search bar** at the top: full-text over body, subject, summary; supports `#tag` tokens as filters (e.g. `#infra kubernetes`). Results are note cards across all days.
 
@@ -221,6 +221,13 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
     tags.json        # tag vocabulary + aliases
     queue.json       # pending enrichment jobs
     settings.json
+    spaces.json      # default space's name, open space
+    categories.json
+    trash/           # deleted spaces, recoverable
+  spaces/
+    Work/            # one folder per extra space, named after it
+      notes/...
+      .scratchnote/  # index.jsonl, tags.json, queue.json, categories.json
   models/            # GGUF files (outside notes so sync tools can ignore it)
 ```
 
@@ -299,6 +306,16 @@ One JSON object per line, one line per note:
 ```
 
 Counts are derived and recomputed on index rebuild. Aliases are user-editable in settings.
+
+### 4.6 Spaces
+
+A space is a separate set of notes with its own tags, aliases, categories, index and queue. Nothing is shared between spaces except settings and models.
+
+- The notes root itself is the default space, so data from before spaces existed needs no migration. It cannot be deleted; its display name (default "Personal") is kept in `spaces.json`.
+- Every other space is a folder under `spaces/`, named after the space, holding the same `notes/` and `.scratchnote/` layout as the root. Any folder there whose name is a valid space name is a space, including one made by hand.
+- Space names are folder names, so they must be valid on every platform: no `<>:"/\|?*`, no leading or trailing dot, no Windows reserved names, at most 40 characters, and unique ignoring case. Renaming a space renames its folder.
+- Deleting a space moves its folder to `.scratchnote/trash/<name> <timestamp>`; moving it back under `spaces/` restores it.
+- All spaces are loaded at startup and watched. Note commands act on the open space. The single enrichment worker drains every space's queue, the open space first.
 
 ## 5. Enrichment (LLM)
 
@@ -434,9 +451,11 @@ model_status() -> ModelStatus                 // absent | downloading(pct) | loa
 download_model(variant)
 check_model_update() -> UpdateCheck           // user-initiated only; up-to-date | newer(revision) | failed(reason)
 rebuild_index()
+list_spaces() -> SpacesView                   // open space + every space with its note count
+create_space(name) / rename_space(name, new_name) / delete_space(name) / set_active_space(name)
 ```
 
-Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`. The UI updates live when enrichment finishes.
+Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `spaces-changed { active, spaces }`. The UI updates live when enrichment finishes.
 
 ## 9. Project Structure
 
@@ -447,6 +466,7 @@ src-tauri/src/
   storage/ (daily_file.rs parser+writer, index.rs, tags.rs, writer.rs)
   enrich/  (model.rs, prompt.rs, grammar.rs, normalize.rs, queue.rs)
   watcher.rs
+  spaces.rs
   search.rs
   settings.rs
 src/
@@ -455,7 +475,7 @@ src/
     +page.svelte      # main window
     capture/+page.svelte   # quick capture window (Tauri window loads /capture)
     settings/+page.svelte
-  lib/components/ (NoteCard, DayList, TagList, SearchBar, Onboarding)
+  lib/components/ (NoteCard, DayCalendar, CategoryList, TagFilters, SearchBar, SpaceSwitcher, Onboarding)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/api.ts          # typed wrappers around Tauri invoke/listen
 ```

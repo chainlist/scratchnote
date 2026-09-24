@@ -146,6 +146,39 @@ body {
 	--radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* A note opened from a chat citation: two soft pulses of the accent, so the
+   eye finds it on the day. One slow fade when motion is reduced. */
+@keyframes note-blink {
+	0%,
+	50%,
+	100% {
+		background-color: transparent;
+	}
+	25%,
+	75% {
+		background-color: color-mix(in oklab, var(--primary) 16%, transparent);
+	}
+}
+
+@keyframes note-fade {
+	from {
+		background-color: color-mix(in oklab, var(--primary) 16%, transparent);
+	}
+	to {
+		background-color: transparent;
+	}
+}
+
+.note-blink {
+	animation: note-blink 1.2s ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.note-blink {
+		animation: note-fade 1.2s ease-out;
+	}
+}
+
 @layer base {
 	* {
 		@apply border-border outline-ring/50;

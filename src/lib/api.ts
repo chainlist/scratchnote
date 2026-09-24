@@ -48,6 +48,12 @@ export const hideCapture = () => invoke<void>('hide_capture');
 /** Reparses every markdown file and replaces the cache. Returns the note count. */
 export const rebuildIndex = () => invoke<number>('rebuild_index');
 
+/**
+ * Rebuild the index and queue every note for a fresh subject, summary and
+ * tags, hand-edited ones included. Returns how many notes were queued.
+ */
+export const regenerateAll = () => invoke<number>('regenerate_all');
+
 export const onNoteUpdated = (handler: (id: string) => void): Promise<UnlistenFn> =>
 	listen<{ id: string }>('note-updated', (event) => handler(event.payload.id));
 
@@ -94,6 +100,9 @@ export const MODEL_CHOICES: { variant: ModelVariant; name: string; size: string;
 	];
 
 export const modelStatus = () => invoke<ModelStatus>('model_status');
+
+/** True while a note is being enriched, loading the model included. */
+export const enrichBusy = () => invoke<boolean>('enrich_busy');
 
 export interface ModelInfo {
 	/** The file enrichment loads, or null when there is nothing usable. */
@@ -153,6 +162,24 @@ export const onNoteEnriched = (handler: (id: string) => void): Promise<UnlistenF
 export const onModelStatus = (handler: (status: ModelStatus) => void): Promise<UnlistenFn> =>
 	listen<ModelStatus>('model-status', (event) => handler(event.payload));
 
+export const onEnrichBusy = (handler: (busy: boolean) => void): Promise<UnlistenFn> =>
+	listen<boolean>('enrich-busy', (event) => handler(event.payload));
+
+/** Which note of how many the worker is on, counting since it last went idle. */
+export interface EnrichProgress {
+	current: number;
+	total: number;
+}
+
+/** Null while the worker is idle. */
+export const enrichProgress = () => invoke<EnrichProgress | null>('enrich_progress');
+
+/** Fired as the worker starts each note. */
+export const onEnrichProgress = (
+	handler: (progress: EnrichProgress | null) => void
+): Promise<UnlistenFn> =>
+	listen<EnrichProgress | null>('enrich-progress', (event) => handler(event.payload));
+
 export interface Settings {
 	root: string;
 	captureHotkey: string;
@@ -165,6 +192,14 @@ export interface Settings {
 	idleUnloadMinutes: number;
 	/** Run the model on the GPU when one is available. */
 	useGpu: boolean;
+	/** Accent preset name, see ACCENTS in appearance.ts. */
+	accentColor: string;
+	/** Base text size in pixels. */
+	fontSize: number;
+	/** Corner radius in rem. */
+	radius: number;
+	/** 'system' follows the OS setting. */
+	theme: 'dark' | 'light' | 'system';
 }
 
 export interface SettingsView extends Settings {

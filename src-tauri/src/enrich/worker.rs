@@ -25,24 +25,45 @@ pub fn spawn(app: AppHandle, wake: Wake) {
         loop {
             // Nothing to do: sleep until something is queued.
             let Some(job) = next_job(&app) else {
+                set_busy(&app, false);
                 wake.notified().await;
                 continue;
             };
+
+            // Set before the load so the first job after startup or an idle
+            // unload shows as work too.
+            set_busy(&app, true);
 
             // No model yet is not a failure. Put the job back untouched and
             // wait; a finished download wakes us (SPEC 5.2, SPEC 11).
             let Some(backend) = backend(&app) else {
                 put_back_unchanged(&app, job);
+                set_busy(&app, false);
                 wake.notified().await;
                 continue;
             };
 
             let state = app.state::<AppState>();
             state.mark_used();
+            let _ = app.emit("enrich-progress", state.progress());
             run(&app, job, backend).await;
+            state.batch_done.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             state.mark_used();
         }
     });
+}
+
+/// Cleared only once the queue is empty, and emitted only on a change, so a
+/// run of queued jobs reads as one stretch of work.
+fn set_busy(app: &AppHandle, busy: bool) {
+    let state = app.state::<AppState>();
+    if state.busy.swap(busy, std::sync::atomic::Ordering::SeqCst) != busy {
+        let _ = app.emit("enrich-busy", busy);
+    }
+    // A new stretch of work counts from 1 again.
+    if !busy {
+        state.batch_done.store(0, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 fn next_job(app: &AppHandle) -> Option<Job> {
@@ -140,6 +161,7 @@ async fn run(app: &AppHandle, job: Job, backend: Arc<dyn Backend>) {
                     log::info!("{} was edited by hand while enriching, dropping", job.id);
                 }
                 Some(_) => {
+                    remember_category(&state, &enrichment.category).await;
                     write_back(app, &job, &runner::patch(&enrichment)).await;
                     let _ = app.emit("note-enriched", serde_json::json!({ "id": job.id }));
                 }
@@ -164,6 +186,19 @@ async fn run(app: &AppHandle, job: Job, backend: Arc<dyn Backend>) {
     }
 
     persist_queue(app).await;
+}
+
+/// Append a category the model invented to `categories.json`, so the next
+/// notes are offered it.
+async fn remember_category(state: &AppState, category: &str) {
+    use crate::storage::categories;
+    let Some(contents) = categories::with_added(&state.root, category) else {
+        return;
+    };
+    let path = categories::categories_path(&state.root);
+    if let Err(e) = state.writer.write_index(path, contents).await {
+        log::warn!("could not add {category} to categories.json: {e}");
+    }
 }
 
 fn read_note(path: &std::path::Path, job: &Job) -> Option<daily_file::Note> {

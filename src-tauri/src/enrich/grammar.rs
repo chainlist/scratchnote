@@ -93,8 +93,24 @@ mod tests {
             .to_string();
         let subject = root.find("subject").unwrap();
         let summary = root.find("summary").unwrap();
-        let tags = root.find("tags").unwrap();
-        assert!(subject < summary && summary < tags, "{root}");
+        let category = root.find("category").unwrap();
+        let tags = root.find("\"tags").unwrap();
+        assert!(
+            subject < summary && summary < category && category < tags,
+            "{root}"
+        );
+    }
+
+    #[test]
+    fn whitespace_between_tokens_is_bounded() {
+        let ws = rules()
+            .lines()
+            .find(|line| line.starts_with("ws"))
+            .expect("a ws rule")
+            .to_string();
+        // Unbounded, it spends output tokens on layout and can run the
+        // answer into the token limit.
+        assert!(!ws.contains('*') && !ws.contains('+'), "{ws}");
     }
 
     #[test]

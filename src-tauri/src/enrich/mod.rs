@@ -31,6 +31,10 @@ use grammar::{MAX_SUBJECT, MAX_SUMMARY, MAX_TAGS, MIN_TAGS};
 pub struct Enrichment {
     pub subject: String,
     pub summary: String,
+    /// The broad subject of the note. The grammar always asks for it; the
+    /// default only spares stub fixtures from spelling it out.
+    #[serde(default)]
+    pub category: String,
     pub tags: Vec<String>,
 }
 

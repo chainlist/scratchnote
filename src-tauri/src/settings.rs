@@ -27,6 +27,14 @@ pub struct Settings {
     pub idle_unload_minutes: u32,
     /// Run the model on the GPU when one is available.
     pub use_gpu: bool,
+    /// Name of the accent preset the windows paint buttons and focus rings in.
+    pub accent_color: String,
+    /// Base text size in pixels; everything sized in rem scales with it.
+    pub font_size: u32,
+    /// Corner radius in rem.
+    pub radius: f32,
+    /// "dark", "light" or "system" to follow the OS.
+    pub theme: String,
 }
 
 impl Default for Settings {
@@ -39,6 +47,10 @@ impl Default for Settings {
             model_path: None,
             idle_unload_minutes: 10,
             use_gpu: true,
+            accent_color: "neutral".to_string(),
+            font_size: 16,
+            radius: 0.625,
+            theme: "dark".to_string(),
         }
     }
 }
@@ -138,6 +150,9 @@ mod tests {
         let back: Settings = serde_json::from_str(r#"{"hideImmediately":false}"#).unwrap();
         assert_eq!(back.capture_hotkey, DEFAULT_HOTKEY);
         assert!(!back.hide_immediately);
+        assert_eq!(back.accent_color, "neutral");
+        assert_eq!(back.font_size, 16);
+        assert_eq!(back.theme, "dark");
     }
 
     #[test]

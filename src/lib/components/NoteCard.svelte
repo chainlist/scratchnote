@@ -45,7 +45,7 @@
 	}
 
 	const action =
-		'cursor-pointer rounded px-1.5 py-0.5 text-[10px] tracking-wide text-neutral-400 uppercase hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50';
+		'cursor-pointer rounded px-1.5 py-0.5 text-[0.625rem] tracking-wide text-neutral-400 uppercase hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50';
 
 	function onEditKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -77,9 +77,24 @@
 </script>
 
 <article
-	class="group relative grid grid-cols-[4.5rem_1fr] gap-x-5 py-4"
+	class="group relative -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-4 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900"
 	onmouseleave={() => (armed = false)}
 >
+	<!-- Timeline rail in the gutter between time and body. Each note draws
+	     its own dot and the segments above and below it; the first and last
+	     notes leave off the outer ends so the rail stops at their dots. -->
+	<span
+		aria-hidden="true"
+		class="absolute top-0 left-[6.25rem] h-[26px] w-px bg-neutral-800 [li:first-child_&]:hidden"
+	></span>
+	<span
+		aria-hidden="true"
+		class="absolute top-[26px] left-[6.25rem] size-2 -translate-x-[3.5px] rounded-full border border-neutral-700 bg-neutral-950 transition-colors duration-300 group-hover:border-neutral-400 group-hover:bg-neutral-400"
+	></span>
+	<span
+		aria-hidden="true"
+		class="absolute top-[34px] bottom-0 left-[6.25rem] w-px bg-neutral-800 [li:last-child_&]:hidden"
+	></span>
 	<time class="pt-1 text-right font-mono text-xs leading-5 text-neutral-600">
 		{#if showDate}<span class="block">{note.date}</span>{/if}{note.time}
 	</time>
@@ -93,7 +108,7 @@
 					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
 					aria-label="Body"
 					spellcheck="false"
-					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[15px] leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
+					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[0.9375rem] leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
 				></textarea>
 				<div class="flex justify-end gap-1">
 					<button type="button" onclick={() => (editing = false)} class={action}>Cancel</button>
@@ -103,13 +118,13 @@
 				</div>
 			</div>
 		{:else}
-			<p class="text-[15px] leading-7 whitespace-pre-wrap text-neutral-200">{note.body}</p>
+			<p class="text-[0.9375rem] leading-7 whitespace-pre-wrap text-neutral-200">{note.body}</p>
 		{/if}
 	</div>
 
 	{#if !editing}
 		<div
-			class="absolute top-3 right-0 flex gap-1 bg-neutral-950 pl-2 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
+			class="absolute top-3 right-3 flex gap-1 bg-neutral-900 pl-2 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
 		>
 			{#if canRetry}
 				<button type="button" onclick={() => onretry(note)} class={action}>Re-run</button>
@@ -121,15 +136,25 @@
 				onblur={() => (armed = false)}
 				aria-label={name}
 				title={name}
-				class="cursor-pointer rounded px-1.5 py-0.5 text-[10px] tracking-wide uppercase
+				class="cursor-pointer rounded px-1.5 py-0.5 text-[0.625rem] tracking-wide uppercase
 					{armed
-					? 'bg-red-900 text-red-100'
+					? 'bg-red-600 text-white dark:bg-red-900 dark:text-red-100'
 					: note.status === 'failed'
-						? 'bg-red-950 text-red-400'
+						? 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400'
 						: 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'}"
 			>
 				{label}
 			</button>
 		</div>
+
+		{#if note.tags.length > 0}
+			<ul
+				class="pointer-events-none absolute right-3 bottom-2 flex gap-1.5 bg-neutral-900 pl-2 font-mono text-[0.625rem] text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
+			>
+				{#each note.tags as tag (tag)}
+					<li>#{tag}</li>
+				{/each}
+			</ul>
+		{/if}
 	{/if}
 </article>

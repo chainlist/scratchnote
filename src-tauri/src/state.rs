@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
@@ -11,7 +11,7 @@ use crate::enrich::queue::Queue;
 use crate::enrich::worker::Wake;
 use crate::settings::Settings;
 use crate::storage::index::{self, Index};
-use crate::storage::tags;
+use crate::storage::{categories, tags};
 use crate::storage::writer::Writer;
 
 pub struct AppState {
@@ -40,11 +40,38 @@ pub struct AppState {
     /// When the worker last started or finished a job, for the idle unload in
     /// SPEC 5.1.
     pub last_used: Mutex<Instant>,
+    /// True while the worker has a job in hand, loading the model included.
+    pub busy: AtomicBool,
+    /// Notes finished since the worker last went idle, for the `3/142` the
+    /// status bar shows.
+    pub batch_done: AtomicUsize,
     /// Nudges the worker when a job is queued or a model becomes available.
     pub wake: Wake,
 }
 
+/// Where the worker is in the current stretch of work: `current` of `total`,
+/// both counting the note in hand.
+#[derive(Debug, Clone, Copy, serde::Serialize)]
+pub struct Progress {
+    pub current: usize,
+    pub total: usize,
+}
+
 impl AppState {
+    /// `None` while the worker is idle. The total grows as notes are queued
+    /// mid-run, and a note put back to retry counts again.
+    pub fn progress(&self) -> Option<Progress> {
+        if !self.busy.load(Ordering::SeqCst) {
+            return None;
+        }
+        let done = self.batch_done.load(Ordering::SeqCst);
+        let queued = self.queue.lock().map(|queue| queue.len()).unwrap_or(0);
+        Some(Progress {
+            current: done + 1,
+            total: done + 1 + queued,
+        })
+    }
+
     /// Drop the loaded model and say what state that leaves. A job still
     /// holding it finishes first, since it owns its own reference.
     pub fn unload_model(&self) -> ModelStatus {
@@ -102,6 +129,7 @@ impl AppState {
                 .map(|idx| idx.tag_counts())
                 .unwrap_or_default(),
             aliases: self.aliases(),
+            categories: categories::load(&self.root),
         }
     }
 

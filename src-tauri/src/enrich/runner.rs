@@ -18,18 +18,67 @@ pub fn enrich(
     vocabulary: &Vocabulary,
     backend: &dyn Backend,
 ) -> Result<Enrichment, String> {
-    let existing = vocabulary.by_frequency();
-    let text = prompt::build(body, &existing);
+    let existing = related_tags(vocabulary.by_frequency(), body);
+    let text = prompt::build(body, &vocabulary.categories, &existing);
 
     let raw = backend.generate(&text, grammar::ENRICHMENT_GBNF)?;
     let mut enrichment = Enrichment::parse(&raw)?;
 
-    enrichment.tags = normalize::normalize(&enrichment.tags, vocabulary);
+    // Normalised on its own, so what gets remembered as a category is the
+    // spelling that lands on the note.
+    enrichment.category = normalize::normalize(&[enrichment.category.clone()], vocabulary)
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    // The category goes first so the tag cap never drops it.
+    let raw_tags: Vec<String> = std::iter::once(enrichment.category.clone())
+        .chain(enrichment.tags.iter().cloned())
+        .collect();
+    enrichment.tags = normalize::normalize(&raw_tags, vocabulary);
     if enrichment.tags.is_empty() {
         return Err("every tag normalised away to nothing".to_string());
     }
 
     Ok(enrichment)
+}
+
+/// Parts of a tag shorter than this match too much of any note (`cd`, `go`).
+const MIN_MATCH_LEN: usize = 3;
+
+/// Only the existing tags whose every part appears in the note. Offered the
+/// whole vocabulary, the model picks tags because they are there (`job` and
+/// `emails` on a meeting note); offered these, it only reuses a spelling.
+/// Every part, not any: `team` alone would offer `data-team` to any team note.
+fn related_tags(tags: Vec<String>, body: &str) -> Vec<String> {
+    // Split on anything that is not a letter or digit, so `Angular's` and
+    // `d'Angular` both give `angular`, whatever the language.
+    let body = body.to_lowercase();
+    let words: Vec<&str> = body
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect();
+    tags.into_iter()
+        .filter(|tag| {
+            let mut parts = tag
+                .split('-')
+                .filter(|part| part.chars().count() >= MIN_MATCH_LEN)
+                .peekable();
+            parts.peek().is_some() && parts.all(|part| mentions(&words, part))
+        })
+        .collect()
+}
+
+/// A word contains the part (`argocd` for `argo`), or is one typo away from
+/// it (`versionning` for `versioning`), the same edit the normaliser folds.
+/// The first letter must match: a typo rarely hits it, while a different word
+/// often differs only there (`review` and `preview`).
+fn mentions(words: &[&str], part: &str) -> bool {
+    words.iter().any(|word| {
+        word.contains(part)
+            || (part.chars().count() >= normalize::FUZZY_MIN_LEN
+                && word.chars().next() == part.chars().next()
+                && strsim::levenshtein(word, part) == 1)
+    })
 }
 
 /// What to write into the note block. The body and hash are untouched.
@@ -158,11 +207,46 @@ mod tests {
         let vocabulary = Vocabulary {
             counts: [("staging".to_string(), 12)].into_iter().collect(),
             aliases: Default::default(),
+            categories: Default::default(),
         };
         // The stub answers "Stagging", one edit away from the known tag.
         let backend = StubBackend::new(r#"{"subject":"a","summary":"b","tags":["Stagging"]}"#);
         let out = enrich("some note", &vocabulary, &backend).unwrap();
         assert_eq!(out.tags, vec!["staging"]);
+    }
+
+    #[test]
+    fn the_category_becomes_the_first_tag_and_survives_the_cap() {
+        let backend = StubBackend::new(
+            r#"{"subject":"a","summary":"b","category":"Gaming","tags":["silksong","boss","gaming","map","secret","waterfall"]}"#,
+        );
+        let out = enrich("note", &Vocabulary::default(), &backend).unwrap();
+        assert_eq!(out.category, "gaming");
+        assert_eq!(out.tags, vec!["gaming", "silksong", "boss", "map", "secret"]);
+    }
+
+    #[test]
+    fn offers_only_existing_tags_the_note_mentions() {
+        let tags = ["argo-cd", "job", "emails", "cd", "home-assistant", "data-team"]
+            .iter()
+            .map(|t| t.to_string())
+            .collect();
+        assert_eq!(
+            related_tags(tags, "ArgoCD sync broke for the team, and Home Assistant"),
+            vec!["argo-cd", "home-assistant"]
+        );
+    }
+
+    #[test]
+    fn offers_tags_through_possessives_elisions_and_one_typo() {
+        let tags = ["angular", "versioning", "api", "argo-cd", "staging", "preview"]
+            .iter()
+            .map(|t| t.to_string())
+            .collect();
+        assert_eq!(
+            related_tags(tags, "Le versionning de l'API d'Angular, Angular's review"),
+            vec!["angular", "versioning", "api"]
+        );
     }
 
     #[test]
@@ -215,6 +299,7 @@ mod tests {
             .map(|(t, c)| (t.to_string(), c))
             .collect(),
             aliases: Default::default(),
+            categories: Default::default(),
         };
 
         let cases: [(&str, &[&str]); 3] = [
@@ -298,6 +383,7 @@ mod tests {
             .map(|(t, c)| (t.to_string(), c))
             .collect(),
             aliases: Default::default(),
+            categories: Default::default(),
         };
 
         let note = "memory burst usage of Scratchnote to check if there's a memory leak";
@@ -323,6 +409,31 @@ mod tests {
                 out.tags
             );
         }
+    }
+
+    /// A note at the length cap used to abort the whole process inside
+    /// llama.cpp, because its prompt went past n_batch in one decode. It must
+    /// label, and a prompt past the context must fail cleanly instead. Needs a
+    /// model; `cargo test -- --ignored`.
+    #[test]
+    #[ignore = "needs a downloaded model"]
+    fn a_note_at_the_length_cap_labels_and_a_longer_prompt_fails_cleanly() {
+        let Some(backend) = load_installed_model() else {
+            return;
+        };
+        let sentence = "Staging deploy notes: the ArgoCD sync wave order was wrong again. ";
+        let long = sentence.repeat(12_000 / sentence.len() + 1);
+        let out = enrich(&long, &Vocabulary::default(), backend.as_ref())
+            .expect("a note at the cap should label");
+        assert!(!out.tags.is_empty());
+
+        // Straight to the backend, past the truncation, so the prompt is
+        // longer than the context.
+        let huge = prompt::build(&"é ".repeat(20_000), &[], &[]);
+        let err = backend
+            .generate(&huge, grammar::ENRICHMENT_GBNF)
+            .unwrap_err();
+        assert!(err.contains("too long"), "{err}");
     }
 
     /// Shared by the tests that need real weights.

@@ -31,7 +31,9 @@
 				style="width: {status.percent ?? 0}%"
 			></div>
 		</div>
-		<p class="mt-2 text-right font-mono text-[11px] text-neutral-500">{status.percent ?? 0}%</p>
+		<p class="mt-2 text-right font-mono text-[0.6875rem] text-neutral-500">
+			{status.percent ?? 0}%
+		</p>
 	{:else}
 		<h2 class="mb-1 text-sm font-medium">No model installed</h2>
 		<p class="mb-3 text-xs text-neutral-400">
@@ -49,7 +51,7 @@
 				>
 					<span class="block text-sm text-neutral-100">
 						{choice.name}
-						<span class="font-mono text-[11px] text-neutral-500">{choice.size}</span>
+						<span class="font-mono text-[0.6875rem] text-neutral-500">{choice.size}</span>
 					</span>
 					<span class="block text-xs text-neutral-400">{choice.note}</span>
 				</button>

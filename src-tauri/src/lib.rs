@@ -48,8 +48,11 @@ pub fn run() {
             commands::update_note,
             commands::update_note_meta,
             commands::rebuild_index,
+            commands::regenerate_all,
             commands::retry_enrichment,
             commands::model_status,
+            commands::enrich_busy,
+            commands::enrich_progress,
             commands::model_info,
             commands::gpu_devices,
             commands::download_model,
@@ -78,6 +81,7 @@ pub fn run() {
             // Load the cache, reparsing any day whose file is newer. Done
             // before the windows exist so the first list_days is already right.
             let (loaded, stale) = index::load(&root);
+            crate::storage::categories::ensure(&root);
             // tags.json is written alongside the index, so a missing one means
             // the counts were never written, not that there are no tags.
             let refresh = stale || !tags::tags_path(&root).exists();
@@ -116,6 +120,8 @@ pub fn run() {
                 model_status: std::sync::RwLock::new(status),
                 swapping: std::sync::atomic::AtomicBool::new(false),
                 last_used: std::sync::Mutex::new(std::time::Instant::now()),
+                busy: std::sync::atomic::AtomicBool::new(false),
+                batch_done: std::sync::atomic::AtomicUsize::new(0),
                 wake: wake.clone(),
             });
 

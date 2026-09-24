@@ -13,7 +13,7 @@ use super::grammar::{MAX_TAG, MAX_TAGS};
 
 /// Below this length, an edit of one is far more likely to be a different tag
 /// than a typo (`ci` and `cd`, `dev` and `ops`), so step 4 leaves them alone.
-const FUZZY_MIN_LEN: usize = 5;
+pub(super) const FUZZY_MIN_LEN: usize = 5;
 
 /// Words that name the kind of note rather than what it is about. They are
 /// worthless for browsing, because every note is one of them, and once a few
@@ -35,11 +35,12 @@ const GENRE_TAGS: [&str; 11] = [
 ];
 
 /// What the tags are normalised against: counts from the index, aliases from
-/// `tags.json`.
+/// `tags.json`, and the categories from `categories.json` for the prompt.
 #[derive(Debug, Default)]
 pub struct Vocabulary {
     pub counts: HashMap<String, u32>,
     pub aliases: HashMap<String, String>,
+    pub categories: Vec<String>,
 }
 
 impl Vocabulary {
@@ -198,6 +199,7 @@ mod tests {
                 .iter()
                 .map(|(from, to)| (from.to_string(), to.to_string()))
                 .collect(),
+            categories: Default::default(),
         }
     }
 

@@ -61,6 +61,7 @@ fn bench_cold_batch() {
     let vocabulary = Vocabulary {
         counts: crate::storage::index::rebuild(&root).tag_counts(),
         aliases: crate::storage::tags::load_aliases(&root),
+        categories: crate::storage::categories::load(&root),
     };
 
     // A quiet stretch first, so the sampler sees the baseline.

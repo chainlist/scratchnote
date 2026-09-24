@@ -1,13 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { resolve } from '$app/paths';
 	import {
 		deleteNote,
+		enrichBusy,
+		enrichProgress,
 		getDay,
 		listDays,
 		listTags,
 		modelStatus,
+		onEnrichBusy,
+		onEnrichProgress,
 		onIndexRebuilt,
 		onModelStatus,
 		onNoteEnriched,
@@ -19,24 +21,38 @@
 		updateNote,
 		updateNoteMeta,
 		type DaySummary,
+		type EnrichProgress,
 		type ModelStatus,
 		type NoteEdit,
 		type Note
 	} from '$lib/api';
-	import DayList from '$lib/components/DayList.svelte';
+	import DayCalendar from '$lib/components/DayCalendar.svelte';
+	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
 	import NoteCard from '$lib/components/NoteCard.svelte';
 	import Onboarding from '$lib/components/Onboarding.svelte';
 	import SearchBar from '$lib/components/SearchBar.svelte';
+	import Settings from '$lib/components/Settings.svelte';
 	import TagList from '$lib/components/TagList.svelte';
+	import WindowControls from '$lib/components/WindowControls.svelte';
+	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import SettingsIcon from '@lucide/svelte/icons/settings';
 
 	let days = $state<DaySummary[]>([]);
 	let notes = $state<Note[]>([]);
 	let selected = $state('');
 	let error = $state<string | null>(null);
 	let model = $state<ModelStatus>({ state: 'absent' });
+	let busy = $state(false);
+	let progress = $state<EnrichProgress | null>(null);
 	let tags = $state<[string, number][]>([]);
 	let query = $state('');
 	let results = $state<Note[]>([]);
+	let settingsOpen = $state(false);
+
+	// macOS keeps its native traffic lights over the sidebar; elsewhere the
+	// window is undecorated and draws its own controls.
+	const mac = navigator.userAgent.includes('Mac');
 
 	const searching = $derived(query.trim() !== '');
 	const activeTags = $derived(
@@ -149,10 +165,19 @@
 			off.push(onIndexRebuilt(() => void refresh()));
 			// Enrichment finishing rewrites the note, so the card has to reload.
 			off.push(onNoteEnriched(() => void refresh()));
-			off.push(onOpenSettings(() => void goto(resolve('/settings/'))));
+			off.push(onOpenSettings(() => (settingsOpen = true)));
 
 			model = await modelStatus();
 			off.push(onModelStatus((status) => (model = status)));
+			busy = await enrichBusy();
+			off.push(
+				onEnrichBusy((value) => {
+					busy = value;
+					if (!value) progress = null;
+				})
+			);
+			progress = await enrichProgress();
+			off.push(onEnrichProgress((value) => (progress = value)));
 		})();
 		return () => off.forEach((p) => void p.then((stop) => stop()));
 	});
@@ -170,67 +195,95 @@
 </script>
 
 <div class="flex h-screen bg-neutral-950 text-neutral-100">
-	<aside class="w-56 shrink-0 overflow-y-auto border-r border-neutral-800 p-3">
-		<div class="mb-4 flex items-baseline justify-between px-2">
-			<h1 class="text-sm font-semibold">Scratchnote</h1>
-			<a href={resolve('/settings/')} class="text-xs text-neutral-500 hover:text-neutral-200"
-				>Settings</a
+	<aside class="flex w-56 shrink-0 flex-col gap-4 border-r bg-muted/40 p-3">
+		<div
+			data-tauri-drag-region="deep"
+			class={['flex items-center justify-between', mac ? 'pl-16' : 'pl-2']}
+		>
+			<h1 class="text-base leading-none font-medium">Scratchnote</h1>
+			<Button
+				variant="ghost"
+				size="icon-sm"
+				onclick={() => (settingsOpen = true)}
+				aria-label="Settings"
+				title="Settings"
+				class="text-muted-foreground hover:text-foreground"
 			>
+				<SettingsIcon />
+			</Button>
 		</div>
-		<div class="flex flex-col gap-6">
-			<DayList {days} selected={searching ? '' : selected} onselect={select} />
+		<div class="flex min-h-0 flex-1 flex-col gap-6">
+			<DayCalendar {days} selected={searching ? '' : selected} onselect={select} />
 			<TagList {tags} active={activeTags} onselect={toggleTag} />
 		</div>
+		<ModelStatusBar status={model} {busy} {progress} />
 	</aside>
 
-	<main class="flex-1 overflow-y-auto p-6">
-		<div class="mx-auto max-w-2xl">
-			<div class="mb-4">
-				<SearchBar bind:value={query} />
-			</div>
+	<main class="flex min-w-0 flex-1 flex-col">
+		<div data-tauri-drag-region class="flex h-10 shrink-0 items-center justify-end px-2">
+			{#if !mac}<WindowControls />{/if}
+		</div>
+		<div class="flex-1 overflow-y-auto px-6 pb-6">
+			<div class="mx-auto max-w-2xl">
+				<div class="mb-4">
+					<SearchBar bind:value={query} />
+				</div>
 
-			<h2 class="mb-4 text-lg font-semibold">
-				{#if searching}
-					{results.length}
-					{results.length === 1 ? 'result' : 'results'}
-				{:else}
-					{heading}
+				<h2 class="mb-4 text-lg font-semibold">
+					{#if searching}
+						{results.length}
+						{results.length === 1 ? 'result' : 'results'}
+					{:else}
+						{heading}
+					{/if}
+				</h2>
+
+				{#if model.state === 'absent' || model.state === 'downloading'}
+					<Onboarding status={model} />
 				{/if}
-			</h2>
 
-			{#if model.state === 'absent' || model.state === 'downloading'}
-				<Onboarding status={model} />
-			{/if}
+				{#if error}
+					<p
+						class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+					>
+						{error}
+					</p>
+				{/if}
 
-			{#if error}
-				<p class="rounded border border-red-900 bg-red-950 p-3 text-sm text-red-300">{error}</p>
-			{/if}
-
-			{#if searching}
-				{#if results.length === 0}
-					<p class="text-sm text-neutral-600">No notes match.</p>
+				{#if searching}
+					{#if results.length === 0}
+						<p class="text-sm text-neutral-600">No notes match.</p>
+					{:else}
+						<ul>
+							{#each results as note (note.id)}
+								<li>
+									<NoteCard {note} ondelete={remove} onsave={save} onretry={retry} showDate />
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				{:else if notes.length === 0}
+					<p class="text-sm text-neutral-600">
+						Nothing captured. Press Ctrl+Shift+Space to write a note.
+					</p>
 				{:else}
-					<ul class="divide-y divide-neutral-900">
-						{#each results as note (note.id)}
+					<ul>
+						{#each notes as note (note.id)}
 							<li>
-								<NoteCard {note} ondelete={remove} onsave={save} onretry={retry} showDate />
+								<NoteCard {note} ondelete={remove} onsave={save} onretry={retry} />
 							</li>
 						{/each}
 					</ul>
 				{/if}
-			{:else if notes.length === 0}
-				<p class="text-sm text-neutral-600">
-					Nothing captured. Press Ctrl+Shift+Space to write a note.
-				</p>
-			{:else}
-				<ul class="divide-y divide-neutral-900">
-					{#each notes as note (note.id)}
-						<li>
-							<NoteCard {note} ondelete={remove} onsave={save} onretry={retry} />
-						</li>
-					{/each}
-				</ul>
-			{/if}
+			</div>
 		</div>
 	</main>
 </div>
+
+<Dialog.Root bind:open={settingsOpen}>
+	<Dialog.Content
+		class="h-[min(640px,85vh)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-3xl"
+	>
+		<Settings />
+	</Dialog.Content>
+</Dialog.Root>

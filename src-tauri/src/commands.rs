@@ -301,6 +301,60 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
     Ok(count)
 }
 
+/// Rebuild the index, then hand every note back to the model for a fresh
+/// subject, summary and tags. Every note is cleared to pending first, hand
+/// edits included, so the tag list empties and the model starts from no
+/// vocabulary but the aliases. Returns how many notes were queued.
+#[tauri::command]
+pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
+    rebuild_index(app.clone(), state.clone()).await?;
+
+    let notes: Vec<(String, String)> = state
+        .index
+        .read()
+        .map_err(|_| "index lock poisoned".to_string())?
+        .entries()
+        .map(|e| (e.id.clone(), e.date.clone()))
+        .collect();
+
+    let cleared = NotePatch {
+        subject: None,
+        summary: None,
+        tags: Vec::new(),
+        status: Status::Pending,
+    };
+    let mut touched_days = std::collections::BTreeSet::new();
+    for (id, date) in &notes {
+        state
+            .writer
+            .update_note(day_path(&state.root, date), id.clone(), cleared.clone())
+            .await?;
+        touched_days.insert(date.clone());
+    }
+    // One index write for the lot, not one per day.
+    {
+        let mut idx = state
+            .index
+            .write()
+            .map_err(|_| "index lock poisoned".to_string())?;
+        for date in &touched_days {
+            idx.replace_day(date, index::parse_day(&day_path(&state.root, date), date));
+        }
+    }
+    state.persist_index().await?;
+
+    if let Ok(mut queue) = state.queue.lock() {
+        for (id, date) in &notes {
+            queue.push(Job::new(id.clone(), date.clone()));
+        }
+    }
+    persist_queue(&state).await;
+    state.wake.notify_one();
+
+    let _ = app.emit("index-rebuilt", ());
+    Ok(notes.len())
+}
+
 /// Every tag in use with how many notes carry it, most used first.
 #[tauri::command]
 pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<(String, u32)>, String> {
@@ -448,6 +502,18 @@ pub async fn retry_enrichment(
 #[tauri::command]
 pub fn model_status(state: State<'_, AppState>) -> ModelStatus {
     state.model_status()
+}
+
+/// Whether the worker is on a job right now; `enrich-busy` reports changes.
+#[tauri::command]
+pub fn enrich_busy(state: State<'_, AppState>) -> bool {
+    state.busy.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Which note of how many the worker is on; `enrich-progress` reports changes.
+#[tauri::command]
+pub fn enrich_progress(state: State<'_, AppState>) -> Option<crate::state::Progress> {
+    state.progress()
 }
 
 /// What the settings screen shows about models: the one in use, and the

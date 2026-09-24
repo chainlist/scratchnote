@@ -69,7 +69,7 @@
 		class="min-h-0 flex-1 resize-none rounded bg-neutral-800 p-2 text-sm leading-relaxed
 			outline-none placeholder:text-neutral-500"></textarea>
 
-	<div class="flex items-center justify-between text-[11px] text-neutral-500">
+	<div class="flex items-center justify-between text-[0.6875rem] text-neutral-500">
 		{#if error}
 			<span class="text-red-400">{error}</span>
 		{:else}

@@ -8,14 +8,18 @@
 # The limits below are mirrored by the constants in grammar.rs and a test
 # fails if the two drift apart.
 
-root    ::= "{" ws "\"subject\"" ws ":" ws subject ws "," ws "\"summary\"" ws ":" ws summary ws "," ws "\"tags\"" ws ":" ws tags ws "}"
+root    ::= "{" ws "\"subject\"" ws ":" ws subject ws "," ws "\"summary\"" ws ":" ws summary ws "," ws "\"category\"" ws ":" ws tag ws "," ws "\"tags\"" ws ":" ws tags ws "}"
 
 subject ::= "\"" char{1,60} "\""
 summary ::= "\"" char{1,140} "\""
 
+# The category is a single tag; the backend adds it to the tags.
 # One tag written out, then up to four more: the 1 to 5 from the spec.
 tags    ::= "[" ws tag (ws "," ws tag){0,4} ws "]"
 tag     ::= "\"" char{1,30} "\""
 
 char    ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4})
-ws      ::= [ \t\n]*
+# At most one space between tokens, the way the model writes the object on
+# one line. Unbounded whitespace let it pretty-print some objects, and
+# nothing stopped it padding all the way to the output token limit.
+ws      ::= " "?

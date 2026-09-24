@@ -726,7 +726,7 @@
 				<Tabs.Content value="tags">
 					{@render header(
 						'Tag aliases',
-						'A tag on the left is written as the tag on the right, for new tags and for #tag searches. Tags already in your notes are not rewritten.'
+						'A tag on the left is written as the tag on the right, for new tags and for #tag searches in the open space. Each space keeps its own aliases. Tags already in your notes are not rewritten.'
 					)}
 
 					<div class="flex flex-col gap-4">
@@ -778,7 +778,10 @@
 				</Tabs.Content>
 
 				<Tabs.Content value="index">
-					{@render header('Index', 'The search index is only a cache of your markdown files.')}
+					{@render header(
+						'Index',
+						'The search index is only a cache of your markdown files. Each space has its own; these act on the open one.'
+					)}
 
 					<div class={group}>
 						<div class={row}>
@@ -801,9 +804,10 @@
 							<div class="flex flex-col gap-1">
 								<span class="text-sm font-medium">Regenerate all notes</span>
 								<p class={hint}>
-									Clears the subject, summary and tags of every note, hand edits included, then runs
-									the model again on each one. The tag list starts empty and fills back in as notes
-									are done. This cannot be undone, and it takes a while on a large journal.
+									Clears the subject, summary and tags of every note in the open space, hand edits
+									included, then runs the model again on each one. The tag list starts empty and
+									fills back in as notes are done. This cannot be undone, and it takes a while on a
+									large journal.
 								</p>
 								{#if !info?.activePath}
 									<p class="text-xs text-amber-500">Install a model first.</p>

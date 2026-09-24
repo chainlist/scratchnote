@@ -1,11 +1,21 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getSettings, hideCapture, onCaptureShown, onSettingsChanged, saveNote } from '$lib/api';
+	import {
+		getSettings,
+		hideCapture,
+		listSpaces,
+		onCaptureShown,
+		onSettingsChanged,
+		onSpacesChanged,
+		saveNote
+	} from '$lib/api';
 
 	let draft = $state('');
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 	let saved = $state(false);
+	/** Where the note will be saved; only named when there is a choice. */
+	let space = $state<string | null>(null);
 	// SPEC 3.1: hiding at once is the default; the toast is opt-in.
 	let hideImmediately = true;
 	let input: HTMLTextAreaElement;
@@ -16,8 +26,10 @@
 		// and the draft survives an Esc.
 		const unlisten = [
 			onCaptureShown(() => input?.focus()),
-			onSettingsChanged((settings) => (hideImmediately = settings.hideImmediately))
+			onSettingsChanged((settings) => (hideImmediately = settings.hideImmediately)),
+			onSpacesChanged((view) => (space = view.spaces.length > 1 ? view.active : null))
 		];
+		void listSpaces().then((view) => (space = view.spaces.length > 1 ? view.active : null));
 		void getSettings().then((settings) => (hideImmediately = settings.hideImmediately));
 		return () => unlisten.forEach((p) => void p.then((off) => off()));
 	});
@@ -75,6 +87,9 @@
 		{:else}
 			<span>Ctrl+Enter to save, Esc to dismiss</span>
 		{/if}
-		<span>{saved ? 'Saved' : saving ? 'Saving…' : ''}</span>
+		<span class="flex items-center gap-2">
+			<span>{saved ? 'Saved' : saving ? 'Saving…' : ''}</span>
+			{#if space}<span class="text-neutral-400" title="Saving into this space">{space}</span>{/if}
+		</span>
 	</div>
 </div>

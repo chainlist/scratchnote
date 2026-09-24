@@ -1,8 +1,15 @@
 <script lang="ts">
-	import type { Note, NoteEdit } from '$lib/api';
+	import { tick } from 'svelte';
+	import type { Note } from '$lib/api';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 
 	let {
 		note,
+		onedit,
 		ondelete,
 		onsave,
 		onretry,
@@ -10,9 +17,12 @@
 		showDate = false
 	}: {
 		note: Note;
+		/** Open the full editor: body, subject, category and tags. */
+		onedit: (note: Note) => void;
+		/** Ask to delete; the page confirms before anything is removed. */
 		ondelete: (note: Note) => void;
-		/** Resolves true once saved; false keeps the editor open. */
-		onsave: (note: Note, edit: NoteEdit) => Promise<boolean>;
+		/** Save a new body. Resolves true once saved; false keeps the editor open. */
+		onsave: (note: Note, body: string) => Promise<boolean>;
 		onretry: (note: Note) => void;
 		/** Filter on a tag, as a click on it in the card does. */
 		ontag: (tag: string) => void;
@@ -23,26 +33,25 @@
 	let editing = $state(false);
 	let saving = $state(false);
 	let draft = $state('');
+	let textarea = $state<HTMLTextAreaElement | null>(null);
+	let menuOpen = $state(false);
 
 	// Re-running a manual note would be skipped anyway, and a pending one is
 	// already in the queue.
 	let canRetry = $derived(note.status === 'done' || note.status === 'failed');
 
-	function startEditing() {
+	async function startEditing() {
+		if (editing) return;
 		draft = note.body;
 		editing = true;
+		await tick();
+		textarea?.focus();
 	}
 
 	async function save() {
 		if (saving) return;
 		saving = true;
-		// Subject and tags only feed search, so they are handed back unchanged
-		// and stay with the model.
-		const saved = await onsave(note, {
-			body: draft,
-			subject: note.subject ?? '',
-			tags: note.tags
-		});
+		const saved = await onsave(note, draft);
 		saving = false;
 		if (saved) editing = false;
 	}
@@ -60,28 +69,27 @@
 		}
 	}
 
-	// The status chip is also the delete affordance: clicking it swaps the
-	// label to Delete, and clicking again removes the note. Deleting rewrites
-	// the day file and there is no undo, so it takes two clicks.
-	let armed = $state(false);
+	/** A double click anywhere on the card, bar its buttons, edits the body. */
+	function onDoubleClick(event: MouseEvent) {
+		if (editing || (event.target as Element).closest('button, a, textarea')) return;
+		void startEditing();
+	}
 
-	// A done note has no status chip to click, so it gets a quiet placeholder
-	// that only appears on hover. Nothing is done before enrichment lands.
-	let placeholder = $derived(note.status === 'done');
-	let label = $derived(armed ? 'Delete' : placeholder ? '⋯' : note.status);
-	let name = $derived(
-		armed ? 'Confirm delete' : placeholder ? 'Delete note' : `${note.status}, click to delete`
-	);
-
-	function onChipClick() {
-		if (armed) ondelete(note);
-		else armed = true;
+	// Without this the second click of a double click selects a word first.
+	function onMouseDown(event: MouseEvent) {
+		if (!editing && event.detail > 1) event.preventDefault();
 	}
 </script>
 
+<!-- The double click is a mouse shortcut; Edit in the menu opens the same
+     text from the keyboard. -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article
-	class="group relative -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-4 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900"
-	onmouseleave={() => (armed = false)}
+	class="group relative -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-4 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900 {menuOpen
+		? 'bg-neutral-900'
+		: ''}"
+	ondblclick={onDoubleClick}
+	onmousedown={onMouseDown}
 >
 	<!-- Timeline rail in the gutter between time and body. Each note draws
 	     its own dot and the segments above and below it; the first and last
@@ -107,13 +115,17 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="flex flex-col gap-2" onkeydown={onEditKeydown}>
 				<textarea
+					bind:this={textarea}
 					bind:value={draft}
 					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
 					aria-label="Body"
 					spellcheck="false"
 					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[0.9375rem] leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
 				></textarea>
-				<div class="flex justify-end gap-1">
+				<div class="flex items-center justify-end gap-1">
+					<span class="mr-auto text-[0.625rem] text-neutral-600"
+						>Ctrl+Enter to save, Esc to cancel</span
+					>
 					<button type="button" onclick={() => (editing = false)} class={action}>Cancel</button>
 					<button type="button" onclick={save} disabled={saving} class={action}>
 						{saving ? 'Saving' : 'Save'}
@@ -127,27 +139,47 @@
 
 	{#if !editing}
 		<div
-			class="absolute top-3 right-3 flex gap-1 bg-neutral-900 pl-2 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
+			class="absolute top-3 right-3 flex items-center gap-1.5 bg-neutral-900 pl-2 transition group-hover:opacity-100 focus-within:opacity-100 {menuOpen
+				? 'opacity-100'
+				: 'opacity-0'}"
 		>
-			{#if canRetry}
-				<button type="button" onclick={() => onretry(note)} class={action}>Re-run</button>
-			{/if}
-			<button type="button" onclick={startEditing} class={action}>Edit</button>
-			<button
-				type="button"
-				onclick={onChipClick}
-				onblur={() => (armed = false)}
-				aria-label={name}
-				title={name}
-				class="cursor-pointer rounded px-1.5 py-0.5 text-[0.625rem] tracking-wide uppercase
-					{armed
-					? 'bg-red-600 text-white dark:bg-red-900 dark:text-red-100'
-					: note.status === 'failed'
+			<span class="text-[0.625rem] text-neutral-600 select-none">Double-click to edit</span>
+			<!-- A done note says nothing; the others say where enrichment is,
+			     and `manual` that the model will leave the note alone. -->
+			{#if note.status !== 'done'}
+				<span
+					title={note.status === 'manual' ? 'Edited by hand, the model leaves it alone' : undefined}
+					class="rounded px-1.5 py-0.5 text-[0.625rem] tracking-wide uppercase select-none
+						{note.status === 'failed'
 						? 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400'
-						: 'text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200'}"
-			>
-				{label}
-			</button>
+						: 'text-neutral-500'}"
+				>
+					{note.status}
+				</span>
+			{/if}
+			<DropdownMenu.Root bind:open={menuOpen}>
+				<DropdownMenu.Trigger
+					aria-label="Note actions"
+					title="Note actions"
+					class="cursor-pointer rounded px-1 py-0.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 data-[state=open]:bg-neutral-800 data-[state=open]:text-neutral-200"
+				>
+					<EllipsisIcon class="size-3.5" />
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content align="end" class="w-40">
+					<DropdownMenu.Item onSelect={() => onedit(note)}>
+						<PencilIcon />Edit
+					</DropdownMenu.Item>
+					{#if canRetry}
+						<DropdownMenu.Item onSelect={() => onretry(note)}>
+							<RefreshCwIcon />Re-run model
+						</DropdownMenu.Item>
+					{/if}
+					<DropdownMenu.Separator />
+					<DropdownMenu.Item variant="destructive" onSelect={() => ondelete(note)}>
+						<Trash2Icon />Delete
+					</DropdownMenu.Item>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
 		</div>
 
 		{#if note.tags.length > 0}

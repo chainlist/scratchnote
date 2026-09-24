@@ -9,12 +9,13 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Notify;
 
+use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::{self, Status};
 use crate::storage::{day_path, index, relative_day_path};
 
 use super::model::{Backend, TIMEOUT_SECS};
-use super::queue::{queue_path, Job};
+use super::queue::Job;
 use super::runner;
 
 /// Woken when a job is added or a model becomes available.
@@ -24,7 +25,7 @@ pub fn spawn(app: AppHandle, wake: Wake) {
     tauri::async_runtime::spawn(async move {
         loop {
             // Nothing to do: sleep until something is queued.
-            let Some(job) = next_job(&app) else {
+            let Some((space, job)) = next_job(&app) else {
                 set_busy(&app, false);
                 wake.notified().await;
                 continue;
@@ -37,7 +38,7 @@ pub fn spawn(app: AppHandle, wake: Wake) {
             // No model yet is not a failure. Put the job back untouched and
             // wait; a finished download wakes us (SPEC 5.2, SPEC 11).
             let Some(backend) = backend(&app) else {
-                put_back_unchanged(&app, job);
+                put_back_unchanged(&space, job);
                 set_busy(&app, false);
                 wake.notified().await;
                 continue;
@@ -46,8 +47,10 @@ pub fn spawn(app: AppHandle, wake: Wake) {
             let state = app.state::<AppState>();
             state.mark_used();
             let _ = app.emit("enrich-progress", state.progress());
-            run(&app, job, backend).await;
-            state.batch_done.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            run(&app, &space, job, backend).await;
+            state
+                .batch_done
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             state.mark_used();
         }
     });
@@ -62,14 +65,19 @@ fn set_busy(app: &AppHandle, busy: bool) {
     }
     // A new stretch of work counts from 1 again.
     if !busy {
-        state.batch_done.store(0, std::sync::atomic::Ordering::SeqCst);
+        state
+            .batch_done
+            .store(0, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
-fn next_job(app: &AppHandle) -> Option<Job> {
+/// The open space's notes go first, then the other spaces' in turn.
+fn next_job(app: &AppHandle) -> Option<(Arc<Space>, Job)> {
     let state = app.state::<AppState>();
-    let mut queue = state.queue.lock().ok()?;
-    queue.pop()
+    state.all_spaces().into_iter().find_map(|space| {
+        let job = space.queue.lock().ok()?.pop()?;
+        Some((space, job))
+    })
 }
 
 /// SPEC 5.1: the model is loaded once, lazily, on the first job, and then
@@ -106,33 +114,30 @@ fn backend(app: &AppHandle) -> Option<Arc<dyn Backend>> {
     }
 }
 
-fn put_back_unchanged(app: &AppHandle, job: Job) {
-    let state = app.state::<AppState>();
-    // Bound rather than used inline so the guard drops before `state` does.
-    let locked = state.queue.lock();
-    if let Ok(mut queue) = locked {
+fn put_back_unchanged(space: &Space, job: Job) {
+    if let Ok(mut queue) = space.queue.lock() {
         queue.requeue_unchanged(job);
     }
 }
 
-async fn run(app: &AppHandle, job: Job, backend: Arc<dyn Backend>) {
+async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>) {
     let state = app.state::<AppState>();
-    let path = day_path(&state.root, &job.date);
+    let path = day_path(&space.root, &job.date);
 
     let Some(note) = read_note(&path, &job) else {
         // The note is gone; so is the job.
-        persist_queue(app).await;
+        space.persist_queue(&state.writer).await;
         return;
     };
 
     // SPEC 5.6: never overwrite a note the user has taken over.
     if note.status == Status::Manual {
         log::info!("skipping {}: the user edited it", job.id);
-        persist_queue(app).await;
+        space.persist_queue(&state.writer).await;
         return;
     }
 
-    let vocabulary = state.vocabulary();
+    let vocabulary = space.vocabulary();
     let body = note.body.clone();
     let started_with = note.hash.clone();
 
@@ -154,16 +159,16 @@ async fn run(app: &AppHandle, job: Job, backend: Arc<dyn Backend>) {
             match read_note(&path, &job) {
                 Some(current) if current.hash != started_with => {
                     log::info!("{} changed while enriching, requeuing", job.id);
-                    put_back_unchanged(app, job);
+                    put_back_unchanged(space, job);
                 }
                 // The user set the subject or tags by hand in the meantime.
                 Some(current) if current.status == Status::Manual => {
                     log::info!("{} was edited by hand while enriching, dropping", job.id);
                 }
                 Some(_) => {
-                    remember_category(&state, &enrichment.category).await;
-                    write_back(app, &job, &runner::patch(&enrichment)).await;
-                    let _ = app.emit("note-enriched", serde_json::json!({ "id": job.id }));
+                    remember_category(&state, space, &enrichment.category).await;
+                    write_back(&state, space, &job, &runner::patch(&enrichment)).await;
+                    emit_enriched(app, space, &job);
                 }
                 None => {}
             }
@@ -171,31 +176,34 @@ async fn run(app: &AppHandle, job: Job, backend: Arc<dyn Backend>) {
         Err(e) => {
             log::warn!("enriching {} failed: {e}", job.id);
             let backoff = job.backoff_secs();
-            let give_up = match state.queue.lock() {
+            let give_up = match space.queue.lock() {
                 Ok(mut queue) => !queue.requeue(job.clone()),
                 Err(_) => true,
             };
             if give_up {
                 log::warn!("giving up on {}", job.id);
-                write_back(app, &job, &runner::failed_patch(&note)).await;
-                let _ = app.emit("note-enriched", serde_json::json!({ "id": job.id }));
+                write_back(&state, space, &job, &runner::failed_patch(&note)).await;
+                emit_enriched(app, space, &job);
             } else {
                 tokio::time::sleep(Duration::from_secs(backoff)).await;
             }
         }
     }
 
-    persist_queue(app).await;
+    space.persist_queue(&state.writer).await;
 }
 
 /// Append a category the model invented to `categories.json`, so the next
 /// notes are offered it.
-async fn remember_category(state: &AppState, category: &str) {
+async fn remember_category(state: &AppState, space: &Space, category: &str) {
     use crate::storage::categories;
-    let Some(contents) = categories::with_added(&state.root, category) else {
+    if space.is_retired() {
+        return;
+    }
+    let Some(contents) = categories::with_added(&space.root, category) else {
         return;
     };
-    let path = categories::categories_path(&state.root);
+    let path = categories::categories_path(&space.root);
     if let Err(e) = state.writer.write_index(path, contents).await {
         log::warn!("could not add {category} to categories.json: {e}");
     }
@@ -208,9 +216,20 @@ fn read_note(path: &std::path::Path, job: &Job) -> Option<daily_file::Note> {
         .find(|note| note.id == job.id)
 }
 
-async fn write_back(app: &AppHandle, job: &Job, patch: &daily_file::NotePatch) {
-    let state = app.state::<AppState>();
-    let path = day_path(&state.root, &job.date);
+fn emit_enriched(app: &AppHandle, space: &Space, job: &Job) {
+    let _ = app.emit(
+        "note-enriched",
+        serde_json::json!({ "id": job.id, "space": space.name }),
+    );
+}
+
+async fn write_back(state: &AppState, space: &Space, job: &Job, patch: &daily_file::NotePatch) {
+    // A space renamed or deleted mid-job: its notes are no longer at this
+    // path, and a pending note is picked up again where they went.
+    if space.is_retired() {
+        return;
+    }
+    let path = day_path(&space.root, &job.date);
 
     if let Err(e) = state
         .writer
@@ -223,27 +242,12 @@ async fn write_back(app: &AppHandle, job: &Job, patch: &daily_file::NotePatch) {
 
     let entries = index::parse_day(&path, &job.date);
     {
-        let Ok(mut idx) = state.index.write() else {
+        let Ok(mut idx) = space.index.write() else {
             return;
         };
         idx.replace_day(&job.date, entries);
     }
-    if let Err(e) = state.persist_index().await {
+    if let Err(e) = space.persist_index(&state.writer).await {
         log::warn!("could not persist the index after enriching: {e}");
-    }
-}
-
-async fn persist_queue(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let contents = match state.queue.lock() {
-        Ok(queue) => queue.to_json(),
-        Err(_) => return,
-    };
-    if let Err(e) = state
-        .writer
-        .write_index(queue_path(&state.root), contents)
-        .await
-    {
-        log::warn!("could not persist the queue: {e}");
     }
 }

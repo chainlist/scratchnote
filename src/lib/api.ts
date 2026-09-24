@@ -37,6 +37,18 @@ export const listTags = () => invoke<[string, number][]>('list_tags');
  */
 export const listCategories = () => invoke<[string, number][]>('list_categories');
 
+/** Every category on the list, used or not, in the list's order. */
+export const categoryNames = () => invoke<string[]>('category_names');
+
+/**
+ * A note's category and its other tags. The category is the first tag, and
+ * only when it is on the list, as the backend reads it.
+ */
+export function splitCategory(names: string[], tags: string[]): [string, string[]] {
+	const [first, ...rest] = tags;
+	return first !== undefined && names.includes(first) ? [first, rest] : ['', tags];
+}
+
 /** Words must all appear; `#tag` tokens are AND filters. Newest first. */
 export const search = (query: string) => invoke<Note[]>('search', { query });
 
@@ -143,10 +155,12 @@ export const downloadModel = (variant: ModelVariant) => invoke<void>('download_m
 export const retryEnrichment = (date: string, id: string) =>
 	invoke<void>('retry_enrichment', { date, id });
 
-/** What the note card's editor hands back. */
+/** What the note editor hands back. `tags` leaves out the category. */
 export interface NoteEdit {
 	body: string;
 	subject: string;
+	/** Empty for none. */
+	category: string;
 	tags: string[];
 }
 
@@ -154,11 +168,15 @@ export interface NoteEdit {
 export const updateNote = (date: string, id: string, body: string) =>
 	invoke<Note>('update_note', { date, id, body });
 
-/** Set subject and tags by hand, which makes the note manual. Omitted fields are kept. */
+/**
+ * Set subject, category and tags by hand, which makes the note manual so the
+ * model leaves it alone from then on. Omitted fields are kept; `tags` are the
+ * ones besides the category, and an empty category clears it.
+ */
 export const updateNoteMeta = (
 	date: string,
 	id: string,
-	meta: { subject?: string; tags?: string[] }
+	meta: { subject?: string; category?: string; tags?: string[] }
 ) => invoke<Note>('update_note_meta', { date, id, ...meta });
 
 /** Fired when a note has been labelled and written back. */
@@ -230,3 +248,36 @@ export const onSettingsChanged = (handler: (settings: Settings) => void): Promis
 /** Fired by the tray's Settings entry. */
 export const onOpenSettings = (handler: () => void): Promise<UnlistenFn> =>
 	listen('open-settings', () => handler());
+
+export interface SpaceSummary {
+	/** Also the space's folder name under `spaces/`. */
+	name: string;
+	/** The space at the notes root, which cannot be deleted. */
+	isDefault: boolean;
+	notes: number;
+}
+
+export interface SpacesView {
+	/** The open space, which every note command acts on. */
+	active: string;
+	/** The default space first, then the rest by name. */
+	spaces: SpaceSummary[];
+}
+
+export const listSpaces = () => invoke<SpacesView>('list_spaces');
+
+/** Makes the space and opens it. */
+export const createSpace = (name: string) => invoke<SpacesView>('create_space', { name });
+
+/** Renames the space's folder too. */
+export const renameSpace = (name: string, newName: string) =>
+	invoke<SpacesView>('rename_space', { name, newName });
+
+/** Moves the space's folder to `.scratchnote/trash/`, so nothing is lost. */
+export const deleteSpace = (name: string) => invoke<SpacesView>('delete_space', { name });
+
+export const setActiveSpace = (name: string) => invoke<SpacesView>('set_active_space', { name });
+
+/** Fired to every window when a space is opened, made, renamed or deleted. */
+export const onSpacesChanged = (handler: (view: SpacesView) => void): Promise<UnlistenFn> =>
+	listen<SpacesView>('spaces-changed', (event) => handler(event.payload));

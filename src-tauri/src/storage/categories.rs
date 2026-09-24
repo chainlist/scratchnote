@@ -78,6 +78,28 @@ pub fn in_use(list: &[String], counts: &HashMap<String, u32>) -> Vec<(String, u3
     used
 }
 
+/// A note's category and the rest of its tags. The category is the first
+/// tag, and only when it is on the list: enrichment always puts it there,
+/// and a note whose first tag is anything else has none.
+pub fn split(list: &[String], tags: &[String]) -> (Option<String>, Vec<String>) {
+    match tags.split_first() {
+        Some((first, rest)) if list.contains(first) => (Some(first.clone()), rest.to_vec()),
+        _ => (None, tags.to_vec()),
+    }
+}
+
+/// The reverse of `split`: the category first, then the other tags, with the
+/// category dropped from them should it also be there.
+pub fn join(category: Option<&str>, tags: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = category.map(str::to_string).into_iter().collect();
+    for tag in tags {
+        if !out.contains(tag) {
+            out.push(tag.clone());
+        }
+    }
+    out
+}
+
 fn read(root: &Path) -> Option<Vec<String>> {
     let raw = std::fs::read_to_string(categories_path(root)).ok()?;
     match serde_json::from_str::<Vec<String>>(&raw) {
@@ -125,7 +147,11 @@ mod tests {
     fn keeps_the_users_list_cleaned_and_in_order() {
         let root = root("scratchnote-categories-edited");
         std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
-        std::fs::write(categories_path(&root), r#"["Movie", "board games", "movie"]"#).unwrap();
+        std::fs::write(
+            categories_path(&root),
+            r#"["Movie", "board games", "movie"]"#,
+        )
+        .unwrap();
         ensure(&root);
         assert_eq!(load(&root), vec!["movie", "board-games"]);
         let _ = std::fs::remove_dir_all(&root);
@@ -161,6 +187,33 @@ mod tests {
                 ("game".to_string(), 3)
             ]
         );
+    }
+
+    fn strings(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn the_category_is_the_first_tag_only_when_it_is_listed() {
+        let list = strings(&["movie", "game"]);
+        assert_eq!(
+            split(&list, &strings(&["movie", "dune", "scifi"])),
+            (Some("movie".to_string()), strings(&["dune", "scifi"]))
+        );
+        assert_eq!(
+            split(&list, &strings(&["dune", "movie"])),
+            (None, strings(&["dune", "movie"]))
+        );
+        assert_eq!(split(&list, &[]), (None, Vec::new()));
+    }
+
+    #[test]
+    fn joining_puts_the_category_first_once() {
+        assert_eq!(
+            join(Some("game"), &strings(&["silksong", "game"])),
+            strings(&["game", "silksong"])
+        );
+        assert_eq!(join(None, &strings(&["a", "b"])), strings(&["a", "b"]));
     }
 
     #[test]

@@ -14,5 +14,15 @@ export default defineConfig({
 			},
 			adapter: adapter({ fallback: 'index.html' })
 		})
-	]
+	],
+	server: {
+		// Tauri's devUrl is pinned to 5173, so fail loudly instead of silently
+		// moving to another port and leaving the app window blank.
+		strictPort: true,
+		watch: {
+			// Never watch the Rust side: cargo holds build artifacts open while it
+			// compiles, which makes the watcher crash with EBUSY on Windows.
+			ignored: ['**/src-tauri/**']
+		}
+	}
 });

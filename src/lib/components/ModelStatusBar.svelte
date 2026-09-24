@@ -2,6 +2,7 @@
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import type { EnrichProgress, ModelStatus } from '$lib/api';
 	import * as Tooltip from '$lib/components/ui/tooltip';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		status,
@@ -12,37 +13,40 @@
 	// The worker flags a job before it loads the model, so busy while not yet
 	// loaded means the load itself is what is taking time.
 	const label = $derived.by(() => {
-		if (busy && status.state !== 'loaded') return 'Loading model';
-		if (busy) return 'Enriching notes';
+		if (busy && status.state !== 'loaded') return m.status_loading();
+		if (busy) return m.status_enriching();
 		switch (status.state) {
 			case 'absent':
-				return 'No model installed';
+				return m.status_absent();
 			case 'downloading':
-				return `Downloading model ${status.percent ?? 0}%`;
+				return m.status_downloading({ percent: status.percent ?? 0 });
 			case 'idle':
-				return 'Model unloaded';
+				return m.status_idle();
 			case 'loaded':
-				return 'Model ready';
+				return m.status_ready();
+			case 'disabled':
+				return m.status_disabled();
 		}
 	});
 
 	/** What the label means, shown on hover. */
 	const explanation = $derived.by(() => {
-		if (busy && status.state !== 'loaded')
-			return 'Loading the model into memory. The first note after launch or after an idle unload waits for this, then labelling starts.';
+		if (busy && status.state !== 'loaded') return m.status_loading_hint();
 		if (busy)
 			return progress
-				? `The model is writing a subject, summary and tags for note ${progress.current} of ${progress.total}, one at a time, in the background.`
-				: 'The model is writing a subject, summary and tags for new or edited notes, one at a time, in the background.';
+				? m.status_enriching_progress_hint({ current: progress.current, total: progress.total })
+				: m.status_enriching_hint();
 		switch (status.state) {
 			case 'absent':
-				return 'Notes are saved but not labelled until a model is installed. Pick one in Settings.';
+				return m.status_absent_hint();
 			case 'downloading':
-				return 'The model is downloading. Notes captured meanwhile are queued and labelled once it is ready.';
+				return m.status_downloading_hint();
 			case 'idle':
-				return 'The model was unloaded after sitting idle, to free memory. It loads again with the next note.';
+				return m.status_idle_hint();
 			case 'loaded':
-				return 'The model is in memory with nothing left to do. New and edited notes are labelled within seconds.';
+				return m.status_ready_hint();
+			case 'disabled':
+				return m.status_disabled_hint();
 		}
 	});
 
@@ -53,7 +57,7 @@
 	const dot = $derived(
 		status.state === 'loaded'
 			? 'bg-emerald-500'
-			: status.state === 'absent'
+			: status.state === 'absent' || status.state === 'disabled'
 				? 'bg-neutral-600'
 				: 'bg-amber-500'
 	);

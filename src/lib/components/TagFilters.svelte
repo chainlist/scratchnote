@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Note } from '$lib/api';
 	import XIcon from '@lucide/svelte/icons/x';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		active,
@@ -109,7 +110,7 @@
 						type="button"
 						data-chip
 						onclick={() => pick(onremove, tag)}
-						aria-label="Remove #{tag} filter"
+						aria-label={m.tags_remove_filter({ tag })}
 						class="{chip} border-input bg-input/30 text-foreground hover:bg-input/60"
 					>
 						#{tag}
@@ -125,7 +126,7 @@
 							type="button"
 							data-chip
 							onclick={() => pick(onadd, tag)}
-							title="Narrow to #{tag}"
+							title={m.tags_narrow({ tag })}
 							class="{chip} border-transparent text-muted-foreground hover:border-input hover:text-foreground"
 						>
 							#{tag}
@@ -141,7 +142,7 @@
 					aria-expanded={open}
 					class="{chip} border-transparent text-muted-foreground hover:border-input hover:text-foreground"
 				>
-					{open ? 'Less' : `+${hidden} more`}
+					{open ? m.common_less() : m.tags_more({ count: hidden })}
 				</button>
 			{/if}
 		</div>

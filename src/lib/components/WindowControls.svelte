@@ -6,6 +6,7 @@
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import XIcon from '@lucide/svelte/icons/x';
 	import { cn } from '$lib/utils';
+	import { m } from '$lib/paraglide/messages';
 
 	const appWindow = getCurrentWindow();
 	let maximized = $state(false);
@@ -25,16 +26,16 @@
 	<button
 		class={button}
 		onclick={() => appWindow.minimize()}
-		aria-label="Minimize"
-		title="Minimize"
+		aria-label={m.window_minimize()}
+		title={m.window_minimize()}
 	>
 		<MinusIcon />
 	</button>
 	<button
 		class={button}
 		onclick={() => appWindow.toggleMaximize()}
-		aria-label={maximized ? 'Restore' : 'Maximize'}
-		title={maximized ? 'Restore' : 'Maximize'}
+		aria-label={maximized ? m.window_restore() : m.window_maximize()}
+		title={maximized ? m.window_restore() : m.window_maximize()}
 	>
 		{#if maximized}<CopyIcon class="-scale-x-100" />{:else}<SquareIcon />{/if}
 	</button>
@@ -42,8 +43,8 @@
 	<button
 		class={cn(button, 'hover:bg-red-600 hover:text-white')}
 		onclick={() => appWindow.close()}
-		aria-label="Close"
-		title="Close"
+		aria-label={m.window_close()}
+		title={m.window_close()}
 	>
 		<XIcon />
 	</button>

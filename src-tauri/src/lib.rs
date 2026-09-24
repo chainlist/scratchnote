@@ -16,10 +16,9 @@ use tauri::{
 use tauri_plugin_global_shortcut::ShortcutState;
 
 use enrich::download;
-use enrich::model::ModelStatus;
 use enrich::{idle, worker};
 use settings::Settings;
-use state::AppState;
+use state::{resting_status, AppState};
 use storage::writer::Writer;
 
 const CAPTURE: &str = "capture";
@@ -29,6 +28,7 @@ const MAIN: &str = "main";
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -72,8 +72,10 @@ pub fn run() {
             commands::create_space,
             commands::rename_space,
             commands::delete_space,
+            commands::open_space_folder,
             commands::set_active_space,
             hide_capture,
+            set_tray_labels,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -95,11 +97,10 @@ pub fn run() {
                 settings.model_variant,
                 settings.model_path.as_deref(),
             );
-            let status = if active.is_some() {
-                ModelStatus::Idle
-            } else {
-                ModelStatus::Absent
-            };
+            let status = resting_status(settings.model_enabled, active.is_some());
+
+            // Before spaces.json is read, since it may point it at a new folder.
+            spaces::migrate_root(&root);
 
             let wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
             app.manage(AppState {
@@ -122,25 +123,18 @@ pub fn run() {
             // Every space is loaded, not just the open one, so notes captured
             // in any of them are enriched and their external edits noticed.
             let state = app.state::<AppState>();
-            let default_name = state
-                .registry
-                .read()
-                .map(|r| r.default_name.clone())
-                .unwrap_or_default();
-            let mut loaded = vec![commands::open_space(
-                app.handle(),
-                &default_name,
-                true,
-                root.clone(),
-            )];
-            for (name, path) in spaces::discover(&root) {
-                // A folder named like the default space would be ambiguous.
-                if name.to_lowercase() == default_name.to_lowercase() {
-                    log::warn!("ignoring spaces/{name}: the first space already has that name");
-                    continue;
+            let mut found = spaces::discover(&root);
+            if found.is_empty() {
+                let path = spaces::spaces_dir(&root).join(spaces::FIRST_NAME);
+                if let Err(e) = std::fs::create_dir_all(path.join("notes")) {
+                    log::error!("could not create {}: {e}", path.display());
                 }
-                loaded.push(commands::open_space(app.handle(), &name, false, path));
+                found.push((spaces::FIRST_NAME.to_string(), path));
             }
+            let mut loaded: Vec<_> = found
+                .into_iter()
+                .map(|(name, path)| commands::open_space(app.handle(), &name, path))
+                .collect();
             commands::sort_spaces(&mut loaded);
             if let Ok(mut spaces) = state.spaces.write() {
                 *spaces = loaded;
@@ -228,12 +222,45 @@ fn keep_main_window_alive(app: &AppHandle) {
     });
 }
 
+/// The tray menu's wording. The frontend holds the translations, so the
+/// main window sends them once its language is known, and again on a change.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrayLabels {
+    new_note: String,
+    open: String,
+    settings: String,
+    quit: String,
+}
+
+impl Default for TrayLabels {
+    fn default() -> Self {
+        Self {
+            new_note: "New note".into(),
+            open: "Open Scratchnote".into(),
+            settings: "Settings".into(),
+            quit: "Quit".into(),
+        }
+    }
+}
+
+fn tray_menu(app: &AppHandle, labels: &TrayLabels) -> tauri::Result<Menu<tauri::Wry>> {
+    let new_note = MenuItem::with_id(app, "new_note", &labels.new_note, true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", &labels.open, true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", &labels.settings, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", &labels.quit, true, None::<&str>)?;
+    Menu::with_items(app, &[&new_note, &open, &settings, &quit])
+}
+
+#[tauri::command]
+fn set_tray_labels(app: AppHandle, labels: TrayLabels) -> Result<(), String> {
+    let tray = app.tray_by_id("tray").ok_or("no tray icon")?;
+    let menu = tray_menu(&app, &labels).map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+}
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let new_note = MenuItem::with_id(app, "new_note", "New note", true, None::<&str>)?;
-    let open = MenuItem::with_id(app, "open", "Open Scratchnote", true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&new_note, &open, &settings, &quit])?;
+    let menu = tray_menu(app, &TrayLabels::default())?;
 
     TrayIconBuilder::with_id("tray")
         .icon(app.default_window_icon().unwrap().clone())

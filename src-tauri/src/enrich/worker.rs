@@ -24,6 +24,13 @@ pub type Wake = Arc<Notify>;
 pub fn spawn(app: AppHandle, wake: Wake) {
     tauri::async_runtime::spawn(async move {
         loop {
+            // Switched off: leave the queue alone until settings turn it on.
+            if !app.state::<AppState>().model_enabled() {
+                set_busy(&app, false);
+                wake.notified().await;
+                continue;
+            }
+
             // Nothing to do: sleep until something is queued.
             let Some((space, job)) = next_job(&app) else {
                 set_busy(&app, false);
@@ -81,10 +88,14 @@ fn next_job(app: &AppHandle) -> Option<(Arc<Space>, Job)> {
 }
 
 /// SPEC 5.1: the model is loaded once, lazily, on the first job, and then
-/// stays resident. Returns `None` when there is nothing on disk to load.
-/// An ask loads it the same way when no job has yet.
+/// stays resident. Returns `None` when there is nothing on disk to load, or
+/// the model is switched off. An ask loads it the same way when no job has
+/// yet.
 pub(crate) fn backend(app: &AppHandle) -> Option<Arc<dyn Backend>> {
     let state = app.state::<AppState>();
+    if !state.model_enabled() {
+        return None;
+    }
 
     if let Ok(guard) = state.backend.read() {
         if let Some(backend) = guard.clone() {

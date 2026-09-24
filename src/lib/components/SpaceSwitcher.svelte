@@ -2,6 +2,7 @@
 	import {
 		createSpace,
 		deleteSpace,
+		openSpaceFolder,
 		renameSpace,
 		setActiveSpace,
 		type SpaceSummary,
@@ -13,9 +14,12 @@
 	import * as Popover from '$lib/components/ui/popover';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
+	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import { parts, slot } from '$lib/i18n.svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	let { view }: { view: SpacesView | null } = $props();
 
@@ -97,7 +101,7 @@
 			<button
 				{...props}
 				type="button"
-				title="Switch space"
+				title={m.spaces_switch()}
 				class="-ml-2 flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-base leading-none font-medium hover:bg-input/30"
 			>
 				<span class="truncate">{view?.active ?? 'Scratchnote'}</span>
@@ -109,7 +113,7 @@
 		<p
 			class="px-2 pt-1 pb-1.5 text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
 		>
-			Spaces
+			{m.spaces_heading()}
 		</p>
 		<ul class="flex flex-col gap-0.5">
 			{#each view?.spaces ?? [] as space (space.name)}
@@ -127,7 +131,7 @@
 								bind:value={draft}
 								autofocus
 								spellcheck="false"
-								aria-label="Space name"
+								aria-label={m.spaces_name_label()}
 								class="h-8"
 								onkeydown={(event) => {
 									if (event.key === 'Escape') {
@@ -137,12 +141,17 @@
 									}
 								}}
 							/>
-							<Button type="submit" variant="ghost" size="icon-sm" aria-label="Save name">
+							<Button
+								type="submit"
+								variant="ghost"
+								size="icon-sm"
+								aria-label={m.spaces_save_name()}
+							>
 								<CheckIcon />
 							</Button>
 						</form>
 					{:else}
-						<button type="button" onclick={() => void pick(space)} class="{sidebarItem(on)} pr-16">
+						<button type="button" onclick={() => void pick(space)} class="{sidebarItem(on)} pr-20">
 							<span class="truncate">{space.name}</span>
 							<span class="ml-auto font-mono text-xs text-muted-foreground group-hover:invisible">
 								{space.notes}
@@ -163,25 +172,34 @@
 									class="h-6 px-2 text-xs"
 									onclick={() => void remove(space)}
 								>
-									Delete
+									{m.common_delete()}
 								</Button>
 							{:else}
 								<button
 									type="button"
 									class={icon}
+									onclick={() => void act(() => openSpaceFolder(space.name))}
+									aria-label={m.spaces_open_folder_label({ name: space.name })}
+									title={m.spaces_open_folder()}
+								>
+									<FolderOpenIcon class="mx-auto size-3.5" />
+								</button>
+								<button
+									type="button"
+									class={icon}
 									onclick={() => startRename(space)}
-									aria-label="Rename {space.name}"
-									title="Rename"
+									aria-label={m.spaces_rename_label({ name: space.name })}
+									title={m.spaces_rename()}
 								>
 									<PencilIcon class="mx-auto size-3.5" />
 								</button>
-								{#if !space.isDefault}
+								{#if (view?.spaces.length ?? 0) > 1}
 									<button
 										type="button"
 										class={icon}
 										onclick={() => void remove(space)}
-										aria-label="Delete {space.name}"
-										title="Delete"
+										aria-label={m.spaces_delete_label({ name: space.name })}
+										title={m.common_delete()}
 									>
 										<Trash2Icon class="mx-auto size-3.5" />
 									</button>
@@ -195,8 +213,9 @@
 
 		{#if confirming}
 			<p class="px-2 pt-2 text-xs text-muted-foreground">
-				Its folder is moved to <span class="font-mono">.scratchnote/trash</span>. Move it back under
-				<span class="font-mono">spaces</span> to restore it.
+				{#each parts(m.spaces_trash_hint( { trash: slot('.scratchnote/trash'), spaces: slot('spaces') } )) as part, i (i)}
+					{#if i % 2}<span class="font-mono">{part}</span>{:else}{part}{/if}
+				{/each}
 			</p>
 		{/if}
 
@@ -207,12 +226,17 @@
 				void create();
 			}}
 		>
-			<Input bind:value={newName} placeholder="New space" spellcheck="false" class="h-8" />
+			<Input
+				bind:value={newName}
+				placeholder={m.spaces_new_placeholder()}
+				spellcheck="false"
+				class="h-8"
+			/>
 			<Button
 				type="submit"
 				variant="ghost"
 				size="icon-sm"
-				aria-label="Create space"
+				aria-label={m.spaces_create()}
 				disabled={newName.trim() === ''}
 			>
 				<PlusIcon />

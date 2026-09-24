@@ -4,11 +4,13 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import XIcon from '@lucide/svelte/icons/x';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		value = $bindable(),
 		tags,
 		canChat,
+		modelOff,
 		onchat
 	}: {
 		value: string;
@@ -16,6 +18,8 @@
 		tags: [string, number][];
 		/** Whether a model is there to talk to. */
 		canChat: boolean;
+		/** The model is switched off in settings, which is why chat is not there. */
+		modelOff: boolean;
 		/** Open the chat about this space's notes. */
 		onchat: () => void;
 	} = $props();
@@ -120,8 +124,8 @@
 		onkeyup={track}
 		onfocus={track}
 		onblur={() => (dismissed = true)}
-		placeholder="Search notes, # for tags"
-		aria-label="Search notes"
+		placeholder={m.search_placeholder()}
+		aria-label={m.search_label()}
 		aria-autocomplete="list"
 		aria-controls="tag-suggestions"
 		aria-expanded={suggestions.length > 0}
@@ -137,7 +141,7 @@
 					value = '';
 					input?.focus();
 				}}
-				aria-label="Clear search"
+				aria-label={m.search_clear()}
 				class="text-muted-foreground hover:text-foreground"
 			>
 				<XIcon />
@@ -148,10 +152,12 @@
 			size="icon-xs"
 			onclick={onchat}
 			disabled={!canChat}
-			aria-label="Chat about these notes"
+			aria-label={m.search_chat_label()}
 			title={canChat
-				? 'Chat with the model about this space. It reads the space index only: dates, subjects, summaries and tags.'
-				: 'Chatting needs a model. Pick one in Settings.'}
+				? m.search_chat_title()
+				: modelOff
+					? m.search_chat_model_off()
+					: m.search_chat_disabled()}
 			class="text-muted-foreground hover:text-foreground"
 		>
 			<SparklesIcon />
@@ -162,7 +168,7 @@
 		<ul
 			id="tag-suggestions"
 			role="listbox"
-			aria-label="Tags"
+			aria-label={m.search_tags_label()}
 			class="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
 		>
 			{#each suggestions as [tag, count], i (tag)}

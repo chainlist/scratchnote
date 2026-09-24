@@ -15,18 +15,20 @@ export default defineConfig({
 			},
 			adapter: adapter({ fallback: 'index.html' })
 		}),
-
 		paraglideVitePlugin({
 			project: './project.inlang',
 			outdir: './src/lib/paraglide',
-			emitTsDeclarations: true
+			emitTsDeclarations: true,
+			// A desktop SPA has no locale in its URLs: the capture window loads
+			// /capture whatever the language. The settings choose it (see
+			// src/lib/i18n.svelte.ts), else the OS language, else English.
+			strategy: ['custom-settings', 'preferredLanguage', 'baseLocale']
 		})
 	],
 	server: {
 		// Tauri's devUrl is pinned to 5173, so fail loudly instead of silently
 		// moving to another port and leaving the app window blank.
 		strictPort: true,
-
 		watch: {
 			// Never watch the Rust side: cargo holds build artifacts open while it
 			// compiles, which makes the watcher crash with EBUSY on Windows.

@@ -1,11 +1,9 @@
 //! Spaces: separate sets of notes, each with its own tags, categories, index
 //! and queue.
 //!
-//! The notes root is the default space, so an install from before spaces
-//! existed keeps working untouched. Every other space is a folder of the same
-//! shape under `spaces/`, named after the space, so a folder made there by
-//! hand is a space too. `.scratchnote/spaces.json` at the root records only
-//! what the folders cannot: the default space's name and which space is open.
+//! Every space is a folder under `spaces/`, named after the space, so a folder
+//! made there by hand is a space too. `.scratchnote/spaces.json` at the root
+//! records only what the folders cannot: which space is open.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -20,7 +18,8 @@ use crate::storage::index::{self, Index};
 use crate::storage::writer::Writer;
 use crate::storage::{categories, tags};
 
-const DEFAULT_NAME: &str = "Personal";
+/// Made on first launch, when there is no space yet.
+pub const FIRST_NAME: &str = "Personal";
 /// Long enough for any sensible name, short enough for the sidebar.
 const MAX_NAME: usize = 40;
 
@@ -29,35 +28,26 @@ const MAX_NAME: usize = 40;
 pub struct Registry {
     /// Name of the open space.
     pub active: String,
-    /// The default space has no folder of its own to be named after.
-    pub default_name: String,
 }
 
 impl Default for Registry {
     fn default() -> Self {
         Self {
-            active: DEFAULT_NAME.to_string(),
-            default_name: DEFAULT_NAME.to_string(),
+            active: FIRST_NAME.to_string(),
         }
     }
 }
 
 impl Registry {
-    /// A missing or broken file opens the default space.
+    /// A missing or broken file opens the first space.
     pub fn load(root: &Path) -> Self {
-        let mut registry = match std::fs::read_to_string(registry_path(root)) {
+        match std::fs::read_to_string(registry_path(root)) {
             Ok(raw) => serde_json::from_str::<Registry>(&raw).unwrap_or_else(|e| {
-                log::warn!("spaces.json is not readable ({e}), opening the default space");
+                log::warn!("spaces.json is not readable ({e}), opening the first space");
                 Registry::default()
             }),
             Err(_) => Registry::default(),
-        };
-        // Hand-edited to something that is not a usable name.
-        match check_name(&registry.default_name) {
-            Ok(name) => registry.default_name = name,
-            Err(_) => registry.default_name = DEFAULT_NAME.to_string(),
         }
-        registry
     }
 
     pub fn to_json(&self) -> String {
@@ -71,6 +61,77 @@ pub fn registry_path(root: &Path) -> PathBuf {
 
 pub fn spaces_dir(root: &Path) -> PathBuf {
     root.join("spaces")
+}
+
+/// Before every space had a folder, the first one lived at the notes root,
+/// named in `spaces.json`. Move its notes and its own files into
+/// `spaces/<its name>/`, once, and point `spaces.json` at the new folder.
+/// Settings, models and the trash stay at the root, shared by every space.
+pub fn migrate_root(root: &Path) {
+    let notes = root.join("notes");
+    if !notes.is_dir() {
+        return;
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(default, rename_all = "camelCase")]
+    struct Old {
+        active: String,
+        default_name: String,
+    }
+    let old: Old = std::fs::read_to_string(registry_path(root))
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    let wanted = check_name(&old.default_name).unwrap_or_else(|_| FIRST_NAME.to_string());
+    // Folders compare without case on Windows, so "personal" would clash too.
+    let taken: Vec<String> = discover(root)
+        .into_iter()
+        .map(|(name, _)| name.to_lowercase())
+        .collect();
+    let name = std::iter::once(wanted.clone())
+        .chain((2..).map(|n| format!("{wanted} {n}")))
+        .find(|n| !taken.contains(&n.to_lowercase()))
+        .unwrap_or(wanted);
+    let to = spaces_dir(root).join(&name);
+
+    let moved = std::fs::create_dir_all(to.join(".scratchnote"))
+        .and_then(|_| std::fs::rename(&notes, to.join("notes")));
+    if let Err(e) = moved {
+        log::error!(
+            "could not move {} into {}: {e}",
+            notes.display(),
+            to.display()
+        );
+        return;
+    }
+    let own: [fn(&Path) -> PathBuf; 4] = [
+        index::index_path,
+        tags::tags_path,
+        queue_path,
+        categories::categories_path,
+    ];
+    for path in own {
+        let from = path(root);
+        if from.exists() {
+            if let Err(e) = std::fs::rename(&from, path(&to)) {
+                log::warn!(
+                    "could not move {} into {}: {e}",
+                    from.display(),
+                    to.display()
+                );
+            }
+        }
+    }
+
+    let active = if old.active.is_empty() || old.active == old.default_name {
+        name.clone()
+    } else {
+        old.active
+    };
+    if let Err(e) = std::fs::write(registry_path(root), Registry { active }.to_json()) {
+        log::warn!("could not update spaces.json ({e})");
+    }
+    log::info!("moved the notes at the root into spaces/{name}");
 }
 
 /// The folders under `spaces/` whose names are usable as space names, sorted
@@ -128,8 +189,6 @@ pub fn check_name(raw: &str) -> Result<String, String> {
 /// One space as loaded: its cache, vocabulary and queue.
 pub struct Space {
     pub name: String,
-    /// The default space lives at the notes root rather than under `spaces/`.
-    pub is_default: bool,
     pub root: PathBuf,
     /// The derived cache from SPEC 4.4. Guards are held only for the length of
     /// a read or a swap, never across an await.
@@ -149,7 +208,7 @@ pub struct Space {
 impl Space {
     /// Load a space from disk. The flag says the index on disk is out of date
     /// and should be written back.
-    pub fn open(name: &str, is_default: bool, root: PathBuf) -> (Self, bool) {
+    pub fn open(name: &str, root: PathBuf) -> (Self, bool) {
         let (loaded, stale) = index::load(&root);
         categories::ensure(&root);
         // tags.json is written alongside the index, so a missing one means
@@ -166,7 +225,6 @@ impl Space {
 
         let space = Self {
             name: name.to_string(),
-            is_default,
             aliases: RwLock::new(tags::load_aliases(&root)),
             index: RwLock::new(loaded),
             queue: Mutex::new(queue),
@@ -268,10 +326,39 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_file_opens_the_default_space() {
+    fn a_missing_file_opens_the_first_space() {
         let registry = Registry::load(&scratch("missing"));
-        assert_eq!(registry.active, DEFAULT_NAME);
-        assert_eq!(registry.default_name, DEFAULT_NAME);
+        assert_eq!(registry.active, FIRST_NAME);
+    }
+
+    #[test]
+    fn the_space_at_the_root_moves_into_its_own_folder() {
+        let root = scratch("migrate");
+        std::fs::create_dir_all(root.join("notes").join("2026")).unwrap();
+        std::fs::write(root.join("notes/2026/2026-09-22.md"), "x").unwrap();
+        std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
+        std::fs::write(categories::categories_path(&root), "[]").unwrap();
+        std::fs::write(
+            registry_path(&root),
+            r#"{"active":"Home","defaultName":"Home"}"#,
+        )
+        .unwrap();
+        // Already taken, ignoring case, so the moved space gets another name.
+        std::fs::create_dir_all(spaces_dir(&root).join("home")).unwrap();
+
+        migrate_root(&root);
+
+        let to = spaces_dir(&root).join("Home 2");
+        assert!(to.join("notes/2026/2026-09-22.md").exists());
+        assert!(categories::categories_path(&to).exists());
+        assert!(!root.join("notes").exists());
+        assert!(!categories::categories_path(&root).exists());
+        assert_eq!(Registry::load(&root).active, "Home 2");
+
+        // Nothing left at the root, so a second launch changes nothing.
+        migrate_root(&root);
+        assert!(to.join("notes/2026/2026-09-22.md").exists());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

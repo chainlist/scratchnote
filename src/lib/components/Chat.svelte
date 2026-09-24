@@ -14,6 +14,7 @@
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
 	import XIcon from '@lucide/svelte/icons/x';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		space,
@@ -33,11 +34,8 @@
 		failed?: string;
 	}
 
-	const SUGGESTIONS = [
-		'What did I write about this week?',
-		'Which movies and shows did I watch?',
-		'What do I still need to do?'
-	];
+	// Sent as typed, so the model answers in the language they are in.
+	const SUGGESTIONS = [m.chat_suggestion_week, m.chat_suggestion_watched, m.chat_suggestion_todo];
 
 	let turns = $state<Turn[]>([]);
 	/** The index as the model numbers it: note n is notes[n - 1]. */
@@ -153,19 +151,21 @@
 	<header class="mx-auto flex w-full max-w-2xl items-center gap-2 px-6 pb-3">
 		<SparklesIcon class="size-4 text-primary" />
 		<h2 class="min-w-0 flex-1 truncate text-lg font-semibold">
-			Chat <span class="font-normal text-muted-foreground">about {space}</span>
+			{m.chat_title()}
+			<span class="font-normal text-muted-foreground">{m.chat_about({ space })}</span>
 		</h2>
 		{#if turns.length > 0}
 			<Button variant="ghost" size="sm" onclick={restart} class="text-muted-foreground">
-				<SquarePenIcon /> New chat
+				<SquarePenIcon />
+				{m.chat_new()}
 			</Button>
 		{/if}
 		<Button
 			variant="ghost"
 			size="icon-sm"
 			onclick={onclose}
-			aria-label="Back to notes"
-			title="Back to notes"
+			aria-label={m.chat_back()}
+			title={m.chat_back()}
 			class="text-muted-foreground hover:text-foreground"
 		>
 			<XIcon />
@@ -176,17 +176,14 @@
 		<div class="mx-auto flex max-w-2xl flex-col gap-5 pb-6">
 			{#if turns.length === 0}
 				<div class="mt-8 flex flex-col gap-4 text-sm text-muted-foreground">
-					<p>
-						Ask anything about the notes in {space}. The model reads this space's index only: each
-						note's date, subject, summary and tags. It does not see what the notes say.
-					</p>
+					<p>{m.chat_intro({ space })}</p>
 					{#if warming}
-						<p class="animate-pulse text-xs">Reading the index of {space}...</p>
+						<p class="animate-pulse text-xs">{m.chat_reading_space({ space })}</p>
 					{/if}
 					<div class="flex flex-wrap gap-2">
 						{#each SUGGESTIONS as suggestion (suggestion)}
-							<Button variant="outline" size="sm" onclick={() => send(suggestion)}>
-								{suggestion}
+							<Button variant="outline" size="sm" onclick={() => send(suggestion())}>
+								{suggestion()}
 							</Button>
 						{/each}
 					</div>
@@ -232,7 +229,7 @@
 							</p>
 						{:else if replying && i === turns.length - 1}
 							<p class="animate-pulse text-sm text-muted-foreground">
-								{warming ? 'Reading the index first...' : 'Thinking...'}
+								{warming ? m.chat_reading_first() : m.chat_thinking()}
 							</p>
 						{/if}
 
@@ -287,12 +284,18 @@
 				bind:value={draft}
 				{onkeydown}
 				rows="1"
-				placeholder="Ask about your notes"
-				aria-label="Message"
+				placeholder={m.chat_placeholder()}
+				aria-label={m.chat_message_label()}
 				class="field-sizing-content max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-[0.9375rem] leading-6 outline-none placeholder:text-muted-foreground"
 			></textarea>
 			{#if replying}
-				<Button size="icon-sm" variant="outline" onclick={stop} aria-label="Stop" title="Stop">
+				<Button
+					size="icon-sm"
+					variant="outline"
+					onclick={stop}
+					aria-label={m.chat_stop()}
+					title={m.chat_stop()}
+				>
 					<SquareIcon />
 				</Button>
 			{:else}
@@ -300,8 +303,8 @@
 					size="icon-sm"
 					onclick={() => send()}
 					disabled={!draft.trim()}
-					aria-label="Send"
-					title="Send (Enter). Shift+Enter for a new line."
+					aria-label={m.chat_send()}
+					title={m.chat_send_title()}
 				>
 					<ArrowUpIcon />
 				</Button>

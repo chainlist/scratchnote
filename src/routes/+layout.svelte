@@ -1,32 +1,31 @@
 <script lang="ts">
-	import type { Pathname } from '$app/types';
-	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
-	import { locales, localizeHref } from '$lib/paraglide/runtime';
 	import './layout.css';
 	import { onMount } from 'svelte';
 	import favicon from '$lib/assets/favicon.svg';
-	import { getSettings, onSettingsChanged } from '$lib/api';
+	import { getSettings, onSettingsChanged, type Settings } from '$lib/api';
 	import { applyAppearance } from '$lib/appearance';
+	import { applyLanguage } from '$lib/i18n.svelte';
+	import { getLocale } from '$lib/paraglide/runtime';
 
 	let { children } = $props();
 
-	// Both windows mount this layout, so an appearance change reaches the
-	// capture window too.
+	function apply(settings: Settings) {
+		applyAppearance(settings);
+		applyLanguage(settings.language);
+	}
+
+	// Both windows mount this layout, so an appearance or language change
+	// reaches the capture window too.
 	onMount(() => {
-		void getSettings().then(applyAppearance);
-
-		const off = onSettingsChanged(applyAppearance);
-
+		void getSettings().then(apply);
+		const off = onSettingsChanged(apply);
 		return () => void off.then((stop) => stop());
+	});
+
+	$effect(() => {
+		document.documentElement.lang = getLocale();
 	});
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 {@render children()}
-
-<div style="display:none">
-	{#each locales as locale (locale)}
-		<a href={resolve(localizeHref(page.url.pathname, { locale }) as Pathname)}>{locale}</a>
-	{/each}
-</div>

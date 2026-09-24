@@ -1,5 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import type { Language } from '$lib/i18n.svelte';
+import { m } from '$lib/paraglide/messages';
 
 export type NoteStatus = 'pending' | 'done' | 'failed' | 'manual';
 
@@ -112,6 +114,16 @@ export const today = () => invoke<string>('today');
 
 export const hideCapture = () => invoke<void>('hide_capture');
 
+export interface TrayLabels {
+	newNote: string;
+	open: string;
+	settings: string;
+	quit: string;
+}
+
+/** The tray menu is built in Rust, so its wording is sent over in the open language. */
+export const setTrayLabels = (labels: TrayLabels) => invoke<void>('set_tray_labels', { labels });
+
 /** Reparses every markdown file and replaces the cache. Returns the note count. */
 export const rebuildIndex = () => invoke<number>('rebuild_index');
 
@@ -132,7 +144,8 @@ export const onIndexRebuilt = (handler: () => void): Promise<UnlistenFn> =>
 export const onCaptureShown = (handler: () => void): Promise<UnlistenFn> =>
 	listen('capture-shown', () => handler());
 
-export type ModelState = 'absent' | 'downloading' | 'loaded' | 'idle';
+/** 'disabled' is the settings switch, whether or not a model is on disk. */
+export type ModelState = 'absent' | 'downloading' | 'loaded' | 'idle' | 'disabled';
 
 export interface ModelStatus {
 	state: ModelState;
@@ -150,21 +163,26 @@ export interface InstalledModel {
 
 export type ModelVariant = 'default' | 'light';
 
-export const MODEL_CHOICES: { variant: ModelVariant; name: string; size: string; note: string }[] =
-	[
-		{
-			variant: 'default',
-			name: 'Default',
-			size: '~2.5 GB',
-			note: 'Qwen3 4B. Better labels, wants more RAM.'
-		},
-		{
-			variant: 'light',
-			name: 'Light',
-			size: '~1.1 GB',
-			note: 'Qwen3 1.7B. Quicker, kinder to a small machine.'
-		}
-	];
+/** Name and note are messages, called where they are shown so they follow the language. */
+export const MODEL_CHOICES: {
+	variant: ModelVariant;
+	name: () => string;
+	size: string;
+	note: () => string;
+}[] = [
+	{
+		variant: 'default',
+		name: m.model_default_name,
+		size: '~2.5 GB',
+		note: m.model_default_note
+	},
+	{
+		variant: 'light',
+		name: m.model_light_name,
+		size: '~1.1 GB',
+		note: m.model_light_note
+	}
+];
 
 export const modelStatus = () => invoke<ModelStatus>('model_status');
 
@@ -258,6 +276,8 @@ export interface Settings {
 	captureHotkey: string;
 	/** Hide the capture window on save rather than showing "Saved" first. */
 	hideImmediately: boolean;
+	/** Off: no enrichment and no chat, and the model never loads. */
+	modelEnabled: boolean;
 	modelVariant: ModelVariant;
 	/** A GGUF file of the user's own, used instead of modelVariant. */
 	modelPath: string | null;
@@ -267,12 +287,16 @@ export interface Settings {
 	useGpu: boolean;
 	/** Accent preset name, see ACCENTS in appearance.ts. */
 	accentColor: string;
+	/** Font preset name, see FONTS in appearance.ts. */
+	fontFamily: string;
 	/** Base text size in pixels. */
 	fontSize: number;
 	/** Corner radius in rem. */
 	radius: number;
 	/** 'system' follows the OS setting. */
 	theme: 'dark' | 'light' | 'system';
+	/** A locale such as 'fr', or 'system' to follow the OS language. */
+	language: Language;
 }
 
 export interface SettingsView extends Settings {
@@ -301,15 +325,13 @@ export const onOpenSettings = (handler: () => void): Promise<UnlistenFn> =>
 export interface SpaceSummary {
 	/** Also the space's folder name under `spaces/`. */
 	name: string;
-	/** The space at the notes root, which cannot be deleted. */
-	isDefault: boolean;
 	notes: number;
 }
 
 export interface SpacesView {
 	/** The open space, which every note command acts on. */
 	active: string;
-	/** The default space first, then the rest by name. */
+	/** By name. */
 	spaces: SpaceSummary[];
 }
 
@@ -326,6 +348,9 @@ export const renameSpace = (name: string, newName: string) =>
 export const deleteSpace = (name: string) => invoke<SpacesView>('delete_space', { name });
 
 export const setActiveSpace = (name: string) => invoke<SpacesView>('set_active_space', { name });
+
+/** Shows the space's folder in the system file manager. */
+export const openSpaceFolder = (name: string) => invoke<void>('open_space_folder', { name });
 
 /** Fired to every window when a space is opened, made, renamed or deleted. */
 export const onSpacesChanged = (handler: (view: SpacesView) => void): Promise<UnlistenFn> =>

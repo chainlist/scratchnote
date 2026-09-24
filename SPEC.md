@@ -174,6 +174,26 @@ cargo add tauri --features tray-icon
 
 (`cargo add tauri --features tray-icon` only adds the feature to the existing dependency; it is the sanctioned way to enable the tray.)
 
+### Step 4b: Internationalization (added after v1)
+
+UI strings come from Paraglide JS, added with its `sv` add-on:
+
+```bash
+pnpm dlx sv@0.17.1 add paraglide="languageTags:en,fr,es,de,it,pt+demo:no" --install pnpm
+```
+
+The add-on assumes a server that puts the locale in the URL, which a Tauri SPA
+does not have. These edits to its output are sanctioned, and nothing else:
+
+- In `vite.config.ts`, the `paraglideVitePlugin` options gain
+  `strategy: ['custom-settings', 'preferredLanguage', 'baseLocale']`.
+- `src/hooks.server.ts` and `src/hooks.ts` (URL rerouting) are deleted, and
+  `src/app.html` goes back to `lang="en"` without the `%paraglide.*%`
+  placeholders. The layout sets `<html lang>` at runtime instead.
+
+Messages live in `messages/<locale>.json`, English first. The compiled
+`src/lib/paraglide/` is generated and not committed.
+
 ### Step 5: Commit the untouched scaffold
 
 Commit everything generated so far as "chore: scaffold SvelteKit + Tauri" before writing any app code, so generated config and hand-written code stay separable in history.
@@ -202,7 +222,7 @@ Note actions (on hover): edit body inline, edit tags manually, re-run enrichment
 
 ### 3.3 Tray
 
-Tray icon with: New note, Open Scratchnote, Settings, Quit. App keeps running in tray when main window closes.
+Tray icon with: New note, Open Scratchnote, Settings, Quit, in the interface language. App keeps running in tray when main window closes.
 
 ## 4. Storage
 
@@ -212,22 +232,24 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
 
 ```
 ~/Scratchnote/
-  notes/
-    2026/
-      2026-09-22.md
-      2026-09-23.md
   .scratchnote/
-    index.jsonl      # derived cache, rebuildable
-    tags.json        # tag vocabulary + aliases
-    queue.json       # pending enrichment jobs
     settings.json
-    spaces.json      # default space's name, open space
-    categories.json
+    spaces.json      # open space
     trash/           # deleted spaces, recoverable
   spaces/
-    Work/            # one folder per extra space, named after it
+    Personal/        # one folder per space, named after it
+      notes/
+        2026/
+          2026-09-22.md
+          2026-09-23.md
+      .scratchnote/
+        index.jsonl      # derived cache, rebuildable
+        tags.json        # tag vocabulary + aliases
+        queue.json       # pending enrichment jobs
+        categories.json
+    Work/
       notes/...
-      .scratchnote/  # index.jsonl, tags.json, queue.json, categories.json
+      .scratchnote/...
   models/            # GGUF files (outside notes so sync tools can ignore it)
 ```
 
@@ -311,8 +333,9 @@ Counts are derived and recomputed on index rebuild. Aliases are user-editable in
 
 A space is a separate set of notes with its own tags, aliases, categories, index and queue. Nothing is shared between spaces except settings and models.
 
-- The notes root itself is the default space, so data from before spaces existed needs no migration. It cannot be deleted; its display name (default "Personal") is kept in `spaces.json`.
-- Every other space is a folder under `spaces/`, named after the space, holding the same `notes/` and `.scratchnote/` layout as the root. Any folder there whose name is a valid space name is a space, including one made by hand.
+- Every space is a folder under `spaces/`, named after the space, holding its own `notes/` and `.scratchnote/`. Any folder there whose name is a valid space name is a space, including one made by hand. No space is special: the list is in name order, and any space can be deleted except the last one.
+- A first launch with no space makes `spaces/Personal/`. `spaces.json` records only which space is open; if that space is gone, the first one opens.
+- Data from before this layout, with `notes/` and the per-space files at the root, is moved once at startup into `spaces/<its old name>/` (with a number added if a folder already has that name).
 - Space names are folder names, so they must be valid on every platform: no `<>:"/\|?*`, no leading or trailing dot, no Windows reserved names, at most 40 characters, and unique ignoring case. Renaming a space renames its folder.
 - Deleting a space moves its folder to `.scratchnote/trash/<name> <timestamp>`; moving it back under `spaces/` restores it.
 - All spaces are loaded at startup and watched. Note commands act on the open space. The single enrichment worker drains every space's queue, the open space first.
@@ -331,6 +354,7 @@ A space is a separate set of notes with its own tags, aliases, categories, index
 - Qwen publishes these models as safetensors, not GGUF, so the quantised builds come from `unsloth/Qwen3-4B-Instruct-2507-GGUF` and `unsloth/Qwen3-1.7B-GGUF`. Qwen's own `Qwen3-1.7B-GGUF` ships only a Q8_0. Hugging Face answers 401 for a repo that does not exist exactly as it does for a private one, so a wrong repo name surfaces as an authorization error rather than a missing one.
 - On first launch, if no model exists, show an onboarding screen: pick Default (4B, ~2.5 GB) or Light (1.7B, ~1.1 GB), then download from Hugging Face with a progress bar, resumable, with SHA-256 verification. Store in `models/`.
 - The app must be fully usable for capture while the model is downloading or absent; notes simply stay `pending`.
+- A "Use the model" switch turns the model off entirely, for machines too small to run it. Off, it is never loaded, notes stay `pending` in the queue until it is back on, chat is unavailable, and the status bar says the model is turned off. It defaults to off on Android and iOS. The onboarding screen offers the same choice as "Continue without a model".
 - Record the resolved Hugging Face revision (commit SHA) alongside the downloaded file, so "which build of this model do I have" has an exact answer. Quant repos are re-uploaded in place, so a filename is not an identity.
 - Settings allow switching model or pointing to any local GGUF file.
 - Settings has a "Check for updates" button. It is the only thing that triggers this check: never on launch, never on a timer. It compares the recorded revision against the current one on Hugging Face and, if they differ, offers to download the new one. The existing model file stays in place and in use until the replacement has finished downloading and passed SHA-256 verification.
@@ -426,6 +450,7 @@ Applied to every tag the model returns, in order:
 
 - Notes root directory
 - Capture hotkey
+- Use the model (on/off)
 - Model choice / custom GGUF path
 - Check for model updates (manual, shows the installed revision)
 - Model idle unload timeout
@@ -433,6 +458,7 @@ Applied to every tag the model returns, in order:
 - Tag aliases editor
 - Rebuild index
 - Launch at login
+- Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It changes only the interface: notes, tags and the enrichment prompt are untouched, and chat replies follow the language the user writes in.
 
 ## 8. Tauri Commands (backend API)
 
@@ -447,10 +473,11 @@ list_days() -> Vec<DaySummary>                // date + note count
 list_tags() -> Vec<(String, u32)>
 search(query: String) -> Vec<Note>
 get_settings() / set_settings(...)
-model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle
+model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle | disabled
 download_model(variant)
 check_model_update() -> UpdateCheck           // user-initiated only; up-to-date | newer(revision) | failed(reason)
 rebuild_index()
+set_tray_labels(labels)                      // the tray menu's wording, sent by the main window in its language
 list_spaces() -> SpacesView                   // open space + every space with its note count
 create_space(name) / rename_space(name, new_name) / delete_space(name) / set_active_space(name)
 ```
@@ -477,6 +504,7 @@ src/
     settings/+page.svelte
   lib/components/ (NoteCard, DayCalendar, CategoryList, TagFilters, SearchBar, SpaceSwitcher, Onboarding)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
+  lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy
   lib/api.ts          # typed wrappers around Tauri invoke/listen
 ```
 

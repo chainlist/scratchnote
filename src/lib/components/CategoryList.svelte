@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { sidebarItem } from '$lib/components/sidebar';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		categories,
@@ -27,11 +28,11 @@
 
 {#if categories.length > 0}
 	<!-- Fills what the sidebar has left; only the list scrolls, the heading stays. -->
-	<nav aria-label="Categories" class="flex min-h-0 flex-1 flex-col">
+	<nav aria-label={m.categories_heading()} class="flex min-h-0 flex-1 flex-col">
 		<h2
 			class="mb-1 px-2 text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
 		>
-			Categories
+			{m.categories_heading()}
 		</h2>
 		<ul class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
 			{#each shown as [name, count] (name)}
@@ -41,7 +42,7 @@
 						type="button"
 						onclick={(event) => onselect(name, event.ctrlKey || event.metaKey)}
 						aria-pressed={on}
-						title={on ? 'Clear filter' : `Show ${name} notes, Ctrl+click to combine`}
+						title={on ? m.categories_clear() : m.categories_show({ name })}
 						class="{sidebarItem(on)} justify-between"
 					>
 						<span class="truncate first-letter:uppercase">{name}</span>
@@ -56,7 +57,7 @@
 						onclick={() => (expanded = !expanded)}
 						class="{sidebarItem(false)} text-xs"
 					>
-						{expanded ? 'Less' : `${categories.length - TOP} more`}
+						{expanded ? m.common_less() : m.categories_more({ count: categories.length - TOP })}
 					</button>
 				</li>
 			{/if}

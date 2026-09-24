@@ -18,6 +18,9 @@ pub struct Settings {
     /// Hide the capture window the moment a note is saved, rather than
     /// showing a "Saved" toast first.
     pub hide_immediately: bool,
+    /// Off keeps the model out of memory entirely, for machines too small
+    /// for it: notes are queued but not enriched, and chat is unavailable.
+    pub model_enabled: bool,
     /// Which of the app's own models to use.
     pub model_variant: Variant,
     /// A GGUF file of the user's own, used instead of `model_variant`.
@@ -29,12 +32,17 @@ pub struct Settings {
     pub use_gpu: bool,
     /// Name of the accent preset the windows paint buttons and focus rings in.
     pub accent_color: String,
+    /// Name of the font preset the interface and notes are set in.
+    pub font_family: String,
     /// Base text size in pixels; everything sized in rem scales with it.
     pub font_size: u32,
     /// Corner radius in rem.
     pub radius: f32,
     /// "dark", "light" or "system" to follow the OS.
     pub theme: String,
+    /// A locale such as "fr", or "system" to follow the OS language. The
+    /// frontend owns the list of locales; an unknown one follows the OS.
+    pub language: String,
 }
 
 impl Default for Settings {
@@ -43,14 +51,18 @@ impl Default for Settings {
             root: PathBuf::from("."),
             capture_hotkey: DEFAULT_HOTKEY.to_string(),
             hide_immediately: true,
+            // Phones are the low end the switch exists for.
+            model_enabled: !cfg!(mobile),
             model_variant: Variant::Default,
             model_path: None,
             idle_unload_minutes: 10,
             use_gpu: true,
             accent_color: "neutral".to_string(),
+            font_family: "inter".to_string(),
             font_size: 16,
             radius: 0.625,
             theme: "dark".to_string(),
+            language: "system".to_string(),
         }
     }
 }
@@ -150,9 +162,12 @@ mod tests {
         let back: Settings = serde_json::from_str(r#"{"hideImmediately":false}"#).unwrap();
         assert_eq!(back.capture_hotkey, DEFAULT_HOTKEY);
         assert!(!back.hide_immediately);
+        assert_eq!(back.model_enabled, !cfg!(mobile));
         assert_eq!(back.accent_color, "neutral");
+        assert_eq!(back.font_family, "inter");
         assert_eq!(back.font_size, 16);
         assert_eq!(back.theme, "dark");
+        assert_eq!(back.language, "system");
     }
 
     #[test]

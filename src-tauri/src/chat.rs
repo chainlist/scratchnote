@@ -473,11 +473,7 @@ mod tests {
 
         // The open space's index, as the app reads it.
         let registry = crate::spaces::Registry::load(&root);
-        let space_root = if registry.active == registry.default_name {
-            root.clone()
-        } else {
-            crate::spaces::spaces_dir(&root).join(&registry.active)
-        };
+        let space_root = crate::spaces::spaces_dir(&root).join(&registry.active);
         let notes = read_index(&crate::storage::index::index_path(&space_root)).unwrap();
         let today = chrono::Local::now().date_naive();
 

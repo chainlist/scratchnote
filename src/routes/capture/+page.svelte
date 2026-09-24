@@ -9,6 +9,7 @@
 		onSpacesChanged,
 		saveNote
 	} from '$lib/api';
+	import { m } from '$lib/paraglide/messages';
 
 	let draft = $state('');
 	let saving = $state(false);
@@ -76,7 +77,7 @@
 		bind:this={input}
 		bind:value={draft}
 		onkeydown={onKeydown}
-		placeholder="What is on your mind?"
+		placeholder={m.capture_placeholder()}
 		spellcheck="false"
 		class="min-h-0 flex-1 resize-none rounded bg-neutral-800 p-2 text-sm leading-relaxed
 			outline-none placeholder:text-neutral-500"></textarea>
@@ -85,11 +86,11 @@
 		{#if error}
 			<span class="text-red-400">{error}</span>
 		{:else}
-			<span>Ctrl+Enter to save, Esc to dismiss</span>
+			<span>{m.capture_hint()}</span>
 		{/if}
 		<span class="flex items-center gap-2">
-			<span>{saved ? 'Saved' : saving ? 'Saving…' : ''}</span>
-			{#if space}<span class="text-neutral-400" title="Saving into this space">{space}</span>{/if}
+			<span>{saved ? m.capture_saved() : saving ? m.capture_saving() : ''}</span>
+			{#if space}<span class="text-neutral-400" title={m.capture_space_title()}>{space}</span>{/if}
 		</span>
 	</div>
 </div>

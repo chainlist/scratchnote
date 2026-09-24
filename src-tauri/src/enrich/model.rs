@@ -52,9 +52,14 @@ impl Variant {
 #[serde(tag = "state", rename_all = "lowercase")]
 pub enum ModelStatus {
     Absent,
-    Downloading { percent: u8 },
+    Downloading {
+        percent: u8,
+    },
     Loaded,
     Idle,
+    /// Turned off in settings: nothing is loaded, notes stay queued, and
+    /// chat is unavailable, whether or not a model is on disk.
+    Disabled,
 }
 
 /// Turns a prompt into text. The grammar is passed through to the sampler so

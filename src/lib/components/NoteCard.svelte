@@ -6,6 +6,7 @@
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		note,
@@ -42,6 +43,13 @@
 	// Re-running a manual note would be skipped anyway, and a pending one is
 	// already in the queue.
 	let canRetry = $derived(note.status === 'done' || note.status === 'failed');
+
+	// A done note shows no status, so only these need a label.
+	const statusLabel = {
+		pending: m.note_status_pending,
+		failed: m.note_status_failed,
+		manual: m.note_status_manual
+	};
 
 	async function startEditing() {
 		if (editing) return;
@@ -122,17 +130,17 @@
 					bind:this={textarea}
 					bind:value={draft}
 					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
-					aria-label="Body"
+					aria-label={m.note_body_label()}
 					spellcheck="false"
 					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[0.9375rem] leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
 				></textarea>
 				<div class="flex items-center justify-end gap-1">
-					<span class="mr-auto text-[0.625rem] text-neutral-600"
-						>Ctrl+Enter to save, Esc to cancel</span
+					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
+					<button type="button" onclick={() => (editing = false)} class={action}
+						>{m.common_cancel()}</button
 					>
-					<button type="button" onclick={() => (editing = false)} class={action}>Cancel</button>
 					<button type="button" onclick={save} disabled={saving} class={action}>
-						{saving ? 'Saving' : 'Save'}
+						{saving ? m.common_saving() : m.common_save()}
 					</button>
 				</div>
 			</div>
@@ -147,40 +155,40 @@
 				? 'opacity-100'
 				: 'opacity-0'}"
 		>
-			<span class="text-[0.625rem] text-neutral-600 select-none">Double-click to edit</span>
+			<span class="text-[0.625rem] text-neutral-600 select-none">{m.note_dblclick_hint()}</span>
 			<!-- A done note says nothing; the others say where enrichment is,
 			     and `manual` that the model will leave the note alone. -->
 			{#if note.status !== 'done'}
 				<span
-					title={note.status === 'manual' ? 'Edited by hand, the model leaves it alone' : undefined}
+					title={note.status === 'manual' ? m.note_manual_title() : undefined}
 					class="rounded px-1.5 py-0.5 text-[0.625rem] tracking-wide uppercase select-none
 						{note.status === 'failed'
 						? 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400'
 						: 'text-neutral-500'}"
 				>
-					{note.status}
+					{statusLabel[note.status]()}
 				</span>
 			{/if}
 			<DropdownMenu.Root bind:open={menuOpen}>
 				<DropdownMenu.Trigger
-					aria-label="Note actions"
-					title="Note actions"
+					aria-label={m.note_actions()}
+					title={m.note_actions()}
 					class="cursor-pointer rounded px-1 py-0.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 data-[state=open]:bg-neutral-800 data-[state=open]:text-neutral-200"
 				>
 					<EllipsisIcon class="size-3.5" />
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content align="end" class="w-40">
 					<DropdownMenu.Item onSelect={() => onedit(note)}>
-						<PencilIcon />Edit
+						<PencilIcon />{m.note_edit()}
 					</DropdownMenu.Item>
 					{#if canRetry}
 						<DropdownMenu.Item onSelect={() => onretry(note)}>
-							<RefreshCwIcon />Re-run model
+							<RefreshCwIcon />{m.note_rerun()}
 						</DropdownMenu.Item>
 					{/if}
 					<DropdownMenu.Separator />
 					<DropdownMenu.Item variant="destructive" onSelect={() => ondelete(note)}>
-						<Trash2Icon />Delete
+						<Trash2Icon />{m.common_delete()}
 					</DropdownMenu.Item>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
@@ -195,7 +203,7 @@
 						<button
 							type="button"
 							onclick={() => ontag(tag)}
-							title="Show #{tag} notes"
+							title={m.note_show_tag({ tag })}
 							class="cursor-pointer hover:text-neutral-200">#{tag}</button
 						>
 					</li>

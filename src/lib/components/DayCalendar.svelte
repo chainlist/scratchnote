@@ -5,6 +5,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Calendar from '$lib/components/ui/calendar';
 	import * as Popover from '$lib/components/ui/popover';
+	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 
 	let {
 		days,
@@ -18,18 +20,18 @@
 
 	let open = $state(false);
 
-	const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+	const locale = $derived(getLocale());
 	const withNotes = $derived(new Set(days.map((day) => day.date)));
 	const value = $derived(selected ? parseDate(selected) : undefined);
 	const label = $derived(
 		selected
-			? new Date(`${selected}T00:00:00`).toLocaleDateString(undefined, {
+			? new Date(`${selected}T00:00:00`).toLocaleDateString(locale, {
 					weekday: 'short',
 					day: 'numeric',
 					month: 'short',
 					year: 'numeric'
 				})
-			: 'Pick a day'
+			: m.calendar_pick()
 	);
 
 	function pick(date: DateValue | undefined) {
@@ -48,7 +50,7 @@
 			</Button>
 		{/snippet}
 	</Popover.Trigger>
-	<Popover.Content class="w-auto p-0" align="start">
+	<Popover.Content class="w-auto bg-background p-0" align="start">
 		<Calendar.Calendar
 			type="single"
 			{value}

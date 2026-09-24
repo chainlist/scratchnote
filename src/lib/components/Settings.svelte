@@ -9,6 +9,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Progress } from '$lib/components/ui/progress';
 	import * as RadioGroup from '$lib/components/ui/radio-group';
+	import * as Select from '$lib/components/ui/select';
 	import { Switch } from '$lib/components/ui/switch';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
@@ -50,18 +51,22 @@
 		type SettingsView,
 		type UpdateCheck
 	} from '$lib/api';
-	import { ACCENTS, DEFAULT_APPEARANCE, FONT_SIZES, RADII, THEMES } from '$lib/appearance';
+	import { ACCENTS, DEFAULT_APPEARANCE, FONT_SIZES, FONTS, RADII, THEMES } from '$lib/appearance';
+	import { LANGUAGE_NAMES, LANGUAGES, parts, slot, type Language } from '$lib/i18n.svelte';
+	import { m } from '$lib/paraglide/messages';
 
 	let view = $state<SettingsView | null>(null);
 	let draft = $state<Settings>({
 		root: '',
 		captureHotkey: '',
 		hideImmediately: true,
+		modelEnabled: true,
 		modelVariant: 'default',
 		modelPath: null,
 		idleUnloadMinutes: 10,
 		useGpu: true,
-		...DEFAULT_APPEARANCE
+		...DEFAULT_APPEARANCE,
+		language: 'system'
 	});
 	let customPath = $state('');
 	let info = $state<ModelInfo | null>(null);
@@ -84,14 +89,17 @@
 		root: s.root,
 		captureHotkey: s.captureHotkey,
 		hideImmediately: s.hideImmediately,
+		modelEnabled: s.modelEnabled,
 		modelVariant: s.modelVariant,
 		modelPath: s.modelPath,
 		idleUnloadMinutes: s.idleUnloadMinutes,
 		useGpu: s.useGpu,
 		accentColor: s.accentColor,
+		fontFamily: s.fontFamily,
 		fontSize: s.fontSize,
 		radius: s.radius,
-		theme: s.theme
+		theme: s.theme,
+		language: s.language
 	});
 	// Model choices apply as soon as they are picked, so only these wait on
 	// the Save button.
@@ -115,12 +123,15 @@
 			onSettingsChanged((settings) => {
 				if (!view) return;
 				view = { ...view, ...settings };
+				draft.modelEnabled = settings.modelEnabled;
 				draft.modelVariant = settings.modelVariant;
 				draft.modelPath = settings.modelPath;
 				draft.accentColor = settings.accentColor;
+				draft.fontFamily = settings.fontFamily;
 				draft.fontSize = settings.fontSize;
 				draft.radius = settings.radius;
 				draft.theme = settings.theme;
+				draft.language = settings.language;
 			})
 		];
 		void (async () => {
@@ -142,6 +153,17 @@
 
 	async function refreshModels() {
 		info = await modelInfo();
+	}
+
+	/** Applies at once: off unloads the model, on lets queued notes through. */
+	async function setModelEnabled(modelEnabled: boolean) {
+		if (!view) return;
+		try {
+			view = await setSettings({ ...editable(view), modelEnabled });
+			draft.modelEnabled = view.modelEnabled;
+		} catch (e) {
+			say(String(e), true);
+		}
 	}
 
 	/** Applies at once: the model is unloaded and the next note reloads it. */
@@ -168,6 +190,7 @@
 	const appearanceIsDefault = $derived(
 		view !== null &&
 			view.accentColor === DEFAULT_APPEARANCE.accentColor &&
+			view.fontFamily === DEFAULT_APPEARANCE.fontFamily &&
 			view.fontSize === DEFAULT_APPEARANCE.fontSize &&
 			view.radius === DEFAULT_APPEARANCE.radius &&
 			view.theme === DEFAULT_APPEARANCE.theme
@@ -176,7 +199,7 @@
 	async function download(variant: ModelVariant) {
 		try {
 			await downloadModel(variant);
-			say('Model downloaded and in use.');
+			say(m.settings_model_downloaded());
 		} catch (e) {
 			say(String(e), true);
 		}
@@ -198,7 +221,7 @@
 			await updateModel();
 			update = null;
 			await refreshModels();
-			say('Model updated.');
+			say(m.settings_model_updated());
 		} catch (e) {
 			say(String(e), true);
 		} finally {
@@ -221,6 +244,10 @@
 
 	const short = (revision: string) => revision.slice(0, 7);
 
+	/** Languages are named in their own tongue; only System follows the open one. */
+	const languageName = (language: Language) =>
+		language === 'system' ? m.settings_language_system() : LANGUAGE_NAMES[language];
+
 	function say(text: string, error = false) {
 		message = { text, error };
 	}
@@ -228,7 +255,7 @@
 	async function save() {
 		try {
 			view = await setSettings($state.snapshot(draft));
-			say('Saved.');
+			say(m.settings_saved());
 		} catch (e) {
 			say(String(e), true);
 		}
@@ -239,7 +266,7 @@
 		try {
 			const saved = await setAliases(Object.fromEntries(pairs.map((a) => [a.from, a.to])));
 			aliases = Object.entries(saved).map(([from, to]) => ({ from, to }));
-			say('Aliases saved.');
+			say(m.settings_aliases_saved());
 		} catch (e) {
 			say(String(e), true);
 		}
@@ -259,7 +286,7 @@
 		rebuilding = true;
 		try {
 			const count = await rebuildIndex();
-			say(`Index rebuilt from the markdown: ${count} notes.`);
+			say(m.settings_rebuilt({ count }));
 		} catch (e) {
 			say(String(e), true);
 		} finally {
@@ -272,7 +299,7 @@
 		regenerating = true;
 		try {
 			const count = await regenerateAll();
-			say(`${count} notes queued. The model works through them in the background.`);
+			say(m.settings_regenerate_queued({ count }));
 		} catch (e) {
 			say(String(e), true);
 		} finally {
@@ -328,11 +355,11 @@
 		accelerator.replace('CommandOrControl', isMac ? '⌘' : 'Ctrl').replace('Super', 'Win');
 
 	const tabs = [
-		{ value: 'general', label: 'General', icon: SlidersHorizontalIcon },
-		{ value: 'appearance', label: 'Appearance', icon: PaletteIcon },
-		{ value: 'model', label: 'Model', icon: BrainIcon },
-		{ value: 'tags', label: 'Tag aliases', icon: TagIcon },
-		{ value: 'index', label: 'Index', icon: DatabaseIcon }
+		{ value: 'general', label: m.settings_tab_general, icon: SlidersHorizontalIcon },
+		{ value: 'appearance', label: m.settings_tab_appearance, icon: PaletteIcon },
+		{ value: 'model', label: m.settings_tab_model, icon: BrainIcon },
+		{ value: 'tags', label: m.settings_tab_tags, icon: TagIcon },
+		{ value: 'index', label: m.settings_tab_index, icon: DatabaseIcon }
 	];
 
 	const group = 'divide-y rounded-lg border bg-card';
@@ -341,7 +368,7 @@
 	/** A selectable model card; highlighted while its radio is checked. */
 	/** One option of a segmented picker, filled while selected. */
 	const segment = (selected: boolean) =>
-		`h-7 rounded-md px-3 text-xs font-medium transition-colors ${
+		`h-7 rounded-md px-3 text-xs font-medium whitespace-nowrap transition-colors ${
 			selected
 				? 'bg-primary text-primary-foreground'
 				: 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -361,12 +388,12 @@
 
 <Tabs.Root value="general" orientation="vertical" class="h-full min-h-0 gap-0">
 	<aside class="flex w-48 shrink-0 flex-col gap-4 border-r bg-muted/40 p-3">
-		<Dialog.Title class="px-2 pt-1">Settings</Dialog.Title>
+		<Dialog.Title class="px-2 pt-1">{m.common_settings()}</Dialog.Title>
 		<Tabs.List class="w-full gap-0.5 bg-transparent p-0">
 			{#each tabs as t (t.value)}
 				<Tabs.Trigger value={t.value} class="h-8 w-full flex-none justify-start gap-2 px-2">
 					<t.icon />
-					{t.label}
+					{t.label()}
 				</Tabs.Trigger>
 			{/each}
 		</Tabs.List>
@@ -383,30 +410,32 @@
 
 			{#if view}
 				<Tabs.Content value="general">
-					{@render header('General', 'Where your notes live and how you capture them.')}
+					{@render header(m.settings_tab_general(), m.settings_general_description())}
 
 					<div class={group}>
 						<div class="flex flex-col gap-2 px-4 py-3">
 							<div class="flex flex-col gap-0.5">
-								<Label for="root">Notes folder</Label>
-								<p class={hint}>One markdown file per day lives here.</p>
+								<Label for="root">{m.settings_root()}</Label>
+								<p class={hint}>{m.settings_root_hint()}</p>
 							</div>
 							<Input id="root" bind:value={draft.root} spellcheck="false" class="font-mono" />
 							{#if restartNeeded}
 								<p class="text-xs text-amber-500">
-									Saved. Restart Scratchnote to switch from {view.activeRoot}.
+									{m.settings_restart_needed({ path: view.activeRoot })}
 								</p>
 							{/if}
 						</div>
 						<div class={row}>
 							<div class="flex flex-col gap-0.5">
-								<Label for="hotkey">Capture hotkey</Label>
-								<p class={hint}>Opens the capture window from anywhere.</p>
+								<Label for="hotkey">{m.settings_hotkey()}</Label>
+								<p class={hint}>{m.settings_hotkey_hint()}</p>
 							</div>
 							<Input
 								id="hotkey"
 								readonly
-								value={recording ? 'Press keys, Esc cancels' : prettyHotkey(draft.captureHotkey)}
+								value={recording
+									? m.settings_hotkey_recording()
+									: prettyHotkey(draft.captureHotkey)}
 								onfocus={() => (recording = true)}
 								onblur={() => (recording = false)}
 								onkeydown={recordHotkey}
@@ -417,19 +446,17 @@
 						</div>
 						<div class={row}>
 							<div class="flex flex-col gap-0.5">
-								<Label for="hide">Hide after saving</Label>
+								<Label for="hide">{m.settings_hide()}</Label>
 								<p class={hint}>
-									{draft.hideImmediately
-										? 'The capture window closes as soon as a note is saved.'
-										: 'The capture window shows "Saved" for a second first.'}
+									{draft.hideImmediately ? m.settings_hide_on() : m.settings_hide_off()}
 								</p>
 							</div>
 							<Switch id="hide" bind:checked={draft.hideImmediately} />
 						</div>
 						<div class={row}>
 							<div class="flex flex-col gap-0.5">
-								<Label for="login">Launch at login</Label>
-								<p class={hint}>Start Scratchnote when you sign in.</p>
+								<Label for="login">{m.settings_login()}</Label>
+								<p class={hint}>{m.settings_login_hint()}</p>
 							</div>
 							<Switch id="login" checked={launchAtLogin} onCheckedChange={toggleLaunchAtLogin} />
 						</div>
@@ -437,19 +464,39 @@
 				</Tabs.Content>
 
 				<Tabs.Content value="appearance">
-					{@render header('Appearance', 'Colors and sizes. Changes apply right away.')}
+					{@render header(m.settings_tab_appearance(), m.settings_appearance_description())}
 
 					<div class="flex flex-col gap-4">
 						<div class={group}>
 							<div class={row}>
 								<div class="flex flex-col gap-0.5">
-									<span class="text-sm font-medium">Theme</span>
-									<p class={hint}>System follows your OS setting.</p>
+									<span class="text-sm font-medium">{m.settings_language()}</span>
+									<p class={hint}>{m.settings_language_hint()}</p>
+								</div>
+								<Select.Root
+									type="single"
+									value={view.language}
+									onValueChange={(language) => setAppearance({ language: language as Language })}
+								>
+									<Select.Trigger size="sm" class="w-40" aria-label={m.settings_language()}>
+										{languageName(view.language)}
+									</Select.Trigger>
+									<Select.Content>
+										{#each LANGUAGES as language (language)}
+											<Select.Item value={language} label={languageName(language)} />
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</div>
+							<div class={row}>
+								<div class="flex flex-col gap-0.5">
+									<span class="text-sm font-medium">{m.settings_theme()}</span>
+									<p class={hint}>{m.settings_theme_hint()}</p>
 								</div>
 								<div
 									class="flex gap-0.5 rounded-lg border p-0.5"
 									role="radiogroup"
-									aria-label="Theme"
+									aria-label={m.settings_theme()}
 								>
 									{#each THEMES as theme (theme.name)}
 										<button
@@ -459,25 +506,25 @@
 											onclick={() => setAppearance({ theme: theme.name })}
 											class={segment(view.theme === theme.name)}
 										>
-											{theme.label}
+											{theme.label()}
 										</button>
 									{/each}
 								</div>
 							</div>
 							<div class={row}>
 								<div class="flex flex-col gap-0.5">
-									<span class="text-sm font-medium">Accent color</span>
-									<p class={hint}>Buttons, switches and focus rings.</p>
+									<span class="text-sm font-medium">{m.settings_accent()}</span>
+									<p class={hint}>{m.settings_accent_hint()}</p>
 								</div>
-								<div class="flex gap-2" role="radiogroup" aria-label="Accent color">
+								<div class="flex gap-2" role="radiogroup" aria-label={m.settings_accent()}>
 									{#each ACCENTS as accent (accent.name)}
 										{@const selected = view.accentColor === accent.name}
 										<button
 											type="button"
 											role="radio"
 											aria-checked={selected}
-											aria-label={accent.label}
-											title={accent.label}
+											aria-label={accent.label()}
+											title={accent.label()}
 											onclick={() => setAppearance({ accentColor: accent.name })}
 											class="flex size-7 cursor-pointer items-center justify-center rounded-full ring-offset-2 ring-offset-card transition {selected
 												? 'ring-2 ring-foreground'
@@ -493,13 +540,35 @@
 							</div>
 							<div class={row}>
 								<div class="flex flex-col gap-0.5">
-									<span class="text-sm font-medium">Text size</span>
-									<p class={hint}>Scales the whole interface, notes included.</p>
+									<span class="text-sm font-medium">{m.settings_font()}</span>
+									<p class={hint}>{m.settings_font_hint()}</p>
+								</div>
+								<Select.Root
+									type="single"
+									value={view.fontFamily}
+									onValueChange={(fontFamily) => setAppearance({ fontFamily })}
+								>
+									<Select.Trigger size="sm" class="w-48" aria-label={m.settings_font()}>
+										{(FONTS.find((f) => f.name === view?.fontFamily) ?? FONTS[0]).label()}
+									</Select.Trigger>
+									<Select.Content>
+										{#each FONTS as font (font.name)}
+											<Select.Item value={font.name} label={font.label()}>
+												<span style="font-family: {font.family}">{font.label()}</span>
+											</Select.Item>
+										{/each}
+									</Select.Content>
+								</Select.Root>
+							</div>
+							<div class={row}>
+								<div class="flex flex-col gap-0.5">
+									<span class="text-sm font-medium">{m.settings_text_size()}</span>
+									<p class={hint}>{m.settings_text_size_hint()}</p>
 								</div>
 								<div
 									class="flex gap-0.5 rounded-lg border p-0.5"
 									role="radiogroup"
-									aria-label="Text size"
+									aria-label={m.settings_text_size()}
 								>
 									{#each FONT_SIZES as size (size.px)}
 										<button
@@ -509,20 +578,20 @@
 											onclick={() => setAppearance({ fontSize: size.px })}
 											class={segment(view.fontSize === size.px)}
 										>
-											{size.label}
+											{size.label()}
 										</button>
 									{/each}
 								</div>
 							</div>
 							<div class={row}>
 								<div class="flex flex-col gap-0.5">
-									<span class="text-sm font-medium">Corner radius</span>
-									<p class={hint}>How rounded cards, buttons and inputs are.</p>
+									<span class="text-sm font-medium">{m.settings_radius()}</span>
+									<p class={hint}>{m.settings_radius_hint()}</p>
 								</div>
 								<div
 									class="flex gap-0.5 rounded-lg border p-0.5"
 									role="radiogroup"
-									aria-label="Corner radius"
+									aria-label={m.settings_radius()}
 								>
 									{#each RADII as radius (radius.rem)}
 										<button
@@ -532,7 +601,7 @@
 											onclick={() => setAppearance({ radius: radius.rem })}
 											class={segment(view.radius === radius.rem)}
 										>
-											{radius.label}
+											{radius.label()}
 										</button>
 									{/each}
 								</div>
@@ -545,189 +614,209 @@
 								onclick={() => setAppearance(DEFAULT_APPEARANCE)}
 								disabled={appearanceIsDefault}
 							>
-								Reset to defaults
+								{m.settings_reset()}
 							</Button>
 						</div>
 					</div>
 				</Tabs.Content>
 
 				<Tabs.Content value="model">
-					{@render header('Model', 'The local model that tags and enriches your notes.')}
+					{@render header(m.settings_tab_model(), m.settings_model_description())}
 
 					<div class="flex flex-col gap-6">
-						<RadioGroup.Root value={modelChoice} onValueChange={pickModel} class="gap-2">
-							{#each MODEL_CHOICES as choice (choice.variant)}
-								{@const record = info?.[choice.variant] ?? null}
-								<Label for="model-{choice.variant}" class="{card} flex items-center">
-									<RadioGroup.Item
-										value={choice.variant}
-										id="model-{choice.variant}"
-										disabled={!record}
-									/>
-									<div class="flex flex-1 flex-col gap-0.5">
-										<span class="flex items-center gap-2">
-											{choice.name}
-											{#if info?.activeVariant === choice.variant && view.modelPath === null}
-												<Badge>In use</Badge>
-											{/if}
-										</span>
-										<span class={hint}>{choice.note}</span>
-									</div>
-									{#if record}
-										<Badge variant="outline" class="font-mono" title={record.revision}>
-											{short(record.revision)}
-										</Badge>
-									{:else}
-										<Button
-											variant="secondary"
-											size="sm"
-											onclick={() => download(choice.variant)}
-											disabled={model.state === 'downloading'}
-										>
-											<DownloadIcon />
-											{choice.size}
-										</Button>
-									{/if}
-								</Label>
-							{/each}
-
-							<div class="{card} flex flex-col">
-								<div class="flex items-center gap-3">
-									<RadioGroup.Item
-										value="custom"
-										id="model-custom"
-										disabled={view.modelPath === null && customPath.trim() === ''}
-									/>
-									<Label for="model-custom" class="flex-1 font-normal">
-										Custom GGUF file
-										{#if view.modelPath !== null}<Badge>In use</Badge>{/if}
-									</Label>
-								</div>
-								<div class="flex gap-2 pl-7">
-									<Input
-										bind:value={customPath}
-										placeholder="C:\models\my-model.gguf"
-										spellcheck="false"
-										class="font-mono"
-									/>
-									<Button
-										variant="secondary"
-										onclick={() => useModel(view!.modelVariant, customPath)}
-										disabled={customPath.trim() === '' || customPath === view.modelPath}
-									>
-										Use
-									</Button>
-								</div>
-							</div>
-						</RadioGroup.Root>
-
-						{#if model.state === 'downloading'}
-							<div class="flex flex-col gap-2">
-								<p class={hint}>Downloading the model: {model.percent ?? 0}%</p>
-								<Progress value={model.percent ?? 0} />
-							</div>
-						{/if}
-
-						<p class={hint}>
-							{#if info?.activePath}
-								In use: <span class="font-mono break-all">{info.activePath}</span>
-							{:else if view.modelPath !== null}
-								<span class="text-amber-500">
-									The custom file is missing, so notes stay pending.
-								</span>
-							{:else}
-								No model installed. Notes stay pending until one is.
-							{/if}
-						</p>
-
-						{#if info?.activeVariant && view.modelPath === null}
-							<div class={group}>
-								<div class={row}>
-									<div class="flex flex-col gap-0.5">
-										<span class="text-sm font-medium">Updates</span>
-										<p class={hint}>
-											{#if updating !== null}
-												Downloading the update: {updating}%
-											{:else if update?.state === 'upToDate'}
-												Up to date ({short(update.revision)}).
-											{:else if update?.state === 'newer'}
-												{short(update.latest)} is out; you have {short(update.installed)}.
-											{:else if update?.state === 'failed'}
-												<span class="text-amber-500">Could not check: {update.reason}</span>
-											{:else}
-												Look for a newer revision of this model.
-											{/if}
-										</p>
-									</div>
-									{#if update?.state === 'newer' && updating === null}
-										<Button size="sm" onclick={applyUpdate}>
-											<DownloadIcon />
-											Update
-										</Button>
-									{:else}
-										<Button
-											variant="secondary"
-											size="sm"
-											onclick={check}
-											disabled={checking || updating !== null}
-										>
-											<RefreshCwIcon class={checking ? 'animate-spin' : ''} />
-											{checking ? 'Checking' : 'Check for updates'}
-										</Button>
-									{/if}
-								</div>
-								{#if updating !== null}
-									<div class="px-4 py-3"><Progress value={updating} /></div>
-								{/if}
-							</div>
-						{/if}
-
 						<div class={group}>
 							<div class={row}>
 								<div class="flex flex-col gap-0.5">
-									<Label for="gpu">Use GPU acceleration</Label>
-									<p class={hint}>
-										{#if gpus.length === 0}
-											No supported GPU found, so the model runs on the CPU.
-										{:else}
-											{gpus.join(', ')}. Much faster and lighter on the CPU.
-										{/if}
-									</p>
+									<Label for="model-enabled">{m.settings_model_enabled()}</Label>
+									<p class={hint}>{m.settings_model_enabled_hint()}</p>
 								</div>
 								<Switch
-									id="gpu"
-									checked={view.useGpu && gpus.length > 0}
-									disabled={gpus.length === 0}
-									onCheckedChange={setGpu}
+									id="model-enabled"
+									checked={view.modelEnabled}
+									onCheckedChange={setModelEnabled}
 								/>
 							</div>
-							<div class={row}>
-								<div class="flex flex-col gap-0.5">
-									<Label for="idle">Unload when idle</Label>
-									<p class={hint}>
-										Frees its memory; the next note loads it again. 0 keeps it loaded.
-									</p>
+						</div>
+
+						{#if view.modelEnabled}
+							<RadioGroup.Root value={modelChoice} onValueChange={pickModel} class="gap-2">
+								{#each MODEL_CHOICES as choice (choice.variant)}
+									{@const record = info?.[choice.variant] ?? null}
+									<Label for="model-{choice.variant}" class="{card} flex items-center">
+										<RadioGroup.Item
+											value={choice.variant}
+											id="model-{choice.variant}"
+											disabled={!record}
+										/>
+										<div class="flex flex-1 flex-col gap-0.5">
+											<span class="flex items-center gap-2">
+												{choice.name()}
+												{#if info?.activeVariant === choice.variant && view.modelPath === null}
+													<Badge>{m.settings_model_in_use()}</Badge>
+												{/if}
+											</span>
+											<span class={hint}>{choice.note()}</span>
+										</div>
+										{#if record}
+											<Badge variant="outline" class="font-mono" title={record.revision}>
+												{short(record.revision)}
+											</Badge>
+										{:else}
+											<Button
+												variant="secondary"
+												size="sm"
+												onclick={() => download(choice.variant)}
+												disabled={model.state === 'downloading'}
+											>
+												<DownloadIcon />
+												{choice.size}
+											</Button>
+										{/if}
+									</Label>
+								{/each}
+
+								<div class="{card} flex flex-col">
+									<div class="flex items-center gap-3">
+										<RadioGroup.Item
+											value="custom"
+											id="model-custom"
+											disabled={view.modelPath === null && customPath.trim() === ''}
+										/>
+										<Label for="model-custom" class="flex-1 font-normal">
+											{m.settings_model_custom()}
+											{#if view.modelPath !== null}<Badge>{m.settings_model_in_use()}</Badge>{/if}
+										</Label>
+									</div>
+									<div class="flex gap-2 pl-7">
+										<Input
+											bind:value={customPath}
+											placeholder="C:\models\my-model.gguf"
+											spellcheck="false"
+											class="font-mono"
+										/>
+										<Button
+											variant="secondary"
+											onclick={() => useModel(view!.modelVariant, customPath)}
+											disabled={customPath.trim() === '' || customPath === view.modelPath}
+										>
+											{m.settings_model_use()}
+										</Button>
+									</div>
 								</div>
-								<div class="flex items-center gap-2">
-									<Input
-										id="idle"
-										type="number"
-										min="0"
-										bind:value={draft.idleUnloadMinutes}
-										class="w-20 text-right font-mono"
+							</RadioGroup.Root>
+
+							{#if model.state === 'downloading'}
+								<div class="flex flex-col gap-2">
+									<p class={hint}>
+										{m.settings_model_downloading({ percent: model.percent ?? 0 })}
+									</p>
+									<Progress value={model.percent ?? 0} />
+								</div>
+							{/if}
+
+							<p class={hint}>
+								{#if info?.activePath}
+									{#each parts(m.settings_model_active_path( { path: slot(info.activePath) } )) as part, i (i)}
+										{#if i % 2}<span class="font-mono break-all">{part}</span>{:else}{part}{/if}
+									{/each}
+								{:else if view.modelPath !== null}
+									<span class="text-amber-500">
+										{m.settings_model_custom_missing()}
+									</span>
+								{:else}
+									{m.settings_model_none()}
+								{/if}
+							</p>
+
+							{#if info?.activeVariant && view.modelPath === null}
+								<div class={group}>
+									<div class={row}>
+										<div class="flex flex-col gap-0.5">
+											<span class="text-sm font-medium">{m.settings_updates()}</span>
+											<p class={hint}>
+												{#if updating !== null}
+													{m.settings_update_downloading({ percent: updating })}
+												{:else if update?.state === 'upToDate'}
+													{m.settings_up_to_date({ revision: short(update.revision) })}
+												{:else if update?.state === 'newer'}
+													{m.settings_update_newer({
+														latest: short(update.latest),
+														installed: short(update.installed)
+													})}
+												{:else if update?.state === 'failed'}
+													<span class="text-amber-500"
+														>{m.settings_update_failed({ reason: update.reason })}</span
+													>
+												{:else}
+													{m.settings_update_hint()}
+												{/if}
+											</p>
+										</div>
+										{#if update?.state === 'newer' && updating === null}
+											<Button size="sm" onclick={applyUpdate}>
+												<DownloadIcon />
+												{m.settings_update()}
+											</Button>
+										{:else}
+											<Button
+												variant="secondary"
+												size="sm"
+												onclick={check}
+												disabled={checking || updating !== null}
+											>
+												<RefreshCwIcon class={checking ? 'animate-spin' : ''} />
+												{checking ? m.settings_checking() : m.settings_check_updates()}
+											</Button>
+										{/if}
+									</div>
+									{#if updating !== null}
+										<div class="px-4 py-3"><Progress value={updating} /></div>
+									{/if}
+								</div>
+							{/if}
+
+							<div class={group}>
+								<div class={row}>
+									<div class="flex flex-col gap-0.5">
+										<Label for="gpu">{m.settings_gpu()}</Label>
+										<p class={hint}>
+											{#if gpus.length === 0}
+												{m.settings_gpu_none()}
+											{:else}
+												{m.settings_gpu_found({ devices: gpus.join(', ') })}
+											{/if}
+										</p>
+									</div>
+									<Switch
+										id="gpu"
+										checked={view.useGpu && gpus.length > 0}
+										disabled={gpus.length === 0}
+										onCheckedChange={setGpu}
 									/>
-									<span class={hint}>min</span>
+								</div>
+								<div class={row}>
+									<div class="flex flex-col gap-0.5">
+										<Label for="idle">{m.settings_idle()}</Label>
+										<p class={hint}>{m.settings_idle_hint()}</p>
+									</div>
+									<div class="flex items-center gap-2">
+										<Input
+											id="idle"
+											type="number"
+											min="0"
+											bind:value={draft.idleUnloadMinutes}
+											class="w-20 text-right font-mono"
+										/>
+										<span class={hint}>{m.settings_idle_unit()}</span>
+									</div>
 								</div>
 							</div>
-						</div>
+						{/if}
 					</div>
 				</Tabs.Content>
 
 				<Tabs.Content value="tags">
-					{@render header(
-						'Tag aliases',
-						'A tag on the left is written as the tag on the right, for new tags and for #tag searches in the open space. Each space keeps its own aliases. Tags already in your notes are not rewritten.'
-					)}
+					{@render header(m.settings_tab_tags(), m.settings_aliases_description())}
 
 					<div class="flex flex-col gap-4">
 						{#if aliases.length === 0}
@@ -735,8 +824,8 @@
 								class="flex flex-col items-center gap-1 rounded-lg border border-dashed px-4 py-8 text-center"
 							>
 								<TagIcon class="size-5 text-muted-foreground" />
-								<p class="text-sm font-medium">No aliases yet</p>
-								<p class={hint}>Map k8s to kubernetes, js to javascript, and so on.</p>
+								<p class="text-sm font-medium">{m.settings_aliases_empty()}</p>
+								<p class={hint}>{m.settings_aliases_empty_hint()}</p>
 							</div>
 						{:else}
 							<div class={group}>
@@ -759,7 +848,7 @@
 											variant="ghost"
 											size="icon"
 											onclick={() => aliases.splice(i, 1)}
-											aria-label="Remove alias"
+											aria-label={m.settings_alias_remove()}
 										>
 											<XIcon />
 										</Button>
@@ -770,28 +859,25 @@
 						<div class="flex justify-between gap-2">
 							<Button variant="outline" onclick={() => aliases.push({ from: '', to: '' })}>
 								<PlusIcon />
-								Add alias
+								{m.settings_alias_add()}
 							</Button>
-							<Button onclick={saveAliases}>Save aliases</Button>
+							<Button onclick={saveAliases}>{m.settings_aliases_save()}</Button>
 						</div>
 					</div>
 				</Tabs.Content>
 
 				<Tabs.Content value="index">
-					{@render header(
-						'Index',
-						'The search index is only a cache of your markdown files. Each space has its own; these act on the open one.'
-					)}
+					{@render header(m.settings_tab_index(), m.settings_index_description())}
 
 					<div class={group}>
 						<div class={row}>
 							<div class="flex flex-col gap-0.5">
-								<span class="text-sm font-medium">Rebuild index</span>
-								<p class={hint}>Reparse every daily file. Always safe to run.</p>
+								<span class="text-sm font-medium">{m.settings_rebuild_title()}</span>
+								<p class={hint}>{m.settings_rebuild_hint()}</p>
 							</div>
 							<Button variant="secondary" size="sm" onclick={rebuild} disabled={rebuilding}>
 								<RefreshCwIcon class={rebuilding ? 'animate-spin' : ''} />
-								{rebuilding ? 'Rebuilding' : 'Rebuild'}
+								{rebuilding ? m.settings_rebuilding() : m.settings_rebuild()}
 							</Button>
 						</div>
 					</div>
@@ -802,25 +888,20 @@
 						<div class="flex gap-3">
 							<TriangleAlertIcon class="mt-0.5 size-4 shrink-0 text-amber-500" />
 							<div class="flex flex-col gap-1">
-								<span class="text-sm font-medium">Regenerate all notes</span>
-								<p class={hint}>
-									Clears the subject, summary and tags of every note in the open space, hand edits
-									included, then runs the model again on each one. The tag list starts empty and
-									fills back in as notes are done. This cannot be undone, and it takes a while on a
-									large journal.
-								</p>
+								<span class="text-sm font-medium">{m.settings_regenerate_title()}</span>
+								<p class={hint}>{m.settings_regenerate_hint()}</p>
 								{#if !info?.activePath}
-									<p class="text-xs text-amber-500">Install a model first.</p>
+									<p class="text-xs text-amber-500">{m.settings_regenerate_needs_model()}</p>
 								{/if}
 							</div>
 						</div>
 						<div class="flex justify-end gap-2">
 							{#if confirmRegenerate}
 								<Button variant="ghost" size="sm" onclick={() => (confirmRegenerate = false)}>
-									Cancel
+									{m.common_cancel()}
 								</Button>
 								<Button variant="destructive" size="sm" onclick={regenerate}>
-									Yes, regenerate everything
+									{m.settings_regenerate_confirm()}
 								</Button>
 							{:else}
 								<Button
@@ -830,7 +911,7 @@
 									disabled={regenerating || !info?.activePath}
 								>
 									<SparklesIcon />
-									{regenerating ? 'Queuing' : 'Regenerate all'}
+									{regenerating ? m.settings_regenerating() : m.settings_regenerate()}
 								</Button>
 							{/if}
 						</div>
@@ -841,8 +922,8 @@
 
 		{#if dirty}
 			<div class="flex items-center justify-between gap-4 border-t bg-muted/40 px-6 py-3">
-				<p class={hint}>You have unsaved changes.</p>
-				<Button onclick={save}>Save changes</Button>
+				<p class={hint}>{m.settings_unsaved()}</p>
+				<Button onclick={save}>{m.settings_save_changes()}</Button>
 			</div>
 		{/if}
 	</div>

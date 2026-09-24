@@ -438,6 +438,17 @@ pub enum ChatEvent {
 
 const NO_MODEL: &str =
     "Chatting needs a model. Download one in Settings, or wait for the download to finish.";
+const MODEL_OFF: &str = "Chatting needs the model, which is turned off in Settings.";
+
+/// The loaded model, or why chat cannot have one.
+fn chat_backend(
+    app: &AppHandle,
+) -> Result<std::sync::Arc<dyn crate::enrich::model::Backend>, String> {
+    if !app.state::<AppState>().model_enabled() {
+        return Err(MODEL_OFF.to_string());
+    }
+    crate::enrich::worker::backend(app).ok_or_else(|| NO_MODEL.to_string())
+}
 
 /// Reply to the last message of a conversation about the open space's
 /// notes, streamed through `on_event`. The model reads that space's
@@ -461,7 +472,7 @@ pub async fn chat(
         let _ = on_event.send(ChatEvent::Notes {
             notes: notes.clone(),
         });
-        let backend = crate::enrich::worker::backend(&app).ok_or(NO_MODEL)?;
+        let backend = chat_backend(&app)?;
         let state = app.state::<AppState>();
         let started = std::time::Instant::now();
         let reply = crate::chat::reply(
@@ -509,7 +520,7 @@ pub async fn warm_chat(app: AppHandle, state: State<'_, AppState>) -> Result<(),
     let (name, path) = (space.name.clone(), index::index_path(&space.root));
     tauri::async_runtime::spawn_blocking(move || {
         let notes = crate::chat::read_index(&path)?;
-        let backend = crate::enrich::worker::backend(&app).ok_or(NO_MODEL)?;
+        let backend = chat_backend(&app)?;
         app.state::<AppState>().mark_used();
         let started = std::time::Instant::now();
         let prefix = crate::chat::prefix(&name, &notes, Local::now().date_naive());
@@ -567,7 +578,8 @@ pub async fn set_settings(
 
     // A different model, or the same one on different hardware, takes a
     // reload either way.
-    let model_changed = settings.model_variant != old.model_variant
+    let model_changed = settings.model_enabled != old.model_enabled
+        || settings.model_variant != old.model_variant
         || settings.model_path != old.model_path
         || settings.use_gpu != old.use_gpu;
     save_settings(&app, &state, settings.clone()).await?;
@@ -742,6 +754,11 @@ pub fn load_model(
     state: &State<'_, AppState>,
     variant: Variant,
 ) -> Result<(), String> {
+    // A download while the model is off leaves it on disk for later.
+    if !state.model_enabled() {
+        set_status(app, state, ModelStatus::Disabled);
+        return Ok(());
+    }
     let path = model_file(&state.root, variant);
     let backend = crate::enrich::llama::LlamaCpp::load_with(&path, state.use_gpu())?;
 
@@ -848,8 +865,6 @@ pub async fn update_model(app: AppHandle, state: State<'_, AppState>) -> Result<
 #[serde(rename_all = "camelCase")]
 pub struct SpaceSummary {
     pub name: String,
-    /// The space at the notes root, which cannot be deleted.
-    pub is_default: bool,
     pub notes: usize,
 }
 
@@ -868,7 +883,6 @@ fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
         .iter()
         .map(|s| SpaceSummary {
             name: s.name.clone(),
-            is_default: s.is_default,
             notes: s.note_count(),
         })
         .collect();
@@ -877,8 +891,8 @@ fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
 
 /// Load a space and start watching it. Used at startup and whenever a space
 /// is made or renamed.
-pub fn open_space(app: &AppHandle, name: &str, is_default: bool, root: PathBuf) -> Arc<Space> {
-    let (space, refresh) = Space::open(name, is_default, root);
+pub fn open_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
+    let (space, refresh) = Space::open(name, root);
     let space = Arc::new(space);
     if let Err(e) = crate::watcher::start(app.clone(), &space) {
         log::error!("could not watch the notes of {name}: {e}");
@@ -927,8 +941,7 @@ fn unused_name(state: &AppState, raw: &str, renaming: Option<&str>) -> Result<St
     Ok(name)
 }
 
-/// Swap a space for its replacement, keeping the default first and the rest
-/// in name order.
+/// Swap a space for its replacement, keeping them in name order.
 fn replace_space(state: &AppState, old: &Arc<Space>, new: Arc<Space>) -> Result<(), String> {
     let mut spaces = state
         .spaces
@@ -942,7 +955,7 @@ fn replace_space(state: &AppState, old: &Arc<Space>, new: Arc<Space>) -> Result<
 }
 
 pub fn sort_spaces(spaces: &mut [Arc<Space>]) {
-    spaces.sort_by_key(|s| (!s.is_default, s.name.to_lowercase()));
+    spaces.sort_by_key(|s| s.name.to_lowercase());
 }
 
 #[tauri::command]
@@ -966,7 +979,7 @@ pub async fn create_space(
         .await
         .map_err(|e| format!("could not create {}: {e}", root.display()))?;
 
-    let space = open_space(&app, &name, false, root);
+    let space = open_space(&app, &name, root);
     {
         let mut spaces = state
             .spaces
@@ -1004,8 +1017,7 @@ pub async fn set_active_space(
     spaces_changed(&app, &state).await
 }
 
-/// Rename a space, and with it its folder. The default space lives at the
-/// root and has no folder of its own, so only its recorded name changes.
+/// Rename a space, and with it its folder.
 #[tauri::command]
 pub async fn rename_space(
     app: AppHandle,
@@ -1024,19 +1036,13 @@ pub async fn rename_space(
     // The watcher holds the folder open, and Windows will not move an open
     // folder, so the old space lets go of it first.
     old.retire();
-    let to = if old.is_default {
-        old.root.clone()
-    } else {
-        spaces::spaces_dir(&state.root).join(&new_name)
-    };
-    if !old.is_default {
-        if let Err(e) = tokio::fs::rename(&old.root, &to).await {
-            let back = open_space(&app, &name, false, old.root.clone());
-            replace_space(&state, &old, back)?;
-            return Err(format!("could not rename {}: {e}", old.root.display()));
-        }
+    let to = spaces::spaces_dir(&state.root).join(&new_name);
+    if let Err(e) = tokio::fs::rename(&old.root, &to).await {
+        let back = open_space(&app, &name, old.root.clone());
+        replace_space(&state, &old, back)?;
+        return Err(format!("could not rename {}: {e}", old.root.display()));
     }
-    let renamed = open_space(&app, &new_name, old.is_default, to);
+    let renamed = open_space(&app, &new_name, to);
     replace_space(&state, &old, renamed)?;
 
     {
@@ -1044,9 +1050,6 @@ pub async fn rename_space(
             .registry
             .write()
             .map_err(|_| "spaces lock poisoned".to_string())?;
-        if old.is_default {
-            registry.default_name = new_name.clone();
-        }
         if registry.active == name {
             registry.active = new_name;
         }
@@ -1069,8 +1072,14 @@ pub async fn delete_space(
     let space = state
         .find_space(&name)
         .ok_or_else(|| format!("no space {name}"))?;
-    if space.is_default {
-        return Err("the first space holds the notes root and cannot be deleted".to_string());
+    let last = state
+        .spaces
+        .read()
+        .map_err(|_| "spaces lock poisoned".to_string())?
+        .len()
+        <= 1;
+    if last {
+        return Err("the last space cannot be deleted".to_string());
     }
 
     space.retire();
@@ -1081,7 +1090,7 @@ pub async fn delete_space(
         Err(e) => Err(e),
     };
     if let Err(e) = moved {
-        let back = open_space(&app, &name, false, space.root.clone());
+        let back = open_space(&app, &name, space.root.clone());
         replace_space(&state, &space, back)?;
         return Err(format!(
             "could not move {} to the trash: {e}",
@@ -1094,14 +1103,38 @@ pub async fn delete_space(
         .write()
         .map_err(|_| "spaces lock poisoned".to_string())?
         .retain(|s| !Arc::ptr_eq(s, &space));
+    let first = state
+        .spaces
+        .read()
+        .map_err(|_| "spaces lock poisoned".to_string())?
+        .first()
+        .map(|s| s.name.clone());
     {
         let mut registry = state
             .registry
             .write()
             .map_err(|_| "spaces lock poisoned".to_string())?;
-        if registry.active == name {
-            registry.active = registry.default_name.clone();
+        if let (true, Some(first)) = (registry.active == name, first) {
+            registry.active = first;
         }
     }
     spaces_changed(&app, &state).await
+}
+
+/// Show a space's folder in the system file manager. The path is looked up
+/// here rather than passed in, so the page can only open folders that are
+/// spaces.
+#[tauri::command]
+pub fn open_space_folder(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let space = state
+        .find_space(&name)
+        .ok_or_else(|| format!("no space {name}"))?;
+    app.opener()
+        .open_path(space.root.to_string_lossy(), None::<&str>)
+        .map_err(|e| format!("could not open {}: {e}", space.root.display()))
 }

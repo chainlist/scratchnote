@@ -51,6 +51,15 @@ pub struct Progress {
     pub total: usize,
 }
 
+/// What the model is while nothing is loaded.
+pub fn resting_status(enabled: bool, on_disk: bool) -> ModelStatus {
+    match (enabled, on_disk) {
+        (false, _) => ModelStatus::Disabled,
+        (true, true) => ModelStatus::Idle,
+        (true, false) => ModelStatus::Absent,
+    }
+}
+
 impl AppState {
     /// `None` while the worker is idle. The total grows as notes are queued
     /// mid-run, and a note put back to retry counts again.
@@ -72,11 +81,7 @@ impl AppState {
         if let Ok(mut slot) = self.backend.write() {
             *slot = None;
         }
-        let status = if self.active_model().is_some() {
-            ModelStatus::Idle
-        } else {
-            ModelStatus::Absent
-        };
+        let status = resting_status(self.model_enabled(), self.active_model().is_some());
         self.set_model_status(status.clone());
         status
     }
@@ -103,6 +108,14 @@ impl AppState {
         )
     }
 
+    /// False when the model is switched off in settings.
+    pub fn model_enabled(&self) -> bool {
+        self.settings
+            .read()
+            .map(|s| s.model_enabled)
+            .unwrap_or(true)
+    }
+
     pub fn use_gpu(&self) -> bool {
         self.settings.read().map(|s| s.use_gpu).unwrap_or(true)
     }
@@ -115,7 +128,7 @@ impl AppState {
             .map_err(|_| "spaces lock poisoned".to_string())?
             .active
             .clone();
-        // The default space is first and always there.
+        // At least one space is always there.
         self.find_space(&active)
             .or_else(|| self.spaces.read().ok()?.first().cloned())
             .ok_or_else(|| "no space is open".to_string())
@@ -148,5 +161,18 @@ impl AppState {
             .read()
             .map(|status| status.clone())
             .unwrap_or(ModelStatus::Absent)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn switched_off_wins_over_a_model_on_disk() {
+        assert_eq!(resting_status(false, true), ModelStatus::Disabled);
+        assert_eq!(resting_status(false, false), ModelStatus::Disabled);
+        assert_eq!(resting_status(true, true), ModelStatus::Idle);
+        assert_eq!(resting_status(true, false), ModelStatus::Absent);
     }
 }

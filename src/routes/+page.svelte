@@ -21,6 +21,7 @@
 		onSpacesChanged,
 		retryEnrichment,
 		search,
+		setTrayLabels,
 		splitCategory,
 		today,
 		updateNote,
@@ -48,6 +49,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
+	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 
 	let days = $state<DaySummary[]>([]);
 	let notes = $state<Note[]>([]);
@@ -274,9 +277,19 @@
 		return () => off.forEach((p) => void p.then((stop) => stop()));
 	});
 
+	// The tray menu lives in Rust; the main window keeps it in the open language.
+	$effect(() => {
+		void setTrayLabels({
+			newNote: m.tray_new_note(),
+			open: m.tray_open(),
+			settings: m.common_settings(),
+			quit: m.tray_quit()
+		}).catch((e) => (error = String(e)));
+	});
+
 	const heading = $derived(
 		selected
-			? new Date(`${selected}T00:00:00`).toLocaleDateString(undefined, {
+			? new Date(`${selected}T00:00:00`).toLocaleDateString(getLocale(), {
 					weekday: 'long',
 					day: 'numeric',
 					month: 'long',
@@ -297,8 +310,8 @@
 				variant="ghost"
 				size="icon-sm"
 				onclick={() => (settingsOpen = true)}
-				aria-label="Settings"
-				title="Settings"
+				aria-label={m.common_settings()}
+				title={m.common_settings()}
 				class="text-muted-foreground hover:text-foreground"
 			>
 				<SettingsIcon />
@@ -332,13 +345,18 @@
 			<div class="flex-1 overflow-y-auto px-6 pb-6">
 				<div class="mx-auto max-w-2xl">
 					<div class="mb-4">
-						<SearchBar bind:value={query} {tags} {canChat} onchat={() => (view = 'chat')} />
+						<SearchBar
+							bind:value={query}
+							{tags}
+							{canChat}
+							modelOff={model.state === 'disabled'}
+							onchat={() => (view = 'chat')}
+						/>
 					</div>
 
 					<h2 class="mb-4 text-lg font-semibold">
 						{#if searching}
-							{results.length}
-							{results.length === 1 ? 'result' : 'results'}
+							{m.page_results({ count: results.length })}
 						{:else}
 							{heading}
 						{/if}
@@ -367,7 +385,7 @@
 
 					{#if searching}
 						{#if results.length === 0}
-							<p class="text-sm text-neutral-600">No notes match.</p>
+							<p class="text-sm text-neutral-600">{m.page_no_match()}</p>
 						{:else}
 							<ul>
 								{#each results as note (note.id)}
@@ -387,7 +405,7 @@
 						{/if}
 					{:else if notes.length === 0}
 						<p class="text-sm text-neutral-600">
-							Nothing captured. Press Ctrl+Shift+Space to write a note.
+							{m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })}
 						</p>
 					{:else}
 						<ul>
@@ -428,8 +446,8 @@
 >
 	<Dialog.Content showCloseButton={false}>
 		<Dialog.Header>
-			<Dialog.Title>Delete this note?</Dialog.Title>
-			<Dialog.Description>It is removed from its day file. There is no undo.</Dialog.Description>
+			<Dialog.Title>{m.page_delete_title()}</Dialog.Title>
+			<Dialog.Description>{m.page_delete_description()}</Dialog.Description>
 		</Dialog.Header>
 		{#if deleting}
 			<p
@@ -439,9 +457,9 @@
 			</p>
 		{/if}
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (deleting = null)}>Cancel</Button>
+			<Button variant="outline" onclick={() => (deleting = null)}>{m.common_cancel()}</Button>
 			<Button variant="destructive" onclick={remove} disabled={removing}>
-				{removing ? 'Deleting' : 'Delete'}
+				{removing ? m.page_deleting() : m.common_delete()}
 			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
@@ -449,7 +467,7 @@
 
 <Dialog.Root bind:open={settingsOpen}>
 	<Dialog.Content
-		class="h-[min(640px,85vh)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-3xl"
+		class="h-[min(640px,85vh)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[min(48rem,calc(100%-2rem))]"
 	>
 		<Settings />
 	</Dialog.Content>

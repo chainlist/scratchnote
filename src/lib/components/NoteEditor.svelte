@@ -7,6 +7,7 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import XIcon from '@lucide/svelte/icons/x';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		note = $bindable(),
@@ -138,7 +139,7 @@
 	async function save() {
 		if (!note || saving) return;
 		if (body.trim() === '') {
-			error = 'A note cannot be empty. Delete it instead.';
+			error = m.editor_empty();
 			return;
 		}
 		// A half-typed tag counts; leaving it behind would surprise.
@@ -166,34 +167,34 @@
 		if (!open) note = null;
 	}}
 >
-	<Dialog.Content class="gap-5 sm:max-w-lg" onkeydown={onKeydown}>
+	<Dialog.Content class="gap-5 sm:max-w-[min(32rem,calc(100%-2rem))]" onkeydown={onKeydown}>
 		<Dialog.Header>
-			<Dialog.Title>Edit note</Dialog.Title>
+			<Dialog.Title>{m.editor_title()}</Dialog.Title>
 			<Dialog.Description>
-				{#if note}{note.date} at {note.time}.{/if}
-				Changing the subject, category or tags takes the note over: the model will not relabel it.
+				{#if note}{m.editor_when({ date: note.date, time: note.time })}{/if}
+				{m.editor_description()}
 			</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="flex flex-col gap-2">
-			<Label for="note-body">Text</Label>
+			<Label for="note-body">{m.editor_text()}</Label>
 			<textarea
 				id="note-body"
 				bind:value={body}
 				rows={Math.min(12, Math.max(4, body.split('\n').length))}
 				spellcheck="false"
-				class="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm leading-6 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+				class="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm leading-6 transition-colors outline-none focus-visible:border-ring dark:bg-input/30"
 			></textarea>
 		</div>
 
 		<div class="flex flex-col gap-2">
-			<Label for="note-subject">Subject</Label>
-			<Input id="note-subject" bind:value={subject} placeholder="(untitled)" />
+			<Label for="note-subject">{m.editor_subject()}</Label>
+			<Input id="note-subject" bind:value={subject} placeholder={m.editor_untitled()} />
 		</div>
 
 		<div class="flex flex-col gap-2">
-			<span class="text-sm font-medium">Category</span>
-			<div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Category">
+			<span class="text-sm font-medium">{m.editor_category()}</span>
+			<div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label={m.editor_category()}>
 				{#each offered as name (name)}
 					<button
 						type="button"
@@ -213,7 +214,7 @@
 						onclick={() => (newCategory = '')}
 						class="{chip} border-dashed border-border text-muted-foreground hover:text-foreground"
 					>
-						<PlusIcon class="size-3" />New
+						<PlusIcon class="size-3" />{m.editor_new()}
 					</button>
 				{:else}
 					<!-- svelte-ignore a11y_autofocus -->
@@ -222,19 +223,19 @@
 						onkeydown={onNewCategoryKeydown}
 						onblur={commitNewCategory}
 						autofocus
-						aria-label="New category"
-						placeholder="new category"
+						aria-label={m.editor_new_category_label()}
+						placeholder={m.editor_new_category_placeholder()}
 						class="h-6 w-32 rounded-md border border-ring bg-transparent px-2 font-mono text-xs outline-none"
 					/>
 				{/if}
 			</div>
 			<p class="text-xs text-muted-foreground">
-				Click the selected one again to leave the note uncategorised.
+				{m.editor_uncategorised_hint()}
 			</p>
 		</div>
 
 		<div class="flex flex-col gap-2">
-			<Label for="note-tags">Tags</Label>
+			<Label for="note-tags">{m.editor_tags()}</Label>
 			<div
 				class="flex min-h-8 flex-wrap items-center gap-1.5 rounded-lg border border-input px-1.5 py-1 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30"
 			>
@@ -246,7 +247,7 @@
 						<button
 							type="button"
 							onclick={() => removeTag(tag)}
-							aria-label="Remove #{tag}"
+							aria-label={m.editor_remove_tag({ tag })}
 							class="cursor-pointer rounded p-0.5 text-muted-foreground hover:text-foreground"
 						>
 							<XIcon class="size-3" />
@@ -257,7 +258,7 @@
 					id="note-tags"
 					bind:value={tagDraft}
 					onkeydown={onTagKeydown}
-					placeholder={chosen.length === 0 ? 'Add a tag' : ''}
+					placeholder={chosen.length === 0 ? m.editor_add_tag() : ''}
 					autocomplete="off"
 					spellcheck="false"
 					class="h-6 min-w-24 flex-1 bg-transparent px-1 font-mono text-xs outline-none placeholder:text-muted-foreground"
@@ -284,11 +285,13 @@
 
 		<Dialog.Footer class="flex-row items-center sm:justify-between">
 			<Button variant="ghost" class="text-destructive" onclick={() => note && ondelete(note)}>
-				<Trash2Icon />Delete
+				<Trash2Icon />{m.common_delete()}
 			</Button>
 			<div class="flex gap-2">
-				<Button variant="outline" onclick={() => (note = null)}>Cancel</Button>
-				<Button onclick={save} disabled={saving}>{saving ? 'Saving' : 'Save'}</Button>
+				<Button variant="outline" onclick={() => (note = null)}>{m.common_cancel()}</Button>
+				<Button onclick={save} disabled={saving}
+					>{saving ? m.common_saving() : m.common_save()}</Button
+				>
 			</div>
 		</Dialog.Footer>
 	</Dialog.Content>

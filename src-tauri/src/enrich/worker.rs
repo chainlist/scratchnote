@@ -82,7 +82,8 @@ fn next_job(app: &AppHandle) -> Option<(Arc<Space>, Job)> {
 
 /// SPEC 5.1: the model is loaded once, lazily, on the first job, and then
 /// stays resident. Returns `None` when there is nothing on disk to load.
-fn backend(app: &AppHandle) -> Option<Arc<dyn Backend>> {
+/// An ask loads it the same way when no job has yet.
+pub(crate) fn backend(app: &AppHandle) -> Option<Arc<dyn Backend>> {
     let state = app.state::<AppState>();
 
     if let Ok(guard) = state.backend.read() {

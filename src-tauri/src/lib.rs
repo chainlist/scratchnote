@@ -1,3 +1,4 @@
+mod chat;
 mod commands;
 mod enrich;
 mod search;
@@ -45,6 +46,9 @@ pub fn run() {
             commands::list_categories,
             commands::category_names,
             commands::search,
+            commands::chat,
+            commands::stop_chat,
+            commands::warm_chat,
             commands::delete_note,
             commands::update_note,
             commands::update_note_meta,

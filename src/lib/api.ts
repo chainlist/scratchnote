@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 export type NoteStatus = 'pending' | 'done' | 'failed' | 'manual';
@@ -51,6 +51,55 @@ export function splitCategory(names: string[], tags: string[]): [string, string[
 
 /** Words must all appear; `#tag` tokens are AND filters. Newest first. */
 export const search = (query: string) => invoke<Note[]>('search', { query });
+
+/** One line of `index.jsonl`, parsed. The index holds no bodies. */
+export type IndexEntry = Omit<Note, 'body'>;
+
+/** One turn of a chat. */
+export interface ChatMessage {
+	role: 'user' | 'assistant';
+	content: string;
+}
+
+/** What a reply sends, in order: the notes, pieces of text, then done. */
+export type ChatEvent =
+	/** The index the model reads, numbered as it sees it: note n is notes[n - 1]. */
+	| { kind: 'notes'; notes: IndexEntry[] }
+	| { kind: 'token'; text: string }
+	/** The reply is complete or was stopped; the note numbers it cites. */
+	| { kind: 'done'; cited: number[] };
+
+/**
+ * Reply to the last message, streamed to `onEvent`. The model reads the open
+ * space's `index.jsonl` and nothing else. Resolves once the reply is done.
+ */
+export function chat(messages: ChatMessage[], onEvent: (event: ChatEvent) => void) {
+	const channel = new Channel<ChatEvent>();
+	channel.onmessage = onEvent;
+	return invoke<void>('chat', { messages, onEvent: channel });
+}
+
+/** End the reply being written; it finishes with what it has so far. */
+export const stopChat = () => invoke<void>('stop_chat');
+
+/** Read the open space's index into the model ahead of the first message. */
+export const warmChat = () => invoke<void>('warm_chat');
+
+/**
+ * A reply split into text and citations: `[12]` and `[3, 7]` become the note
+ * numbers they name. Anything else in brackets stays text.
+ */
+export function splitCitations(text: string): (string | number[])[] {
+	const parts: (string | number[])[] = [];
+	let last = 0;
+	for (const match of text.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
+		if (match.index > last) parts.push(text.slice(last, match.index));
+		parts.push(match[1].split(',').map((n) => Number(n.trim())));
+		last = match.index + match[0].length;
+	}
+	if (last < text.length) parts.push(text.slice(last));
+	return parts;
+}
 
 /**
  * The spec's signature is `delete_note(id)`; the date comes along until the

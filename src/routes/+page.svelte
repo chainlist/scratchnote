@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import {
 		categoryNames,
 		deleteNote,
@@ -27,11 +27,13 @@
 		updateNoteMeta,
 		type DaySummary,
 		type EnrichProgress,
+		type IndexEntry,
 		type ModelStatus,
 		type SpacesView,
 		type NoteEdit,
 		type Note
 	} from '$lib/api';
+	import Chat from '$lib/components/Chat.svelte';
 	import DayCalendar from '$lib/components/DayCalendar.svelte';
 	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
 	import NoteCard from '$lib/components/NoteCard.svelte';
@@ -72,6 +74,9 @@
 	// window is undecorated and draws its own controls.
 	const mac = navigator.userAgent.includes('Mac');
 
+	/** The notes, or a chat with the model about the open space's index. */
+	let view = $state<'notes' | 'chat'>('notes');
+	const canChat = $derived(model.state === 'loaded' || model.state === 'idle');
 	const searching = $derived(query.trim() !== '');
 	const activeTags = $derived(
 		query
@@ -120,9 +125,30 @@
 	}
 
 	async function select(date: string) {
+		view = 'notes';
 		selected = date;
 		query = '';
 		await refresh();
+	}
+
+	/** The note a chat citation led to, blinking while it is set. */
+	let blinking = $state<string | null>(null);
+	let blinkTimer: ReturnType<typeof setTimeout> | undefined;
+
+	/** Open a cited note's day, bring the note into view and blink it. */
+	async function openCited(entry: IndexEntry) {
+		await select(entry.date);
+		// Cleared first so a second click on the same note blinks it again.
+		blinking = null;
+		await tick();
+		blinking = entry.id;
+		await tick();
+		document
+			.querySelector(`[data-note-id="${CSS.escape(entry.id)}"]`)
+			?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		clearTimeout(blinkTimer);
+		// A little past the animation, which runs 1.2s.
+		blinkTimer = setTimeout(() => (blinking = null), 1400);
 	}
 
 	/**
@@ -279,7 +305,11 @@
 			</Button>
 		</div>
 		<div class="flex min-h-0 flex-1 flex-col gap-6">
-			<DayCalendar {days} selected={searching ? '' : selected} onselect={select} />
+			<DayCalendar
+				{days}
+				selected={searching || view === 'chat' ? '' : selected}
+				onselect={select}
+			/>
 			<CategoryList {categories} active={activeTags} onselect={toggleTag} />
 		</div>
 		<ModelStatusBar status={model} {busy} {progress} />
@@ -289,48 +319,79 @@
 		<div data-tauri-drag-region class="flex h-10 shrink-0 items-center justify-end px-2">
 			{#if !mac}<WindowControls />{/if}
 		</div>
-		<div class="flex-1 overflow-y-auto px-6 pb-6">
-			<div class="mx-auto max-w-2xl">
-				<div class="mb-4">
-					<SearchBar bind:value={query} {tags} />
-				</div>
+		{#if view === 'chat'}
+			<!-- Another space has another index, so a switch starts a new chat. -->
+			{#key spaces?.active}
+				<Chat
+					space={spaces?.active ?? ''}
+					onclose={() => (view = 'notes')}
+					onopen={(entry) => void openCited(entry)}
+				/>
+			{/key}
+		{:else}
+			<div class="flex-1 overflow-y-auto px-6 pb-6">
+				<div class="mx-auto max-w-2xl">
+					<div class="mb-4">
+						<SearchBar bind:value={query} {tags} {canChat} onchat={() => (view = 'chat')} />
+					</div>
 
-				<h2 class="mb-4 text-lg font-semibold">
+					<h2 class="mb-4 text-lg font-semibold">
+						{#if searching}
+							{results.length}
+							{results.length === 1 ? 'result' : 'results'}
+						{:else}
+							{heading}
+						{/if}
+					</h2>
+
 					{#if searching}
-						{results.length}
-						{results.length === 1 ? 'result' : 'results'}
-					{:else}
-						{heading}
+						<TagFilters
+							active={activeTags}
+							{results}
+							onremove={(tag) => toggleTag(tag, true)}
+							onadd={(tag) => toggleTag(tag, true)}
+						/>
 					{/if}
-				</h2>
 
-				{#if searching}
-					<TagFilters
-						active={activeTags}
-						{results}
-						onremove={(tag) => toggleTag(tag, true)}
-						onadd={(tag) => toggleTag(tag, true)}
-					/>
-				{/if}
+					{#if model.state === 'absent' || model.state === 'downloading'}
+						<Onboarding status={model} />
+					{/if}
 
-				{#if model.state === 'absent' || model.state === 'downloading'}
-					<Onboarding status={model} />
-				{/if}
+					{#if error}
+						<p
+							class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+						>
+							{error}
+						</p>
+					{/if}
 
-				{#if error}
-					<p
-						class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-					>
-						{error}
-					</p>
-				{/if}
-
-				{#if searching}
-					{#if results.length === 0}
-						<p class="text-sm text-neutral-600">No notes match.</p>
+					{#if searching}
+						{#if results.length === 0}
+							<p class="text-sm text-neutral-600">No notes match.</p>
+						{:else}
+							<ul>
+								{#each results as note (note.id)}
+									<li>
+										<NoteCard
+											{note}
+											onedit={(n) => (editing = n)}
+											ondelete={(n) => (deleting = n)}
+											onsave={saveBody}
+											onretry={retry}
+											ontag={toggleTag}
+											showDate
+										/>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					{:else if notes.length === 0}
+						<p class="text-sm text-neutral-600">
+							Nothing captured. Press Ctrl+Shift+Space to write a note.
+						</p>
 					{:else}
 						<ul>
-							{#each results as note (note.id)}
+							{#each notes as note (note.id)}
 								<li>
 									<NoteCard
 										{note}
@@ -339,34 +400,15 @@
 										onsave={saveBody}
 										onretry={retry}
 										ontag={toggleTag}
-										showDate
+										blink={note.id === blinking}
 									/>
 								</li>
 							{/each}
 						</ul>
 					{/if}
-				{:else if notes.length === 0}
-					<p class="text-sm text-neutral-600">
-						Nothing captured. Press Ctrl+Shift+Space to write a note.
-					</p>
-				{:else}
-					<ul>
-						{#each notes as note (note.id)}
-							<li>
-								<NoteCard
-									{note}
-									onedit={(n) => (editing = n)}
-									ondelete={(n) => (deleting = n)}
-									onsave={saveBody}
-									onretry={retry}
-									ontag={toggleTag}
-								/>
-							</li>
-						{/each}
-					</ul>
-				{/if}
+				</div>
 			</div>
-		</div>
+		{/if}
 	</main>
 </div>
 

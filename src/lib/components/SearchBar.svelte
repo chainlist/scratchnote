@@ -2,15 +2,22 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import SearchIcon from '@lucide/svelte/icons/search';
+	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import XIcon from '@lucide/svelte/icons/x';
 
 	let {
 		value = $bindable(),
-		tags
+		tags,
+		canChat,
+		onchat
 	}: {
 		value: string;
 		/** Every tag with its count, most used first, offered as `#` completions. */
 		tags: [string, number][];
+		/** Whether a model is there to talk to. */
+		canChat: boolean;
+		/** Open the chat about this space's notes. */
+		onchat: () => void;
 	} = $props();
 
 	/** Completions shown at once. */
@@ -119,22 +126,37 @@
 		aria-controls="tag-suggestions"
 		aria-expanded={suggestions.length > 0}
 		spellcheck="false"
-		class="px-8 [&::-webkit-search-cancel-button]:appearance-none"
+		class="pr-15 pl-8 [&::-webkit-search-cancel-button]:appearance-none"
 	/>
-	{#if value}
+	<div class="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
+		{#if value}
+			<Button
+				variant="ghost"
+				size="icon-xs"
+				onclick={() => {
+					value = '';
+					input?.focus();
+				}}
+				aria-label="Clear search"
+				class="text-muted-foreground hover:text-foreground"
+			>
+				<XIcon />
+			</Button>
+		{/if}
 		<Button
 			variant="ghost"
 			size="icon-xs"
-			onclick={() => {
-				value = '';
-				input?.focus();
-			}}
-			aria-label="Clear search"
-			class="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+			onclick={onchat}
+			disabled={!canChat}
+			aria-label="Chat about these notes"
+			title={canChat
+				? 'Chat with the model about this space. It reads the space index only: dates, subjects, summaries and tags.'
+				: 'Chatting needs a model. Pick one in Settings.'}
+			class="text-muted-foreground hover:text-foreground"
 		>
-			<XIcon />
+			<SparklesIcon />
 		</Button>
-	{/if}
+	</div>
 
 	{#if suggestions.length > 0}
 		<ul

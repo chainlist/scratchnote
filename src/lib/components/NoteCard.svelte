@@ -14,7 +14,8 @@
 		onsave,
 		onretry,
 		ontag,
-		showDate = false
+		showDate = false,
+		blink = false
 	}: {
 		note: Note;
 		/** Open the full editor: body, subject, category and tags. */
@@ -28,6 +29,8 @@
 		ontag: (tag: string) => void;
 		/** Search results span days, so each card says which one. */
 		showDate?: boolean;
+		/** Blink once to show where a chat citation led. */
+		blink?: boolean;
 	} = $props();
 
 	let editing = $state(false);
@@ -85,9 +88,10 @@
      text from the keyboard. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article
+	data-note-id={note.id}
 	class="group relative -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-4 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900 {menuOpen
 		? 'bg-neutral-900'
-		: ''}"
+		: ''} {blink ? 'note-blink' : ''}"
 	ondblclick={onDoubleClick}
 	onmousedown={onMouseDown}
 >

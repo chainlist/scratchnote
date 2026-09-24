@@ -423,6 +423,108 @@ pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, St
     Ok(crate::search::search(&idx, &query, &aliases))
 }
 
+/// What a chat sends the page while it replies.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum ChatEvent {
+    /// The index the model reads, numbered as it sees it: note `n` is
+    /// `notes[n - 1]`. First, so citations resolve while the reply streams.
+    Notes { notes: Vec<IndexEntry> },
+    /// The next piece of the reply.
+    Token { text: String },
+    /// The reply is complete, or was stopped; these are the notes it cites.
+    Done { cited: Vec<usize> },
+}
+
+const NO_MODEL: &str =
+    "Chatting needs a model. Download one in Settings, or wait for the download to finish.";
+
+/// Reply to the last message of a conversation about the open space's
+/// notes, streamed through `on_event`. The model reads that space's
+/// `index.jsonl` and nothing else, never the markdown. A new message, or
+/// `stop_chat`, ends the reply being written.
+#[tauri::command]
+pub async fn chat(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    messages: Vec<crate::chat::Message>,
+    on_event: tauri::ipc::Channel<ChatEvent>,
+) -> Result<(), String> {
+    let run = crate::chat::begin();
+    let space = state.space()?;
+    let (name, path) = (space.name.clone(), index::index_path(&space.root));
+
+    // Reading the file, loading the model and running it all block, so none
+    // of it may run on the async runtime.
+    tauri::async_runtime::spawn_blocking(move || {
+        let notes = crate::chat::read_index(&path)?;
+        let _ = on_event.send(ChatEvent::Notes {
+            notes: notes.clone(),
+        });
+        let backend = crate::enrich::worker::backend(&app).ok_or(NO_MODEL)?;
+        let state = app.state::<AppState>();
+        let started = std::time::Instant::now();
+        let reply = crate::chat::reply(
+            &name,
+            &notes,
+            &messages,
+            Local::now().date_naive(),
+            backend.as_ref(),
+            &mut |piece| {
+                // Keeps the idle unload away for as long as the reply runs.
+                state.mark_used();
+                let _ = on_event.send(ChatEvent::Token {
+                    text: piece.to_string(),
+                });
+                crate::chat::is_current(run)
+            },
+        )?;
+        log::info!(
+            "chat replied over {} notes in {:.1}s",
+            notes.len(),
+            started.elapsed().as_secs_f32()
+        );
+        let _ = on_event.send(ChatEvent::Done {
+            cited: crate::chat::cited(&reply, notes.len()),
+        });
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("the chat failed: {e}"))?
+}
+
+/// End the reply being written, if any. It ends as a normal reply would,
+/// with what was written so far.
+#[tauri::command]
+pub fn stop_chat() {
+    crate::chat::stop();
+}
+
+/// Read the open space's index into the model's cache ahead of the first
+/// message, loading the model if need be, so the first reply starts sooner.
+/// The page calls it when the chat opens.
+#[tauri::command]
+pub async fn warm_chat(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let space = state.space()?;
+    let (name, path) = (space.name.clone(), index::index_path(&space.root));
+    tauri::async_runtime::spawn_blocking(move || {
+        let notes = crate::chat::read_index(&path)?;
+        let backend = crate::enrich::worker::backend(&app).ok_or(NO_MODEL)?;
+        app.state::<AppState>().mark_used();
+        let started = std::time::Instant::now();
+        let prefix = crate::chat::prefix(&name, &notes, Local::now().date_naive());
+        backend.prefill_long(&prefix)?;
+        log::info!(
+            "chat read {} notes ahead in {:.1}s",
+            notes.len(),
+            started.elapsed().as_secs_f32()
+        );
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("warming the chat failed: {e}"))?
+}
+
 /// Settings as saved, plus the root this run is actually using, so the screen
 /// can say when a new root is waiting on a restart.
 #[derive(Debug, Serialize)]

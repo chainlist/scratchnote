@@ -17,7 +17,7 @@ use llama_cpp_2::token::data::LlamaTokenData;
 use llama_cpp_2::token::data_array::LlamaTokenDataArray;
 use llama_cpp_2::token::LlamaToken;
 
-use super::model::{Backend, CONTEXT_TOKENS, MAX_OUTPUT_TOKENS, TEMPERATURE};
+use super::model::{Backend, CONTEXT_TOKENS, LONG_CONTEXT_TOKENS, MAX_OUTPUT_TOKENS, TEMPERATURE};
 
 /// Prompt tokens evaluated per decode call. Well under llama.cpp's default
 /// n_batch of 2048, and above a typical prompt, so short notes still go in
@@ -30,6 +30,9 @@ pub struct LlamaCpp {
     /// and the queue runs one job at a time anyway, so one guarded context is
     /// enough. Declared first so it is dropped before the model it borrows.
     session: Mutex<Option<Session>>,
+    /// The larger context a chat runs in, made on first use. Kept apart so
+    /// enrichment cannot evict the index a chat left in its cache.
+    long_session: Mutex<Option<Session>>,
     backend: LlamaBackend,
     /// Boxed so the context's reference to it survives `Self` moving.
     model: Box<LlamaModel>,
@@ -79,17 +82,18 @@ impl LlamaCpp {
 
         Ok(Self {
             session: Mutex::new(None),
+            long_session: Mutex::new(None),
             backend,
             model: Box::new(model),
             use_gpu,
         })
     }
 
-    fn new_context(&self) -> Result<LlamaContext<'static>, String> {
+    fn new_context(&self, n_ctx: u32) -> Result<LlamaContext<'static>, String> {
         // With no layers on the GPU, llama.cpp would still send large prompt
         // batches there unless op offload is off too.
         let params = LlamaContextParams::default()
-            .with_n_ctx(NonZeroU32::new(CONTEXT_TOKENS))
+            .with_n_ctx(NonZeroU32::new(n_ctx))
             .with_op_offload(self.use_gpu);
         // SAFETY: the model is boxed and never replaced, so the reference
         // stays valid however `self` moves, and `session` is dropped before
@@ -100,25 +104,39 @@ impl LlamaCpp {
             .map_err(|e| format!("could not create a context: {e}"))
     }
 
-    fn run(
+    /// The session in `slot`, made with a context of `n_ctx` tokens if there
+    /// is none yet.
+    fn session<'s>(
         &self,
-        slot: &mut Option<Session>,
-        prompt: &str,
-        grammar: &str,
-    ) -> Result<String, String> {
-        let session = match slot {
+        slot: &'s mut Option<Session>,
+        n_ctx: u32,
+    ) -> Result<&'s mut Session, String> {
+        Ok(match slot {
             Some(session) => session,
             None => slot.insert(Session {
-                context: self.new_context()?,
+                context: self.new_context(n_ctx)?,
                 cached: Vec::new(),
             }),
-        };
-        let context = &mut session.context;
+        })
+    }
 
-        let tokens = self
-            .model
+    fn tokenize(&self, prompt: &str) -> Result<Vec<LlamaToken>, String> {
+        self.model
             .str_to_token(prompt, AddBos::Always)
-            .map_err(|e| format!("could not tokenise the prompt: {e}"))?;
+            .map_err(|e| format!("could not tokenise the prompt: {e}"))
+    }
+
+    /// Bring the session's cache in line with `tokens`, evaluating only what
+    /// it does not already hold, and leave room for `reserve` more. Returns
+    /// where the logits of the last token sit, to sample the next one from.
+    fn feed(
+        &self,
+        session: &mut Session,
+        tokens: &[LlamaToken],
+        n_ctx: u32,
+        reserve: u32,
+    ) -> Result<i32, String> {
+        let context = &mut session.context;
 
         // Keep what the cache already holds of this prompt, at least the
         // system prompt every note shares, and evaluate only the rest. The
@@ -126,7 +144,7 @@ impl LlamaCpp {
         let mut reuse = session
             .cached
             .iter()
-            .zip(&tokens)
+            .zip(tokens)
             .take_while(|(cached, token)| cached == token)
             .count()
             .min(tokens.len().saturating_sub(1));
@@ -142,11 +160,11 @@ impl LlamaCpp {
         session.cached.truncate(reuse);
 
         // Past the context, llama.cpp would have nowhere to put the answer.
-        if tokens.len() + MAX_OUTPUT_TOKENS as usize > CONTEXT_TOKENS as usize {
+        if tokens.len() + reserve as usize > n_ctx as usize {
             return Err(format!(
-                "the note is too long to label: {} prompt tokens, the limit is {}",
+                "the prompt is too long: {} tokens, the limit is {}",
                 tokens.len(),
-                CONTEXT_TOKENS - MAX_OUTPUT_TOKENS
+                n_ctx - reserve
             ));
         }
 
@@ -167,6 +185,37 @@ impl LlamaCpp {
         }
         session.cached.extend_from_slice(&tokens[reuse..]);
 
+        // The final prompt token, last in the final chunk.
+        Ok(batch.n_tokens() - 1)
+    }
+
+    /// Evaluate one sampled token so the next can be sampled from it.
+    fn step(session: &mut Session, token: LlamaToken, position: i32) -> Result<(), String> {
+        let mut batch = LlamaBatch::new(1, 1);
+        batch
+            .add(token, position, &[0], true)
+            .map_err(|e| format!("could not extend the batch: {e}"))?;
+        session
+            .context
+            .decode(&mut batch)
+            .map_err(|e| format!("could not decode: {e}"))?;
+        session.cached.push(token);
+        Ok(())
+    }
+
+    fn run(
+        &self,
+        slot: &mut Option<Session>,
+        n_ctx: u32,
+        prompt: &str,
+        grammar: &str,
+    ) -> Result<String, String> {
+        let session = self.session(slot, n_ctx)?;
+        let tokens = self.tokenize(prompt)?;
+        // Where the logits of the last decoded batch sit: the final prompt
+        // token, then the single token of each step.
+        let mut logits_at = self.feed(session, &tokens, n_ctx, MAX_OUTPUT_TOKENS)?;
+
         // The grammar is the whole point: the sampler cannot emit anything the
         // schema does not allow.
         let mut grammar = LlamaSampler::grammar(&self.model, grammar, "root")
@@ -180,11 +229,8 @@ impl LlamaCpp {
         // The grammar only allows end-of-generation once the object is closed,
         // so running out of tokens is the one way an answer comes back short.
         let mut finished = false;
-        // Where the logits of the last decoded batch sit: the final prompt
-        // token, last in the final chunk, then the single token of each step.
-        let mut logits_at = batch.n_tokens() - 1;
         for position in (tokens.len() as i32..).take(MAX_OUTPUT_TOKENS as usize) {
-            let token = sample(context, logits_at, &mut grammar);
+            let token = sample(&session.context, logits_at, &mut grammar);
 
             if self.model.is_eog_token(token) {
                 finished = true;
@@ -196,16 +242,8 @@ impl LlamaCpp {
                     .token_to_piece(token, &mut decoder, false, None)
                     .unwrap_or_default(),
             );
-
-            batch.clear();
-            batch
-                .add(token, position, &[0], true)
-                .map_err(|e| format!("could not extend the batch: {e}"))?;
+            Self::step(session, token, position)?;
             logits_at = 0;
-            context
-                .decode(&mut batch)
-                .map_err(|e| format!("could not decode: {e}"))?;
-            session.cached.push(token);
         }
 
         if !finished {
@@ -216,7 +254,62 @@ impl LlamaCpp {
         }
         Ok(out)
     }
+
+    /// Free text, handed to `on_piece` as it comes. Sampled rather than
+    /// greedy, with a light repetition penalty: greedy prose from a small
+    /// model loops. Ends at the end of the answer, at `max_tokens`, or when
+    /// `on_piece` returns false, and returns what was written either way.
+    fn stream(
+        &self,
+        slot: &mut Option<Session>,
+        n_ctx: u32,
+        prompt: &str,
+        max_tokens: u32,
+        on_piece: &mut dyn FnMut(&str) -> bool,
+    ) -> Result<String, String> {
+        let session = self.session(slot, n_ctx)?;
+        let tokens = self.tokenize(prompt)?;
+        let mut logits_at = self.feed(session, &tokens, n_ctx, max_tokens)?;
+
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0);
+        let mut sampler = LlamaSampler::chain_simple([
+            LlamaSampler::penalties(self.model.n_vocab(), 64, 1.1, 0.0, 0.0),
+            LlamaSampler::top_k(40),
+            LlamaSampler::top_p(0.9, 1),
+            LlamaSampler::temp(CHAT_TEMPERATURE),
+            LlamaSampler::dist(seed),
+        ]);
+
+        let mut out = String::new();
+        let mut decoder = encoding_rs::UTF_8.new_decoder();
+        for position in (tokens.len() as i32..).take(max_tokens as usize) {
+            // Samples and accepts in one call.
+            let token = sampler.sample(&session.context, logits_at);
+            if self.model.is_eog_token(token) {
+                break;
+            }
+            let piece = self
+                .model
+                .token_to_piece(token, &mut decoder, false, None)
+                .unwrap_or_default();
+            out.push_str(&piece);
+            // Stopped before the token goes into the cache, which then still
+            // matches what the session says it holds.
+            if !on_piece(&piece) {
+                break;
+            }
+            Self::step(session, token, position)?;
+            logits_at = 0;
+        }
+        Ok(out)
+    }
 }
+
+/// Warm enough to read as prose, cool enough to stay on the notes.
+const CHAT_TEMPERATURE: f32 = 0.6;
 
 /// Greedy under the grammar, picking what grammar, temperature and greedy
 /// chained would, without running the grammar over the whole vocabulary each
@@ -277,16 +370,67 @@ pub fn gpu_devices() -> Vec<String> {
         .collect()
 }
 
-impl Backend for LlamaCpp {
-    fn generate(&self, prompt: &str, grammar: &str) -> Result<String, String> {
-        let mut session = self
-            .session
+impl LlamaCpp {
+    fn run_in(
+        &self,
+        slot: &Mutex<Option<Session>>,
+        n_ctx: u32,
+        prompt: &str,
+        grammar: &str,
+    ) -> Result<String, String> {
+        let mut session = slot
             .lock()
             .map_err(|_| "the model lock is poisoned".to_string())?;
-        let result = self.run(&mut session, prompt, grammar);
+        let result = self.run(&mut session, n_ctx, prompt, grammar);
         // A run that fails part way can leave the cache out of step with what
-        // the session thinks it holds, so the next note starts from a new
+        // the session thinks it holds, so the next call starts from a new
         // context.
+        if result.is_err() {
+            *session = None;
+        }
+        result
+    }
+}
+
+impl Backend for LlamaCpp {
+    fn generate(&self, prompt: &str, grammar: &str) -> Result<String, String> {
+        self.run_in(&self.session, CONTEXT_TOKENS, prompt, grammar)
+    }
+
+    fn stream_long(
+        &self,
+        prompt: &str,
+        max_tokens: u32,
+        on_piece: &mut dyn FnMut(&str) -> bool,
+    ) -> Result<String, String> {
+        let mut session = self
+            .long_session
+            .lock()
+            .map_err(|_| "the model lock is poisoned".to_string())?;
+        let result = self.stream(
+            &mut session,
+            LONG_CONTEXT_TOKENS,
+            prompt,
+            max_tokens,
+            on_piece,
+        );
+        if result.is_err() {
+            *session = None;
+        }
+        result
+    }
+
+    fn prefill_long(&self, prompt: &str) -> Result<(), String> {
+        let mut session = self
+            .long_session
+            .lock()
+            .map_err(|_| "the model lock is poisoned".to_string())?;
+        let result = (|| {
+            let tokens = self.tokenize(prompt)?;
+            let session = self.session(&mut session, LONG_CONTEXT_TOKENS)?;
+            self.feed(session, &tokens, LONG_CONTEXT_TOKENS, 0)
+                .map(|_| ())
+        })();
         if result.is_err() {
             *session = None;
         }

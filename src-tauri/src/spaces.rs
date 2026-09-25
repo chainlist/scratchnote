@@ -297,6 +297,16 @@ impl Space {
             .unwrap_or_default()
     }
 
+    /// Notes close to this one, best first, per `Vectors::similar`. Empty
+    /// until the embed task has loaded the vectors.
+    pub fn similar(&self, id: &str, k: usize, min_score: f32) -> Vec<(String, f32)> {
+        self.vectors
+            .lock()
+            .ok()
+            .and_then(|vectors| Some(vectors.as_ref()?.similar(id, k, min_score)))
+            .unwrap_or_default()
+    }
+
     /// Tell the embed task the index changed. `persist_index` does it; the
     /// capture path, which appends to the index instead, calls this itself.
     pub fn index_changed(&self) {

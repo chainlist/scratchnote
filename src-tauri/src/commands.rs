@@ -1,5 +1,6 @@
 //! Tauri commands, SPEC 8.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -422,6 +423,30 @@ pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, St
         .read()
         .map_err(|_| "index lock poisoned".to_string())?;
     Ok(crate::search::search(&idx, &query, &aliases))
+}
+
+/// How many notes "Similar notes" lists at most.
+const SIMILAR_NOTES: usize = 8;
+/// The score, a cosine once the space's mean is removed, below which a note
+/// is not shown as similar. Set on 75 real notes: notes on the same thing
+/// scored 0.35 and up, unrelated ones mostly under 0.25.
+const MIN_SIMILARITY: f32 = 0.28;
+
+/// The notes closest in meaning to this one, best first. Empty while the note
+/// has no vector yet, or without the embedding model.
+#[tauri::command]
+pub fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec<Note>, String> {
+    let space = state.space()?;
+    let hits = space.similar(&id, SIMILAR_NOTES, MIN_SIMILARITY);
+    let idx = space
+        .index
+        .read()
+        .map_err(|_| "index lock poisoned".to_string())?;
+    let notes: HashMap<&str, &IndexEntry> = idx.entries().map(|e| (e.id.as_str(), e)).collect();
+    Ok(hits
+        .iter()
+        .filter_map(|(hit, _)| notes.get(hit.as_str()).map(|e| e.to_note()))
+        .collect())
 }
 
 /// What a chat sends the page while it replies.

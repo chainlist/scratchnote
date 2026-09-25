@@ -30,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Aucune note ne correspond.",
+	"page_no_similar": "Aucune note n'est proche de celle-ci.",
 	"page_back": "Retour à la journée",
 	"page_empty_day": "Rien de capturé. Appuyez sur {hotkey} pour écrire une note.",
 	"page_delete_title": "Supprimer cette note ?",
@@ -111,6 +112,7 @@
 	"note_actions": "Actions de la note",
 	"note_edit": "Modifier",
 	"note_rerun": "Relancer le modèle",
+	"note_similar": "Notes similaires",
 	"note_show_tag": "Afficher les notes #{tag}",
 	"search_placeholder": "Rechercher des notes, # pour les tags",
 	"search_label": "Rechercher des notes",

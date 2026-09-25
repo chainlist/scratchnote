@@ -217,7 +217,7 @@ Opened from tray icon or app launch. Three areas:
 2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Subject, summary and tags are not displayed; they exist for search and indexing. Edit, re-run and delete (with the enrichment status) appear on hover.
 3. **Search bar** at the top: full-text over body, subject, summary; supports `#tag` tokens as filters (e.g. `#infra kubernetes`). Results are note cards across all days.
 
-Note actions (on hover): edit body inline, edit tags manually, re-run enrichment, delete.
+Note actions (on hover): edit body inline, edit tags manually, similar notes (with the embedding model, see 6.2), re-run enrichment, delete.
 
 ### 3.3 Tray
 
@@ -243,7 +243,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
           2026-09-23.md
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
-        vectors.bin      # note embeddings for chat, derived, rebuildable
+        vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
         tags.json        # tag vocabulary + aliases
         queue.json       # pending enrichment jobs
         categories.json
@@ -454,6 +454,13 @@ Applied to every tag the model returns, in order:
 - The model cites notes by number, like `[12]`, and the page resolves a number against the whole index, shown or not.
 - The embedding model is optional. Without it, or when embedding fails, the chat answers from the index alone. When a prompt does not fit, the oldest turns go first, then the retrieved notes from the worst up.
 
+### 6.2 Similar notes
+
+- A note's menu offers "Similar notes" when the embedding model is installed and the model switch is on. The timeline then lists up to 8 notes of the space closest to it in meaning, best first, under the note itself.
+- No model runs: the note's vector is already in `vectors.bin`, so it costs one pass over the space's vectors. A note not embedded yet has no similar notes.
+- The score is a cosine taken after removing the mean of the space's vectors. Plain cosines between notes bunch up (two unrelated work notes score about as high as two notes on the same show), and a bland note comes up for everything. Notes under 0.28 are left out, so a note on its own subject lists none. The cutoff was set on 75 real notes and may need tuning as spaces grow.
+- Similar notes complement tags rather than replace them: tags are exact, editable, live in the markdown and work without the embedding model.
+
 ## 7. Settings
 
 - Notes root directory
@@ -462,7 +469,7 @@ Applied to every tag the model returns, in order:
 - Model choice / custom GGUF path
 - Check for model updates (manual, shows the installed revision)
 - Model idle unload timeout
-- Embedding model download (optional, for chat)
+- Embedding model download (optional, for chat and similar notes)
 - Hide immediately after save vs. show toast
 - Tag aliases editor
 - Rebuild index
@@ -481,6 +488,7 @@ get_day(date: String) -> Vec<Note>
 list_days() -> Vec<DaySummary>                // date + note count
 list_tags() -> Vec<(String, u32)>
 search(query: String) -> Vec<Note>
+similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
 get_settings() / set_settings(...)
 model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle | disabled
 download_model(variant)

@@ -47,6 +47,7 @@ pub fn run() {
             commands::list_categories,
             commands::category_names,
             commands::search,
+            commands::similar_notes,
             commands::chat,
             commands::stop_chat,
             commands::warm_chat,

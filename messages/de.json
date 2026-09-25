@@ -30,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Keine Notizen gefunden.",
+	"page_no_similar": "Keine Notiz ähnelt dieser.",
 	"page_back": "Zurück zum Tag",
 	"page_empty_day": "Nichts erfasst. Drücke {hotkey}, um eine Notiz zu schreiben.",
 	"page_delete_title": "Diese Notiz löschen?",
@@ -111,6 +112,7 @@
 	"note_actions": "Notizaktionen",
 	"note_edit": "Bearbeiten",
 	"note_rerun": "Modell erneut ausführen",
+	"note_similar": "Ähnliche Notizen",
 	"note_show_tag": "Notizen mit #{tag} anzeigen",
 	"search_placeholder": "Notizen durchsuchen, # für Tags",
 	"search_label": "Notizen durchsuchen",

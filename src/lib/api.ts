@@ -54,6 +54,12 @@ export function splitCategory(names: string[], tags: string[]): [string, string[
 /** Words must all appear; `#tag` tokens are AND filters. Newest first. */
 export const search = (query: string) => invoke<Note[]>('search', { query });
 
+/**
+ * The notes closest in meaning to this one, best first. Empty while the note
+ * has no vector yet, or without the embedding model.
+ */
+export const similarNotes = (id: string) => invoke<Note[]>('similar_notes', { id });
+
 /** One line of `index.jsonl`, parsed. The index holds no bodies. */
 export type IndexEntry = Omit<Note, 'body'>;
 

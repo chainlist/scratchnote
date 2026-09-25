@@ -114,17 +114,56 @@ impl Vectors {
         let mut query = query.to_vec();
         normalize(&mut query);
 
-        let mut scored: Vec<(&String, f32)> = self
+        let scored: Vec<(&String, f32)> = self
             .notes
             .iter()
             .map(|(id, (_, vector))| (id, dot(&query, vector)))
             .collect();
-        scored.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(b.0)));
-        scored.truncate(k);
-        scored
-            .into_iter()
-            .map(|(id, score)| (id.clone(), score))
-            .collect()
+        ranked(scored, k)
+    }
+
+    /// Up to `k` other notes that score at least `min_score` against this
+    /// one, best first. Empty for a note with no vector yet. No model runs:
+    /// the note's vector is already here.
+    ///
+    /// The score is a cosine taken after removing the mean of the space's
+    /// vectors. Notes share a lot just by being short notes by one person,
+    /// so plain cosines bunch up: two unrelated work notes score about as
+    /// high as two notes on the same show, and a bland note comes up for
+    /// everything. Once the mean is removed, only what a note has beyond the
+    /// usual counts.
+    pub fn similar(&self, id: &str, k: usize, min_score: f32) -> Vec<(String, f32)> {
+        let Some((_, note)) = self.notes.get(id) else {
+            return Vec::new();
+        };
+        let count = self.notes.len() as f32;
+        let mut mean = vec![0.0; self.dims];
+        for (_, vector) in self.notes.values() {
+            for (m, x) in mean.iter_mut().zip(vector) {
+                *m += x / count;
+            }
+        }
+
+        // Expanded rather than centred copies: (a - m)·(b - m) is
+        // a·b - a·m - b·m + m·m, and |a - m|² is a·a - 2 a·m + m·m.
+        let mm = dot(&mean, &mean);
+        let centred_norm = |v: &[f32], vm: f32| (dot(v, v) - 2.0 * vm + mm).max(0.0).sqrt();
+        let note_m = dot(note, &mean);
+        let note_norm = centred_norm(note, note_m);
+
+        let scored: Vec<(&String, f32)> = self
+            .notes
+            .iter()
+            .filter(|(other, _)| other.as_str() != id)
+            .filter_map(|(other, (_, vector))| {
+                let other_m = dot(vector, &mean);
+                let norm = note_norm * centred_norm(vector, other_m);
+                // A note that is the mean has no direction of its own left.
+                (norm > 0.0).then(|| (other, (dot(note, vector) - note_m - other_m + mm) / norm))
+            })
+            .filter(|(_, score)| *score >= min_score)
+            .collect();
+        ranked(scored, k)
     }
 
     fn encode(&self) -> Vec<u8> {
@@ -174,6 +213,16 @@ impl Vectors {
             notes,
         })
     }
+}
+
+/// Best first, equal scores by id, cut to `k`.
+fn ranked(mut scored: Vec<(&String, f32)>, k: usize) -> Vec<(String, f32)> {
+    scored.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+    scored.truncate(k);
+    scored
+        .into_iter()
+        .map(|(id, score)| (id.clone(), score))
+        .collect()
 }
 
 fn dot(a: &[f32], b: &[f32]) -> f32 {
@@ -396,6 +445,32 @@ mod tests {
             ids(&vectors.top(&[1.0, 0.0], 10)),
             vec!["01A", "01B", "01C"]
         );
+    }
+
+    #[test]
+    fn similar_leaves_out_the_note_itself_and_what_is_only_shared_by_all() {
+        // Every note leans on the first axis, as real notes share a lot.
+        // 01A and 01B are also about the same thing; 01C and 01D are not.
+        let mut vectors = Vectors::new("m", 4);
+        for (id, vector) in [
+            ("01A", vec![1.0, 1.0, 0.0, 0.0]),
+            ("01B", vec![1.0, 0.9, 0.1, 0.0]),
+            ("01C", vec![1.0, 0.0, 1.0, 0.0]),
+            ("01D", vec![1.0, 0.0, 0.0, 1.0]),
+        ] {
+            vectors.insert(id.into(), "h".into(), vector).unwrap();
+        }
+
+        // A plain cosine puts 01C and 01D at 0.5 from 01A, on the shared
+        // axis alone.
+        let plain = vectors.top(&vectors.notes["01A"].1, 4);
+        assert!(plain.iter().all(|(_, score)| *score >= 0.5));
+
+        let hits = vectors.similar("01A", 5, 0.28);
+        assert_eq!(ids(&hits), vec!["01B"]);
+        assert!(hits[0].1 > 0.9);
+        assert_eq!(ids(&vectors.similar("01A", 2, -1.0)).len(), 2);
+        assert!(vectors.similar("01Z", 5, -1.0).is_empty());
     }
 
     /// Brute force is only fine while it stays this fast at the scale retrieval

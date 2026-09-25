@@ -3,6 +3,7 @@
 	import {
 		categoryNames,
 		deleteNote,
+		embeddingModelInfo,
 		enrichBusy,
 		enrichProgress,
 		getDay,
@@ -11,6 +12,7 @@
 		listSpaces,
 		listTags,
 		modelStatus,
+		onEmbeddingStatus,
 		onEnrichBusy,
 		onEnrichProgress,
 		onIndexRebuilt,
@@ -22,6 +24,7 @@
 		retryEnrichment,
 		search,
 		setTrayLabels,
+		similarNotes,
 		splitCategory,
 		today,
 		updateNote,
@@ -80,6 +83,12 @@
 	let results = $state<Note[]>([]);
 	/** The timeline lists every tag in place of the day. */
 	let tagsShown = $state(false);
+	/** The note whose closest notes the timeline lists in place of the day. */
+	let similarTo = $state<Note | null>(null);
+	let similar = $state<Note[]>([]);
+	/** Similar notes come from the embedding model's vectors. */
+	let embeddingInstalled = $state(false);
+	const canSimilar = $derived(embeddingInstalled && model.state !== 'disabled');
 	const activeTags = $derived(
 		(shown ?? '')
 			.split(/\s+/)
@@ -118,6 +127,29 @@
 			error = String(e);
 		}
 		await runSearch();
+		await loadSimilar();
+	}
+
+	async function loadSimilar() {
+		if (similarTo === null) {
+			similar = [];
+			return;
+		}
+		const run = ++searchRun;
+		try {
+			const found = await similarNotes(similarTo.id);
+			if (run === searchRun) similar = found;
+		} catch (e) {
+			error = String(e);
+		}
+	}
+
+	async function showSimilar(note: Note) {
+		tagsShown = false;
+		shown = null;
+		similarTo = note;
+		await loadSimilar();
+		document.querySelector('main')?.scrollTo({ top: 0 });
 	}
 
 	// Only the latest query's answer is kept, so a slow reply to an earlier
@@ -139,6 +171,7 @@
 
 	async function showResults(q: string) {
 		tagsShown = false;
+		similarTo = null;
 		shown = q.trim() || null;
 		query = shown ?? '';
 		await runSearch();
@@ -146,6 +179,7 @@
 
 	async function select(date: string) {
 		tagsShown = false;
+		similarTo = null;
 		shown = null;
 		selected = date;
 		await refresh();
@@ -259,6 +293,7 @@
 		try {
 			await deleteNote(note.date, note.id);
 			if (editing?.id === note.id) editing = null;
+			if (similarTo?.id === note.id) similarTo = null;
 			deleting = null;
 			await refresh();
 		} catch (e) {
@@ -290,11 +325,14 @@
 					if (switched) {
 						query = '';
 						shown = null;
+						similarTo = null;
 					}
 					void refresh();
 				})
 			);
 
+			embeddingInstalled = (await embeddingModelInfo()).installed;
+			off.push(onEmbeddingStatus((status) => (embeddingInstalled = status.state === 'installed')));
 			model = await modelStatus();
 			off.push(onModelStatus((status) => (model = status)));
 			busy = await enrichBusy();
@@ -369,7 +407,7 @@
 	<main class="min-h-0 flex-1 overflow-y-auto px-6 pb-28">
 		<div class="mx-auto max-w-3xl">
 			<div class="mt-6 mb-8 flex items-center gap-2">
-				{#if tagsShown || shown !== null}
+				{#if tagsShown || shown !== null || similarTo !== null}
 					<Button
 						variant="ghost"
 						size="icon-sm"
@@ -387,6 +425,10 @@
 						<span class="font-normal text-muted-foreground">
 							{m.tags_count({ count: tags.length })}
 						</span>
+					</h1>
+				{:else if similarTo !== null}
+					<h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight">
+						{m.note_similar()}
 					</h1>
 				{:else if shown !== null}
 					<h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight">
@@ -420,8 +462,37 @@
 				</p>
 			{/if}
 
+			{#if similarTo !== null}
+				<p
+					class="mb-6 line-clamp-3 rounded-lg border border-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap text-neutral-400"
+				>
+					{similarTo.body}
+				</p>
+			{/if}
+
 			{#if tagsShown}
 				<TagsPage {tags} {categories} onpick={(tag) => void showResults(`#${tag}`)} />
+			{:else if similarTo !== null}
+				{#if similar.length === 0}
+					<p class="text-base text-neutral-600">{m.page_no_similar()}</p>
+				{:else}
+					<ul>
+						{#each similar as note (note.id)}
+							<li>
+								<NoteCard
+									{note}
+									onedit={(n) => (editing = n)}
+									ondelete={(n) => (deleting = n)}
+									onsave={saveBody}
+									onretry={retry}
+									ontag={openTag}
+									onsimilar={canSimilar ? showSimilar : undefined}
+									showDate
+								/>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			{:else if shown !== null}
 				{#if results.length === 0}
 					<p class="text-base text-neutral-600">{m.page_no_match()}</p>
@@ -436,6 +507,7 @@
 									onsave={saveBody}
 									onretry={retry}
 									ontag={openTag}
+									onsimilar={canSimilar ? showSimilar : undefined}
 									showDate
 								/>
 							</li>
@@ -457,6 +529,7 @@
 								onsave={saveBody}
 								onretry={retry}
 								ontag={openTag}
+								onsimilar={canSimilar ? showSimilar : undefined}
 								blink={note.id === blinking}
 							/>
 						</li>
@@ -520,6 +593,7 @@
 	ontoday={async () => void select(await today())}
 	ontags={() => {
 		shown = null;
+		similarTo = null;
 		tagsShown = true;
 	}}
 	onchat={() => (chatOpen = true)}

@@ -9,7 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use ulid::Ulid;
 
 use crate::enrich::download::{self, RemoteModel};
-use crate::enrich::model::{model_file, ModelStatus, Variant};
+use crate::enrich::model::{model_file, EmbeddingModel, ModelStatus, Variant};
 use crate::enrich::normalize;
 use crate::enrich::queue::Job;
 use crate::settings::Settings;
@@ -451,10 +451,38 @@ fn chat_backend(
     crate::enrich::worker::backend(app).ok_or_else(|| NO_MODEL.to_string())
 }
 
+/// The notes closest to the last message, as positions in `notes` with their
+/// bodies filled in, for `chat::reply`. Empty without the embedding model or
+/// when embedding fails, and the chat then reads the index alone.
+fn retrieve(
+    app: &AppHandle,
+    space: &Space,
+    notes: &mut [IndexEntry],
+    messages: &[crate::chat::Message],
+) -> Vec<usize> {
+    let (Some(embedder), Some(last)) = (crate::embed::embedder(app), messages.last()) else {
+        return Vec::new();
+    };
+    let query = match embedder.embed_query(last.content.trim()) {
+        Ok(query) => query,
+        Err(e) => {
+            log::warn!("could not embed the question, answering from the index: {e}");
+            return Vec::new();
+        }
+    };
+    let hits = space.nearest(&query, crate::chat::MAX_RETRIEVED);
+    match space.index.read() {
+        Ok(index) => crate::chat::retrieved(notes, &hits, &index),
+        Err(_) => Vec::new(),
+    }
+}
+
 /// Reply to the last message of a conversation about the open space's
 /// notes, streamed through `on_event`. The model reads that space's
-/// `index.jsonl` and nothing else, never the markdown. A new message, or
-/// `stop_chat`, ends the reply being written.
+/// `index.jsonl`, and with the embedding model the text of the few notes
+/// closest to the last message, taken from the index in memory. It never
+/// reads the markdown. A new message, or `stop_chat`, ends the reply being
+/// written.
 #[tauri::command]
 pub async fn chat(
     app: AppHandle,
@@ -464,22 +492,24 @@ pub async fn chat(
 ) -> Result<(), String> {
     let run = crate::chat::begin();
     let space = state.space()?;
-    let (name, path) = (space.name.clone(), index::index_path(&space.root));
+    let path = index::index_path(&space.root);
 
-    // Reading the file, loading the model and running it all block, so none
-    // of it may run on the async runtime.
+    // Reading the file, loading the models and running them all block, so
+    // none of it may run on the async runtime.
     tauri::async_runtime::spawn_blocking(move || {
-        let notes = crate::chat::read_index(&path)?;
+        let mut notes = crate::chat::read_index(&path)?;
         let _ = on_event.send(ChatEvent::Notes {
             notes: notes.clone(),
         });
         let backend = chat_backend(&app)?;
         let state = app.state::<AppState>();
         let started = std::time::Instant::now();
+        let retrieved = retrieve(&app, &space, &mut notes, &messages);
+        let retrieval = started.elapsed();
         let reply = crate::chat::reply(
-            &name,
+            &space.name,
             &notes,
-            &[],
+            &retrieved,
             &messages,
             Local::now().date_naive(),
             backend.as_ref(),
@@ -493,9 +523,11 @@ pub async fn chat(
             },
         )?;
         log::info!(
-            "chat replied over {} notes in {:.1}s",
+            "chat replied over {} notes in {:.1}s, {} retrieved in {:.2}s",
             notes.len(),
-            started.elapsed().as_secs_f32()
+            started.elapsed().as_secs_f32(),
+            retrieved.len(),
+            retrieval.as_secs_f32()
         );
         let _ = on_event.send(ChatEvent::Done {
             cited: crate::chat::cited(&reply, notes.len()),
@@ -775,6 +807,76 @@ pub fn load_model(
     state.wake.notify_one();
     state.embed_wake.notify_one();
     Ok(())
+}
+
+/// What the settings screen shows about the embedding model.
+#[derive(Debug, Serialize)]
+pub struct EmbeddingModelInfo {
+    pub installed: bool,
+    /// How far the download is, while one runs.
+    pub downloading: Option<u8>,
+}
+
+#[tauri::command]
+pub fn embedding_model_info(state: State<'_, AppState>) -> EmbeddingModelInfo {
+    EmbeddingModelInfo {
+        installed: download::is_installed(&state.root, EmbeddingModel),
+        downloading: state.embedding_download.lock().ok().and_then(|d| *d),
+    }
+}
+
+/// Fetch the embedding model, which lets the chat find the notes a question
+/// is about. It is not a chat model: no setting changes and the chat model
+/// is left alone. The embed task is woken instead, loads it and embeds the
+/// notes already there. Progress goes out as `embedding-status`.
+#[tauri::command]
+pub async fn download_embedding_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    {
+        let mut running = state
+            .embedding_download
+            .lock()
+            .map_err(|_| "download lock poisoned".to_string())?;
+        if running.is_some() {
+            return Err("the embedding model is already downloading".to_string());
+        }
+        *running = Some(0);
+    }
+    let _ = app.emit(
+        "embedding-status",
+        serde_json::json!({ "state": "downloading", "percent": 0 }),
+    );
+
+    let progress_app = app.clone();
+    let result = async {
+        let remote = download::lookup(EmbeddingModel).await?;
+        download::fetch(&state.root, EmbeddingModel, &remote, move |percent| {
+            if let Ok(mut running) = progress_app.state::<AppState>().embedding_download.lock() {
+                *running = Some(percent);
+            }
+            let _ = progress_app.emit(
+                "embedding-status",
+                serde_json::json!({ "state": "downloading", "percent": percent }),
+            );
+        })
+        .await
+    }
+    .await;
+
+    if let Ok(mut running) = state.embedding_download.lock() {
+        *running = None;
+    }
+    let status = if result.is_ok() {
+        // The notes already there get embedded now.
+        state.embed_wake.notify_one();
+        "installed"
+    } else {
+        "absent"
+    };
+    let _ = app.emit("embedding-status", serde_json::json!({ "state": status }));
+    result
 }
 
 /// Drop the loaded model. The next job loads whatever the settings now point

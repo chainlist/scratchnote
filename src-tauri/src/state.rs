@@ -48,6 +48,10 @@ pub struct AppState {
     /// Nudges the embed task when an index changes or a model becomes
     /// available.
     pub embed_wake: Wake,
+    /// How far the embedding model's download is, while one runs. Kept here
+    /// so a settings screen opened meanwhile shows it, and a second click
+    /// does not start another.
+    pub embedding_download: Mutex<Option<u8>>,
 }
 
 /// Where the worker is in the current stretch of work: `current` of `total`,
@@ -82,10 +86,14 @@ impl AppState {
         })
     }
 
-    /// Drop the loaded model and say what state that leaves. A job still
-    /// holding it finishes first, since it owns its own reference.
+    /// Drop the loaded model, and the embedding model with it, and say what
+    /// state that leaves. A job still holding one finishes first, since it
+    /// owns its own reference. Both load again lazily when next needed.
     pub fn unload_model(&self) -> ModelStatus {
         if let Ok(mut slot) = self.backend.write() {
+            *slot = None;
+        }
+        if let Ok(mut slot) = self.embedder.write() {
             *slot = None;
         }
         let status = resting_status(self.model_enabled(), self.active_model().is_some());

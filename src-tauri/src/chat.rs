@@ -22,7 +22,7 @@ use chrono::NaiveDate;
 use serde::Deserialize;
 
 use crate::enrich::model::Backend;
-use crate::storage::index::IndexEntry;
+use crate::storage::index::{Index, IndexEntry};
 
 /// The longest reply, in tokens. Replies are asked to be short; this only
 /// stops one that runs on.
@@ -133,6 +133,25 @@ pub fn read_index(path: &Path) -> Result<Vec<IndexEntry>, String> {
         .collect();
     entries.sort_by(|a, b| a.date.cmp(&b.date).then_with(|| a.time.cmp(&b.time)));
     Ok(entries)
+}
+
+/// The notes a search found, best first, as the positions in `notes` that
+/// `reply` takes, each with its body copied in from `index`, which holds
+/// bodies in memory. A hit missing from either, such as a note saved after
+/// `index.jsonl` was read, is skipped.
+pub fn retrieved(notes: &mut [IndexEntry], hits: &[(String, f32)], index: &Index) -> Vec<usize> {
+    let mut out = Vec::new();
+    for (id, _) in hits {
+        let Some(n) = notes.iter().position(|note| &note.id == id) else {
+            continue;
+        };
+        let Some(entry) = index.entries().find(|entry| &entry.id == id) else {
+            continue;
+        };
+        notes[n].body = entry.body.clone();
+        out.push(n);
+    }
+    out
 }
 
 /// Write the reply to the last message, handing it to `on_piece` as it
@@ -604,6 +623,53 @@ mod tests {
         );
         assert_eq!(text.matches("RELEVANT NOTES:").count(), 1);
         assert!(!text.contains("SECRET BODY"));
+    }
+
+    #[test]
+    fn retrieved_notes_come_back_as_positions_with_their_bodies() {
+        use crate::embed::vectors::Vectors;
+        use crate::embed::{Embedder, StubEmbedder};
+
+        let mut in_memory = vec![
+            entry("2026-09-18", "09:00", "Coffee", &[]),
+            entry("2026-09-19", "09:00", "Deploy", &[]),
+            entry("2026-09-20", "09:00", "Birthday", &[]),
+        ];
+        in_memory[0].body = "coffee beans from the market".to_string();
+        in_memory[1].body = "the deploy failed on friday".to_string();
+        in_memory[2].body = "grandma's birthday cake".to_string();
+        let mut index = Index::default();
+        for note in &in_memory {
+            index.push(note.clone());
+        }
+
+        let mut vectors = Vectors::new(StubEmbedder.model_id(), StubEmbedder.dims());
+        for note in &in_memory {
+            let vector = StubEmbedder.embed_document(&note.body).unwrap();
+            vectors.insert(note.id.clone(), note.hash.clone(), vector).unwrap();
+        }
+        // A note embedded but saved after index.jsonl was read.
+        vectors
+            .insert("01LATE".to_string(), "0".to_string(), vec![1.0; StubEmbedder.dims()])
+            .unwrap();
+
+        // As `read_index` gives them: no bodies, and here without the last.
+        let mut notes: Vec<IndexEntry> = in_memory[..2]
+            .iter()
+            .map(|note| IndexEntry {
+                body: String::new(),
+                ..note.clone()
+            })
+            .collect();
+        let query = StubEmbedder.embed_query("why did the deploy fail").unwrap();
+        let hits = vectors.top(&query, MAX_RETRIEVED);
+        assert_eq!(hits.len(), 4);
+        assert_eq!(hits[0].0, in_memory[1].id);
+
+        // The late note and the one left out of `notes` are skipped.
+        assert_eq!(retrieved(&mut notes, &hits, &index), vec![1, 0]);
+        assert_eq!(notes[1].body, "the deploy failed on friday");
+        assert_eq!(notes[0].body, "coffee beans from the market");
     }
 
     #[test]

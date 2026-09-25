@@ -24,16 +24,21 @@ pub fn spawn(app: AppHandle, wake: Wake) {
             // A wake during a pass is kept as a permit, so the notes saved
             // meanwhile get a pass of their own straight after.
             wake.notified().await;
-            let Some(embedder) = super::embedder(&app) else {
-                continue;
-            };
             let app = app.clone();
-            // Embedding blocks, so it stays off the async runtime.
+            // Loading the model and embedding both block, so they stay off
+            // the async runtime.
             let pass = tauri::async_runtime::spawn_blocking(move || {
+                let Some(embedder) = super::embedder(&app) else {
+                    return;
+                };
                 let state = app.state::<AppState>();
+                // Stamped as the worker stamps a job, so the idle unload
+                // counts embedding as use.
+                state.mark_used();
                 for space in state.all_spaces() {
                     sync_space(&state, &space, embedder.as_ref());
                 }
+                state.mark_used();
             });
             if let Err(e) = pass.await {
                 log::warn!("embedding notes failed: {e}");

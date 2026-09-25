@@ -289,8 +289,6 @@ impl Space {
 
     /// The `k` notes closest to a query, best first, with their cosine. Empty
     /// until the embed task has loaded the vectors.
-    // Not called yet: the chat searches with it next.
-    #[allow(dead_code)]
     pub fn nearest(&self, query: &[f32], k: usize) -> Vec<(String, f32)> {
         self.vectors
             .lock()

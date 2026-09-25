@@ -58,8 +58,6 @@ impl Catalogued for Variant {
 
 /// Qwen3-Embedding-0.6B, which turns notes into vectors for chat retrieval.
 /// One model, so nothing to choose.
-// Not fetched or loaded yet: chat retrieval is wired up to it next.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EmbeddingModel;
 

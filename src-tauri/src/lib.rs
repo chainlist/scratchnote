@@ -62,6 +62,8 @@ pub fn run() {
             commands::model_info,
             commands::gpu_devices,
             commands::download_model,
+            commands::embedding_model_info,
+            commands::download_embedding_model,
             commands::check_model_update,
             commands::update_model,
             commands::today,
@@ -122,6 +124,7 @@ pub fn run() {
                 wake: wake.clone(),
                 embedder: std::sync::RwLock::new(None),
                 embed_wake: embed_wake.clone(),
+                embedding_download: std::sync::Mutex::new(None),
             });
 
             // Every space is loaded, not just the open one, so notes captured

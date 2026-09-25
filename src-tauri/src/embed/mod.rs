@@ -12,6 +12,8 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager};
 
+use crate::enrich::download;
+use crate::enrich::model::{model_file, EmbeddingModel};
 use crate::state::AppState;
 
 /// A model that turns text into vectors.
@@ -24,21 +26,44 @@ pub trait Embedder: Send + Sync {
     fn embed_document(&self, text: &str) -> Result<Vec<f32>, String>;
     /// A question. Qwen3-Embedding puts an instruction before queries and not
     /// before documents, hence a method of its own.
-    // Not called yet: the chat embeds its question with it next.
-    #[allow(dead_code)]
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, String>;
 }
 
 /// The model that embeds notes, or `None` while there is none or the model
-/// is switched off: the one switch covers embeddings too.
+/// is switched off: the one switch covers embeddings too. Loaded on first
+/// use, as `enrich::worker::backend` loads the chat model, and dropped with
+/// it by `AppState::unload_model`. A load that fails is tried again on the
+/// next call, which comes with the next change to a note or the next chat
+/// message, never in a loop.
 pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
     let state = app.state::<AppState>();
     if !state.model_enabled() {
         return None;
     }
-    // Lazy loading goes here when the slot is empty, as in `enrich::worker::backend`.
-    let loaded = state.embedder.read().ok()?.clone();
-    loaded
+    if let Some(loaded) = state.embedder.read().ok()?.clone() {
+        return Some(loaded);
+    }
+    if !download::is_installed(&state.root, EmbeddingModel) {
+        return None;
+    }
+    let path = model_file(&state.root, EmbeddingModel);
+    log::info!("loading {}", path.display());
+
+    match llama::LlamaEmbedder::load_with(&path, state.use_gpu()) {
+        Ok(loaded) => {
+            let loaded: Arc<dyn Embedder> = Arc::new(loaded);
+            if let Ok(mut slot) = state.embedder.write() {
+                *slot = Some(loaded.clone());
+            }
+            // Otherwise the idle unload counts from before the load.
+            state.mark_used();
+            Some(loaded)
+        }
+        Err(e) => {
+            log::error!("could not load the embedding model: {e}");
+            None
+        }
+    }
 }
 
 /// Scale to unit length, so similarity is a plain dot product. A zero vector

@@ -18,7 +18,10 @@ pub fn spawn(app: AppHandle) {
             tokio::time::sleep(TICK).await;
             let state = app.state::<AppState>();
 
-            let loaded = state.backend.read().is_ok_and(|slot| slot.is_some());
+            // The embedding model alone counts too: it loads on a note
+            // change even when no chat or job has loaded the other.
+            let loaded = state.backend.read().is_ok_and(|slot| slot.is_some())
+                || state.embedder.read().is_ok_and(|slot| slot.is_some());
             let idle_for = state
                 .last_used
                 .lock()

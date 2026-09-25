@@ -4,6 +4,7 @@
 //! Only the body is embedded, so a vector is tied to the body hash: editing a
 //! note's text embeds it again, editing its subject or tags does not.
 
+pub mod llama;
 pub mod sync;
 pub mod vectors;
 

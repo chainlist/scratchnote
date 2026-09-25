@@ -36,6 +36,28 @@ pub(crate) fn llama_backend() -> Result<&'static LlamaBackend, String> {
         .map_err(Clone::clone)
 }
 
+/// Loads a GGUF, all on the GPU or all on the CPU. Shared with the embedding
+/// model, which wants the same placement as the chat model.
+pub(crate) fn load_model(path: &std::path::Path, use_gpu: bool) -> Result<LlamaModel, String> {
+    let backend = llama_backend()?;
+
+    let params = if use_gpu {
+        LlamaModelParams::default().with_n_gpu_layers(u32::MAX)
+    } else {
+        // Zero layers alone is not enough: with a GPU device still attached,
+        // llama.cpp stages CPU work through the GPU driver's host buffers
+        // and skips its repacked CPU kernels, which made CPU mode about
+        // half again slower than a CPU-only build. No devices at all gets
+        // the plain CPU path.
+        LlamaModelParams::default()
+            .with_n_gpu_layers(0)
+            .with_devices(&[])
+            .map_err(|e| format!("could not keep the model off the GPU: {e}"))?
+    };
+    LlamaModel::load_from_file(backend, path, &params)
+        .map_err(|e| format!("could not load {}: {e}", path.display()))
+}
+
 pub struct LlamaCpp {
     /// The context kept from one note to the next, so the start every prompt
     /// shares is only evaluated once. llama.cpp contexts are not re-entrant,
@@ -72,23 +94,7 @@ impl LlamaCpp {
     /// `use_gpu: false` keeps every layer and every op on the CPU, even in a
     /// build with a GPU backend.
     pub fn load_with(path: &std::path::Path, use_gpu: bool) -> Result<Self, String> {
-        let backend = llama_backend()?;
-
-        let params = if use_gpu {
-            LlamaModelParams::default().with_n_gpu_layers(u32::MAX)
-        } else {
-            // Zero layers alone is not enough: with a GPU device still attached,
-            // llama.cpp stages CPU work through the GPU driver's host buffers
-            // and skips its repacked CPU kernels, which made CPU mode about
-            // half again slower than a CPU-only build. No devices at all gets
-            // the plain CPU path.
-            LlamaModelParams::default()
-                .with_n_gpu_layers(0)
-                .with_devices(&[])
-                .map_err(|e| format!("could not keep the model off the GPU: {e}"))?
-        };
-        let model = LlamaModel::load_from_file(backend, path, &params)
-            .map_err(|e| format!("could not load {}: {e}", path.display()))?;
+        let model = load_model(path, use_gpu)?;
 
         Ok(Self {
             session: Mutex::new(None),

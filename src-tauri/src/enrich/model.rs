@@ -28,22 +28,49 @@ pub enum Variant {
     Light,
 }
 
-impl Variant {
+/// A model the app can fetch from Hugging Face: where it is published and
+/// the file it is saved as. The chat models and the embedding model share
+/// the download code through it, without the embedding model becoming a
+/// chat model anyone can pick.
+pub trait Catalogued: Copy {
+    fn repo(self) -> &'static str;
+    fn file(self) -> &'static str;
+}
+
+impl Catalogued for Variant {
     /// Qwen publishes these models as safetensors, not GGUF, so the
     /// quantised builds come from unsloth, which ships both at the sizes the
     /// spec quotes. Qwen's own `Qwen3-1.7B-GGUF` only has a Q8_0.
-    pub fn repo(self) -> &'static str {
+    fn repo(self) -> &'static str {
         match self {
             Variant::Default => "unsloth/Qwen3-4B-Instruct-2507-GGUF",
             Variant::Light => "unsloth/Qwen3-1.7B-GGUF",
         }
     }
 
-    pub fn file(self) -> &'static str {
+    fn file(self) -> &'static str {
         match self {
             Variant::Default => "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
             Variant::Light => "Qwen3-1.7B-Q4_K_M.gguf",
         }
+    }
+}
+
+/// Qwen3-Embedding-0.6B, which turns notes into vectors for chat retrieval.
+/// One model, so nothing to choose.
+// Not fetched or loaded yet: chat retrieval is wired up to it next.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmbeddingModel;
+
+impl Catalogued for EmbeddingModel {
+    /// Qwen publishes this one as GGUF itself, about 640 MB at Q8_0.
+    fn repo(self) -> &'static str {
+        "Qwen/Qwen3-Embedding-0.6B-GGUF"
+    }
+
+    fn file(self) -> &'static str {
+        "Qwen3-Embedding-0.6B-Q8_0.gguf"
     }
 }
 
@@ -121,8 +148,8 @@ pub fn models_dir(root: &std::path::Path) -> PathBuf {
     root.join("models")
 }
 
-pub fn model_file(root: &std::path::Path, variant: Variant) -> PathBuf {
-    models_dir(root).join(variant.file())
+pub fn model_file(root: &std::path::Path, model: impl Catalogued) -> PathBuf {
+    models_dir(root).join(model.file())
 }
 
 #[cfg(test)]
@@ -144,6 +171,8 @@ mod tests {
         );
         assert_eq!(Variant::Light.repo(), "unsloth/Qwen3-1.7B-GGUF");
         assert_eq!(Variant::Light.file(), "Qwen3-1.7B-Q4_K_M.gguf");
+        assert_eq!(EmbeddingModel.repo(), "Qwen/Qwen3-Embedding-0.6B-GGUF");
+        assert_eq!(EmbeddingModel.file(), "Qwen3-Embedding-0.6B-Q8_0.gguf");
     }
 
     #[test]

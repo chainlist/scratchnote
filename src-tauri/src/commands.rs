@@ -479,6 +479,7 @@ pub async fn chat(
         let reply = crate::chat::reply(
             &name,
             &notes,
+            &[],
             &messages,
             Local::now().date_naive(),
             backend.as_ref(),

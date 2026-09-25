@@ -7,8 +7,8 @@
 //! note text.
 //!
 //! The index goes into the system message, numbered, oldest first, and the
-//! conversation follows it. Past `WINDOW` notes only the most recent are
-//! shown, keeping their numbers. The model's cache keeps that start from one
+//! conversation follows it. Past `INDEX_CHARS` of lines only the most recent
+//! notes are shown, keeping their numbers. The model's cache keeps that start from one
 //! reply to the next, so only the first reply of a chat reads it all, and a
 //! note added since only adds its own line at the end. The retrieved notes go
 //! into the last question, after that start, so they never break the cache.
@@ -34,28 +34,28 @@ const MAX_LINE_CHARS: usize = 300;
 
 // What fits the model's 8192 tokens, guessing 4 characters a token, which is
 // rough: the reply keeps 768, leaving about 7400 for the prompt. The
-// instructions and markup take about 500. Up to `MAX_RETRIEVED` notes with
-// a full line and body take 5 x 1530 characters, about 1900. A short talk
-// gets about 1000. That leaves about 4000 for the index, and a line cut at
-// `MAX_LINE_CHARS` is about 77 tokens, so 50 lines. Most lines are far
-// shorter than the cap, which covers languages that take more tokens; when
-// it still overflows, `reply` drops old turns, then retrieved notes.
+// instructions and markup take about 400. The index lines get 20000
+// characters, about 5000, which holds some 150 lines of a typical length.
+// Up to `MAX_RETRIEVED` notes with a line cut at `MAX_LINE_CHARS` and a full
+// body take 5 x 1130 characters, about 1400. A short talk gets the last 600.
+// When it still overflows, as in a language that takes more tokens, `reply`
+// drops old turns, then retrieved notes.
 
-/// The most index lines shown. A larger index shows only its latest notes.
-const WINDOW: usize = 50;
+/// The most characters of index lines shown. A longer index shows only its
+/// latest notes.
+const INDEX_CHARS: usize = 20_000;
 
 /// The shown lines start at a multiple of this, so the start of the prompt
-/// and the model's cache stay the same while up to `STEP` notes are added.
-/// Between `WINDOW - STEP + 1` and `WINDOW` lines are then shown.
+/// and the model's cache stay the same while notes are added.
 const STEP: usize = 10;
 
 /// The most notes whose full text goes with a question; the caller retrieves
 /// this many.
 pub const MAX_RETRIEVED: usize = 5;
 
-/// A retrieved note's text is cut here: a few paragraphs, enough for most
-/// daily notes whole.
-const MAX_BODY_CHARS: usize = 1200;
+/// A retrieved note's text is cut here: about 130 words, the whole of most
+/// daily notes and the start of longer ones.
+const MAX_BODY_CHARS: usize = 800;
 
 pub const SYSTEM: &str = "\
 You help the user with their personal notes, in a conversation. Under NOTES
@@ -187,18 +187,17 @@ pub fn reply(
 }
 
 /// What every prompt of a chat starts with, and what warming it up reads:
-/// the instructions, then the index or its most recent `WINDOW` notes, then
-/// the date and a reminder to be brief, which a long index would otherwise
-/// push out of the model's mind.
+/// the instructions, then the index or its most recent notes, then the date
+/// and a reminder to be brief, which a long index would otherwise push out
+/// of the model's mind.
 pub fn prefix(space: &str, notes: &[IndexEntry], today: NaiveDate) -> String {
-    let start = window_start(notes.len());
-    let lines = notes
+    let lines: Vec<String> = notes
         .iter()
         .enumerate()
-        .skip(start)
         .map(|(n, entry)| format!("[{}] {}", n + 1, line(entry)))
-        .collect::<Vec<_>>()
-        .join("\n");
+        .collect();
+    let start = window_start(&lines);
+    let lines = lines[start..].join("\n");
     // Names where the shown notes start and not how many there are, so the
     // heading stays the same while notes are added.
     let heading = if start == 0 {
@@ -218,14 +217,22 @@ pub fn prefix(space: &str, notes: &[IndexEntry], today: NaiveDate) -> String {
     format!("<|im_start|>system\n{system}<|im_end|>\n")
 }
 
-/// The 0-based position of the first note shown under NOTES: none are left
-/// out up to `WINDOW` notes, then the start moves by whole `STEP`s.
-fn window_start(count: usize) -> usize {
-    if count <= WINDOW {
-        0
-    } else {
-        (count - WINDOW).div_ceil(STEP) * STEP
+/// The 0-based position of the first line shown under NOTES: the earliest
+/// from which the lines to the end fit `INDEX_CHARS`, moved up to a whole
+/// `STEP`. Adding notes only moves it later, and only by whole steps. A line
+/// is far shorter than the budget, so the start never passes the end.
+fn window_start(lines: &[String]) -> usize {
+    let mut chars = 0;
+    let mut start = lines.len();
+    for line in lines.iter().rev() {
+        // Each line and the newline after it.
+        chars += line.chars().count() + 1;
+        if chars > INDEX_CHARS {
+            break;
+        }
+        start -= 1;
     }
+    start.div_ceil(STEP) * STEP
 }
 
 /// The conversation after the prefix, in Qwen3's chat template. Every
@@ -372,16 +379,35 @@ mod tests {
         }
     }
 
-    /// `count` notes, one a day from 2026-01-01, note n with subject "note n".
-    fn many(count: usize) -> Vec<IndexEntry> {
+    /// `count` notes, one a day from 2026-01-01, each with an index line of
+    /// `width` characters: its subject is "note n" padded with x.
+    fn many(count: usize, width: usize) -> Vec<IndexEntry> {
         let first = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         (0..count)
             .map(|i| {
                 let date = first + chrono::Days::new(i as u64);
                 let date = date.format("%Y-%m-%d").to_string();
-                entry(&date, "09:00", &format!("note {}", i + 1), &[])
+                // The date, weekday, summary and separators take 32.
+                let subject = format!("{:x<1$}", format!("note {} ", i + 1), width - 32);
+                entry(&date, "09:00", &subject, &[])
             })
             .collect()
+    }
+
+    /// The index lines a prefix shows, each as `[n] line`.
+    fn shown(prefix: &str) -> Vec<String> {
+        let (from, to) = (prefix.find("NOTES of").unwrap(), prefix.find("\n\nTODAY").unwrap());
+        prefix[from..to].lines().skip(1).map(str::to_string).collect()
+    }
+
+    /// Characters of `[n] line` and its newline, for notes `from..` of `notes`.
+    fn chars_from(notes: &[IndexEntry], from: usize) -> usize {
+        notes
+            .iter()
+            .enumerate()
+            .skip(from)
+            .map(|(n, entry)| format!("[{}] {}", n + 1, line(entry)).chars().count() + 1)
+            .sum()
     }
 
     fn today() -> NaiveDate {
@@ -485,30 +511,63 @@ mod tests {
     }
 
     #[test]
-    fn a_large_index_shows_only_its_recent_notes_with_their_numbers() {
-        let notes = many(WINDOW + STEP + 1);
+    fn a_space_of_150_typical_notes_is_shown_whole() {
+        let notes = many(150, 120);
+        assert_eq!(line(&notes[149]).chars().count(), 120);
         let start = prefix("P", &notes, today());
-        let first = 2 * STEP + 1;
+        assert_eq!(shown(&start).len(), 150);
+        assert!(!start.contains("only the most recent"));
+    }
+
+    /// The 0-based position of the first line a prefix shows.
+    fn first_shown(prefix: &str) -> usize {
+        let first = &shown(prefix)[0];
+        first[1..first.find(']').unwrap()].parse::<usize>().unwrap() - 1
+    }
+
+    #[test]
+    fn a_large_index_shows_only_its_recent_notes_that_fit_with_their_numbers() {
+        let notes = many(200, 200);
+        let start = prefix("P", &notes, today());
+        let from = first_shown(&start);
+        assert!(from > 0 && from % STEP == 0, "{from}");
         assert!(start.contains(&format!(
-            "NOTES of their space \"P\", only the most recent, from [{first}] on; \
-             older notes are left out:\n[{first}] "
+            "NOTES of their space \"P\", only the most recent, from [{}] on; \
+             older notes are left out:\n[{}] ",
+            from + 1,
+            from + 1
         )));
-        assert!(!start.contains(&format!("[{}] ", first - 1)));
-        assert!(start.contains(&format!("[{}] ", notes.len())));
-        assert_eq!(start.matches("\n[").count(), notes.len() - 2 * STEP);
+        let lines = shown(&start);
+        assert_eq!(lines.len(), notes.len() - from);
+        assert!(lines.last().unwrap().starts_with("[200] "));
+        // Within the budget, and a step earlier would not be.
+        assert!(chars_from(&notes, from) <= INDEX_CHARS);
+        assert!(chars_from(&notes, from - STEP) > INDEX_CHARS);
     }
 
     #[test]
     fn the_prompt_start_holds_while_notes_are_added_within_a_step() {
-        let notes = many(WINDOW + 2 * STEP + 1);
-        // Everything up to the date, which follows the last line.
+        let notes = many(300, 200);
+        // Everything up to the date, which follows the last line, and where
+        // the shown lines start.
         let lines = |count: usize| {
             let text = prefix("P", &notes[..count], today());
-            text[..text.find("\n\nTODAY").unwrap()].to_string()
+            let head = text[..text.find("\n\nTODAY").unwrap()].to_string();
+            (head, first_shown(&text))
         };
-        let before = lines(WINDOW + STEP + 1);
-        assert!(lines(WINDOW + 2 * STEP).starts_with(&before));
-        assert!(!lines(WINDOW + 2 * STEP + 1).starts_with(&before));
+        let (mut held, mut moved) = (0, 0);
+        for count in 120..300 {
+            let ((before, from), (after, to)) = (lines(count), lines(count + 1));
+            if to == from {
+                assert!(after.starts_with(&before), "{count}");
+                held += 1;
+            } else {
+                assert_eq!(to, from + STEP, "{count}");
+                assert!(!after.starts_with(&before), "{count}");
+                moved += 1;
+            }
+        }
+        assert!(held > 0 && moved > 0);
     }
 
     #[test]
@@ -549,7 +608,7 @@ mod tests {
 
     #[test]
     fn every_prompt_of_a_chat_starts_with_the_prefix_warming_reads() {
-        for notes in [vec![entry("2026-09-18", "09:00", "a", &[])], many(WINDOW + STEP + 1)] {
+        for notes in [vec![entry("2026-09-18", "09:00", "a", &[])], many(200, 200)] {
             let start = prefix("Personal", &notes, today());
             for history in [
                 vec![user("one")],
@@ -683,7 +742,7 @@ mod tests {
 
     #[test]
     fn citations_resolve_past_the_window_up_to_the_whole_index() {
-        let notes = many(WINDOW + STEP + 1);
+        let notes = many(200, 200);
         let last = notes.len();
         // Note 1 is left out of the window and still resolves.
         assert_eq!(cited(&format!("See [1] and [{last}]."), last), vec![1, last]);

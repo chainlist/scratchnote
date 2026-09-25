@@ -71,10 +71,16 @@ fn sync_space(state: &AppState, space: &Space, embedder: &dyn Embedder) {
     }
 }
 
+/// A first pass over thousands of notes takes minutes, so it saves as it
+/// goes: quitting midway then loses at most this many notes, not the pass.
+/// Each save rewrites the whole file, hence not after every note.
+const SAVE_EVERY: usize = 500;
+
 /// Embed every note the vectors lack or hold for an older body, and forget
 /// notes the index no longer has. The store is loaded from `path` first if
-/// it is not in memory yet or holds another model's vectors. Stops before the
-/// next note once `keep_going` says so. True when the vectors changed.
+/// it is not in memory yet or holds another model's vectors, and saved there
+/// every `SAVE_EVERY` notes. Stops before the next note once `keep_going`
+/// says so. True when the vectors hold changes not saved yet.
 pub fn reconcile(
     index: &RwLock<Index>,
     vectors: &Mutex<Option<Vectors>>,
@@ -108,6 +114,7 @@ pub fn reconcile(
         (dropped, todo)
     };
 
+    let mut embedded = 0;
     for (id, hash, body) in todo {
         if !keep_going() {
             break;
@@ -128,6 +135,14 @@ pub fn reconcile(
             match store.insert(id.clone(), hash, vector) {
                 Ok(()) => changed = true,
                 Err(e) => log::warn!("could not store the vector of {id}: {e}"),
+            }
+            embedded += 1;
+            // `keep_going` is false for a retired space, whose folder is gone.
+            if embedded % SAVE_EVERY == 0 && keep_going() {
+                match store.save(path) {
+                    Ok(()) => changed = false,
+                    Err(e) => log::warn!("could not save the vectors midway: {e}"),
+                }
             }
         }
     }
@@ -308,6 +323,36 @@ mod tests {
         assert!(!reconcile(&index, &loaded, &path, &embedder, || true).unwrap());
         assert_eq!(embedder.calls(), 0);
         assert_eq!(*loaded.lock().unwrap(), *first.lock().unwrap());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_long_pass_cut_short_keeps_what_it_saved_along_the_way() {
+        let root = scratch_root("resume");
+        let path = vectors_path(&root);
+        let bodies: Vec<(String, String)> = (0..SAVE_EVERY + 100)
+            .map(|i| (format!("{i:05}"), format!("note number {i}")))
+            .collect();
+        let pairs: Vec<(&str, &str)> = bodies
+            .iter()
+            .map(|(id, body)| (id.as_str(), body.as_str()))
+            .collect();
+        let index = index_of(&pairs);
+
+        // Quit after one save's worth and a bit more, without the final save.
+        let first = Counting::new("stub-64");
+        let vectors = Mutex::new(None);
+        let unsaved = reconcile(&index, &vectors, &path, &first, || {
+            first.calls() < SAVE_EVERY + 10
+        });
+        assert!(unsaved.unwrap());
+
+        // The next launch reads the file and embeds only what it lacks.
+        let next = Counting::new("stub-64");
+        let reloaded = Mutex::new(None);
+        reconcile(&index, &reloaded, &path, &next, || true).unwrap();
+        assert_eq!(next.calls(), 100);
 
         let _ = std::fs::remove_dir_all(&root);
     }

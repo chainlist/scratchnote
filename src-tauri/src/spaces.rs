@@ -12,8 +12,10 @@ use std::sync::{Mutex, RwLock};
 
 use serde::{Deserialize, Serialize};
 
+use crate::embed::vectors::Vectors;
 use crate::enrich::normalize::Vocabulary;
 use crate::enrich::queue::{queue_path, Job, Queue};
+use crate::enrich::worker::Wake;
 use crate::storage::index::{self, Index};
 use crate::storage::writer::Writer;
 use crate::storage::{categories, tags};
@@ -198,6 +200,11 @@ pub struct Space {
     pub aliases: RwLock<HashMap<String, String>>,
     /// Pending enrichment jobs (SPEC 5.6).
     pub queue: Mutex<Queue>,
+    /// The note embeddings the chat searches. `None` until the embed task
+    /// first runs with a model, which loads them from `vectors.bin`.
+    pub vectors: Mutex<Option<Vectors>>,
+    /// Nudges the embed task whenever the index changes.
+    embed_wake: Wake,
     /// Held only to keep it alive; dropping it stops watching.
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
     /// Set once the space is deleted or renamed away, so a job still in hand
@@ -208,7 +215,7 @@ pub struct Space {
 impl Space {
     /// Load a space from disk. The flag says the index on disk is out of date
     /// and should be written back.
-    pub fn open(name: &str, root: PathBuf) -> (Self, bool) {
+    pub fn open(name: &str, root: PathBuf, embed_wake: Wake) -> (Self, bool) {
         let (loaded, stale) = index::load(&root);
         categories::ensure(&root);
         // tags.json is written alongside the index, so a missing one means
@@ -228,10 +235,14 @@ impl Space {
             aliases: RwLock::new(tags::load_aliases(&root)),
             index: RwLock::new(loaded),
             queue: Mutex::new(queue),
+            vectors: Mutex::new(None),
             watcher: Mutex::new(None),
             retired: AtomicBool::new(false),
             root,
+            embed_wake,
         };
+        // Its notes may have been written with no model, or by another one.
+        space.embed_wake.notify_one();
         (space, refresh)
     }
 
@@ -276,6 +287,24 @@ impl Space {
         }
     }
 
+    /// The `k` notes closest to a query, best first, with their cosine. Empty
+    /// until the embed task has loaded the vectors.
+    // Not called yet: the chat searches with it next.
+    #[allow(dead_code)]
+    pub fn nearest(&self, query: &[f32], k: usize) -> Vec<(String, f32)> {
+        self.vectors
+            .lock()
+            .ok()
+            .and_then(|vectors| Some(vectors.as_ref()?.top(query, k)))
+            .unwrap_or_default()
+    }
+
+    /// Tell the embed task the index changed. `persist_index` does it; the
+    /// capture path, which appends to the index instead, calls this itself.
+    pub fn index_changed(&self) {
+        self.embed_wake.notify_one();
+    }
+
     /// Write `index.jsonl` and `tags.json` from what is in memory. The tag
     /// counts are derived from the index, so they are rewritten whenever it is
     /// and the two never drift apart.
@@ -283,6 +312,9 @@ impl Space {
         if self.is_retired() {
             return Ok(());
         }
+        // Every change to the index but a capture ends here, so the vectors
+        // follow it from this one place.
+        self.index_changed();
         let (jsonl, counts) = {
             let idx = self
                 .index

@@ -73,6 +73,7 @@ pub async fn save_note(
         .writer
         .append_index_line(index::index_path(&space.root), line)
         .await?;
+    space.index_changed();
 
     enqueue(&state, &space, note.id.clone(), note.date.clone()).await;
 
@@ -586,6 +587,7 @@ pub async fn set_settings(
     if model_changed {
         unload_model(&app, &state);
         state.wake.notify_one();
+        state.embed_wake.notify_one();
     }
 
     Ok(SettingsView {
@@ -770,6 +772,7 @@ pub fn load_model(
     set_status(app, state, ModelStatus::Loaded);
     // Anything that was waiting on a model can go now.
     state.wake.notify_one();
+    state.embed_wake.notify_one();
     Ok(())
 }
 
@@ -851,6 +854,7 @@ pub async fn update_model(app: AppHandle, state: State<'_, AppState>) -> Result<
     }
     state.swapping.store(false, Ordering::SeqCst);
     state.wake.notify_one();
+    state.embed_wake.notify_one();
 
     result.map_err(|e| {
         format!(
@@ -892,7 +896,8 @@ fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
 /// Load a space and start watching it. Used at startup and whenever a space
 /// is made or renamed.
 pub fn open_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
-    let (space, refresh) = Space::open(name, root);
+    let embed_wake = app.state::<AppState>().embed_wake.clone();
+    let (space, refresh) = Space::open(name, root, embed_wake);
     let space = Arc::new(space);
     if let Err(e) = crate::watcher::start(app.clone(), &space) {
         log::error!("could not watch the notes of {name}: {e}");

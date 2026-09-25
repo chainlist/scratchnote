@@ -1,7 +1,5 @@
 mod chat;
 mod commands;
-// Not called yet: chat retrieval is wired up to it next.
-#[allow(dead_code)]
 mod embed;
 mod enrich;
 mod search;
@@ -106,6 +104,7 @@ pub fn run() {
             spaces::migrate_root(&root);
 
             let wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
+            let embed_wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
             app.manage(AppState {
                 root: root.clone(),
                 settings: std::sync::RwLock::new(settings),
@@ -121,6 +120,8 @@ pub fn run() {
                 busy: std::sync::atomic::AtomicBool::new(false),
                 batch_done: std::sync::atomic::AtomicUsize::new(0),
                 wake: wake.clone(),
+                embedder: std::sync::RwLock::new(None),
+                embed_wake: embed_wake.clone(),
             });
 
             // Every space is loaded, not just the open one, so notes captured
@@ -144,6 +145,9 @@ pub fn run() {
             }
 
             worker::spawn(app.handle().clone(), wake.clone());
+            // Opening the spaces above already woke it, so their notes are
+            // backfilled.
+            embed::sync::spawn(app.handle().clone(), embed_wake);
             idle::spawn(app.handle().clone());
             // Kick the worker in case a queue came back non-empty.
             wake.notify_one();

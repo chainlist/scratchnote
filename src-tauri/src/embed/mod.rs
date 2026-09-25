@@ -4,7 +4,14 @@
 //! Only the body is embedded, so a vector is tied to the body hash: editing a
 //! note's text embeds it again, editing its subject or tags does not.
 
+pub mod sync;
 pub mod vectors;
+
+use std::sync::Arc;
+
+use tauri::{AppHandle, Manager};
+
+use crate::state::AppState;
 
 /// A model that turns text into vectors.
 pub trait Embedder: Send + Sync {
@@ -16,7 +23,21 @@ pub trait Embedder: Send + Sync {
     fn embed_document(&self, text: &str) -> Result<Vec<f32>, String>;
     /// A question. Qwen3-Embedding puts an instruction before queries and not
     /// before documents, hence a method of its own.
+    // Not called yet: the chat embeds its question with it next.
+    #[allow(dead_code)]
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, String>;
+}
+
+/// The model that embeds notes, or `None` while there is none or the model
+/// is switched off: the one switch covers embeddings too.
+pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
+    let state = app.state::<AppState>();
+    if !state.model_enabled() {
+        return None;
+    }
+    // Lazy loading goes here when the slot is empty, as in `enrich::worker::backend`.
+    let loaded = state.embedder.read().ok()?.clone();
+    loaded
 }
 
 /// Scale to unit length, so similarity is a plain dot product. A zero vector

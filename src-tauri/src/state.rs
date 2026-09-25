@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
+use crate::embed::Embedder;
 use crate::enrich::download::{self, ActiveModel};
 use crate::enrich::model::{Backend, ModelStatus};
 use crate::enrich::worker::Wake;
@@ -41,6 +42,12 @@ pub struct AppState {
     pub batch_done: AtomicUsize,
     /// Nudges the worker when a job is queued or a model becomes available.
     pub wake: Wake,
+    /// `None` until an embedding model is loaded. Read through
+    /// `embed::embedder`, which also honours the model switch.
+    pub embedder: RwLock<Option<Arc<dyn Embedder>>>,
+    /// Nudges the embed task when an index changes or a model becomes
+    /// available.
+    pub embed_wake: Wake,
 }
 
 /// Where the worker is in the current stretch of work: `current` of `total`,

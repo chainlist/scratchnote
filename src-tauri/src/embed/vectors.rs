@@ -45,8 +45,13 @@ impl Vectors {
         std::fs::read(path)
             .ok()
             .and_then(|bytes| Self::decode(&bytes))
-            .filter(|saved| saved.model_id == model_id && saved.dims == dims)
+            .filter(|saved| saved.is_from(model_id, dims))
             .unwrap_or_else(|| Self::new(model_id, dims))
+    }
+
+    /// Whether these vectors came from this model at this size.
+    pub fn is_from(&self, model_id: &str, dims: usize) -> bool {
+        self.model_id == model_id && self.dims == dims
     }
 
     /// Temp file, fsync, rename, as the writer does, so a crash mid-save

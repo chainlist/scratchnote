@@ -29,13 +29,17 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import {
 		checkModelUpdate,
+		downloadEmbeddingModel,
 		downloadModel,
+		EMBEDDING_SIZE,
+		embeddingModelInfo,
 		getAliases,
 		getSettings,
 		gpuDevices,
 		MODEL_CHOICES,
 		modelInfo,
 		modelStatus,
+		onEmbeddingStatus,
 		onModelStatus,
 		onModelUpdateProgress,
 		onSettingsChanged,
@@ -44,6 +48,7 @@
 		setAliases,
 		setSettings,
 		updateModel,
+		type EmbeddingModelInfo,
 		type ModelInfo,
 		type ModelStatus,
 		type ModelVariant,
@@ -75,6 +80,7 @@
 	let checking = $state(false);
 	/** Download progress of an update, null when none is running. */
 	let updating = $state<number | null>(null);
+	let embedding = $state<EmbeddingModelInfo | null>(null);
 	let gpus = $state<string[]>([]);
 	let aliases = $state<{ from: string; to: string }[]>([]);
 	let launchAtLogin = $state(false);
@@ -119,6 +125,13 @@
 				if (status.state !== 'downloading') void refreshModels();
 			}),
 			onModelUpdateProgress((percent) => (updating = percent)),
+			onEmbeddingStatus(
+				(status) =>
+					(embedding = {
+						installed: status.state === 'installed',
+						downloading: status.state === 'downloading' ? status.percent : null
+					})
+			),
 			// A finished download makes that model the one in use.
 			onSettingsChanged((settings) => {
 				if (!view) return;
@@ -143,6 +156,7 @@
 				launchAtLogin = await isEnabled();
 				model = await modelStatus();
 				gpus = await gpuDevices();
+				embedding = await embeddingModelInfo();
 				await refreshModels();
 			} catch (e) {
 				say(String(e), true);
@@ -200,6 +214,15 @@
 		try {
 			await downloadModel(variant);
 			say(m.settings_model_downloaded());
+		} catch (e) {
+			say(String(e), true);
+		}
+	}
+
+	async function downloadEmbedding() {
+		try {
+			await downloadEmbeddingModel();
+			say(m.settings_embedding_downloaded());
 		} catch (e) {
 			say(String(e), true);
 		}
@@ -774,6 +797,37 @@
 									{/if}
 								</div>
 							{/if}
+
+							<div class={group}>
+								<div class={row}>
+									<div class="flex flex-col gap-0.5">
+										<span class="text-sm font-medium">{m.settings_embedding()}</span>
+										<p class={hint}>
+											{#if embedding?.downloading != null}
+												{m.settings_embedding_downloading({ percent: embedding.downloading })}
+											{:else}
+												{m.settings_embedding_hint()}
+											{/if}
+										</p>
+									</div>
+									{#if embedding?.installed}
+										<Badge variant="outline">{m.settings_embedding_installed()}</Badge>
+									{:else}
+										<Button
+											variant="secondary"
+											size="sm"
+											onclick={downloadEmbedding}
+											disabled={!embedding || embedding.downloading != null}
+										>
+											<DownloadIcon />
+											{EMBEDDING_SIZE}
+										</Button>
+									{/if}
+								</div>
+								{#if embedding?.downloading != null}
+									<div class="px-4 py-3"><Progress value={embedding.downloading} /></div>
+								{/if}
+							</div>
 
 							<div class={group}>
 								<div class={row}>

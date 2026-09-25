@@ -219,6 +219,28 @@ export const onModelUpdateProgress = (handler: (percent: number) => void): Promi
 
 export const downloadModel = (variant: ModelVariant) => invoke<void>('download_model', { variant });
 
+/** Qwen3-Embedding-0.6B at Q8_0, which lets the chat find notes by meaning. */
+export const EMBEDDING_SIZE = '~640 MB';
+
+export interface EmbeddingModelInfo {
+	installed: boolean;
+	/** Percent done while a download runs, null otherwise. */
+	downloading: number | null;
+}
+
+export const embeddingModelInfo = () => invoke<EmbeddingModelInfo>('embedding_model_info');
+
+/** Leaves the chat model and its settings alone. */
+export const downloadEmbeddingModel = () => invoke<void>('download_embedding_model');
+
+export type EmbeddingStatus =
+	{ state: 'downloading'; percent: number } | { state: 'installed' } | { state: 'absent' };
+
+export const onEmbeddingStatus = (
+	handler: (status: EmbeddingStatus) => void
+): Promise<UnlistenFn> =>
+	listen<EmbeddingStatus>('embedding-status', (event) => handler(event.payload));
+
 export const retryEnrichment = (date: string, id: string) =>
 	invoke<void>('retry_enrichment', { date, id });
 

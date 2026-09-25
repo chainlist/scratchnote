@@ -4,8 +4,10 @@
 	import * as Command from '$lib/components/ui/command';
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import HashIcon from '@lucide/svelte/icons/hash';
+	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
+	import TagsIcon from '@lucide/svelte/icons/tags';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
@@ -15,7 +17,9 @@
 		categories,
 		canChat,
 		onpick,
+		onseeall,
 		ontoday,
+		ontags,
 		onchat,
 		onsettings
 	}: {
@@ -29,7 +33,11 @@
 		canChat: boolean;
 		/** Show a found note on its day. */
 		onpick: (note: Note) => void;
+		/** Show every note the query matches in the timeline. */
+		onseeall: (query: string) => void;
 		ontoday: () => void;
+		/** List every tag in the timeline. */
+		ontags: () => void;
 		onchat: () => void;
 		onsettings: () => void;
 	} = $props();
@@ -136,6 +144,9 @@
 				<Command.Item value="today" onSelect={() => run(ontoday)}>
 					<CalendarCheckIcon />{m.command_today()}
 				</Command.Item>
+				<Command.Item value="tags" onSelect={() => run(ontags)}>
+					<TagsIcon />{m.command_tags()}
+				</Command.Item>
 				{#if canChat}
 					<Command.Item value="chat" onSelect={() => run(onchat)}>
 						<SparklesIcon />{m.search_chat_label()}
@@ -168,6 +179,10 @@
 			{/if}
 			{#if results.length > 0}
 				<Command.Group heading={m.page_results({ count: results.length })}>
+					<!-- First, so Enter right after typing lists the matches as the old search did. -->
+					<Command.Item value="see-all" onSelect={() => run(() => onseeall(trimmed))}>
+						<ListIcon />{m.command_see_all()}
+					</Command.Item>
 					{#each results as note (note.id)}
 						<Command.Item value="n:{note.id}" onSelect={() => run(() => onpick(note))}>
 							<span class="w-24 shrink-0 self-start font-mono text-xs text-muted-foreground">

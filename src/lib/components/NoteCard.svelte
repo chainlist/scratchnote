@@ -15,6 +15,7 @@
 		onsave,
 		onretry,
 		ontag,
+		showDate = false,
 		blink = false
 	}: {
 		note: Note;
@@ -27,6 +28,8 @@
 		onretry: (note: Note) => void;
 		/** Filter on a tag, as a click on it in the card does. */
 		ontag: (tag: string) => void;
+		/** Search results span days, so each card says which one. */
+		showDate?: boolean;
 		/** Blink once to show where a chat citation led. */
 		blink?: boolean;
 	} = $props();
@@ -109,13 +112,15 @@
 	></span>
 	<span
 		aria-hidden="true"
-		class="absolute top-[30px] left-[6.25rem] size-2.5 -translate-x-[4.5px] rounded-full border border-neutral-700 bg-neutral-950 transition-colors duration-300 group-hover:border-neutral-400 group-hover:bg-neutral-400"
+		class="absolute top-[30px] left-[6.25rem] size-2 -translate-x-[3.5px] rounded-full border border-neutral-700 bg-neutral-950 transition-colors duration-300 group-hover:border-neutral-400 group-hover:bg-neutral-400"
 	></span>
 	<span
 		aria-hidden="true"
-		class="absolute top-[40px] bottom-0 left-[6.25rem] w-px bg-neutral-800 [li:last-child_&]:hidden"
+		class="absolute top-[38px] bottom-0 left-[6.25rem] w-px bg-neutral-800 [li:last-child_&]:hidden"
 	></span>
-	<time class="pt-1 text-right font-mono text-[0.8125rem] leading-[1.375rem] text-neutral-600">{note.time}</time>
+	<time class="pt-1 text-right font-mono text-xs leading-5 text-neutral-600">
+		{#if showDate}<span class="block">{note.date}</span>{/if}{note.time}
+	</time>
 
 	<div class="min-w-0">
 		{#if editing}
@@ -127,7 +132,7 @@
 					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
 					aria-label={m.note_body_label()}
 					spellcheck="false"
-					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[1.0625rem] leading-7.5 text-neutral-100 focus:border-neutral-600 focus:outline-none"
+					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
 				></textarea>
 				<div class="flex items-center justify-end gap-1">
 					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
@@ -140,7 +145,7 @@
 				</div>
 			</div>
 		{:else}
-			<p class="text-[1.0625rem] leading-7.5 whitespace-pre-wrap text-neutral-200">{note.body}</p>
+			<p class="text-base leading-7 whitespace-pre-wrap text-neutral-200">{note.body}</p>
 		{/if}
 	</div>
 

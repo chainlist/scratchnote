@@ -3,6 +3,7 @@
 	"common_cancel": "Annulla",
 	"common_close": "Chiudi",
 	"common_delete": "Elimina",
+	"common_less": "Meno",
 	"common_save": "Salva",
 	"common_saving": "Salvataggio",
 	"common_settings": "Impostazioni",
@@ -29,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Nessuna nota corrisponde.",
+	"page_back": "Torna alla giornata",
 	"page_empty_day": "Non hai ancora scritto nulla. Premi {hotkey} per scrivere una nota.",
 	"page_delete_title": "Eliminare questa nota?",
 	"page_delete_description": "Viene rimossa dal file del giorno. Non si può annullare.",
@@ -63,6 +65,42 @@
 	"onboarding_downloading_body": "La cattura continua a funzionare. Le note restano in sospeso finché non finisce.",
 	"onboarding_absent_body": "Le note vengono salvate e restano cercabili anche senza un modello. Un modello aggiunge un soggetto, un riassunto e dei tag.",
 	"onboarding_skip": "Continua senza modello",
+	"tags_remove_filter": "Rimuovi il filtro #{tag}",
+	"tags_narrow": "Filtra su #{tag}",
+	"tags_more": "+{count} altri",
+	"tags_title": "Tag",
+	"tags_all": "Tutti i tag",
+	"tags_empty": "Ancora nessun tag. Il modello li aggiunge mentre etichetta le tue note.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} tag",
+				"countPlural=other": "{count} tag"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} nota",
+				"countPlural=other": "{count} note"
+			}
+		}
+	],
 	"note_body_label": "Corpo",
 	"note_edit_hint": "Ctrl+Enter per salvare, Esc per annullare",
 	"note_dblclick_hint": "Doppio click per modificare",
@@ -83,6 +121,8 @@
 	"search_chat_model_off": "La chat richiede il modello, che è disattivato nelle Impostazioni.",
 	"command_group_commands": "Comandi",
 	"command_today": "Vai a oggi",
+	"command_see_all": "Vedi tutti",
+	"command_tags": "Sfoglia i tag",
 	"chat_title": "Chat",
 	"chat_about": "su {space}",
 	"chat_new": "Nuova chat",

@@ -3,6 +3,7 @@
 	"common_cancel": "Cancelar",
 	"common_close": "Cerrar",
 	"common_delete": "Eliminar",
+	"common_less": "Menos",
 	"common_save": "Guardar",
 	"common_saving": "Guardando",
 	"common_settings": "Ajustes",
@@ -29,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Ninguna nota coincide.",
+	"page_back": "Volver al día",
 	"page_empty_day": "Nada capturado. Pulsa {hotkey} para escribir una nota.",
 	"page_delete_title": "¿Eliminar esta nota?",
 	"page_delete_description": "Se elimina de su archivo del día. No se puede deshacer.",
@@ -63,6 +65,42 @@
 	"onboarding_downloading_body": "La captura sigue funcionando. Las notas quedan pendientes hasta que esto termine.",
 	"onboarding_absent_body": "Las notas se guardan y se pueden buscar sin un modelo. Un modelo añade un asunto, un resumen y etiquetas.",
 	"onboarding_skip": "Continuar sin modelo",
+	"tags_remove_filter": "Quitar el filtro #{tag}",
+	"tags_narrow": "Filtrar por #{tag}",
+	"tags_more": "+{count} más",
+	"tags_title": "Etiquetas",
+	"tags_all": "Todas las etiquetas",
+	"tags_empty": "Aún no hay etiquetas. El modelo las añade al etiquetar tus notas.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} etiqueta",
+				"countPlural=other": "{count} etiquetas"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} nota",
+				"countPlural=other": "{count} notas"
+			}
+		}
+	],
 	"note_body_label": "Cuerpo",
 	"note_edit_hint": "Ctrl+Enter para guardar, Esc para cancelar",
 	"note_dblclick_hint": "Doble clic para editar",
@@ -83,6 +121,8 @@
 	"search_chat_model_off": "Chatear necesita el modelo, que está desactivado en Ajustes.",
 	"command_group_commands": "Comandos",
 	"command_today": "Ir a hoy",
+	"command_see_all": "Ver todo",
+	"command_tags": "Explorar etiquetas",
 	"chat_title": "Chat",
 	"chat_about": "sobre {space}",
 	"chat_new": "Chat nuevo",

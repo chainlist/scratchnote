@@ -3,6 +3,7 @@
 	"common_cancel": "Cancelar",
 	"common_close": "Fechar",
 	"common_delete": "Excluir",
+	"common_less": "Menos",
 	"common_save": "Salvar",
 	"common_saving": "Salvando",
 	"common_settings": "Configurações",
@@ -29,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Nenhuma nota encontrada.",
+	"page_back": "Voltar ao dia",
 	"page_empty_day": "Nada registrado. Pressione {hotkey} para escrever uma nota.",
 	"page_delete_title": "Excluir esta nota?",
 	"page_delete_description": "Ela é removida do arquivo do dia. Não há como desfazer.",
@@ -63,6 +65,42 @@
 	"onboarding_downloading_body": "A captura continua funcionando. As notas ficam pendentes até isso terminar.",
 	"onboarding_absent_body": "As notas são salvas e pesquisáveis sem um modelo. Um modelo adiciona um assunto, um resumo e tags.",
 	"onboarding_skip": "Continuar sem modelo",
+	"tags_remove_filter": "Remover filtro #{tag}",
+	"tags_narrow": "Restringir a #{tag}",
+	"tags_more": "+{count} mais",
+	"tags_title": "Tags",
+	"tags_all": "Todas as tags",
+	"tags_empty": "Ainda não há tags. O modelo adiciona-as ao etiquetar as suas notas.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} tag",
+				"countPlural=other": "{count} tags"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} nota",
+				"countPlural=other": "{count} notas"
+			}
+		}
+	],
 	"note_body_label": "Corpo",
 	"note_edit_hint": "Ctrl+Enter para salvar, Esc para cancelar",
 	"note_dblclick_hint": "Clique duas vezes para editar",
@@ -83,6 +121,8 @@
 	"search_chat_model_off": "Conversar exige o modelo, que está desativado em Configurações.",
 	"command_group_commands": "Comandos",
 	"command_today": "Ir para hoje",
+	"command_see_all": "Ver tudo",
+	"command_tags": "Explorar tags",
 	"chat_title": "Conversa",
 	"chat_about": "sobre {space}",
 	"chat_new": "Nova conversa",

@@ -20,6 +20,7 @@
 		onOpenSettings,
 		onSpacesChanged,
 		retryEnrichment,
+		search,
 		setTrayLabels,
 		splitCategory,
 		today,
@@ -42,9 +43,12 @@
 	import Onboarding from '$lib/components/Onboarding.svelte';
 	import Settings from '$lib/components/Settings.svelte';
 	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
+	import TagFilters from '$lib/components/TagFilters.svelte';
+	import TagsPage from '$lib/components/TagsPage.svelte';
 	import WindowControls from '$lib/components/WindowControls.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
@@ -71,6 +75,23 @@
 	/** The command center's query, kept between openings. */
 	let query = $state('');
 	let paletteOpen = $state(false);
+	/** The query whose matches the timeline lists in place of the day, from "See all". */
+	let shown = $state<string | null>(null);
+	let results = $state<Note[]>([]);
+	/** The timeline lists every tag in place of the day. */
+	let tagsShown = $state(false);
+	const activeTags = $derived(
+		(shown ?? '')
+			.split(/\s+/)
+			.filter((token) => token.startsWith('#'))
+			.map((token) => token.slice(1).toLowerCase())
+	);
+	const words = $derived(
+		(shown ?? '')
+			.split(/\s+/)
+			.filter((token) => token && !token.startsWith('#'))
+			.join(' ')
+	);
 	let settingsOpen = $state(false);
 	let spaces = $state<SpacesView | null>(null);
 
@@ -96,9 +117,36 @@
 		} catch (e) {
 			error = String(e);
 		}
+		await runSearch();
+	}
+
+	// Only the latest query's answer is kept, so a slow reply to an earlier
+	// one cannot overwrite a newer one.
+	let searchRun = 0;
+	async function runSearch() {
+		const run = ++searchRun;
+		if (shown === null) {
+			results = [];
+			return;
+		}
+		try {
+			const found = await search(shown);
+			if (run === searchRun) results = found;
+		} catch (e) {
+			error = String(e);
+		}
+	}
+
+	async function showResults(q: string) {
+		tagsShown = false;
+		shown = q.trim() || null;
+		query = shown ?? '';
+		await runSearch();
 	}
 
 	async function select(date: string) {
+		tagsShown = false;
+		shown = null;
 		selected = date;
 		await refresh();
 	}
@@ -123,10 +171,28 @@
 		blinkTimer = setTimeout(() => (blinking = null), 1400);
 	}
 
-	/** A tag clicked on a card opens the command center filtered on it. */
-	function openTag(tag: string) {
-		query = `#${tag} `;
-		paletteOpen = true;
+	/**
+	 * A tag clicked on a card opens the command center filtered on it. While
+	 * the timeline lists results, it narrows them instead: a plain click
+	 * filters on this tag alone, or clears it if it already was the only one,
+	 * and `additive` adds the tag or takes it out again. Words are kept.
+	 */
+	function openTag(tag: string, additive = false) {
+		if (shown === null) {
+			query = `#${tag} `;
+			paletteOpen = true;
+			return;
+		}
+		const tokens = shown.split(/\s+/).filter(Boolean);
+		const kept = tokens.filter((token) => token.toLowerCase() !== `#${tag}`);
+		const on = kept.length !== tokens.length;
+		if (additive) {
+			void showResults((on ? kept : [...tokens, `#${tag}`]).join(' '));
+			return;
+		}
+		const plain = tokens.filter((token) => !token.startsWith('#'));
+		const alone = on && activeTags.length === 1;
+		void showResults((alone ? plain : [...plain, `#${tag}`]).join(' '));
 	}
 
 	function onWindowKeydown(event: KeyboardEvent) {
@@ -221,7 +287,10 @@
 				onSpacesChanged((view) => {
 					const switched = view.active !== spaces?.active;
 					spaces = view;
-					if (switched) query = '';
+					if (switched) {
+						query = '';
+						shown = null;
+					}
 					void refresh();
 				})
 			);
@@ -300,9 +369,44 @@
 	<main class="min-h-0 flex-1 overflow-y-auto px-6 pb-28">
 		<div class="mx-auto max-w-3xl">
 			<div class="mt-6 mb-8 flex items-center gap-2">
-				<DayCalendar {days} {selected} onselect={select} />
-				<h1 class="text-3xl font-semibold tracking-tight">{heading}</h1>
+				{#if tagsShown || shown !== null}
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						onclick={() => void select(selected)}
+						aria-label={m.page_back()}
+						title={m.page_back()}
+						class="text-muted-foreground hover:text-foreground"
+					>
+						<ArrowLeftIcon />
+					</Button>
+				{/if}
+				{#if tagsShown}
+					<h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight">
+						{m.tags_title()}
+						<span class="font-normal text-muted-foreground">
+							{m.tags_count({ count: tags.length })}
+						</span>
+					</h1>
+				{:else if shown !== null}
+					<h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight">
+						{m.page_results({ count: results.length })}
+						{#if words}<span class="font-normal text-muted-foreground">{words}</span>{/if}
+					</h1>
+				{:else}
+					<DayCalendar {days} {selected} onselect={select} />
+					<h1 class="text-2xl font-semibold tracking-tight">{heading}</h1>
+				{/if}
 			</div>
+
+			{#if shown !== null}
+				<TagFilters
+					active={activeTags}
+					{results}
+					onremove={(tag) => openTag(tag, true)}
+					onadd={(tag) => openTag(tag, true)}
+				/>
+			{/if}
 
 			{#if model.state === 'absent' || model.state === 'downloading'}
 				<Onboarding status={model} />
@@ -316,7 +420,29 @@
 				</p>
 			{/if}
 
-			{#if notes.length === 0}
+			{#if tagsShown}
+				<TagsPage {tags} {categories} onpick={(tag) => void showResults(`#${tag}`)} />
+			{:else if shown !== null}
+				{#if results.length === 0}
+					<p class="text-base text-neutral-600">{m.page_no_match()}</p>
+				{:else}
+					<ul>
+						{#each results as note (note.id)}
+							<li>
+								<NoteCard
+									{note}
+									onedit={(n) => (editing = n)}
+									ondelete={(n) => (deleting = n)}
+									onsave={saveBody}
+									onretry={retry}
+									ontag={openTag}
+									showDate
+								/>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			{:else if notes.length === 0}
 				<p class="text-base text-neutral-600">
 					{m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })}
 				</p>
@@ -390,7 +516,12 @@
 	{categories}
 	{canChat}
 	onpick={(note) => void openCited(note)}
+	onseeall={(q) => void showResults(q)}
 	ontoday={async () => void select(await today())}
+	ontags={() => {
+		shown = null;
+		tagsShown = true;
+	}}
 	onchat={() => (chatOpen = true)}
 	onsettings={() => (settingsOpen = true)}
 />

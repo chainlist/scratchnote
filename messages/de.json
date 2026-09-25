@@ -3,6 +3,7 @@
 	"common_cancel": "Abbrechen",
 	"common_close": "Schließen",
 	"common_delete": "Löschen",
+	"common_less": "Weniger",
 	"common_save": "Speichern",
 	"common_saving": "Wird gespeichert",
 	"common_settings": "Einstellungen",
@@ -29,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Keine Notizen gefunden.",
+	"page_back": "Zurück zum Tag",
 	"page_empty_day": "Nichts erfasst. Drücke {hotkey}, um eine Notiz zu schreiben.",
 	"page_delete_title": "Diese Notiz löschen?",
 	"page_delete_description": "Sie wird aus der Tagesdatei entfernt. Das lässt sich nicht rückgängig machen.",
@@ -63,6 +65,42 @@
 	"onboarding_downloading_body": "Die Erfassung funktioniert weiter. Notizen bleiben ausstehend, bis dies abgeschlossen ist.",
 	"onboarding_absent_body": "Notizen werden auch ohne Modell gespeichert und durchsucht. Ein Modell fügt ein Thema, eine Zusammenfassung und Tags hinzu.",
 	"onboarding_skip": "Ohne Modell fortfahren",
+	"tags_remove_filter": "Filter #{tag} entfernen",
+	"tags_narrow": "Auf #{tag} eingrenzen",
+	"tags_more": "+{count} weitere",
+	"tags_title": "Tags",
+	"tags_all": "Alle Tags",
+	"tags_empty": "Noch keine Tags. Das Modell fügt sie hinzu, während es deine Notizen beschriftet.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Tag",
+				"countPlural=other": "{count} Tags"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Notiz",
+				"countPlural=other": "{count} Notizen"
+			}
+		}
+	],
 	"note_body_label": "Text",
 	"note_edit_hint": "Strg+Enter zum Speichern, Esc zum Abbrechen",
 	"note_dblclick_hint": "Doppelklick zum Bearbeiten",
@@ -83,6 +121,8 @@
 	"search_chat_model_off": "Zum Chatten wird das Modell benötigt, das in den Einstellungen ausgeschaltet ist.",
 	"command_group_commands": "Befehle",
 	"command_today": "Zu heute springen",
+	"command_see_all": "Alle anzeigen",
+	"command_tags": "Tags durchstöbern",
 	"chat_title": "Chat",
 	"chat_about": "über {space}",
 	"chat_new": "Neuer Chat",

@@ -3,6 +3,7 @@
 	"common_cancel": "Annuler",
 	"common_close": "Fermer",
 	"common_delete": "Supprimer",
+	"common_less": "Moins",
 	"common_save": "Enregistrer",
 	"common_saving": "Enregistrement",
 	"common_settings": "Paramètres",
@@ -29,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Aucune note ne correspond.",
+	"page_back": "Retour à la journée",
 	"page_empty_day": "Rien de capturé. Appuyez sur {hotkey} pour écrire une note.",
 	"page_delete_title": "Supprimer cette note ?",
 	"page_delete_description": "Elle est retirée de son fichier du jour. Il n'y a pas d'annulation possible.",
@@ -63,6 +65,42 @@
 	"onboarding_downloading_body": "La capture continue de fonctionner. Les notes restent en attente jusqu'à la fin du téléchargement.",
 	"onboarding_absent_body": "Les notes sont enregistrées et consultables sans modèle. Un modèle ajoute un sujet, un résumé et des tags.",
 	"onboarding_skip": "Continuer sans modèle",
+	"tags_remove_filter": "Retirer le filtre #{tag}",
+	"tags_narrow": "Filtrer sur #{tag}",
+	"tags_more": "+{count} de plus",
+	"tags_title": "Tags",
+	"tags_all": "Tous les tags",
+	"tags_empty": "Aucun tag pour l'instant. Le modèle en ajoute en étiquetant vos notes.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} tag",
+				"countPlural=other": "{count} tags"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} note",
+				"countPlural=other": "{count} notes"
+			}
+		}
+	],
 	"note_body_label": "Corps",
 	"note_edit_hint": "Ctrl+Enter pour enregistrer, Esc pour annuler",
 	"note_dblclick_hint": "Double-cliquez pour modifier",
@@ -83,6 +121,8 @@
 	"search_chat_model_off": "La discussion nécessite le modèle, qui est désactivé dans Paramètres.",
 	"command_group_commands": "Commandes",
 	"command_today": "Aller à aujourd'hui",
+	"command_see_all": "Tout voir",
+	"command_tags": "Parcourir les tags",
 	"chat_title": "Discussion",
 	"chat_about": "à propos de {space}",
 	"chat_new": "Nouvelle discussion",

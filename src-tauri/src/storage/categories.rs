@@ -1,69 +1,160 @@
 //! `categories.json`, the categories the model files notes under.
 //!
-//! The user's list: seeded on first run, edited by hand, and added to when
-//! the model finds nothing in it that fits. It is read afresh for every note,
-//! so an edit applies from the next one on.
+//! The user's lists, one per language notes are labelled in: seeded on first
+//! use of a language, edited by hand, and added to when the model finds
+//! nothing in one that fits. It is read afresh for every note, so an edit
+//! applies from the next one on.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
+use crate::enrich::language;
 use crate::enrich::normalize;
 
-/// What a new install starts with. Broad enough to cover most notes, narrow
+/// What a language starts with. Broad enough to cover most notes, narrow
 /// enough that films, shows and games do not end up on one shelf.
-pub const DEFAULT: [&str; 9] = [
-    "development",
-    "infrastructure",
-    "movie",
-    "tv",
-    "game",
-    "music",
-    "book",
-    "food",
-    "home",
-];
+fn defaults(lang: &str) -> Vec<String> {
+    let list: [&str; 9] = match lang {
+        "fr" => [
+            "développement",
+            "infrastructure",
+            "film",
+            "série",
+            "jeu",
+            "musique",
+            "livre",
+            "cuisine",
+            "maison",
+        ],
+        "es" => [
+            "desarrollo",
+            "infraestructura",
+            "película",
+            "serie",
+            "juego",
+            "música",
+            "libro",
+            "comida",
+            "hogar",
+        ],
+        "de" => [
+            "entwicklung",
+            "infrastruktur",
+            "film",
+            "serie",
+            "spiel",
+            "musik",
+            "buch",
+            "essen",
+            "zuhause",
+        ],
+        "it" => [
+            "sviluppo",
+            "infrastruttura",
+            "film",
+            "serie",
+            "gioco",
+            "musica",
+            "libro",
+            "cibo",
+            "casa",
+        ],
+        "pt" => [
+            "desenvolvimento",
+            "infraestrutura",
+            "filme",
+            "série",
+            "jogo",
+            "música",
+            "livro",
+            "comida",
+            "casa",
+        ],
+        _ => [
+            "development",
+            "infrastructure",
+            "movie",
+            "tv",
+            "game",
+            "music",
+            "book",
+            "food",
+            "home",
+        ],
+    };
+    list.map(String::from).to_vec()
+}
+
+/// Each language's list, by locale code.
+type Lists = BTreeMap<String, Vec<String>>;
 
 pub fn categories_path(root: &Path) -> PathBuf {
     root.join(".scratchnote").join("categories.json")
 }
 
-/// Write the default list if there is no file yet.
-pub fn ensure(root: &Path) {
+/// Write the defaults of `lang` if there is no file yet.
+pub fn ensure(root: &Path, lang: &str) {
     let path = categories_path(root);
     if path.exists() {
         return;
     }
-    let defaults: Vec<String> = DEFAULT.iter().map(|c| c.to_string()).collect();
+    let lists = Lists::from([(lang.to_string(), defaults(lang))]);
     let written = std::fs::create_dir_all(root.join(".scratchnote"))
-        .and_then(|_| std::fs::write(&path, render(&defaults)));
+        .and_then(|_| std::fs::write(&path, render(&lists)));
     if let Err(e) = written {
         log::warn!("could not write categories.json ({e})");
     }
 }
 
-/// The categories in file order. A missing or broken file offers the
-/// defaults, so labelling still works.
+/// Every language's categories, for telling a note's category from its tags
+/// and for the sidebar and editor: a note labelled in another language keeps
+/// its category. A missing or broken file offers the English defaults.
 pub fn load(root: &Path) -> Vec<String> {
-    read(root).unwrap_or_else(|| DEFAULT.iter().map(|c| c.to_string()).collect())
+    let Some(lists) = read(root) else {
+        return defaults(language::ENGLISH.code);
+    };
+    let mut all: Vec<String> = Vec::new();
+    for category in lists.into_values().flatten() {
+        if !all.contains(&category) {
+            all.push(category);
+        }
+    }
+    all
 }
 
-/// The file with `category` appended, or `None` when there is nothing to
-/// write: the category is already listed, empty, or the file is broken and
-/// must not be overwritten.
-pub fn with_added(root: &Path, category: &str) -> Option<String> {
+/// The categories of `lang` in file order, for the model to pick from. A
+/// language with no list yet, or a broken file, offers its defaults.
+pub fn load_in(root: &Path, lang: &str) -> Vec<String> {
+    read(root)
+        .and_then(|mut lists| lists.remove(lang))
+        .unwrap_or_else(|| defaults(lang))
+}
+
+/// The file with `category` appended to the list of `lang`, or `None` when
+/// there is nothing to write: the category is already listed, empty, or the
+/// file is broken and must not be overwritten. A language with no list yet
+/// gets its defaults written too, so the sidebar knows them.
+pub fn with_added(root: &Path, lang: &str, category: &str) -> Option<String> {
     if category.is_empty() {
         return None;
     }
-    let mut list = if categories_path(root).exists() {
+    let mut lists = if categories_path(root).exists() {
         read(root)?
     } else {
-        DEFAULT.iter().map(|c| c.to_string()).collect()
+        Lists::new()
     };
+    let listed = lists.contains_key(lang);
+    let list = lists
+        .entry(lang.to_string())
+        .or_insert_with(|| defaults(lang));
     if list.iter().any(|c| c == category) {
-        return None;
+        if listed {
+            return None;
+        }
+    } else {
+        list.push(category.to_string());
     }
-    list.push(category.to_string());
-    Some(render(&list))
+    Some(render(&lists))
 }
 
 /// The categories that at least one note carries, with how many do, most
@@ -100,19 +191,30 @@ pub fn join(category: Option<&str>, tags: &[String]) -> Vec<String> {
     out
 }
 
-fn read(root: &Path) -> Option<Vec<String>> {
+/// The lists as written. A plain list, the format before languages had
+/// their own, is the English one.
+fn read(root: &Path) -> Option<Lists> {
     let raw = std::fs::read_to_string(categories_path(root)).ok()?;
-    match serde_json::from_str::<Vec<String>>(&raw) {
-        Ok(raw) => {
-            // Cleaned like tags, since that is what they become.
-            let mut list: Vec<String> = Vec::new();
-            for category in raw.iter().filter_map(|c| normalize::clean(c)) {
-                if !list.contains(&category) {
-                    list.push(category);
-                }
-            }
-            Some(list)
-        }
+    let lists = serde_json::from_str::<Lists>(&raw).or_else(|_| {
+        serde_json::from_str::<Vec<String>>(&raw)
+            .map(|list| Lists::from([(language::ENGLISH.code.to_string(), list)]))
+    });
+    match lists {
+        Ok(lists) => Some(
+            lists
+                .into_iter()
+                .map(|(lang, raw)| {
+                    // Cleaned like tags, since that is what they become.
+                    let mut list: Vec<String> = Vec::new();
+                    for category in raw.iter().filter_map(|c| normalize::clean(c)) {
+                        if !list.contains(&category) {
+                            list.push(category);
+                        }
+                    }
+                    (lang, list)
+                })
+                .collect(),
+        ),
         Err(e) => {
             log::warn!("categories.json is not readable ({e}), using the defaults");
             None
@@ -120,8 +222,8 @@ fn read(root: &Path) -> Option<Vec<String>> {
     }
 }
 
-fn render(list: &[String]) -> String {
-    serde_json::to_string_pretty(list).unwrap_or_else(|_| "[]".to_string())
+fn render(lists: &Lists) -> String {
+    serde_json::to_string_pretty(lists).unwrap_or_else(|_| "{}".to_string())
 }
 
 #[cfg(test)]
@@ -135,11 +237,38 @@ mod tests {
     }
 
     #[test]
-    fn a_new_install_gets_the_defaults_on_disk() {
+    fn a_new_install_gets_the_defaults_of_its_language_on_disk() {
         let root = root("scratchnote-categories-new");
-        ensure(&root);
-        assert_eq!(load(&root), DEFAULT.map(String::from).to_vec());
-        assert!(load(&root).contains(&"movie".to_string()));
+        ensure(&root, "fr");
+        assert_eq!(load_in(&root, "fr"), defaults("fr"));
+        assert!(load(&root).contains(&"film".to_string()));
+        assert!(!load(&root).contains(&"movie".to_string()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_plain_list_is_the_english_one() {
+        let root = root("scratchnote-categories-legacy");
+        std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
+        std::fs::write(categories_path(&root), r#"["movie", "admin-dashboard"]"#).unwrap();
+        assert_eq!(load_in(&root, "en"), vec!["movie", "admin-dashboard"]);
+        // French has no list yet, so the model is offered its defaults.
+        assert_eq!(load_in(&root, "fr"), defaults("fr"));
+        assert_eq!(load(&root), vec!["movie", "admin-dashboard"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn every_language_is_listed_for_the_sidebar_once() {
+        let root = root("scratchnote-categories-all");
+        std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
+        std::fs::write(
+            categories_path(&root),
+            r#"{"en": ["movie", "infrastructure"], "fr": ["film", "infrastructure"]}"#,
+        )
+        .unwrap();
+        assert_eq!(load(&root), vec!["movie", "infrastructure", "film"]);
+        assert_eq!(load_in(&root, "fr"), vec!["film", "infrastructure"]);
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -152,7 +281,7 @@ mod tests {
             r#"["Movie", "board games", "movie"]"#,
         )
         .unwrap();
-        ensure(&root);
+        ensure(&root, "en");
         assert_eq!(load(&root), vec!["movie", "board-games"]);
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -162,13 +291,26 @@ mod tests {
         let root = root("scratchnote-categories-add");
         std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
         std::fs::write(categories_path(&root), r#"["movie"]"#).unwrap();
-        assert_eq!(with_added(&root, "movie"), None);
-        assert_eq!(with_added(&root, ""), None);
-        let added = with_added(&root, "podcast").unwrap();
+        assert_eq!(with_added(&root, "en", "movie"), None);
+        assert_eq!(with_added(&root, "en", ""), None);
+        let added = with_added(&root, "en", "podcast").unwrap();
         assert_eq!(
-            serde_json::from_str::<Vec<String>>(&added).unwrap(),
-            vec!["movie", "podcast"]
+            serde_json::from_str::<Lists>(&added).unwrap(),
+            Lists::from([("en".to_string(), strings(&["movie", "podcast"]))])
         );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_first_category_of_a_language_writes_its_defaults_too() {
+        let root = root("scratchnote-categories-new-language");
+        std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
+        std::fs::write(categories_path(&root), r#"["movie"]"#).unwrap();
+        // One of the defaults: nothing new to add, but the list gets written.
+        let added = with_added(&root, "fr", "film").unwrap();
+        let lists = serde_json::from_str::<Lists>(&added).unwrap();
+        assert_eq!(lists["en"], strings(&["movie"]));
+        assert_eq!(lists["fr"], defaults("fr"));
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -221,8 +363,9 @@ mod tests {
         let root = root("scratchnote-categories-broken");
         std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
         std::fs::write(categories_path(&root), "not json").unwrap();
-        assert_eq!(load(&root), DEFAULT.map(String::from).to_vec());
-        assert_eq!(with_added(&root, "podcast"), None);
+        assert_eq!(load(&root), defaults("en"));
+        assert_eq!(load_in(&root, "fr"), defaults("fr"));
+        assert_eq!(with_added(&root, "en", "podcast"), None);
         let _ = std::fs::remove_dir_all(&root);
     }
 }

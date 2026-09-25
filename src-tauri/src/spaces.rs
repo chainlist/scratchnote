@@ -215,9 +215,10 @@ pub struct Space {
 impl Space {
     /// Load a space from disk. The flag says the index on disk is out of date
     /// and should be written back.
-    pub fn open(name: &str, root: PathBuf, embed_wake: Wake) -> (Self, bool) {
+    /// `lang` seeds the categories of a space that has none yet.
+    pub fn open(name: &str, root: PathBuf, lang: &str, embed_wake: Wake) -> (Self, bool) {
         let (loaded, stale) = index::load(&root);
-        categories::ensure(&root);
+        categories::ensure(&root, lang);
         // tags.json is written alongside the index, so a missing one means
         // the counts were never written, not that there are no tags.
         let refresh = stale || !tags::tags_path(&root).exists();
@@ -275,15 +276,17 @@ impl Space {
     }
 
     /// What enrichment normalises against (SPEC 5.5).
-    pub fn vocabulary(&self) -> Vocabulary {
+    /// The tags and categories of the notes labelled in `lang`, so the model
+    /// is steered towards that language's spellings, never another's.
+    pub fn vocabulary(&self, lang: &str) -> Vocabulary {
         Vocabulary {
             counts: self
                 .index
                 .read()
-                .map(|idx| idx.tag_counts())
+                .map(|idx| idx.tag_counts_in(lang))
                 .unwrap_or_default(),
             aliases: self.aliases(),
-            categories: categories::load(&self.root),
+            categories: categories::load_in(&self.root, lang),
         }
     }
 

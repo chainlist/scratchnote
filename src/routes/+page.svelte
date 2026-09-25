@@ -18,6 +18,7 @@
 		onOpenSettings,
 		onSpacesChanged,
 		retryEnrichment,
+		saveNote,
 		search,
 		setTrayLabels,
 		similarNotes,
@@ -37,6 +38,7 @@
 	import CommandCenter from '$lib/components/CommandCenter.svelte';
 	import DeleteNoteDialog from '$lib/components/DeleteNoteDialog.svelte';
 	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
+	import NewNote from '$lib/components/NewNote.svelte';
 	import NoteEditor from '$lib/components/NoteEditor.svelte';
 	import NoteList from '$lib/components/NoteList.svelte';
 	import Onboarding from '$lib/components/Onboarding.svelte';
@@ -53,6 +55,8 @@
 	/** The selected day's notes. */
 	let notes = $state<Note[]>([]);
 	let selected = $state('');
+	/** New notes land on today, so only today's list offers to add one. */
+	let todayDate = $state('');
 	let error = $state<string | null>(null);
 	let model = $state<ModelStatus>({ state: 'absent' });
 	let tags = $state<[string, number][]>([]);
@@ -222,6 +226,21 @@
 		}
 	}
 
+	/** A note written in the page rather than the capture window. */
+	async function addNote(body: string): Promise<boolean> {
+		try {
+			await saveNote(body);
+			error = null;
+			// Past midnight the note went to a new day, so follow it there.
+			todayDate = await today();
+			await select(todayDate);
+			return true;
+		} catch (e) {
+			error = String(e);
+			return false;
+		}
+	}
+
 	async function retry(note: Note) {
 		try {
 			await retryEnrichment(note.date, note.id);
@@ -254,7 +273,7 @@
 	onMount(() => {
 		const off: Promise<() => void>[] = [];
 		void (async () => {
-			selected = await today();
+			selected = todayDate = await today();
 			await refresh();
 			// A note saved from the capture window lands in another webview.
 			off.push(onNoteUpdated(() => void refresh()));
@@ -357,6 +376,9 @@
 					{blinking}
 					{...cardActions}
 				/>
+				{#if selected === todayDate}
+					<NewNote onsave={addNote} />
+				{/if}
 			{/if}
 		</div>
 	</main>

@@ -149,14 +149,15 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
         return;
     }
 
-    let vocabulary = space.vocabulary();
+    let language = state.note_language();
+    let vocabulary = space.vocabulary(language.code);
     let body = note.body.clone();
     let started_with = note.hash.clone();
 
     // Inference is blocking and must never run on the async runtime's
     // reactor, nor outlive the timeout in SPEC 5.6.
     let work = tauri::async_runtime::spawn_blocking(move || {
-        runner::enrich(&body, &vocabulary, backend.as_ref())
+        runner::enrich(&body, language, &vocabulary, backend.as_ref())
     });
     let outcome = match tokio::time::timeout(Duration::from_secs(TIMEOUT_SECS), work).await {
         Ok(Ok(result)) => result,
@@ -178,8 +179,8 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
                     log::info!("{} was edited by hand while enriching, dropping", job.id);
                 }
                 Some(_) => {
-                    remember_category(&state, space, &enrichment.category).await;
-                    write_back(&state, space, &job, &runner::patch(&enrichment)).await;
+                    remember_category(&state, space, language.code, &enrichment.category).await;
+                    write_back(&state, space, &job, &runner::patch(&enrichment, language)).await;
                     emit_enriched(app, space, &job);
                 }
                 None => {}
@@ -205,14 +206,14 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
     space.persist_queue(&state.writer).await;
 }
 
-/// Append a category the model invented to `categories.json`, so the next
-/// notes are offered it.
-async fn remember_category(state: &AppState, space: &Space, category: &str) {
+/// Append a category the model invented to its language's list in
+/// `categories.json`, so the next notes are offered it.
+async fn remember_category(state: &AppState, space: &Space, lang: &str, category: &str) {
     use crate::storage::categories;
     if space.is_retired() {
         return;
     }
-    let Some(contents) = categories::with_added(&space.root, category) else {
+    let Some(contents) = categories::with_added(&space.root, lang, category) else {
         return;
     };
     let path = categories::categories_path(&space.root);

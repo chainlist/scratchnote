@@ -52,6 +52,7 @@ pub async fn save_note(
         tags: Vec::new(),
         status: Status::Pending,
         hash: daily_file::body_hash(&body),
+        lang: None,
         body,
         date: date.clone(),
     };
@@ -194,8 +195,12 @@ pub async fn update_note(
     if !state.writer.replace_body(path, id.clone(), body).await? {
         return Err(format!("no note {id} in {date}"));
     }
+    let requeue = current.status != Status::Manual;
+    if requeue {
+        mark_pending(&state, &space, &current).await?;
+    }
     reindex_day(&state, &space, &date).await?;
-    if current.status != Status::Manual {
+    if requeue {
         enqueue(&state, &space, id.clone(), date.clone()).await;
     }
 
@@ -220,8 +225,10 @@ pub async fn update_note_meta(
     check_date(&date)?;
     let space = state.space()?;
     let current = read_note(&space, &date, &id).await?;
-    let vocabulary = space.vocabulary();
-    let (current_category, current_tags) = categories::split(&vocabulary.categories, &current.tags);
+    let lang = state.note_language().code;
+    let vocabulary = space.vocabulary(lang);
+    let (current_category, current_tags) =
+        categories::split(&categories::load(&space.root), &current.tags);
 
     let subject = match subject {
         // The subject is the note's heading, so it has to stay on one line.
@@ -249,7 +256,7 @@ pub async fn update_note_meta(
     // does, so the sidebar shows it and later notes are offered it.
     if let Some(contents) = category
         .as_deref()
-        .and_then(|c| categories::with_added(&space.root, c))
+        .and_then(|c| categories::with_added(&space.root, lang, c))
     {
         state
             .writer
@@ -262,6 +269,7 @@ pub async fn update_note_meta(
         summary: current.summary.clone(),
         tags,
         status: Status::Manual,
+        lang: current.lang.clone(),
     };
     let path = day_path(&space.root, &date);
     if !state.writer.update_note(path, id.clone(), patch).await? {
@@ -287,6 +295,28 @@ async fn read_note(space: &Space, date: &str, id: &str) -> Result<Note, String> 
         .into_iter()
         .find(|note| note.id == id)
         .ok_or_else(|| format!("no note {id} in {date}"))
+}
+
+/// Set a note back to `pending` as it returns to the queue, so the day view
+/// shows it waiting. Its labels stay until the model replaces them.
+async fn mark_pending(
+    state: &State<'_, AppState>,
+    space: &Space,
+    note: &Note,
+) -> Result<(), String> {
+    let patch = NotePatch {
+        subject: note.subject.clone(),
+        summary: note.summary.clone(),
+        tags: note.tags.clone(),
+        status: Status::Pending,
+        lang: note.lang.clone(),
+    };
+    let path = day_path(&space.root, &note.date);
+    state
+        .writer
+        .update_note(path, note.id.clone(), patch)
+        .await?;
+    Ok(())
 }
 
 /// After rewriting a day file: reparse the day and write the index back.
@@ -348,6 +378,7 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
         summary: None,
         tags: Vec::new(),
         status: Status::Pending,
+        lang: None,
     };
     let mut touched_days = std::collections::BTreeSet::new();
     for (id, date) in &notes {
@@ -714,13 +745,22 @@ pub fn today() -> String {
 /// (SPEC 5.6).
 #[tauri::command]
 pub async fn retry_enrichment(
+    app: AppHandle,
     state: State<'_, AppState>,
     date: String,
     id: String,
 ) -> Result<(), String> {
     check_date(&date)?;
     let space = state.space()?;
-    enqueue(&state, &space, id, date).await;
+    let note = read_note(&space, &date, &id).await?;
+    // A manual note is never re-enriched, so it must not be unlocked here.
+    if note.status == Status::Manual {
+        return Ok(());
+    }
+    mark_pending(&state, &space, &note).await?;
+    reindex_day(&state, &space, &date).await?;
+    enqueue(&state, &space, id.clone(), date).await;
+    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     Ok(())
 }
 
@@ -1025,7 +1065,8 @@ fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
 /// is made or renamed.
 pub fn open_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
     let embed_wake = app.state::<AppState>().embed_wake.clone();
-    let (space, refresh) = Space::open(name, root, embed_wake);
+    let lang = app.state::<AppState>().note_language().code;
+    let (space, refresh) = Space::open(name, root, lang, embed_wake);
     let space = Arc::new(space);
     if let Err(e) = crate::watcher::start(app.clone(), &space) {
         log::error!("could not watch the notes of {name}: {e}");

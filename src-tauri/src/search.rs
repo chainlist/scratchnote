@@ -91,6 +91,7 @@ mod tests {
             tags: tags.iter().map(|t| t.to_string()).collect(),
             status: Status::Done,
             hash: body_hash(body),
+            lang: None,
             body: body.to_string(),
         }
     }

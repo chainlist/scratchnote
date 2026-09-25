@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use crate::embed::Embedder;
 use crate::enrich::download::{self, ActiveModel};
+use crate::enrich::language::{self, Language};
 use crate::enrich::model::{Backend, ModelStatus};
 use crate::enrich::worker::Wake;
 use crate::settings::Settings;
@@ -133,6 +134,15 @@ impl AppState {
 
     pub fn use_gpu(&self) -> bool {
         self.settings.read().map(|s| s.use_gpu).unwrap_or(true)
+    }
+
+    /// The language notes are labelled in, read afresh for every note so a
+    /// change applies from the next one on.
+    pub fn note_language(&self) -> Language {
+        self.settings
+            .read()
+            .map(|s| language::resolve(&s.language))
+            .unwrap_or(language::ENGLISH)
     }
 
     /// The open space, which every note command acts on.

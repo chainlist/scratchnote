@@ -214,7 +214,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 Opened from tray icon or app launch. Three areas:
 
 1. **Sidebar**: the space switcher (see 4.6), a day picker, and the categories in use with counts, sorted by count. Tags are too many and too fluid to browse as a list, so they are reached from search instead: `#` completes tag names, a note's tags filter on click, and search results offer the tags they share as chips to narrow down.
-2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Subject, summary and tags are not displayed; they exist for search and indexing. Edit, re-run and delete (with the enrichment status) appear on hover.
+2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Subject, summary and tags are not displayed; they exist for search and indexing. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page, a `failed` one has a faint turning red border, and the others look alike.
 3. **Search bar** at the top: full-text over body, subject, summary; supports `#tag` tokens as filters (e.g. `#infra kubernetes`). Results are note cards across all days.
 
 Note actions (on hover): edit body inline, edit tags manually, similar notes (with the embedding model, see 6.2), re-run enrichment, delete.
@@ -246,7 +246,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
         vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
         tags.json        # tag vocabulary + aliases
         queue.json       # pending enrichment jobs
-        categories.json
+        categories.json  # category lists by label language: {"en": [...], "fr": [...]}
     Work/
       notes/...
       .scratchnote/...
@@ -262,7 +262,7 @@ The daily markdown file holds both the note body and its enrichment metadata. `i
 ```markdown
 # 2026-09-22
 
-<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 status=done hash=a1b2c3d4 -->
+<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 status=done hash=a1b2c3d4 lang=en -->
 
 ### Rollback plan for ArgoCD sync issue
 
@@ -287,7 +287,8 @@ Rules:
 - `hash` is the first 8 hex chars of SHA-256 of the body (trimmed). It is used to detect external edits.
 - Before enrichment: heading is `### (untitled)` and there is no summary/tags block.
 - After enrichment: the heading becomes the subject, and a two-line blockquote holds summary and tags.
-- `status` is one of `pending`, `done`, `failed`, `manual` (`manual` = user edited tags/subject; never overwrite automatically).
+- `status` is one of `pending`, `done`, `failed`, `manual` (`manual` = user edited tags/subject; never overwrite automatically). A note sent back to the model (body edited, re-run) returns to `pending`, keeping its subject and tags until the model replaces them.
+- `lang` is the locale the model labelled the note in (`en`, `fr`, ...), written with its labels. A note without one was labelled before it was recorded and counts as English.
 - Anything outside note blocks (user's own text) must be preserved untouched on rewrite.
 
 ### 4.3 Write safety
@@ -404,7 +405,9 @@ First decide the note's topics from its own words. EXISTING TAGS only tells
 you how a topic is already spelled: when one of your topics is there, use that
 spelling. Never add a tag just because it is in the list. When none of them fit,
 make a new tag rather than forcing a poor match.
-Write subject and summary in the same language as the note.
+Write subject, summary, category and tags in {language}, whatever language the
+note is in: a note in another language is labelled in {language}, translated.
+Names of projects, products, tools, people and places stay as they are.
 ```
 
 User:
@@ -414,7 +417,11 @@ EXISTING TAGS: {top 150 tags by count, comma-separated}
 
 NOTE:
 {note body}
+
+LABEL IN: {language}. The category and every tag are {language} words, except names.
 ```
+
+`{language}` is the language setting (section 7) in English, such as French: the OS language under System, English when that is not one of the six. The vocabulary is that language's alone: EXISTING TAGS come from the notes whose `lang` it is, and EXISTING CATEGORIES from its list in `categories.json`, which starts from that language's defaults (`développement`, `film`, `série`, `jeu`... for French; a plain list from before is the English one). Offered another language's words, the model reuses them whatever it is told. The sidebar and the note editor still list every language's categories, so older notes keep theirs.
 
 ### 5.5 Tag normalization (post-processing, in Rust)
 
@@ -474,7 +481,7 @@ Applied to every tag the model returns, in order:
 - Tag aliases editor
 - Rebuild index
 - Launch at login
-- Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It changes only the interface: notes, tags and the enrichment prompt are untouched, and chat replies follow the language the user writes in.
+- Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It also sets the language new subjects, summaries and tags are written in (the OS language under System, English when that is not one of the six); note bodies are untouched, and chat replies follow the language the user writes in.
 
 ## 8. Tauri Commands (backend API)
 

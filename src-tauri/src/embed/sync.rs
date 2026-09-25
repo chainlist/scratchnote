@@ -207,6 +207,7 @@ mod tests {
             tags: Vec::new(),
             status: Status::Done,
             hash: body_hash(body),
+            lang: None,
             body: body.to_string(),
         })
     }

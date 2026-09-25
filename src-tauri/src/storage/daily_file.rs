@@ -52,6 +52,10 @@ pub struct Note {
     pub tags: Vec<String>,
     pub status: Status,
     pub hash: String,
+    /// The locale the model labelled the note in, such as "fr". `None` on a
+    /// note it has not labelled, or labelled before this was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
     pub body: String,
 }
 
@@ -62,8 +66,13 @@ pub fn body_hash(body: &str) -> String {
 }
 
 pub fn render_note(note: &Note) -> String {
+    let lang = note
+        .lang
+        .as_deref()
+        .map(|lang| format!(" lang={lang}"))
+        .unwrap_or_default();
     let mut out = format!(
-        "{}id={} time={} status={} hash={} -->\n",
+        "{}id={} time={} status={} hash={}{lang} -->\n",
         NOTE_OPEN,
         note.id,
         note.time,
@@ -191,6 +200,7 @@ pub struct NotePatch {
     pub summary: Option<String>,
     pub tags: Vec<String>,
     pub status: Status,
+    pub lang: Option<String>,
 }
 
 /// Rewrite one note's block in place, keeping its body and every byte of the
@@ -201,6 +211,7 @@ pub fn update_note(content: &str, id: &str, patch: &NotePatch) -> Option<String>
         note.summary = patch.summary.clone();
         note.tags = patch.tags.clone();
         note.status = patch.status;
+        note.lang = patch.lang.clone();
     })
 }
 
@@ -265,13 +276,14 @@ fn header_id(header: &str) -> Option<&str> {
 fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<Note> {
     let attrs = header.strip_prefix(NOTE_OPEN)?.strip_suffix("-->")?.trim();
 
-    let (mut id, mut time, mut status, mut hash) = (None, None, None, None);
+    let (mut id, mut time, mut status, mut hash, mut lang) = (None, None, None, None, None);
     for pair in attrs.split_whitespace() {
         match pair.split_once('=') {
             Some(("id", v)) => id = Some(v.to_string()),
             Some(("time", v)) => time = Some(v.to_string()),
             Some(("status", v)) => status = Status::parse(v),
             Some(("hash", v)) => hash = Some(v.to_string()),
+            Some(("lang", v)) => lang = Some(v.to_string()),
             _ => {}
         }
     }
@@ -288,6 +300,7 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
         tags,
         status: status.unwrap_or(Status::Pending),
         hash: hash.unwrap_or_else(|| body_hash(&body)),
+        lang,
         body,
     })
 }
@@ -355,6 +368,7 @@ mod tests {
             tags: Vec::new(),
             status: Status::Pending,
             hash: body_hash(body),
+            lang: None,
             body: body.to_string(),
         }
     }
@@ -581,7 +595,20 @@ mod tests {
             summary: Some("Pin the chart version and roll back staging.".to_string()),
             tags: vec!["argocd".to_string(), "staging".to_string()],
             status: Status::Done,
+            lang: Some("fr".to_string()),
         }
+    }
+
+    #[test]
+    fn the_label_language_is_written_in_the_marker_and_read_back() {
+        let doc = append_note("", &pending("01AAA", "08:00", "body"), DATE);
+        assert!(!doc.contains("lang="), "a pending note has no language");
+
+        let out = update_note(&doc, "01AAA", &enrich_patch()).unwrap();
+        assert!(out.contains(" lang=fr -->"), "{out}");
+        assert_eq!(parse_one(&out).lang.as_deref(), Some("fr"));
+        // Notes labelled before the language was recorded have none.
+        assert_eq!(parse_one(&doc).lang, None);
     }
 
     #[test]

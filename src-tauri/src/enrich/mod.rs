@@ -14,6 +14,7 @@ mod bench;
 pub mod download;
 pub mod grammar;
 pub mod idle;
+pub mod language;
 pub mod llama;
 pub mod model;
 pub mod normalize;

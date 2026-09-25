@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use super::daily_file::{self, Note, Status};
 use super::{check_date, relative_day_path};
+use crate::enrich::language;
 
 /// One note. The body is held in memory for search (SPEC 6) but never written
 /// to `index.jsonl`, which stays a small metadata cache.
@@ -27,6 +28,8 @@ pub struct IndexEntry {
     pub tags: Vec<String>,
     pub status: Status,
     pub hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
     #[serde(skip)]
     pub body: String,
     /// Subject, summary and body folded for matching, computed once here so a
@@ -55,6 +58,7 @@ impl From<&Note> for IndexEntry {
             tags: note.tags.clone(),
             status: note.status,
             hash: note.hash.clone(),
+            lang: note.lang.clone(),
             body: note.body.clone(),
             folded,
         }
@@ -73,6 +77,7 @@ impl IndexEntry {
             tags: self.tags.clone(),
             status: self.status,
             hash: self.hash.clone(),
+            lang: self.lang.clone(),
             body: self.body.clone(),
         }
     }
@@ -125,6 +130,22 @@ impl Index {
     pub fn tag_counts(&self) -> HashMap<String, u32> {
         let mut counts = HashMap::new();
         for tag in self.entries().flat_map(|entry| entry.tags.iter()) {
+            *counts.entry(tag.clone()).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    /// The tags of the notes labelled in `lang`, for the vocabulary the model
+    /// reuses: offered tags in another language, it keeps writing that one.
+    /// A note with no language recorded counts as English, the language
+    /// notes were labelled in before it was.
+    pub fn tag_counts_in(&self, lang: &str) -> HashMap<String, u32> {
+        let mut counts = HashMap::new();
+        let tags = self
+            .entries()
+            .filter(|entry| entry.lang.as_deref().unwrap_or(language::ENGLISH.code) == lang)
+            .flat_map(|entry| entry.tags.iter());
+        for tag in tags {
             *counts.entry(tag.clone()).or_insert(0) += 1;
         }
         counts
@@ -293,6 +314,7 @@ mod tests {
             tags: Vec::new(),
             status: Status::Pending,
             hash: body_hash(body),
+            lang: None,
             body: body.to_string(),
         }
     }
@@ -387,6 +409,34 @@ mod tests {
         let counts = index.tag_counts();
         assert_eq!(counts["infra"], 2);
         assert_eq!(counts["k8s"], 1);
+    }
+
+    #[test]
+    fn counts_a_languages_tags_with_unrecorded_notes_as_english() {
+        let mut index = Index::default();
+        let mut old = note("01AAA", "2026-09-22", "08:00", "a");
+        old.tags = vec!["movie".into()];
+        let mut french = note("01BBB", "2026-09-23", "08:00", "b");
+        french.tags = vec!["film".into()];
+        french.lang = Some("fr".into());
+        index.push(IndexEntry::from(&old));
+        index.push(IndexEntry::from(&french));
+
+        assert_eq!(
+            index.tag_counts_in("en").keys().collect::<Vec<_>>(),
+            ["movie"]
+        );
+        assert_eq!(
+            index.tag_counts_in("fr").keys().collect::<Vec<_>>(),
+            ["film"]
+        );
+        assert!(index.tag_counts_in("de").is_empty());
+        // The lang survives the index.jsonl cache.
+        let back = Index::from_jsonl(&index.to_jsonl());
+        assert_eq!(
+            back.tag_counts_in("fr").keys().collect::<Vec<_>>(),
+            ["film"]
+        );
     }
 
     #[test]

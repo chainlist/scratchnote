@@ -48,13 +48,6 @@
 	// already in the queue.
 	let canRetry = $derived(note.status === 'done' || note.status === 'failed');
 
-	// A done note shows no status, so only these need a label.
-	const statusLabel = {
-		pending: m.note_status_pending,
-		failed: m.note_status_failed,
-		manual: m.note_status_manual
-	};
-
 	async function startEditing() {
 		if (editing) return;
 		draft = note.body;
@@ -97,16 +90,24 @@
 </script>
 
 <!-- The double click is a mouse shortcut; Edit in the menu opens the same
-     text from the keyboard. -->
+     text from the keyboard. A pending note sits above its neighbours: its
+     glow spills onto them, and their hover background would cover it. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article
 	data-note-id={note.id}
-	class="group relative -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-5 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900 {menuOpen
+	class="group relative isolate -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-5 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900 {menuOpen
 		? 'bg-neutral-900'
-		: ''} {blink ? 'note-blink' : ''}"
+		: ''} {blink ? 'note-blink' : ''} {note.status === 'pending' ? 'z-10' : ''}"
 	ondblclick={onDoubleClick}
 	onmousedown={onMouseDown}
 >
+	<!-- Enrichment shows only while it matters: a glowing rainbow edge while
+	     the note waits for the model, a faint red ring when it failed. -->
+	{#if note.status === 'pending'}
+		<span aria-hidden="true" class="note-aurora"></span>
+	{:else if note.status === 'failed'}
+		<span aria-hidden="true" class="note-error-ring"></span>
+	{/if}
 	<!-- Timeline rail in the gutter between time and body. Each note draws
 	     its own dot and the segments above and below it; the first and last
 	     notes leave off the outer ends so the rail stops at their dots. -->
@@ -149,7 +150,15 @@
 				</div>
 			</div>
 		{:else}
-			<p class="text-base leading-7 whitespace-pre-wrap text-neutral-200">{note.body}</p>
+			<!-- data-text feeds the glow drawn behind the letters. -->
+			<p
+				class="text-base leading-7 whitespace-pre-wrap text-neutral-200 {note.status === 'pending'
+					? 'note-glow-text'
+					: ''}"
+				data-text={note.status === 'pending' ? note.body : undefined}
+			>
+				{note.body}
+			</p>
 		{/if}
 	</div>
 
@@ -160,19 +169,6 @@
 				: 'opacity-0'}"
 		>
 			<span class="text-[0.625rem] text-neutral-600 select-none">{m.note_dblclick_hint()}</span>
-			<!-- A done note says nothing; the others say where enrichment is,
-			     and `manual` that the model will leave the note alone. -->
-			{#if note.status !== 'done'}
-				<span
-					title={note.status === 'manual' ? m.note_manual_title() : undefined}
-					class="rounded px-1.5 py-0.5 text-[0.625rem] tracking-wide uppercase select-none
-						{note.status === 'failed'
-						? 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400'
-						: 'text-neutral-500'}"
-				>
-					{statusLabel[note.status]()}
-				</span>
-			{/if}
 			<DropdownMenu.Root bind:open={menuOpen}>
 				<DropdownMenu.Trigger
 					aria-label={m.note_actions()}

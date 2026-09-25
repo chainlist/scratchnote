@@ -7,19 +7,22 @@
 
 use crate::storage::daily_file::{NotePatch, Status};
 
+use super::language::Language;
 use super::model::Backend;
 use super::normalize::{self, Vocabulary};
 use super::{grammar, prompt, Enrichment};
 
-/// Label one note. The vocabulary steers the model towards tags already in
-/// use and then normalises whatever it returns anyway.
+/// Label one note, in `language` whatever the note is written in. The
+/// vocabulary, that language's, steers the model towards tags already in use
+/// and then normalises whatever it returns anyway.
 pub fn enrich(
     body: &str,
+    language: Language,
     vocabulary: &Vocabulary,
     backend: &dyn Backend,
 ) -> Result<Enrichment, String> {
     let existing = related_tags(vocabulary.by_frequency(), body);
-    let text = prompt::build(body, &vocabulary.categories, &existing);
+    let text = prompt::build(body, language.name, &vocabulary.categories, &existing);
 
     let raw = backend.generate(&text, grammar::ENRICHMENT_GBNF)?;
     let mut enrichment = Enrichment::parse(&raw)?;
@@ -81,13 +84,15 @@ fn mentions(words: &[&str], part: &str) -> bool {
     })
 }
 
-/// What to write into the note block. The body and hash are untouched.
-pub fn patch(enrichment: &Enrichment) -> NotePatch {
+/// What to write into the note block, recording the language it was
+/// labelled in. The body and hash are untouched.
+pub fn patch(enrichment: &Enrichment, language: Language) -> NotePatch {
     NotePatch {
         subject: Some(enrichment.subject.clone()),
         summary: Some(enrichment.summary.clone()),
         tags: enrichment.tags.clone(),
         status: Status::Done,
+        lang: Some(language.code.to_string()),
     }
 }
 
@@ -99,12 +104,14 @@ pub fn failed_patch(current: &crate::storage::daily_file::Note) -> NotePatch {
         summary: current.summary.clone(),
         tags: current.tags.clone(),
         status: Status::Failed,
+        lang: current.lang.clone(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enrich::language::{self, ENGLISH};
     use crate::enrich::model::StubBackend;
     use crate::storage::daily_file::{append_note, body_hash, parse_notes, update_note, Note};
 
@@ -128,6 +135,7 @@ mod tests {
             tags: Vec::new(),
             status: Status::Pending,
             hash: body_hash(body),
+            lang: None,
             body: body.to_string(),
         }
     }
@@ -175,8 +183,10 @@ mod tests {
             let note = pending(&id, body);
             let doc = append_note("", &note, DATE);
 
-            let enrichment = enrich(body, &vocabulary, &backend).expect("stub always succeeds");
-            let out = update_note(&doc, &id, &patch(&enrichment)).expect("id is present");
+            let enrichment =
+                enrich(body, ENGLISH, &vocabulary, &backend).expect("stub always succeeds");
+            let out =
+                update_note(&doc, &id, &patch(&enrichment, ENGLISH)).expect("id is present");
 
             // The block must read back as an enriched note with the body intact.
             let parsed = parse_notes(&out, DATE, FILE);
@@ -185,6 +195,7 @@ mod tests {
             assert_eq!(parsed.body, *body, "body changed for {body}");
             assert_eq!(parsed.hash, note.hash, "hash changed for {body}");
             assert_eq!(parsed.status, Status::Done);
+            assert_eq!(parsed.lang.as_deref(), Some("en"), "language for {body}");
             assert_eq!(parsed.subject.as_deref(), Some("Rollback plan"));
             assert_eq!(
                 parsed.summary.as_deref(),
@@ -211,7 +222,7 @@ mod tests {
         };
         // The stub answers "Stagging", one edit away from the known tag.
         let backend = StubBackend::new(r#"{"subject":"a","summary":"b","tags":["Stagging"]}"#);
-        let out = enrich("some note", &vocabulary, &backend).unwrap();
+        let out = enrich("some note", ENGLISH, &vocabulary, &backend).unwrap();
         assert_eq!(out.tags, vec!["staging"]);
     }
 
@@ -220,7 +231,7 @@ mod tests {
         let backend = StubBackend::new(
             r#"{"subject":"a","summary":"b","category":"Gaming","tags":["silksong","boss","gaming","map","secret","waterfall"]}"#,
         );
-        let out = enrich("note", &Vocabulary::default(), &backend).unwrap();
+        let out = enrich("note", ENGLISH, &Vocabulary::default(), &backend).unwrap();
         assert_eq!(out.category, "gaming");
         assert_eq!(out.tags, vec!["gaming", "silksong", "boss", "map", "secret"]);
     }
@@ -257,21 +268,21 @@ mod tests {
                 Err("model exploded".to_string())
             }
         }
-        let err = enrich("note", &Vocabulary::default(), &Failing).unwrap_err();
+        let err = enrich("note", ENGLISH, &Vocabulary::default(), &Failing).unwrap_err();
         assert!(err.contains("model exploded"));
     }
 
     #[test]
     fn output_that_is_not_the_object_is_a_failure_not_a_bad_write() {
         let backend = StubBackend::new("I'm sorry, I cannot do that.");
-        assert!(enrich("note", &Vocabulary::default(), &backend).is_err());
+        assert!(enrich("note", ENGLISH, &Vocabulary::default(), &backend).is_err());
     }
 
     #[test]
     fn tags_that_all_normalise_away_are_a_failure() {
         let backend =
             StubBackend::new("{\"subject\":\"a\",\"summary\":\"b\",\"tags\":[\"###\",\"!!!\"]}");
-        assert!(enrich("note", &Vocabulary::default(), &backend).is_err());
+        assert!(enrich("note", ENGLISH, &Vocabulary::default(), &backend).is_err());
     }
 
     /// A note should be tagged with what it is about, including the project or
@@ -319,7 +330,7 @@ mod tests {
 
         let mut missing = Vec::new();
         for (note, wanted) in cases {
-            let out = enrich(note, &vocabulary, backend.as_ref()).expect("should label");
+            let out = enrich(note, ENGLISH, &vocabulary, backend.as_ref()).expect("should label");
             eprintln!(
                 "{note}
   -> {} | {:?}",
@@ -387,7 +398,7 @@ mod tests {
         };
 
         let note = "memory burst usage of Scratchnote to check if there's a memory leak";
-        let out = enrich(note, &vocabulary, backend.as_ref()).expect("should label");
+        let out = enrich(note, ENGLISH, &vocabulary, backend.as_ref()).expect("should label");
         eprintln!("{note}\n  -> {} | {:?}", out.subject, out.tags);
 
         assert!(
@@ -423,17 +434,56 @@ mod tests {
         };
         let sentence = "Staging deploy notes: the ArgoCD sync wave order was wrong again. ";
         let long = sentence.repeat(12_000 / sentence.len() + 1);
-        let out = enrich(&long, &Vocabulary::default(), backend.as_ref())
+        let out = enrich(&long, ENGLISH, &Vocabulary::default(), backend.as_ref())
             .expect("a note at the cap should label");
         assert!(!out.tags.is_empty());
 
         // Straight to the backend, past the truncation, so the prompt is
         // longer than the context.
-        let huge = prompt::build(&"é ".repeat(20_000), &[], &[]);
+        let huge = prompt::build(&"é ".repeat(20_000), "English", &[], &[]);
         let err = backend
             .generate(&huge, grammar::ENRICHMENT_GBNF)
             .unwrap_err();
         assert!(err.contains("too long"), "{err}");
+    }
+
+    /// The labels follow the language the user picked, not the note's. Needs
+    /// a model; `cargo test -- --ignored`.
+    #[test]
+    #[ignore = "needs a downloaded model"]
+    fn labels_in_the_chosen_language_whatever_the_note_is_in() {
+        let Some(backend) = load_installed_model() else {
+            return;
+        };
+
+        let cases = [
+            (
+                "ArgoCD auto-sync broke staging again. Pin the chart version and roll back before Friday's release.",
+                language::find("fr").unwrap(),
+                [" le ", " la ", " les ", " de ", " du ", " des "],
+            ),
+            (
+                "La démo client est décalée à jeudi, prévenir l'équipe produit",
+                ENGLISH,
+                [" the ", " to ", " a ", " for ", " of ", " and "],
+            ),
+        ];
+
+        for (note, language, common_words) in cases {
+            let out = enrich(note, language, &Vocabulary::default(), backend.as_ref())
+                .expect("should label");
+            eprintln!(
+                "{note}\n  -> [{}] {} | {} | {:?}",
+                language.name, out.subject, out.summary, out.tags
+            );
+            let summary = format!(" {} ", out.summary.to_lowercase());
+            assert!(
+                common_words.iter().any(|word| summary.contains(word)),
+                "the summary is not in {}: {}",
+                language.name,
+                out.summary
+            );
+        }
     }
 
     /// Shared by the tests that need real weights.
@@ -476,7 +526,7 @@ mod tests {
         let vocabulary = Vocabulary::default();
 
         for body in samples().iter().take(5) {
-            let out = enrich(body, &vocabulary, &backend)
+            let out = enrich(body, ENGLISH, &vocabulary, &backend)
                 .unwrap_or_else(|e| panic!("{body:?} failed: {e}"));
 
             assert!(!out.subject.trim().is_empty(), "empty subject for {body:?}");

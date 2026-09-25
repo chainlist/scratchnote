@@ -393,6 +393,7 @@ mod tests {
             tags: tags.iter().map(|t| t.to_string()).collect(),
             status: Status::Done,
             hash: "00000000".to_string(),
+            lang: None,
             body: "SECRET BODY".to_string(),
             folded: String::new(),
         }

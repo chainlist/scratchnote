@@ -8,10 +8,15 @@ const MAX_NOTE_CHARS: usize = 12_000;
 /// How many of the existing tags to offer the model (SPEC 5.4).
 pub const EXISTING_TAG_LIMIT: usize = 150;
 
-pub const SYSTEM: &str = "\
+/// `language` is the English name of the one the user picked, such as
+/// "French": the labels follow it whatever language the note is in.
+pub fn system(language: &str) -> String {
+    format!(
+        "\
 You label short personal notes. Return JSON only.
-Write subject and summary in the same language as the note: a French note gets
-a French subject and summary.
+Write subject, summary, category and tags in {language}, whatever language the
+note is in: a note in another language is labelled in {language}, translated.
+Names of projects, products, tools, people and places stay as they are.
 - subject: a title of 3 to 8 words naming what the note is about. Do not copy
   the note's first sentence. No trailing punctuation.
 - summary: one sentence, max 20 words, stating the key point, decision or next
@@ -19,11 +24,13 @@ a French subject and summary.
 - category: one lowercase word or kebab-case naming the broad subject the note
   belongs to, such as its field, technology, hobby or medium, so it sits next
   to related notes that name other things. Not what kind of note it is.
-  Pick it from EXISTING CATEGORIES, spelled exactly as listed. Only when none
-  of them is the subject of the note, make a new one.
-- tags: 1 to 5 lowercase tags, single words or kebab-case. A tag is a shelf the
-  user browses later: keep one only if they would want to see other notes
-  under it.
+  Pick it from the EXISTING CATEGORIES written in {language}, spelled exactly
+  as listed. Only when none of them is the subject of the note, make a new one
+  in {language}.
+- tags: 1 to 5 lowercase tags in {language}, single words or kebab-case. A
+  subject word from a note in another language is translated.
+  A tag is a shelf the user browses later: keep one only if they would want to
+  see other notes under it.
   First, when the note names a specific project, product, tool, game, film,
   show, person or place, tag it by that name. A project or product the note
   names is always a tag, even when the note is about one feature of it. Then
@@ -32,13 +39,25 @@ a French subject and summary.
   what kind of note it is, such as issue, plan, update, task, idea, todo or
   question.
 EXISTING TAGS only tells you how a subject is already spelled. Reuse one only
-when it means the same thing in this note. Never add a tag just because it is
-in the list. When none of them fit, make a new tag
-rather than forcing a poor match.";
+when it is a name or a {language} word, and means the same thing in this note.
+Never add a tag just because it is in the list. When none of them fit, make a
+new tag
+rather than forcing a poor match."
+    )
+}
 
-pub fn user_message(body: &str, categories: &[String], existing_tags: &[String]) -> String {
+/// The language is named again after the note: said only in the system
+/// message, the 4B labels an English note in English whatever it asks. The
+/// categories and tags offered must be that language's too (`Space::vocabulary`),
+/// or it reuses them whatever it is told.
+pub fn user_message(
+    body: &str,
+    language: &str,
+    categories: &[String],
+    existing_tags: &[String],
+) -> String {
     format!(
-        "EXISTING CATEGORIES: {}\nEXISTING TAGS: {}\n\nNOTE:\n{}",
+        "EXISTING CATEGORIES: {}\nEXISTING TAGS: {}\n\nNOTE:\n{}\n\nLABEL IN: {language}. The category and every tag are {language} words, except names.",
         categories.join(", "),
         existing_tags
             .iter()
@@ -60,8 +79,16 @@ pub fn chat(system: &str, user: &str) -> String {
     )
 }
 
-pub fn build(body: &str, categories: &[String], existing_tags: &[String]) -> String {
-    chat(SYSTEM, &user_message(body, categories, existing_tags))
+pub fn build(
+    body: &str,
+    language: &str,
+    categories: &[String],
+    existing_tags: &[String],
+) -> String {
+    chat(
+        &system(language),
+        &user_message(body, language, categories, existing_tags),
+    )
 }
 
 /// Keep the head and the tail: the opening says what a note is about and the
@@ -85,37 +112,39 @@ mod tests {
 
     #[test]
     fn the_system_message_matches_the_spec() {
-        assert!(SYSTEM.starts_with("You label short personal notes. Return JSON only."));
-        assert!(SYSTEM.contains("3 to 8 words"));
-        assert!(SYSTEM.contains("max 20 words"));
-        assert!(SYSTEM.contains("1 to 5 lowercase tags"));
+        let system = system("French");
+        assert!(system.starts_with("You label short personal notes. Return JSON only."));
+        assert!(system.contains("3 to 8 words"));
+        assert!(system.contains("max 20 words"));
+        assert!(system.contains("1 to 5 lowercase tags"));
         // The two things that keep the vocabulary useful rather than merely
         // small: tag the subject matter, and never force-fit an existing tag.
-        assert!(SYSTEM.contains("A tag is a shelf"));
-        assert!(SYSTEM.contains("- category:"));
-        assert!(SYSTEM.contains("what kind of note it is"));
-        assert!(SYSTEM.contains("tag it by that name"));
-        assert!(SYSTEM.contains("rather than forcing a poor match"));
-        assert!(SYSTEM.contains("same language as the note"));
+        assert!(system.contains("A tag is a shelf"));
+        assert!(system.contains("- category:"));
+        assert!(system.contains("what kind of note it is"));
+        assert!(system.contains("tag it by that name"));
+        assert!(system.contains("rather than forcing a poor match"));
+        assert!(system.contains("tags in French, whatever language the"));
     }
 
     #[test]
-    fn the_user_message_lists_categories_and_tags_then_the_note() {
+    fn the_user_message_lists_categories_and_tags_then_the_note_and_language() {
         let message = user_message(
             "buy a hub",
+            "French",
             &["hardware".into()],
             &["argocd".into(), "homelab".into()],
         );
         assert_eq!(
             message,
-            "EXISTING CATEGORIES: hardware\nEXISTING TAGS: argocd, homelab\n\nNOTE:\nbuy a hub"
+            "EXISTING CATEGORIES: hardware\nEXISTING TAGS: argocd, homelab\n\nNOTE:\nbuy a hub\n\nLABEL IN: French. The category and every tag are French words, except names."
         );
     }
 
     #[test]
     fn offers_at_most_the_top_tags() {
         let many: Vec<String> = (0..300).map(|i| format!("tag{i}")).collect();
-        let message = user_message("note", &[], &many);
+        let message = user_message("note", "English", &[], &many);
         let listed = message
             .lines()
             .nth(1)
@@ -128,7 +157,7 @@ mod tests {
 
     #[test]
     fn an_empty_vocabulary_still_produces_a_usable_message() {
-        let message = user_message("buy a hub", &[], &[]);
+        let message = user_message("buy a hub", "English", &[], &[]);
         assert!(message.starts_with("EXISTING CATEGORIES: \nEXISTING TAGS: \n\nNOTE:"));
     }
 

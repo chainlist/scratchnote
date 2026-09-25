@@ -6,6 +6,7 @@
 
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
+use super::language::ENGLISH;
 use super::llama::LlamaCpp;
 use super::model::Backend;
 use super::normalize::Vocabulary;
@@ -61,7 +62,7 @@ fn bench_cold_batch() {
     let vocabulary = Vocabulary {
         counts: crate::storage::index::rebuild(&root).tag_counts(),
         aliases: crate::storage::tags::load_aliases(&root),
-        categories: crate::storage::categories::load(&root),
+        categories: crate::storage::categories::load_in(&root, "en"),
     };
 
     // A quiet stretch first, so the sampler sees the baseline.
@@ -87,7 +88,7 @@ fn bench_cold_batch() {
 
     for (i, note) in NOTES.iter().enumerate() {
         let started = Instant::now();
-        let result = enrich(note, &vocabulary, backend.as_ref());
+        let result = enrich(note, ENGLISH, &vocabulary, backend.as_ref());
         mark(
             "note",
             serde_json::json!({

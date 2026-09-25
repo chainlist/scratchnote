@@ -1,0 +1,89 @@
+<script lang="ts">
+	import { tick } from 'svelte';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import { m } from '$lib/paraglide/messages';
+
+	let {
+		onsave
+	}: {
+		/** Save the note to today. Resolves true once saved; false keeps the editor open. */
+		onsave: (body: string) => Promise<boolean>;
+	} = $props();
+
+	let writing = $state(false);
+	let saving = $state(false);
+	let draft = $state('');
+	let textarea = $state<HTMLTextAreaElement | null>(null);
+
+	async function start() {
+		writing = true;
+		await tick();
+		textarea?.focus();
+	}
+
+	async function save() {
+		if (saving) return;
+		if (draft.trim() === '') {
+			writing = false;
+			return;
+		}
+		saving = true;
+		const saved = await onsave(draft);
+		saving = false;
+		if (saved) {
+			draft = '';
+			writing = false;
+		}
+	}
+
+	const action =
+		'cursor-pointer rounded px-1.5 py-0.5 text-[0.625rem] tracking-wide text-neutral-400 uppercase hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50';
+
+	function onKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+			event.preventDefault();
+			void save();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			writing = false;
+		}
+	}
+</script>
+
+<!-- Laid out like a note card so the button and the editor sit in the body
+     column, under the notes above. -->
+<div class="-mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 px-3 py-3">
+	<div class="col-start-2 min-w-0">
+		{#if writing}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="flex flex-col gap-2" onkeydown={onKeydown}>
+				<textarea
+					bind:this={textarea}
+					bind:value={draft}
+					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
+					placeholder={m.capture_placeholder()}
+					aria-label={m.note_body_label()}
+					spellcheck="false"
+					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+				></textarea>
+				<div class="flex items-center justify-end gap-1">
+					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
+					<button type="button" onclick={() => (writing = false)} class={action}
+						>{m.common_cancel()}</button
+					>
+					<button type="button" onclick={save} disabled={saving} class={action}>
+						{saving ? m.common_saving() : m.common_save()}
+					</button>
+				</div>
+			</div>
+		{:else}
+			<button
+				type="button"
+				onclick={start}
+				class="-mx-1.5 flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-neutral-600 hover:bg-neutral-900 hover:text-neutral-300"
+			>
+				<PlusIcon class="size-3.5" />{m.page_add_note()}
+			</button>
+		{/if}
+	</div>
+</div>

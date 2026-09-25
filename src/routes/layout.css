@@ -193,12 +193,20 @@ body {
 	}
 }
 
+/* How bright the aurora is as it breathes. A property of its own rather
+   than opacity, which the fade in and out of the glow drives. */
+@property --note-glow {
+	syntax: '<number>';
+	inherits: true;
+	initial-value: 1;
+}
+
 @keyframes note-breathe {
 	from {
-		opacity: 0.55;
+		--note-glow: 0.55;
 	}
 	to {
-		opacity: 1;
+		--note-glow: 1;
 	}
 }
 
@@ -246,7 +254,7 @@ body {
 	inset: -1px;
 	padding: 3px;
 	border-radius: calc(var(--radius) + 1px);
-	opacity: 0.7;
+	opacity: calc(0.7 * var(--note-glow));
 }
 
 /* The halo. The colour is painted under the card alone and blurred outward;
@@ -258,7 +266,7 @@ body {
 	border-radius: calc(var(--radius) + 16px);
 	background-clip: content-box;
 	filter: blur(7px);
-	opacity: 0.7;
+	opacity: calc(0.7 * var(--note-glow));
 }
 
 @keyframes note-flow {
@@ -269,9 +277,9 @@ body {
 
 /* The text of a waiting note: the edge's colours flowing through the
    letters, with a blurred copy behind them as their glow. Deeper shades on
-   a light page and lighter ones on a dark page keep it readable. */
+   a light page and lighter ones on a dark page keep it readable. The card
+   lays it over the real text, which it positions. */
 .note-glow-text {
-	position: relative;
 	color: transparent;
 	background: linear-gradient(90deg, #7c3aed, #2563eb, #0891b2, #059669, #d97706, #db2777, #7c3aed)
 		0 0 / 200% 100% repeat-x;
@@ -335,7 +343,7 @@ body {
 		animation: none;
 	}
 	.note-aurora {
-		opacity: 0.8;
+		--note-glow: 0.8;
 	}
 }
 

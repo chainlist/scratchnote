@@ -206,8 +206,51 @@ export interface ModelInfo {
 
 export const modelInfo = () => invoke<ModelInfo>('model_info');
 
+/** What the benchmark sends as it runs. */
+export type BenchmarkEvent =
+	/** The model was not in memory; this is what loading it took. */
+	| { kind: 'load'; ms: number }
+	/** Sample `done` of `total` is labelled, or failed to be. */
+	| { kind: 'note'; done: number; total: number; ms: number; ok: boolean };
+
+/**
+ * Label a few fixed sample notes with the model in use, loading it if need
+ * be, timing each to `onEvent`. Nothing is written. Resolves once done.
+ */
+export function benchmarkModel(onEvent: (event: BenchmarkEvent) => void) {
+	const channel = new Channel<BenchmarkEvent>();
+	channel.onmessage = onEvent;
+	return invoke<void>('benchmark_model', { onEvent: channel });
+}
+
 /** GPUs the model can run on. Empty when the machine has no usable device. */
 export const gpuDevices = () => invoke<string[]>('gpu_devices');
+
+export interface Gpu {
+	name: string;
+	/** In bytes; zero when the driver does not say. */
+	memory: number;
+	/** Shares the system memory rather than having its own. */
+	integrated: boolean;
+}
+
+/** Why the suggested model was picked. */
+export type HardwareReason = 'gpu' | 'cpu' | 'small';
+
+export interface Hardware {
+	gpus: Gpu[];
+	/** System memory in bytes; zero when unknown. */
+	memory: number;
+	threads: number;
+	recommended: ModelVariant;
+	reason: HardwareReason;
+}
+
+/**
+ * The machine and the model it suits, read before any model is on disk for
+ * the benchmark to time. An estimate, for the onboarding.
+ */
+export const systemProfile = () => invoke<Hardware>('system_profile');
 
 export type UpdateCheck =
 	| { state: 'upToDate'; revision: string }
@@ -223,6 +266,10 @@ export const updateModel = () => invoke<void>('update_model');
 export const onModelUpdateProgress = (handler: (percent: number) => void): Promise<UnlistenFn> =>
 	listen<{ percent: number }>('model-update', (event) => handler(event.payload.percent));
 
+/**
+ * Also starts the embedding model's download once this one is in, when it is
+ * not installed yet. Its progress goes out as `embedding-status`.
+ */
 export const downloadModel = (variant: ModelVariant) => invoke<void>('download_model', { variant });
 
 /** Qwen3-Embedding-0.6B at Q8_0, which lets the chat find notes by meaning. */
@@ -325,6 +372,8 @@ export interface Settings {
 	theme: 'dark' | 'light' | 'system';
 	/** A locale such as 'fr', or 'system' to follow the OS language. */
 	language: Language;
+	/** The first-run walkthrough has been finished or skipped. */
+	onboarded: boolean;
 }
 
 export interface SettingsView extends Settings {
@@ -336,6 +385,9 @@ export const getSettings = () => invoke<SettingsView>('get_settings');
 
 export const setSettings = (settings: Settings) =>
 	invoke<SettingsView>('set_settings', { settings });
+
+/** Relaunch the app, which is how a new notes root takes effect. */
+export const restartApp = () => invoke<void>('restart_app');
 
 export const getAliases = () => invoke<Record<string, string>>('get_aliases');
 

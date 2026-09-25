@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import type { Note } from '$lib/api';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
@@ -47,6 +48,10 @@
 	// Re-running a manual note would be skipped anyway, and a pending one is
 	// already in the queue.
 	let canRetry = $derived(note.status === 'done' || note.status === 'failed');
+
+	let pending = $derived(note.status === 'pending');
+	/** How long the glow takes to come and go, text and edge alike. */
+	const glowFade = { duration: 500 };
 
 	async function startEditing() {
 		if (editing) return;
@@ -97,16 +102,16 @@
 	data-note-id={note.id}
 	class="group relative isolate -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-5 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900 {menuOpen
 		? 'bg-neutral-900'
-		: ''} {blink ? 'note-blink' : ''} {note.status === 'pending' ? 'z-10' : ''}"
+		: ''} {blink ? 'note-blink' : ''} {pending ? 'z-10' : ''}"
 	ondblclick={onDoubleClick}
 	onmousedown={onMouseDown}
 >
 	<!-- Enrichment shows only while it matters: a glowing rainbow edge while
 	     the note waits for the model, a faint red ring when it failed. -->
-	{#if note.status === 'pending'}
-		<span aria-hidden="true" class="note-aurora"></span>
+	{#if pending}
+		<span aria-hidden="true" class="note-aurora" transition:fade={glowFade}></span>
 	{:else if note.status === 'failed'}
-		<span aria-hidden="true" class="note-error-ring"></span>
+		<span aria-hidden="true" class="note-error-ring" transition:fade={glowFade}></span>
 	{/if}
 	<!-- Timeline rail in the gutter between time and body. Each note draws
 	     its own dot and the segments above and below it; the first and last
@@ -127,7 +132,7 @@
 		{#if showDate}<span class="block">{note.date}</span>{/if}{note.time}
 	</time>
 
-	<div class="min-w-0">
+	<div class="relative min-w-0">
 		{#if editing}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="flex flex-col gap-2" onkeydown={onEditKeydown}>
@@ -150,15 +155,27 @@
 				</div>
 			</div>
 		{:else}
-			<!-- data-text feeds the glow drawn behind the letters. -->
+			<!-- While pending, the text turns transparent and a glowing copy fades
+			     in over it, so the two cross-fade both ways. The copy lets clicks
+			     and selection through to the real text. data-text feeds the glow
+			     drawn behind its letters. -->
 			<p
-				class="text-base leading-7 whitespace-pre-wrap text-neutral-200 {note.status === 'pending'
-					? 'note-glow-text'
-					: ''}"
-				data-text={note.status === 'pending' ? note.body : undefined}
+				class="text-base leading-7 whitespace-pre-wrap transition-colors duration-500 {pending
+					? 'text-transparent'
+					: 'text-neutral-200'}"
 			>
 				{note.body}
 			</p>
+			{#if pending}
+				<p
+					aria-hidden="true"
+					data-text={note.body}
+					transition:fade={glowFade}
+					class="note-glow-text pointer-events-none absolute inset-0 text-base leading-7 whitespace-pre-wrap"
+				>
+					{note.body}
+				</p>
+			{/if}
 		{/if}
 	</div>
 

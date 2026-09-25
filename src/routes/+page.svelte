@@ -1,14 +1,18 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import {
 		categoryNames,
 		deleteNote,
 		embeddingModelInfo,
 		getDay,
+		getSettings,
 		listCategories,
 		listDays,
 		listSpaces,
 		listTags,
+		modelInfo,
 		modelStatus,
 		onEmbeddingStatus,
 		onIndexRebuilt,
@@ -48,6 +52,7 @@
 	import TimelineHeader from '$lib/components/TimelineHeader.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { m } from '$lib/paraglide/messages';
+	import { resumeStep } from '$lib/onboarding';
 	import { queryTags, toggleTag } from '$lib/query';
 	import type { Timeline } from '$lib/timeline';
 
@@ -273,6 +278,21 @@
 	onMount(() => {
 		const off: Promise<() => void>[] = [];
 		void (async () => {
+			// A fresh install goes through the onboarding first. Someone who
+			// already has a model, or turned it off, is left alone. A run under
+			// way, as after the restart a new folder takes, picks up again.
+			const [settings, info] = await Promise.all([getSettings(), modelInfo()]);
+			const fresh =
+				!settings.onboarded &&
+				settings.modelEnabled &&
+				!info.activePath &&
+				!info.light &&
+				!info.default;
+			if (fresh || resumeStep() !== null) {
+				await goto(resolve('/onboarding/'));
+				return;
+			}
+
 			selected = todayDate = await today();
 			await refresh();
 			// A note saved from the capture window lands in another webview.

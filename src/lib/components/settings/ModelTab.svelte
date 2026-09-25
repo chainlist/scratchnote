@@ -4,14 +4,13 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Progress } from '$lib/components/ui/progress';
 	import { Switch } from '$lib/components/ui/switch';
-	import { parts, slot } from '$lib/i18n.svelte';
 	import { m } from '$lib/paraglide/messages';
 	import EmbeddingModel from './EmbeddingModel.svelte';
+	import ModelBenchmark from './ModelBenchmark.svelte';
 	import ModelChoices from './ModelChoices.svelte';
-	import ModelUpdates from './ModelUpdates.svelte';
 	import SettingRow from './SettingRow.svelte';
 	import type { SettingsState } from './state.svelte';
-	import { group, hint } from './styles';
+	import { group, hint, section } from './styles';
 
 	let { settings }: { settings: SettingsState } = $props();
 
@@ -48,68 +47,74 @@
 	</div>
 
 	{#if view.modelEnabled}
-		<ModelChoices {settings} />
-
-		{#if model.state === 'downloading'}
-			<div class="flex flex-col gap-2">
-				<p class={hint}>
-					{m.settings_model_downloading({ percent: model.percent ?? 0 })}
-				</p>
-				<Progress value={model.percent ?? 0} />
-			</div>
-		{/if}
-
-		<p class={hint}>
+		<section class="flex flex-col gap-3">
+			<h4 class={section}>{m.settings_model_section_labeling()}</h4>
 			{#if info?.activePath}
-				{#each parts(m.settings_model_active_path({ path: slot(info.activePath) })) as part, i (i)}
-					{#if i % 2}<span class="font-mono break-all">{part}</span>{:else}{part}{/if}
-				{/each}
-			{:else if view.modelPath !== null}
-				<span class="text-amber-500">
-					{m.settings_model_custom_missing()}
-				</span>
-			{:else}
-				{m.settings_model_none()}
-			{/if}
-		</p>
-
-		{#if info?.activeVariant && view.modelPath === null}
-			<!-- Another model has other revisions, so a switch drops the last check. -->
-			{#key info.activeVariant}
-				<ModelUpdates {settings} />
-			{/key}
-		{/if}
-
-		<EmbeddingModel {settings} />
-
-		<div class={group}>
-			<SettingRow
-				id="gpu"
-				label={m.settings_gpu()}
-				hint={gpus.length === 0
-					? m.settings_gpu_none()
-					: m.settings_gpu_found({ devices: gpus.join(', ') })}
-			>
-				<!-- Applies at once: the model is unloaded and the next note reloads it. -->
-				<Switch
-					id="gpu"
-					checked={view.useGpu && gpus.length > 0}
-					disabled={gpus.length === 0}
-					onCheckedChange={(useGpu) => settings.apply({ useGpu })}
-				/>
-			</SettingRow>
-			<SettingRow id="idle" label={m.settings_idle()} hint={m.settings_idle_hint()}>
-				<div class="flex items-center gap-2">
-					<Input
-						id="idle"
-						type="number"
-						min="0"
-						bind:value={settings.draft.idleUnloadMinutes}
-						class="w-20 text-right font-mono"
-					/>
-					<span class={hint}>{m.settings_idle_unit()}</span>
+				<div class={group}>
+					<!-- Timings only hold for the model and device they were taken on. -->
+					{#key `${info.activePath}|${view.useGpu}`}
+						<ModelBenchmark {settings} {gpus} />
+					{/key}
 				</div>
-			</SettingRow>
-		</div>
+			{/if}
+			<ModelChoices {settings} />
+
+			{#if model.state === 'downloading'}
+				<div class="flex flex-col gap-2">
+					<p class={hint}>
+						{m.settings_model_downloading({ percent: model.percent ?? 0 })}
+					</p>
+					<Progress value={model.percent ?? 0} />
+				</div>
+			{/if}
+
+			{#if !info?.activePath}
+				<p class={hint}>
+					{#if view.modelPath !== null}
+						<span class="text-amber-500">{m.settings_model_custom_missing()}</span>
+					{:else}
+						{m.settings_model_none()}
+					{/if}
+				</p>
+			{/if}
+		</section>
+
+		<section class="flex flex-col gap-3">
+			<h4 class={section}>{m.settings_model_section_performance()}</h4>
+			<div class={group}>
+				<SettingRow
+					id="gpu"
+					label={m.settings_gpu()}
+					hint={gpus.length === 0
+						? m.settings_gpu_none()
+						: m.settings_gpu_found({ devices: gpus.join(', ') })}
+				>
+					<!-- Applies at once: the model is unloaded and the next note reloads it. -->
+					<Switch
+						id="gpu"
+						checked={view.useGpu && gpus.length > 0}
+						disabled={gpus.length === 0}
+						onCheckedChange={(useGpu) => settings.apply({ useGpu })}
+					/>
+				</SettingRow>
+				<SettingRow id="idle" label={m.settings_idle()} hint={m.settings_idle_hint()}>
+					<div class="flex items-center gap-2">
+						<Input
+							id="idle"
+							type="number"
+							min="0"
+							bind:value={settings.draft.idleUnloadMinutes}
+							class="w-20 text-right font-mono"
+						/>
+						<span class={hint}>{m.settings_idle_unit()}</span>
+					</div>
+				</SettingRow>
+			</div>
+		</section>
+
+		<section class="flex flex-col gap-3">
+			<h4 class={section}>{m.settings_model_section_search()}</h4>
+			<EmbeddingModel {settings} />
+		</section>
 	{/if}
 </div>

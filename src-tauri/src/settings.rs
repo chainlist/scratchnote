@@ -43,6 +43,8 @@ pub struct Settings {
     /// A locale such as "fr", or "system" to follow the OS language. The
     /// frontend owns the list of locales; an unknown one follows the OS.
     pub language: String,
+    /// The first-run walkthrough has been finished or skipped.
+    pub onboarded: bool,
 }
 
 impl Default for Settings {
@@ -63,6 +65,7 @@ impl Default for Settings {
             radius: 0.625,
             theme: "dark".to_string(),
             language: "system".to_string(),
+            onboarded: false,
         }
     }
 }
@@ -168,6 +171,7 @@ mod tests {
         assert_eq!(back.font_size, 16);
         assert_eq!(back.theme, "dark");
         assert_eq!(back.language, "system");
+        assert!(!back.onboarded);
     }
 
     #[test]

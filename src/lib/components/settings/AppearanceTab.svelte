@@ -10,7 +10,14 @@
 	import type { SettingsState } from './state.svelte';
 	import { group } from './styles';
 
-	let { settings }: { settings: SettingsState } = $props();
+	let {
+		settings,
+		withLanguage = true
+	}: {
+		settings: SettingsState;
+		/** Off where the language was picked already, as in the onboarding. */
+		withLanguage?: boolean;
+	} = $props();
 
 	// Tabs are only drawn once the settings have loaded. Every choice here
 	// applies at once: each window repaints on settings-changed.
@@ -31,22 +38,24 @@
 
 <div class="flex flex-col gap-4">
 	<div class={group}>
-		<SettingRow label={m.settings_language()} hint={m.settings_language_hint()}>
-			<Select.Root
-				type="single"
-				value={view.language}
-				onValueChange={(language) => settings.apply({ language: language as Language })}
-			>
-				<Select.Trigger size="sm" class="w-40" aria-label={m.settings_language()}>
-					{languageName(view.language)}
-				</Select.Trigger>
-				<Select.Content>
-					{#each LANGUAGES as language (language)}
-						<Select.Item value={language} label={languageName(language)} />
-					{/each}
-				</Select.Content>
-			</Select.Root>
-		</SettingRow>
+		{#if withLanguage}
+			<SettingRow label={m.settings_language()} hint={m.settings_language_hint()}>
+				<Select.Root
+					type="single"
+					value={view.language}
+					onValueChange={(language) => settings.apply({ language: language as Language })}
+				>
+					<Select.Trigger size="sm" class="w-40" aria-label={m.settings_language()}>
+						{languageName(view.language)}
+					</Select.Trigger>
+					<Select.Content>
+						{#each LANGUAGES as language (language)}
+							<Select.Item value={language} label={languageName(language)} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</SettingRow>
+		{/if}
 		<SettingRow label={m.settings_theme()} hint={m.settings_theme_hint()}>
 			<Segmented
 				label={m.settings_theme()}

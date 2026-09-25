@@ -685,6 +685,13 @@ pub async fn set_settings(
     })
 }
 
+/// Relaunch the app, which is how a new notes root takes effect. The
+/// onboarding uses it so the model downloads into the chosen folder.
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart();
+}
+
 fn current_settings(state: &State<'_, AppState>) -> Result<Settings, String> {
     Ok(state
         .settings
@@ -781,6 +788,72 @@ pub fn enrich_progress(state: State<'_, AppState>) -> Option<crate::state::Progr
     state.progress()
 }
 
+/// What the benchmark sends the page as it runs.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum BenchmarkEvent {
+    /// The model was not in memory; this is what loading it took.
+    Load { ms: u64 },
+    /// Sample `done` of `total` is labelled, or failed to be.
+    Note {
+        done: usize,
+        total: usize,
+        ms: u64,
+        ok: bool,
+    },
+}
+
+/// Label the benchmark's sample notes with the model in use, loading it if
+/// need be, and time each one, reported through `on_event`. Nothing is
+/// written anywhere.
+#[tauri::command]
+pub async fn benchmark_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    on_event: tauri::ipc::Channel<BenchmarkEvent>,
+) -> Result<(), String> {
+    use crate::enrich::benchmark::SAMPLES;
+    use std::time::Instant;
+
+    let space = state.space()?;
+    // Loading and inference block, so none of it may run on the async runtime.
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let resident = state.backend.read().is_ok_and(|slot| slot.is_some());
+        let started = Instant::now();
+        let backend = crate::enrich::worker::backend(&app)
+            .ok_or_else(|| "There is no model to benchmark.".to_string())?;
+        if !resident {
+            let ms = started.elapsed().as_millis() as u64;
+            let _ = on_event.send(BenchmarkEvent::Load { ms });
+        }
+
+        let language = state.note_language();
+        let vocabulary = space.vocabulary(language.code);
+        for (i, sample) in SAMPLES.iter().enumerate() {
+            // Keeps the idle unload away for as long as the benchmark runs.
+            state.mark_used();
+            let started = Instant::now();
+            let result =
+                crate::enrich::runner::enrich(sample, language, &vocabulary, backend.as_ref());
+            let ms = started.elapsed().as_millis() as u64;
+            if let Err(e) = &result {
+                log::warn!("benchmark sample {i} failed: {e}");
+            }
+            let _ = on_event.send(BenchmarkEvent::Note {
+                done: i + 1,
+                total: SAMPLES.len(),
+                ms,
+                ok: result.is_ok(),
+            });
+        }
+        state.mark_used();
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("the benchmark failed: {e}"))?
+}
+
 /// What the settings screen shows about models: the one in use, and the
 /// record of each variant the app has fetched.
 #[derive(Debug, Serialize)]
@@ -798,6 +871,13 @@ pub struct ModelInfo {
 #[tauri::command]
 pub fn gpu_devices() -> Vec<String> {
     crate::enrich::llama::gpu_devices()
+}
+
+/// The machine as the onboarding sees it, and the model it suggests, before
+/// any model is on disk for the benchmark to time.
+#[tauri::command]
+pub fn system_profile() -> crate::enrich::hardware::Hardware {
+    crate::enrich::hardware::probe()
 }
 
 #[tauri::command]
@@ -838,6 +918,19 @@ pub async fn download_model(
     if let Err(e) = result {
         set_status(&app, &state, before);
         return Err(e);
+    }
+
+    // Search and similar notes need the embedding model, so it comes along
+    // with the first chat model rather than waiting on a trip to settings.
+    // Only once the chat model is in, which enrichment needs first.
+    let embedding_running = state.embedding_download.lock().is_ok_and(|d| d.is_some());
+    if !embedding_running && !download::is_installed(&root, EmbeddingModel) {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = fetch_embedding_model(&app).await {
+                log::warn!("the embedding model did not download: {e}");
+            }
+        });
     }
 
     let mut settings = current_settings(&state)?;
@@ -895,10 +988,13 @@ pub fn embedding_model_info(state: State<'_, AppState>) -> EmbeddingModelInfo {
 /// is left alone. The embed task is woken instead, loads it and embeds the
 /// notes already there. Progress goes out as `embedding-status`.
 #[tauri::command]
-pub async fn download_embedding_model(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn download_embedding_model(app: AppHandle) -> Result<(), String> {
+    fetch_embedding_model(&app).await
+}
+
+/// `download_embedding_model`, also started by `download_model`.
+async fn fetch_embedding_model(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
     {
         let mut running = state
             .embedding_download

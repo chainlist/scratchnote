@@ -30,6 +30,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -61,7 +62,9 @@ pub fn run() {
             commands::enrich_busy,
             commands::enrich_progress,
             commands::model_info,
+            commands::benchmark_model,
             commands::gpu_devices,
+            commands::system_profile,
             commands::download_model,
             commands::embedding_model_info,
             commands::download_embedding_model,
@@ -70,6 +73,7 @@ pub fn run() {
             commands::today,
             commands::get_settings,
             commands::set_settings,
+            commands::restart_app,
             commands::get_aliases,
             commands::set_aliases,
             commands::list_spaces,

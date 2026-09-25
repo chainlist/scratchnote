@@ -28,7 +28,8 @@ const editable = (s: Settings): Settings => ({
 	fontSize: s.fontSize,
 	radius: s.radius,
 	theme: s.theme,
-	language: s.language
+	language: s.language,
+	onboarded: s.onboarded
 });
 
 /**
@@ -47,7 +48,8 @@ export class SettingsState {
 		idleUnloadMinutes: 10,
 		useGpu: true,
 		...DEFAULT_APPEARANCE,
-		language: 'system'
+		language: 'system',
+		onboarded: false
 	});
 	info = $state<ModelInfo | null>(null);
 	model = $state<ModelStatus>({ state: 'absent' });

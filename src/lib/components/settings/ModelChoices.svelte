@@ -8,6 +8,7 @@
 	import * as RadioGroup from '$lib/components/ui/radio-group';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import { m } from '$lib/paraglide/messages';
+	import ModelUpdates from './ModelUpdates.svelte';
 	import type { SettingsState } from './state.svelte';
 	import { hint } from './styles';
 
@@ -62,7 +63,10 @@
 				</span>
 				<span class={hint}>{option.note()}</span>
 			</div>
-			{#if record}
+			{#if record && info?.activeVariant === option.variant && view.modelPath === null}
+				<!-- On the model in use only, so a switch drops the last check. -->
+				<ModelUpdates {settings} />
+			{:else if record}
 				<Badge variant="outline" class="font-mono" title={record.revision}>
 					{short(record.revision)}
 				</Badge>

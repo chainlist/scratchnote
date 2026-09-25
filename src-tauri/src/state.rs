@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
+use crate::embed::Embedder;
 use crate::enrich::download::{self, ActiveModel};
 use crate::enrich::model::{Backend, ModelStatus};
 use crate::enrich::worker::Wake;
@@ -41,6 +42,16 @@ pub struct AppState {
     pub batch_done: AtomicUsize,
     /// Nudges the worker when a job is queued or a model becomes available.
     pub wake: Wake,
+    /// `None` until an embedding model is loaded. Read through
+    /// `embed::embedder`, which also honours the model switch.
+    pub embedder: RwLock<Option<Arc<dyn Embedder>>>,
+    /// Nudges the embed task when an index changes or a model becomes
+    /// available.
+    pub embed_wake: Wake,
+    /// How far the embedding model's download is, while one runs. Kept here
+    /// so a settings screen opened meanwhile shows it, and a second click
+    /// does not start another.
+    pub embedding_download: Mutex<Option<u8>>,
 }
 
 /// Where the worker is in the current stretch of work: `current` of `total`,
@@ -75,10 +86,14 @@ impl AppState {
         })
     }
 
-    /// Drop the loaded model and say what state that leaves. A job still
-    /// holding it finishes first, since it owns its own reference.
+    /// Drop the loaded model, and the embedding model with it, and say what
+    /// state that leaves. A job still holding one finishes first, since it
+    /// owns its own reference. Both load again lazily when next needed.
     pub fn unload_model(&self) -> ModelStatus {
         if let Ok(mut slot) = self.backend.write() {
+            *slot = None;
+        }
+        if let Ok(mut slot) = self.embedder.write() {
             *slot = None;
         }
         let status = resting_status(self.model_enabled(), self.active_model().is_some());

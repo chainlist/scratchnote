@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 
-use super::model::{model_file, models_dir, Variant};
+use super::model::{model_file, models_dir, Catalogued, Variant};
 
 /// What the registry says about the file we are about to fetch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,19 +54,19 @@ struct Lfs {
     size: u64,
 }
 
-pub fn sidecar_path(root: &Path, variant: Variant) -> PathBuf {
-    models_dir(root).join(format!("{}.json", variant.file()))
+pub fn sidecar_path(root: &Path, model: impl Catalogued) -> PathBuf {
+    models_dir(root).join(format!("{}.json", model.file()))
 }
 
-pub fn installed(root: &Path, variant: Variant) -> Option<InstalledModel> {
-    let raw = std::fs::read_to_string(sidecar_path(root, variant)).ok()?;
+pub fn installed(root: &Path, model: impl Catalogued) -> Option<InstalledModel> {
+    let raw = std::fs::read_to_string(sidecar_path(root, model)).ok()?;
     serde_json::from_str(&raw).ok()
 }
 
 /// A model counts as present only when both the weights and the record of
 /// what they are exist.
-pub fn is_installed(root: &Path, variant: Variant) -> bool {
-    model_file(root, variant).exists() && installed(root, variant).is_some()
+pub fn is_installed(root: &Path, model: impl Catalogued) -> bool {
+    model_file(root, model).exists() && installed(root, model).is_some()
 }
 
 /// The first variant with both weights and a record on disk.
@@ -77,8 +77,8 @@ pub fn installed_variant(root: &Path) -> Option<Variant> {
 }
 
 /// Ask the registry which revision is current and what the file should hash to.
-pub async fn lookup(variant: Variant) -> Result<RemoteModel, String> {
-    let repo = variant.repo();
+pub async fn lookup(model: impl Catalogued) -> Result<RemoteModel, String> {
+    let repo = model.repo();
     let info: RepoInfo = reqwest::Client::new()
         .get(format!(
             "https://huggingface.co/api/models/{repo}?blobs=true"
@@ -92,7 +92,7 @@ pub async fn lookup(variant: Variant) -> Result<RemoteModel, String> {
         .await
         .map_err(|e| format!("unexpected answer from Hugging Face: {e}"))?;
 
-    let wanted = variant.file();
+    let wanted = model.file();
     let sibling = info
         .siblings
         .iter()
@@ -129,19 +129,19 @@ fn describe_lookup_failure(repo: &str, e: &reqwest::Error) -> String {
 /// Download, verify and move into place, for a model that is not loaded.
 pub async fn fetch<F>(
     root: &Path,
-    variant: Variant,
+    model: impl Catalogued,
     remote: &RemoteModel,
     on_progress: F,
 ) -> Result<(), String>
 where
     F: FnMut(u8),
 {
-    download_verified(root, variant, remote, on_progress).await?;
-    install(root, variant, remote).await
+    download_verified(root, model, remote, on_progress).await?;
+    install(root, model, remote).await
 }
 
-fn part_path(root: &Path, variant: Variant) -> PathBuf {
-    model_file(root, variant).with_extension("gguf.part")
+fn part_path(root: &Path, model: impl Catalogued) -> PathBuf {
+    model_file(root, model).with_extension("gguf.part")
 }
 
 /// Download to `<file>.part`, resuming whatever is already there, and verify
@@ -150,14 +150,14 @@ fn part_path(root: &Path, variant: Variant) -> PathBuf {
 /// complete is only re-hashed, which makes a retried install cheap.
 pub async fn download_verified<F>(
     root: &Path,
-    variant: Variant,
+    model: impl Catalogued,
     remote: &RemoteModel,
     mut on_progress: F,
 ) -> Result<(), String>
 where
     F: FnMut(u8),
 {
-    let part = part_path(root, variant);
+    let part = part_path(root, model);
     tokio::fs::create_dir_all(models_dir(root))
         .await
         .map_err(|e| format!("could not create the models directory: {e}"))?;
@@ -226,21 +226,25 @@ where
 /// Move a verified `.part` over the model and record its revision. On Windows
 /// this fails while the old file is still memory-mapped by a loaded model, so
 /// the caller unloads first.
-pub async fn install(root: &Path, variant: Variant, remote: &RemoteModel) -> Result<(), String> {
-    let part = part_path(root, variant);
-    let target = model_file(root, variant);
+pub async fn install(
+    root: &Path,
+    model: impl Catalogued,
+    remote: &RemoteModel,
+) -> Result<(), String> {
+    let part = part_path(root, model);
+    let target = model_file(root, model);
     tokio::fs::rename(&part, &target)
         .await
         .map_err(|e| format!("could not move the model into place: {e}"))?;
 
     let record = InstalledModel {
-        repo: variant.repo().to_string(),
-        file: variant.file().to_string(),
+        repo: model.repo().to_string(),
+        file: model.file().to_string(),
         revision: remote.revision.clone(),
         sha256: remote.sha256.clone(),
     };
     let sidecar = serde_json::to_string_pretty(&record).map_err(|e| e.to_string())?;
-    tokio::fs::write(sidecar_path(root, variant), sidecar)
+    tokio::fs::write(sidecar_path(root, model), sidecar)
         .await
         .map_err(|e| format!("could not record which model this is: {e}"))?;
     Ok(())
@@ -332,6 +336,7 @@ async fn hash_file(path: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enrich::model::EmbeddingModel;
 
     #[test]
     fn progress_is_a_percentage_that_cannot_overshoot() {
@@ -510,22 +515,27 @@ mod tests {
     /// being dropped, which otherwise shows up as a 401 in front of the user.
     #[tokio::test]
     #[ignore = "reaches Hugging Face"]
-    async fn every_variant_resolves_on_hugging_face() {
+    async fn every_model_resolves_on_hugging_face() {
         for variant in [Variant::Default, Variant::Light] {
-            let remote = lookup(variant)
-                .await
-                .unwrap_or_else(|e| panic!("{} did not resolve: {e}", variant.repo()));
-
-            assert_eq!(remote.sha256.len(), 64, "{:?} hash looks wrong", variant);
-            assert!(remote.size > 0, "{:?} has no size", variant);
-            assert!(
-                remote.url.ends_with(variant.file()),
-                "{:?} resolved to {}",
-                variant,
-                remote.url
-            );
-            assert!(!remote.revision.is_empty(), "{:?} has no revision", variant);
+            resolves(variant).await;
         }
+        resolves(EmbeddingModel).await;
+    }
+
+    async fn resolves(model: impl Catalogued + std::fmt::Debug) {
+        let remote = lookup(model)
+            .await
+            .unwrap_or_else(|e| panic!("{} did not resolve: {e}", model.repo()));
+
+        assert_eq!(remote.sha256.len(), 64, "{:?} hash looks wrong", model);
+        assert!(remote.size > 0, "{:?} has no size", model);
+        assert!(
+            remote.url.ends_with(model.file()),
+            "{:?} resolved to {}",
+            model,
+            remote.url
+        );
+        assert!(!remote.revision.is_empty(), "{:?} has no revision", model);
     }
 
     #[tokio::test]

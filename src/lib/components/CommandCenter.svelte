@@ -9,6 +9,7 @@
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import TagsIcon from '@lucide/svelte/icons/tags';
 	import { m } from '$lib/paraglide/messages';
+	import { queryTags } from '$lib/query';
 
 	let {
 		open = $bindable(),
@@ -63,12 +64,7 @@
 	// the prefix come before names that only contain it, each most used first.
 	const completions = $derived.by(() => {
 		if (prefix === null) return [];
-		const used = new Set(
-			query
-				.split(/\s+/)
-				.filter((t) => t.startsWith('#'))
-				.map((t) => t.slice(1).toLowerCase())
-		);
+		const used = new Set(queryTags(query));
 		const starts: [string, number][] = [];
 		const contains: [string, number][] = [];
 		for (const entry of tags) {

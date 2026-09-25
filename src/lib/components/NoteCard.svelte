@@ -6,6 +6,7 @@
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
+	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
@@ -15,6 +16,7 @@
 		onsave,
 		onretry,
 		ontag,
+		onsimilar,
 		showDate = false,
 		blink = false
 	}: {
@@ -28,6 +30,8 @@
 		onretry: (note: Note) => void;
 		/** Filter on a tag, as a click on it in the card does. */
 		ontag: (tag: string) => void;
+		/** List the notes closest in meaning. Left out without the embedding model. */
+		onsimilar?: (note: Note) => void;
 		/** Search results span days, so each card says which one. */
 		showDate?: boolean;
 		/** Blink once to show where a chat citation led. */
@@ -181,6 +185,11 @@
 					<DropdownMenu.Item onSelect={() => onedit(note)}>
 						<PencilIcon />{m.note_edit()}
 					</DropdownMenu.Item>
+					{#if onsimilar}
+						<DropdownMenu.Item onSelect={() => onsimilar(note)}>
+							<WaypointsIcon />{m.note_similar()}
+						</DropdownMenu.Item>
+					{/if}
 					{#if canRetry}
 						<DropdownMenu.Item onSelect={() => onretry(note)}>
 							<RefreshCwIcon />{m.note_rerun()}

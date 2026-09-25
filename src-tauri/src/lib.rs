@@ -1,5 +1,6 @@
 mod chat;
 mod commands;
+mod embed;
 mod enrich;
 mod search;
 mod settings;
@@ -46,6 +47,7 @@ pub fn run() {
             commands::list_categories,
             commands::category_names,
             commands::search,
+            commands::similar_notes,
             commands::chat,
             commands::stop_chat,
             commands::warm_chat,
@@ -61,6 +63,8 @@ pub fn run() {
             commands::model_info,
             commands::gpu_devices,
             commands::download_model,
+            commands::embedding_model_info,
+            commands::download_embedding_model,
             commands::check_model_update,
             commands::update_model,
             commands::today,
@@ -103,6 +107,7 @@ pub fn run() {
             spaces::migrate_root(&root);
 
             let wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
+            let embed_wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
             app.manage(AppState {
                 root: root.clone(),
                 settings: std::sync::RwLock::new(settings),
@@ -118,6 +123,9 @@ pub fn run() {
                 busy: std::sync::atomic::AtomicBool::new(false),
                 batch_done: std::sync::atomic::AtomicUsize::new(0),
                 wake: wake.clone(),
+                embedder: std::sync::RwLock::new(None),
+                embed_wake: embed_wake.clone(),
+                embedding_download: std::sync::Mutex::new(None),
             });
 
             // Every space is loaded, not just the open one, so notes captured
@@ -141,6 +149,9 @@ pub fn run() {
             }
 
             worker::spawn(app.handle().clone(), wake.clone());
+            // Opening the spaces above already woke it, so their notes are
+            // backfilled.
+            embed::sync::spawn(app.handle().clone(), embed_wake);
             idle::spawn(app.handle().clone());
             // Kick the worker in case a queue came back non-empty.
             wake.notify_one();

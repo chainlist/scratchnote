@@ -54,6 +54,12 @@ export function splitCategory(names: string[], tags: string[]): [string, string[
 /** Words must all appear; `#tag` tokens are AND filters. Newest first. */
 export const search = (query: string) => invoke<Note[]>('search', { query });
 
+/**
+ * The notes closest in meaning to this one, best first. Empty while the note
+ * has no vector yet, or without the embedding model.
+ */
+export const similarNotes = (id: string) => invoke<Note[]>('similar_notes', { id });
+
 /** One line of `index.jsonl`, parsed. The index holds no bodies. */
 export type IndexEntry = Omit<Note, 'body'>;
 
@@ -218,6 +224,28 @@ export const onModelUpdateProgress = (handler: (percent: number) => void): Promi
 	listen<{ percent: number }>('model-update', (event) => handler(event.payload.percent));
 
 export const downloadModel = (variant: ModelVariant) => invoke<void>('download_model', { variant });
+
+/** Qwen3-Embedding-0.6B at Q8_0, which lets the chat find notes by meaning. */
+export const EMBEDDING_SIZE = '~640 MB';
+
+export interface EmbeddingModelInfo {
+	installed: boolean;
+	/** Percent done while a download runs, null otherwise. */
+	downloading: number | null;
+}
+
+export const embeddingModelInfo = () => invoke<EmbeddingModelInfo>('embedding_model_info');
+
+/** Leaves the chat model and its settings alone. */
+export const downloadEmbeddingModel = () => invoke<void>('download_embedding_model');
+
+export type EmbeddingStatus =
+	{ state: 'downloading'; percent: number } | { state: 'installed' } | { state: 'absent' };
+
+export const onEmbeddingStatus = (
+	handler: (status: EmbeddingStatus) => void
+): Promise<UnlistenFn> =>
+	listen<EmbeddingStatus>('embedding-status', (event) => handler(event.payload));
 
 export const retryEnrichment = (date: string, id: string) =>
 	invoke<void>('retry_enrichment', { date, id });

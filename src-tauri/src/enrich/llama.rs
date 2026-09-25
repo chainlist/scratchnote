@@ -4,7 +4,7 @@
 //! by construction rather than by luck (SPEC 5.3).
 
 use std::num::NonZeroU32;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::context::LlamaContext;
@@ -24,6 +24,40 @@ use super::model::{Backend, CONTEXT_TOKENS, LONG_CONTEXT_TOKENS, MAX_OUTPUT_TOKE
 /// one call.
 const PROMPT_CHUNK: usize = 512;
 
+/// llama.cpp allows one initialised backend per process, and every model
+/// loaded at the same time needs it, so it is made once and never dropped.
+static BACKEND: OnceLock<Result<LlamaBackend, String>> = OnceLock::new();
+
+/// The process's llama.cpp backend, started on first use.
+pub(crate) fn llama_backend() -> Result<&'static LlamaBackend, String> {
+    BACKEND
+        .get_or_init(|| LlamaBackend::init().map_err(|e| format!("llama.cpp would not start: {e}")))
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+/// Loads a GGUF, all on the GPU or all on the CPU. Shared with the embedding
+/// model, which wants the same placement as the chat model.
+pub(crate) fn load_model(path: &std::path::Path, use_gpu: bool) -> Result<LlamaModel, String> {
+    let backend = llama_backend()?;
+
+    let params = if use_gpu {
+        LlamaModelParams::default().with_n_gpu_layers(u32::MAX)
+    } else {
+        // Zero layers alone is not enough: with a GPU device still attached,
+        // llama.cpp stages CPU work through the GPU driver's host buffers
+        // and skips its repacked CPU kernels, which made CPU mode about
+        // half again slower than a CPU-only build. No devices at all gets
+        // the plain CPU path.
+        LlamaModelParams::default()
+            .with_n_gpu_layers(0)
+            .with_devices(&[])
+            .map_err(|e| format!("could not keep the model off the GPU: {e}"))?
+    };
+    LlamaModel::load_from_file(backend, path, &params)
+        .map_err(|e| format!("could not load {}: {e}", path.display()))
+}
+
 pub struct LlamaCpp {
     /// The context kept from one note to the next, so the start every prompt
     /// shares is only evaluated once. llama.cpp contexts are not re-entrant,
@@ -33,7 +67,6 @@ pub struct LlamaCpp {
     /// The larger context a chat runs in, made on first use. Kept apart so
     /// enrichment cannot evict the index a chat left in its cache.
     long_session: Mutex<Option<Session>>,
-    backend: LlamaBackend,
     /// Boxed so the context's reference to it survives `Self` moving.
     model: Box<LlamaModel>,
     use_gpu: bool,
@@ -61,29 +94,11 @@ impl LlamaCpp {
     /// `use_gpu: false` keeps every layer and every op on the CPU, even in a
     /// build with a GPU backend.
     pub fn load_with(path: &std::path::Path, use_gpu: bool) -> Result<Self, String> {
-        let backend =
-            LlamaBackend::init().map_err(|e| format!("llama.cpp would not start: {e}"))?;
-
-        let params = if use_gpu {
-            LlamaModelParams::default().with_n_gpu_layers(u32::MAX)
-        } else {
-            // Zero layers alone is not enough: with a GPU device still attached,
-            // llama.cpp stages CPU work through the GPU driver's host buffers
-            // and skips its repacked CPU kernels, which made CPU mode about
-            // half again slower than a CPU-only build. No devices at all gets
-            // the plain CPU path.
-            LlamaModelParams::default()
-                .with_n_gpu_layers(0)
-                .with_devices(&[])
-                .map_err(|e| format!("could not keep the model off the GPU: {e}"))?
-        };
-        let model = LlamaModel::load_from_file(&backend, path, &params)
-            .map_err(|e| format!("could not load {}: {e}", path.display()))?;
+        let model = load_model(path, use_gpu)?;
 
         Ok(Self {
             session: Mutex::new(None),
             long_session: Mutex::new(None),
-            backend,
             model: Box::new(model),
             use_gpu,
         })
@@ -100,7 +115,7 @@ impl LlamaCpp {
         // `model`, so no context outlives it.
         let model: &'static LlamaModel = unsafe { &*(&*self.model as *const LlamaModel) };
         model
-            .new_context(&self.backend, params)
+            .new_context(llama_backend()?, params)
             .map_err(|e| format!("could not create a context: {e}"))
     }
 
@@ -435,5 +450,20 @@ impl Backend for LlamaCpp {
             *session = None;
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A second model loaded next to the first asks for the backend again,
+    /// which a fresh `LlamaBackend::init` would refuse.
+    #[test]
+    fn the_backend_is_shared() {
+        let other = std::thread::spawn(|| llama_backend().map(|_| ()));
+        assert_eq!(llama_backend().map(|_| ()), Ok(()));
+        assert_eq!(other.join().unwrap(), Ok(()));
+        assert_eq!(llama_backend().map(|_| ()), Ok(()));
     }
 }

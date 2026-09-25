@@ -16,7 +16,6 @@ Scratchnote is a local-first desktop app for frictionless capture. The user hits
 - No rich text editor, no images/attachments.
 - No sync, accounts, or cloud features.
 - No mobile app.
-- No chat with notes / RAG.
 
 ## 2. Tech Stack (decided)
 
@@ -244,6 +243,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
           2026-09-23.md
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
+        vectors.bin      # note embeddings for chat, derived, rebuildable
         tags.json        # tag vocabulary + aliases
         queue.json       # pending enrichment jobs
         categories.json
@@ -357,6 +357,7 @@ A space is a separate set of notes with its own tags, aliases, categories, index
 - A "Use the model" switch turns the model off entirely, for machines too small to run it. Off, it is never loaded, notes stay `pending` in the queue until it is back on, chat is unavailable, and the status bar says the model is turned off. It defaults to off on Android and iOS. The onboarding screen offers the same choice as "Continue without a model".
 - Record the resolved Hugging Face revision (commit SHA) alongside the downloaded file, so "which build of this model do I have" has an exact answer. Quant repos are re-uploaded in place, so a filename is not an identity.
 - Settings allow switching model or pointing to any local GGUF file.
+- An optional embedding model, Qwen3-Embedding-0.6B (Q8_0, ~640 MB, from `Qwen/Qwen3-Embedding-0.6B-GGUF`), has its own download row in settings, fetched, verified and recorded like the others. It is not a chat model: downloading it changes no model setting. It follows the "Use the model" switch, the GPU setting and the idle unload, and loads lazily. Once it is there, a background task embeds each space's note bodies into `vectors.bin`, again whenever a body's hash changes.
 - Settings has a "Check for updates" button. It is the only thing that triggers this check: never on launch, never on a timer. It compares the recorded revision against the current one on Hugging Face and, if they differ, offers to download the new one. The existing model file stays in place and in use until the replacement has finished downloading and passed SHA-256 verification.
 - A model pointed at by a custom GGUF path is not checked; the app did not fetch it and has no revision to compare against.
 - If the check fails (offline, rate limited), say so and carry on. It is never blocking, and a failed check must not affect enrichment.
@@ -446,6 +447,13 @@ Applied to every tag the model returns, in order:
 - Results sorted by date desc, then time desc.
 - Must stay under 50ms for 10,000 notes. If it doesn't, switch to `tantivy` (out of scope unless needed).
 
+### 6.1 Chat
+
+- A chat talks with the model about the open space's notes. It reads `index.jsonl` and never the markdown: each note's number, date, weekday, subject, summary and tags, oldest first. Past a budget of about 20,000 characters only the most recent notes are shown, from a multiple of 10 on, so the start of the prompt, and the model's cache of it, holds while notes are added. Numbers stay those of the whole index.
+- With the embedding model, the last question is embedded and the 5 closest notes of the space are found in `vectors.bin`. Their text, cut to about 800 characters, goes with that question only, after the index, so it never breaks the cache.
+- The model cites notes by number, like `[12]`, and the page resolves a number against the whole index, shown or not.
+- The embedding model is optional. Without it, or when embedding fails, the chat answers from the index alone. When a prompt does not fit, the oldest turns go first, then the retrieved notes from the worst up.
+
 ## 7. Settings
 
 - Notes root directory
@@ -454,6 +462,7 @@ Applied to every tag the model returns, in order:
 - Model choice / custom GGUF path
 - Check for model updates (manual, shows the installed revision)
 - Model idle unload timeout
+- Embedding model download (optional, for chat)
 - Hide immediately after save vs. show toast
 - Tag aliases editor
 - Rebuild index
@@ -475,6 +484,9 @@ search(query: String) -> Vec<Note>
 get_settings() / set_settings(...)
 model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle | disabled
 download_model(variant)
+embedding_model_info() -> { installed, downloading(pct)? }
+download_embedding_model()                    // optional model for chat retrieval; changes no setting
+chat(messages, on_event) / stop_chat() / warm_chat()  // replies stream through a channel
 check_model_update() -> UpdateCheck           // user-initiated only; up-to-date | newer(revision) | failed(reason)
 rebuild_index()
 set_tray_labels(labels)                      // the tray menu's wording, sent by the main window in its language
@@ -482,7 +494,7 @@ list_spaces() -> SpacesView                   // open space + every space with i
 create_space(name) / rename_space(name, new_name) / delete_space(name) / set_active_space(name)
 ```
 
-Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `spaces-changed { active, spaces }`. The UI updates live when enrichment finishes.
+Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`. The UI updates live when enrichment finishes.
 
 ## 9. Project Structure
 

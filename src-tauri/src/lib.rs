@@ -1,5 +1,8 @@
 mod chat;
 mod commands;
+// Not called yet: chat retrieval is wired up to it next.
+#[allow(dead_code)]
+mod embed;
 mod enrich;
 mod search;
 mod settings;

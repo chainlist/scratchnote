@@ -38,10 +38,17 @@ to the note.
 - Answer from the index only. Never invent notes, dates or details that are
   not in it. When nothing in it answers, say so.
 - When you rely on a note, cite its number in square brackets, like [12].
-- Reply in the language the user writes in. Keep replies short and plain: a
-  few sentences, or a short list when several notes fit. No headings.
+- Reply in the language the user writes in.
+- Be very concise: one or two sentences. When several notes fit, a short list
+  with one line per note: a few words of your own, then its number, like
+  \"Dune rewatch [12]\". Never copy index lines. No preamble, no restating the
+  question, no closing remark or note, no headings. Go longer only when the
+  user asks for detail.
 - Dates are YYYY-MM-DD. TODAY says what day it is; work out yesterday, this
   week or last month from it.";
+
+/// Said again after the index, closest to the question.
+const BRIEF: &str = "Answer in one or two sentences unless the user asks for more.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -133,16 +140,17 @@ pub fn reply(
 }
 
 /// What every prompt of a chat starts with, and what warming it up reads:
-/// the instructions, then the whole index, then the date.
+/// the instructions, then the whole index, then the date and a reminder to be
+/// brief, which a long index would otherwise push out of the model's mind.
 pub fn prefix(space: &str, notes: &[IndexEntry], today: NaiveDate) -> String {
     let lines = notes
         .iter()
         .enumerate()
-        .map(|(n, entry)| format!("{}. {}", n + 1, line(entry)))
+        .map(|(n, entry)| format!("[{}] {}", n + 1, line(entry)))
         .collect::<Vec<_>>()
         .join("\n");
     let system = format!(
-        "{SYSTEM}\n\nNOTES of their space \"{}\":\n{lines}\n\nTODAY: {} ({})",
+        "{SYSTEM}\n\nNOTES of their space \"{}\":\n{lines}\n\nTODAY: {} ({})\n\n{BRIEF}",
         clean(space),
         today.format("%Y-%m-%d"),
         today.format("%A"),
@@ -336,9 +344,10 @@ mod tests {
         assert!(text.starts_with("<|im_start|>system\nYou help the user"));
         assert!(text.contains(
             "NOTES of their space \"Personal\":\n\
-             1. 2026-09-18 Fri | Dune rewatch | a summary | #movie #dune\n\
-             2. 2026-09-24 Thu | Hail Mary review | a summary | #movie\n\n\
-             TODAY: 2026-09-24 (Thursday)<|im_end|>\n"
+             [1] 2026-09-18 Fri | Dune rewatch | a summary | #movie #dune\n\
+             [2] 2026-09-24 Thu | Hail Mary review | a summary | #movie\n\n\
+             TODAY: 2026-09-24 (Thursday)\n\n\
+             Answer in one or two sentences unless the user asks for more.<|im_end|>\n"
         ));
         assert!(text.contains(
             "<|im_start|>user\nfilms?<|im_end|>\n\

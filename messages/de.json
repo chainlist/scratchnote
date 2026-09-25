@@ -30,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Keine Notizen gefunden.",
+	"page_back": "Zurück zum Tag",
 	"page_empty_day": "Nichts erfasst. Drücke {hotkey}, um eine Notiz zu schreiben.",
 	"page_delete_title": "Diese Notiz löschen?",
 	"page_delete_description": "Sie wird aus der Tagesdatei entfernt. Das lässt sich nicht rückgängig machen.",
@@ -40,9 +41,6 @@
 	"capture_saving": "Speichern…",
 	"capture_space_title": "Wird in diesem Space gespeichert",
 	"categories_heading": "Kategorien",
-	"categories_clear": "Filter zurücksetzen",
-	"categories_show": "Notizen von {name} anzeigen, Strg+Klick zum Kombinieren",
-	"categories_more": "{count} weitere",
 	"calendar_pick": "Tag auswählen",
 	"status_loading": "Modell wird geladen",
 	"status_loading_hint": "Das Modell wird in den Speicher geladen. Die erste Notiz nach dem Start oder nach einer Leerlauf-Entladung wartet darauf, dann beginnt die Beschriftung.",
@@ -70,6 +68,39 @@
 	"tags_remove_filter": "Filter #{tag} entfernen",
 	"tags_narrow": "Auf #{tag} eingrenzen",
 	"tags_more": "+{count} weitere",
+	"tags_title": "Tags",
+	"tags_all": "Alle Tags",
+	"tags_empty": "Noch keine Tags. Das Modell fügt sie hinzu, während es deine Notizen beschriftet.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Tag",
+				"countPlural=other": "{count} Tags"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Notiz",
+				"countPlural=other": "{count} Notizen"
+			}
+		}
+	],
 	"note_body_label": "Text",
 	"note_edit_hint": "Strg+Enter zum Speichern, Esc zum Abbrechen",
 	"note_dblclick_hint": "Doppelklick zum Bearbeiten",
@@ -83,16 +114,18 @@
 	"note_show_tag": "Notizen mit #{tag} anzeigen",
 	"search_placeholder": "Notizen durchsuchen, # für Tags",
 	"search_label": "Notizen durchsuchen",
-	"search_clear": "Suche löschen",
 	"search_tags_label": "Tags",
 	"search_chat_label": "Über diese Notizen chatten",
 	"search_chat_title": "Chatte mit dem Modell über diesen Space. Es liest nur den Space-Index: Datumsangaben, Themen, Zusammenfassungen und Tags.",
 	"search_chat_disabled": "Zum Chatten wird ein Modell benötigt. Wähle eins in den Einstellungen.",
 	"search_chat_model_off": "Zum Chatten wird das Modell benötigt, das in den Einstellungen ausgeschaltet ist.",
+	"command_group_commands": "Befehle",
+	"command_today": "Zu heute springen",
+	"command_see_all": "Alle anzeigen",
+	"command_tags": "Tags durchstöbern",
 	"chat_title": "Chat",
 	"chat_about": "über {space}",
 	"chat_new": "Neuer Chat",
-	"chat_back": "Zurück zu den Notizen",
 	"chat_intro": "Frag alles über die Notizen in {space}. Das Modell liest nur den Index dieses Space: Datum, Thema, Zusammenfassung und Tags jeder Notiz. Es sieht nicht, was in den Notizen steht.",
 	"chat_reading_space": "Index von {space} wird gelesen...",
 	"chat_reading_first": "Index wird zuerst gelesen...",

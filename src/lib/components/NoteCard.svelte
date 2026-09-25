@@ -97,7 +97,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <article
 	data-note-id={note.id}
-	class="group relative -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-4 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900 {menuOpen
+	class="group relative -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-5 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900 {menuOpen
 		? 'bg-neutral-900'
 		: ''} {blink ? 'note-blink' : ''}"
 	ondblclick={onDoubleClick}
@@ -108,15 +108,15 @@
 	     notes leave off the outer ends so the rail stops at their dots. -->
 	<span
 		aria-hidden="true"
-		class="absolute top-0 left-[6.25rem] h-[26px] w-px bg-neutral-800 [li:first-child_&]:hidden"
+		class="absolute top-0 left-[6.25rem] h-[30px] w-px bg-neutral-800 [li:first-child_&]:hidden"
 	></span>
 	<span
 		aria-hidden="true"
-		class="absolute top-[26px] left-[6.25rem] size-2 -translate-x-[3.5px] rounded-full border border-neutral-700 bg-neutral-950 transition-colors duration-300 group-hover:border-neutral-400 group-hover:bg-neutral-400"
+		class="absolute top-[30px] left-[6.25rem] size-2 -translate-x-[3.5px] rounded-full border border-neutral-700 bg-neutral-950 transition-colors duration-300 group-hover:border-neutral-400 group-hover:bg-neutral-400"
 	></span>
 	<span
 		aria-hidden="true"
-		class="absolute top-[34px] bottom-0 left-[6.25rem] w-px bg-neutral-800 [li:last-child_&]:hidden"
+		class="absolute top-[38px] bottom-0 left-[6.25rem] w-px bg-neutral-800 [li:last-child_&]:hidden"
 	></span>
 	<time class="pt-1 text-right font-mono text-xs leading-5 text-neutral-600">
 		{#if showDate}<span class="block">{note.date}</span>{/if}{note.time}
@@ -132,7 +132,7 @@
 					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
 					aria-label={m.note_body_label()}
 					spellcheck="false"
-					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[0.9375rem] leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
+					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
 				></textarea>
 				<div class="flex items-center justify-end gap-1">
 					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
@@ -145,7 +145,7 @@
 				</div>
 			</div>
 		{:else}
-			<p class="text-[0.9375rem] leading-7 whitespace-pre-wrap text-neutral-200">{note.body}</p>
+			<p class="text-base leading-7 whitespace-pre-wrap text-neutral-200">{note.body}</p>
 		{/if}
 	</div>
 

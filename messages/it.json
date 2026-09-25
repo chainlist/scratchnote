@@ -30,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Nessuna nota corrisponde.",
+	"page_back": "Torna alla giornata",
 	"page_empty_day": "Non hai ancora scritto nulla. Premi {hotkey} per scrivere una nota.",
 	"page_delete_title": "Eliminare questa nota?",
 	"page_delete_description": "Viene rimossa dal file del giorno. Non si può annullare.",
@@ -40,9 +41,6 @@
 	"capture_saving": "Salvataggio…",
 	"capture_space_title": "Salvataggio in questo spazio",
 	"categories_heading": "Categorie",
-	"categories_clear": "Rimuovi filtro",
-	"categories_show": "Mostra le note di {name}, Ctrl+click per combinare",
-	"categories_more": "Altre {count}",
 	"calendar_pick": "Scegli un giorno",
 	"status_loading": "Caricamento del modello",
 	"status_loading_hint": "Caricamento del modello in memoria. La prima nota dopo l'avvio o dopo un rilascio per inattività attende questo passaggio, poi inizia l'etichettatura.",
@@ -70,6 +68,39 @@
 	"tags_remove_filter": "Rimuovi il filtro #{tag}",
 	"tags_narrow": "Filtra su #{tag}",
 	"tags_more": "+{count} altri",
+	"tags_title": "Tag",
+	"tags_all": "Tutti i tag",
+	"tags_empty": "Ancora nessun tag. Il modello li aggiunge mentre etichetta le tue note.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} tag",
+				"countPlural=other": "{count} tag"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} nota",
+				"countPlural=other": "{count} note"
+			}
+		}
+	],
 	"note_body_label": "Corpo",
 	"note_edit_hint": "Ctrl+Enter per salvare, Esc per annullare",
 	"note_dblclick_hint": "Doppio click per modificare",
@@ -83,16 +114,18 @@
 	"note_show_tag": "Mostra le note #{tag}",
 	"search_placeholder": "Cerca note, # per i tag",
 	"search_label": "Cerca note",
-	"search_clear": "Cancella ricerca",
 	"search_tags_label": "Tag",
 	"search_chat_label": "Chatta su queste note",
 	"search_chat_title": "Chatta con il modello su questo spazio. Legge solo l'indice dello spazio: date, soggetti, riassunti e tag.",
 	"search_chat_disabled": "La chat richiede un modello. Scegline uno nelle Impostazioni.",
 	"search_chat_model_off": "La chat richiede il modello, che è disattivato nelle Impostazioni.",
+	"command_group_commands": "Comandi",
+	"command_today": "Vai a oggi",
+	"command_see_all": "Vedi tutti",
+	"command_tags": "Sfoglia i tag",
 	"chat_title": "Chat",
 	"chat_about": "su {space}",
 	"chat_new": "Nuova chat",
-	"chat_back": "Torna alle note",
 	"chat_intro": "Chiedi qualsiasi cosa sulle note in {space}. Il modello legge solo l'indice di questo spazio: data, soggetto, riassunto e tag di ogni nota. Non vede il contenuto delle note.",
 	"chat_reading_space": "Lettura dell'indice di {space}...",
 	"chat_reading_first": "Prima lettura dell'indice...",

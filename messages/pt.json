@@ -30,6 +30,7 @@
 		}
 	],
 	"page_no_match": "Nenhuma nota encontrada.",
+	"page_back": "Voltar ao dia",
 	"page_empty_day": "Nada registrado. Pressione {hotkey} para escrever uma nota.",
 	"page_delete_title": "Excluir esta nota?",
 	"page_delete_description": "Ela é removida do arquivo do dia. Não há como desfazer.",
@@ -40,9 +41,6 @@
 	"capture_saving": "Salvando…",
 	"capture_space_title": "Salvando neste espaço",
 	"categories_heading": "Categorias",
-	"categories_clear": "Limpar filtro",
-	"categories_show": "Mostrar notas de {name}, Ctrl+click para combinar",
-	"categories_more": "mais {count}",
 	"calendar_pick": "Escolher um dia",
 	"status_loading": "Carregando modelo",
 	"status_loading_hint": "Carregando o modelo na memória. A primeira nota após abrir o app ou após um descarregamento por inatividade aguarda isso terminar, depois a rotulagem começa.",
@@ -70,6 +68,39 @@
 	"tags_remove_filter": "Remover filtro #{tag}",
 	"tags_narrow": "Restringir a #{tag}",
 	"tags_more": "+{count} mais",
+	"tags_title": "Tags",
+	"tags_all": "Todas as tags",
+	"tags_empty": "Ainda não há tags. O modelo adiciona-as ao etiquetar as suas notas.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} tag",
+				"countPlural=other": "{count} tags"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} nota",
+				"countPlural=other": "{count} notas"
+			}
+		}
+	],
 	"note_body_label": "Corpo",
 	"note_edit_hint": "Ctrl+Enter para salvar, Esc para cancelar",
 	"note_dblclick_hint": "Clique duas vezes para editar",
@@ -83,16 +114,18 @@
 	"note_show_tag": "Mostrar notas #{tag}",
 	"search_placeholder": "Buscar notas, # para tags",
 	"search_label": "Buscar notas",
-	"search_clear": "Limpar busca",
 	"search_tags_label": "Tags",
 	"search_chat_label": "Conversar sobre estas notas",
 	"search_chat_title": "Converse com o modelo sobre este espaço. Ele lê apenas o índice do espaço: datas, assuntos, resumos e tags.",
 	"search_chat_disabled": "Conversar exige um modelo. Escolha um em Configurações.",
 	"search_chat_model_off": "Conversar exige o modelo, que está desativado em Configurações.",
+	"command_group_commands": "Comandos",
+	"command_today": "Ir para hoje",
+	"command_see_all": "Ver tudo",
+	"command_tags": "Explorar tags",
 	"chat_title": "Conversa",
 	"chat_about": "sobre {space}",
 	"chat_new": "Nova conversa",
-	"chat_back": "Voltar às notas",
 	"chat_intro": "Pergunte qualquer coisa sobre as notas em {space}. O modelo lê apenas o índice deste espaço: a data, o assunto, o resumo e as tags de cada nota. Ele não vê o que as notas dizem.",
 	"chat_reading_space": "Lendo o índice de {space}...",
 	"chat_reading_first": "Lendo o índice primeiro...",

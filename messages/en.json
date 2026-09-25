@@ -30,6 +30,7 @@
 		}
 	],
 	"page_no_match": "No notes match.",
+	"page_back": "Back to the day",
 	"page_empty_day": "Nothing captured. Press {hotkey} to write a note.",
 	"page_delete_title": "Delete this note?",
 	"page_delete_description": "It is removed from its day file. There is no undo.",
@@ -40,9 +41,6 @@
 	"capture_saving": "Saving…",
 	"capture_space_title": "Saving into this space",
 	"categories_heading": "Categories",
-	"categories_clear": "Clear filter",
-	"categories_show": "Show {name} notes, Ctrl+click to combine",
-	"categories_more": "{count} more",
 	"calendar_pick": "Pick a day",
 	"status_loading": "Loading model",
 	"status_loading_hint": "Loading the model into memory. The first note after launch or after an idle unload waits for this, then labelling starts.",
@@ -70,6 +68,39 @@
 	"tags_remove_filter": "Remove #{tag} filter",
 	"tags_narrow": "Narrow to #{tag}",
 	"tags_more": "+{count} more",
+	"tags_title": "Tags",
+	"tags_all": "All tags",
+	"tags_empty": "No tags yet. The model adds them as it labels your notes.",
+	"tags_count": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} tag",
+				"countPlural=other": "{count} tags"
+			}
+		}
+	],
+	"tags_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} note",
+				"countPlural=other": "{count} notes"
+			}
+		}
+	],
 	"note_body_label": "Body",
 	"note_edit_hint": "Ctrl+Enter to save, Esc to cancel",
 	"note_dblclick_hint": "Double-click to edit",
@@ -83,16 +114,18 @@
 	"note_show_tag": "Show #{tag} notes",
 	"search_placeholder": "Search notes, # for tags",
 	"search_label": "Search notes",
-	"search_clear": "Clear search",
 	"search_tags_label": "Tags",
 	"search_chat_label": "Chat about these notes",
 	"search_chat_title": "Chat with the model about this space. It reads the space index only: dates, subjects, summaries and tags.",
 	"search_chat_disabled": "Chatting needs a model. Pick one in Settings.",
 	"search_chat_model_off": "Chatting needs the model, which is turned off in Settings.",
+	"command_group_commands": "Commands",
+	"command_today": "Go to today",
+	"command_see_all": "See all",
+	"command_tags": "Browse tags",
 	"chat_title": "Chat",
 	"chat_about": "about {space}",
 	"chat_new": "New chat",
-	"chat_back": "Back to notes",
 	"chat_intro": "Ask anything about the notes in {space}. The model reads this space's index only: each note's date, subject, summary and tags. It does not see what the notes say.",
 	"chat_reading_space": "Reading the index of {space}...",
 	"chat_reading_first": "Reading the index first...",

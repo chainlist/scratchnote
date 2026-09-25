@@ -1,14 +1,36 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
-	import type { EnrichProgress, ModelStatus } from '$lib/api';
+	import {
+		enrichBusy,
+		enrichProgress,
+		onEnrichBusy,
+		onEnrichProgress,
+		type EnrichProgress,
+		type ModelStatus
+	} from '$lib/api';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { m } from '$lib/paraglide/messages';
 
-	let {
-		status,
-		busy,
-		progress
-	}: { status: ModelStatus; busy: boolean; progress: EnrichProgress | null } = $props();
+	let { status }: { status: ModelStatus } = $props();
+
+	let busy = $state(false);
+	let progress = $state<EnrichProgress | null>(null);
+
+	onMount(() => {
+		const off = [
+			onEnrichBusy((value) => {
+				busy = value;
+				if (!value) progress = null;
+			}),
+			onEnrichProgress((value) => (progress = value))
+		];
+		void (async () => {
+			busy = await enrichBusy();
+			progress = await enrichProgress();
+		})();
+		return () => off.forEach((p) => void p.then((stop) => stop()));
+	});
 
 	// The worker flags a job before it loads the model, so busy while not yet
 	// loaded means the load itself is what is taking time.

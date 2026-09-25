@@ -4,8 +4,6 @@
 		categoryNames,
 		deleteNote,
 		embeddingModelInfo,
-		enrichBusy,
-		enrichProgress,
 		getDay,
 		listCategories,
 		listDays,
@@ -13,8 +11,6 @@
 		listTags,
 		modelStatus,
 		onEmbeddingStatus,
-		onEnrichBusy,
-		onEnrichProgress,
 		onIndexRebuilt,
 		onModelStatus,
 		onNoteEnriched,
@@ -30,87 +26,61 @@
 		updateNote,
 		updateNoteMeta,
 		type DaySummary,
-		type EnrichProgress,
 		type IndexEntry,
 		type ModelStatus,
 		type SpacesView,
 		type NoteEdit,
 		type Note
 	} from '$lib/api';
-	import Chat from '$lib/components/Chat.svelte';
+	import AppHeader from '$lib/components/AppHeader.svelte';
+	import ChatPanel from '$lib/components/ChatPanel.svelte';
 	import CommandCenter from '$lib/components/CommandCenter.svelte';
-	import DayCalendar from '$lib/components/DayCalendar.svelte';
+	import DeleteNoteDialog from '$lib/components/DeleteNoteDialog.svelte';
 	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
-	import NoteCard from '$lib/components/NoteCard.svelte';
 	import NoteEditor from '$lib/components/NoteEditor.svelte';
+	import NoteList from '$lib/components/NoteList.svelte';
 	import Onboarding from '$lib/components/Onboarding.svelte';
-	import Settings from '$lib/components/Settings.svelte';
-	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
+	import Settings from '$lib/components/settings/Settings.svelte';
 	import TagFilters from '$lib/components/TagFilters.svelte';
 	import TagsPage from '$lib/components/TagsPage.svelte';
-	import WindowControls from '$lib/components/WindowControls.svelte';
-	import { Button } from '$lib/components/ui/button';
+	import TimelineHeader from '$lib/components/TimelineHeader.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-	import SearchIcon from '@lucide/svelte/icons/search';
-	import SettingsIcon from '@lucide/svelte/icons/settings';
-	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import XIcon from '@lucide/svelte/icons/x';
 	import { m } from '$lib/paraglide/messages';
-	import { getLocale } from '$lib/paraglide/runtime';
+	import { queryTags, toggleTag } from '$lib/query';
+	import type { Timeline } from '$lib/timeline';
 
 	let days = $state<DaySummary[]>([]);
+	/** The selected day's notes. */
 	let notes = $state<Note[]>([]);
 	let selected = $state('');
 	let error = $state<string | null>(null);
 	let model = $state<ModelStatus>({ state: 'absent' });
-	let busy = $state(false);
-	let progress = $state<EnrichProgress | null>(null);
 	let tags = $state<[string, number][]>([]);
 	let categories = $state<[string, number][]>([]);
 	/** Every category on the list, for the editor to offer. */
 	let categoryList = $state<string[]>([]);
+	let spaces = $state<SpacesView | null>(null);
+
+	let timeline = $state<Timeline>({ kind: 'day' });
+	/** The notes a search matches, while the timeline lists them. */
+	let results = $state<Note[]>([]);
+	/** The notes close to a note, while the timeline lists them. */
+	let similar = $state<Note[]>([]);
+	const activeTags = $derived(timeline.kind === 'search' ? queryTags(timeline.query) : []);
+
 	/** The note open in the editor. */
 	let editing = $state<Note | null>(null);
 	/** The note waiting on the delete confirmation. */
 	let deleting = $state<Note | null>(null);
-	let removing = $state(false);
 	/** The command center's query, kept between openings. */
 	let query = $state('');
 	let paletteOpen = $state(false);
-	/** The query whose matches the timeline lists in place of the day, from "See all". */
-	let shown = $state<string | null>(null);
-	let results = $state<Note[]>([]);
-	/** The timeline lists every tag in place of the day. */
-	let tagsShown = $state(false);
-	/** The note whose closest notes the timeline lists in place of the day. */
-	let similarTo = $state<Note | null>(null);
-	let similar = $state<Note[]>([]);
+	let settingsOpen = $state(false);
+	let chatOpen = $state(false);
+	const canChat = $derived(model.state === 'loaded' || model.state === 'idle');
 	/** Similar notes come from the embedding model's vectors. */
 	let embeddingInstalled = $state(false);
 	const canSimilar = $derived(embeddingInstalled && model.state !== 'disabled');
-	const activeTags = $derived(
-		(shown ?? '')
-			.split(/\s+/)
-			.filter((token) => token.startsWith('#'))
-			.map((token) => token.slice(1).toLowerCase())
-	);
-	const words = $derived(
-		(shown ?? '')
-			.split(/\s+/)
-			.filter((token) => token && !token.startsWith('#'))
-			.join(' ')
-	);
-	let settingsOpen = $state(false);
-	let spaces = $state<SpacesView | null>(null);
-
-	// macOS keeps its native traffic lights over the top left corner;
-	// elsewhere the window is undecorated and draws its own controls.
-	const mac = navigator.userAgent.includes('Mac');
-
-	/** The chat about the open space's index, floating over the day. */
-	let chatOpen = $state(false);
-	const canChat = $derived(model.state === 'loaded' || model.state === 'idle');
 
 	async function refresh() {
 		try {
@@ -126,63 +96,48 @@
 		} catch (e) {
 			error = String(e);
 		}
-		await runSearch();
-		await loadSimilar();
+		await loadTimeline();
 	}
 
-	async function loadSimilar() {
-		if (similarTo === null) {
-			similar = [];
-			return;
-		}
-		const run = ++searchRun;
+	// Only the latest answer is kept, so a slow reply to an earlier query
+	// cannot overwrite a newer one.
+	let run = 0;
+	/** Loads what the timeline lists in place of the day, if anything. */
+	async function loadTimeline() {
+		const mine = ++run;
+		const current = timeline;
+		if (current.kind !== 'search') results = [];
+		if (current.kind !== 'similar') similar = [];
 		try {
-			const found = await similarNotes(similarTo.id);
-			if (run === searchRun) similar = found;
+			if (current.kind === 'search') {
+				const found = await search(current.query);
+				if (mine === run) results = found;
+			} else if (current.kind === 'similar') {
+				const found = await similarNotes(current.note.id);
+				if (mine === run) similar = found;
+			}
 		} catch (e) {
 			error = String(e);
 		}
-	}
-
-	async function showSimilar(note: Note) {
-		tagsShown = false;
-		shown = null;
-		similarTo = note;
-		await loadSimilar();
-		document.querySelector('main')?.scrollTo({ top: 0 });
-	}
-
-	// Only the latest query's answer is kept, so a slow reply to an earlier
-	// one cannot overwrite a newer one.
-	let searchRun = 0;
-	async function runSearch() {
-		const run = ++searchRun;
-		if (shown === null) {
-			results = [];
-			return;
-		}
-		try {
-			const found = await search(shown);
-			if (run === searchRun) results = found;
-		} catch (e) {
-			error = String(e);
-		}
-	}
-
-	async function showResults(q: string) {
-		tagsShown = false;
-		similarTo = null;
-		shown = q.trim() || null;
-		query = shown ?? '';
-		await runSearch();
 	}
 
 	async function select(date: string) {
-		tagsShown = false;
-		similarTo = null;
-		shown = null;
+		timeline = { kind: 'day' };
 		selected = date;
 		await refresh();
+	}
+
+	async function showResults(q: string) {
+		const trimmed = q.trim();
+		timeline = trimmed ? { kind: 'search', query: trimmed } : { kind: 'day' };
+		query = trimmed;
+		await loadTimeline();
+	}
+
+	async function showSimilar(note: Note) {
+		timeline = { kind: 'similar', note };
+		await loadTimeline();
+		document.querySelector('main')?.scrollTo({ top: 0 });
 	}
 
 	/** The note a chat citation led to, blinking while it is set. */
@@ -207,26 +162,15 @@
 
 	/**
 	 * A tag clicked on a card opens the command center filtered on it. While
-	 * the timeline lists results, it narrows them instead: a plain click
-	 * filters on this tag alone, or clears it if it already was the only one,
-	 * and `additive` adds the tag or takes it out again. Words are kept.
+	 * the timeline lists results, it narrows them instead, see `toggleTag`.
 	 */
 	function openTag(tag: string, additive = false) {
-		if (shown === null) {
+		if (timeline.kind !== 'search') {
 			query = `#${tag} `;
 			paletteOpen = true;
 			return;
 		}
-		const tokens = shown.split(/\s+/).filter(Boolean);
-		const kept = tokens.filter((token) => token.toLowerCase() !== `#${tag}`);
-		const on = kept.length !== tokens.length;
-		if (additive) {
-			void showResults((on ? kept : [...tokens, `#${tag}`]).join(' '));
-			return;
-		}
-		const plain = tokens.filter((token) => !token.startsWith('#'));
-		const alone = on && activeTags.length === 1;
-		void showResults((alone ? plain : [...plain, `#${tag}`]).join(' '));
+		void showResults(toggleTag(timeline.query, tag, additive));
 	}
 
 	function onWindowKeydown(event: KeyboardEvent) {
@@ -286,23 +230,26 @@
 		}
 	}
 
-	async function remove() {
-		const note = deleting;
-		if (!note || removing) return;
-		removing = true;
+	async function remove(note: Note) {
 		try {
 			await deleteNote(note.date, note.id);
 			if (editing?.id === note.id) editing = null;
-			if (similarTo?.id === note.id) similarTo = null;
-			deleting = null;
+			if (timeline.kind === 'similar' && timeline.note.id === note.id) timeline = { kind: 'day' };
 			await refresh();
 		} catch (e) {
 			error = String(e);
-			deleting = null;
-		} finally {
-			removing = false;
 		}
 	}
+
+	/** What every card on the page can do. */
+	const cardActions = $derived({
+		onedit: (note: Note) => (editing = note),
+		ondelete: (note: Note) => (deleting = note),
+		onsave: saveBody,
+		onretry: retry,
+		ontag: openTag,
+		onsimilar: canSimilar ? showSimilar : undefined
+	});
 
 	onMount(() => {
 		const off: Promise<() => void>[] = [];
@@ -316,16 +263,16 @@
 			// Enrichment finishing rewrites the note, so the card has to reload.
 			off.push(onNoteEnriched(() => void refresh()));
 			off.push(onOpenSettings(() => (settingsOpen = true)));
-			// Another space has its own days and tags, so a search or tag
-			// filter from the last one would mean nothing there.
+			// Another space has its own days and notes, so a search or similar
+			// notes from the last one would mean nothing there. Its tags are
+			// listed afresh.
 			off.push(
 				onSpacesChanged((view) => {
 					const switched = view.active !== spaces?.active;
 					spaces = view;
 					if (switched) {
 						query = '';
-						shown = null;
-						similarTo = null;
+						if (timeline.kind !== 'tags') timeline = { kind: 'day' };
 					}
 					void refresh();
 				})
@@ -335,15 +282,6 @@
 			off.push(onEmbeddingStatus((status) => (embeddingInstalled = status.state === 'installed')));
 			model = await modelStatus();
 			off.push(onModelStatus((status) => (model = status)));
-			busy = await enrichBusy();
-			off.push(
-				onEnrichBusy((value) => {
-					busy = value;
-					if (!value) progress = null;
-				})
-			);
-			progress = await enrichProgress();
-			off.push(onEnrichProgress((value) => (progress = value)));
 		})();
 		return () => off.forEach((p) => void p.then((stop) => stop()));
 	});
@@ -357,91 +295,30 @@
 			quit: m.tray_quit()
 		}).catch((e) => (error = String(e)));
 	});
-
-	const heading = $derived(
-		selected
-			? new Date(`${selected}T00:00:00`).toLocaleDateString(getLocale(), {
-					weekday: 'long',
-					day: 'numeric',
-					month: 'long',
-					year: 'numeric'
-				})
-			: ''
-	);
 </script>
 
 <svelte:window onkeydown={onWindowKeydown} />
 
 <div class="flex h-screen flex-col bg-neutral-950 text-neutral-100">
-	<header
-		data-tauri-drag-region="deep"
-		class={['flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}
-	>
-		<SpaceSwitcher view={spaces} />
-		<div class="ml-auto flex items-center gap-1">
-			<Button
-				variant="ghost"
-				size="sm"
-				onclick={() => (paletteOpen = true)}
-				aria-label={m.search_label()}
-				title={m.search_label()}
-				class="text-muted-foreground hover:text-foreground"
-			>
-				<SearchIcon />
-				<kbd class="font-mono text-xs">{mac ? '⌘' : 'Ctrl'} /</kbd>
-			</Button>
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				onclick={() => (settingsOpen = true)}
-				aria-label={m.common_settings()}
-				title={m.common_settings()}
-				class="text-muted-foreground hover:text-foreground"
-			>
-				<SettingsIcon />
-			</Button>
-			{#if !mac}<WindowControls />{/if}
-		</div>
-	</header>
+	<AppHeader
+		{spaces}
+		onsearch={() => (paletteOpen = true)}
+		onsettings={() => (settingsOpen = true)}
+	/>
 
 	<main class="min-h-0 flex-1 overflow-y-auto px-6 pb-28">
 		<div class="mx-auto max-w-3xl">
-			<div class="mt-6 mb-8 flex items-center gap-2">
-				{#if tagsShown || shown !== null || similarTo !== null}
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						onclick={() => void select(selected)}
-						aria-label={m.page_back()}
-						title={m.page_back()}
-						class="text-muted-foreground hover:text-foreground"
-					>
-						<ArrowLeftIcon />
-					</Button>
-				{/if}
-				{#if tagsShown}
-					<h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight">
-						{m.tags_title()}
-						<span class="font-normal text-muted-foreground">
-							{m.tags_count({ count: tags.length })}
-						</span>
-					</h1>
-				{:else if similarTo !== null}
-					<h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight">
-						{m.note_similar()}
-					</h1>
-				{:else if shown !== null}
-					<h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight">
-						{m.page_results({ count: results.length })}
-						{#if words}<span class="font-normal text-muted-foreground">{words}</span>{/if}
-					</h1>
-				{:else}
-					<DayCalendar {days} {selected} onselect={select} />
-					<h1 class="text-2xl font-semibold tracking-tight">{heading}</h1>
-				{/if}
-			</div>
+			<TimelineHeader
+				{timeline}
+				{days}
+				{selected}
+				tagCount={tags.length}
+				resultCount={results.length}
+				onback={() => void select(selected)}
+				onselect={select}
+			/>
 
-			{#if shown !== null}
+			{#if timeline.kind === 'search'}
 				<TagFilters
 					active={activeTags}
 					{results}
@@ -462,125 +339,40 @@
 				</p>
 			{/if}
 
-			{#if similarTo !== null}
+			{#if timeline.kind === 'tags'}
+				<TagsPage {tags} {categories} onpick={(tag) => void showResults(`#${tag}`)} />
+			{:else if timeline.kind === 'similar'}
 				<p
 					class="mb-6 line-clamp-3 rounded-lg border border-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap text-neutral-400"
 				>
-					{similarTo.body}
+					{timeline.note.body}
 				</p>
-			{/if}
-
-			{#if tagsShown}
-				<TagsPage {tags} {categories} onpick={(tag) => void showResults(`#${tag}`)} />
-			{:else if similarTo !== null}
-				{#if similar.length === 0}
-					<p class="text-base text-neutral-600">{m.page_no_similar()}</p>
-				{:else}
-					<ul>
-						{#each similar as note (note.id)}
-							<li>
-								<NoteCard
-									{note}
-									onedit={(n) => (editing = n)}
-									ondelete={(n) => (deleting = n)}
-									onsave={saveBody}
-									onretry={retry}
-									ontag={openTag}
-									onsimilar={canSimilar ? showSimilar : undefined}
-									showDate
-								/>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			{:else if shown !== null}
-				{#if results.length === 0}
-					<p class="text-base text-neutral-600">{m.page_no_match()}</p>
-				{:else}
-					<ul>
-						{#each results as note (note.id)}
-							<li>
-								<NoteCard
-									{note}
-									onedit={(n) => (editing = n)}
-									ondelete={(n) => (deleting = n)}
-									onsave={saveBody}
-									onretry={retry}
-									ontag={openTag}
-									onsimilar={canSimilar ? showSimilar : undefined}
-									showDate
-								/>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			{:else if notes.length === 0}
-				<p class="text-base text-neutral-600">
-					{m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })}
-				</p>
+				<NoteList notes={similar} empty={m.page_no_similar()} showDate {...cardActions} />
+			{:else if timeline.kind === 'search'}
+				<NoteList notes={results} empty={m.page_no_match()} showDate {...cardActions} />
 			{:else}
-				<ul>
-					{#each notes as note (note.id)}
-						<li>
-							<NoteCard
-								{note}
-								onedit={(n) => (editing = n)}
-								ondelete={(n) => (deleting = n)}
-								onsave={saveBody}
-								onretry={retry}
-								ontag={openTag}
-								onsimilar={canSimilar ? showSimilar : undefined}
-								blink={note.id === blinking}
-							/>
-						</li>
-					{/each}
-				</ul>
+				<NoteList
+					{notes}
+					empty={m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })}
+					{blinking}
+					{...cardActions}
+				/>
 			{/if}
 		</div>
 	</main>
 </div>
 
 <div class="fixed bottom-3 left-3 z-30">
-	<ModelStatusBar status={model} {busy} {progress} />
+	<ModelStatusBar status={model} />
 </div>
 
-{#if chatOpen}
-	<section
-		aria-label={m.chat_title()}
-		class="fixed right-6 bottom-16 z-40 flex h-[min(40rem,calc(100vh-7rem))] w-[min(26rem,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl"
-	>
-		<!-- Another space has another index, so a switch starts a new chat. -->
-		{#key spaces?.active}
-			<Chat
-				space={spaces?.active ?? ''}
-				onclose={() => (chatOpen = false)}
-				onopen={(entry) => void openCited(entry)}
-			/>
-		{/key}
-	</section>
-{/if}
-
-<!-- A disabled button shows no title, so the wrapper carries it. -->
-<span
-	class="fixed right-6 bottom-2 z-40"
-	title={chatOpen
-		? m.common_close()
-		: canChat
-			? m.search_chat_title()
-			: model.state === 'disabled'
-				? m.search_chat_model_off()
-				: m.search_chat_disabled()}
->
-	<Button
-		onclick={() => (chatOpen = !chatOpen)}
-		disabled={!canChat && !chatOpen}
-		aria-label={chatOpen ? m.common_close() : m.search_chat_label()}
-		aria-expanded={chatOpen}
-		class="size-12 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-5"
-	>
-		{#if chatOpen}<XIcon />{:else}<SparklesIcon />{/if}
-	</Button>
-</span>
+<ChatPanel
+	bind:open={chatOpen}
+	space={spaces?.active ?? ''}
+	{canChat}
+	modelOff={model.state === 'disabled'}
+	onopen={(entry) => void openCited(entry)}
+/>
 
 <CommandCenter
 	bind:open={paletteOpen}
@@ -591,11 +383,7 @@
 	onpick={(note) => void openCited(note)}
 	onseeall={(q) => void showResults(q)}
 	ontoday={async () => void select(await today())}
-	ontags={() => {
-		shown = null;
-		similarTo = null;
-		tagsShown = true;
-	}}
+	ontags={() => (timeline = { kind: 'tags' })}
 	onchat={() => (chatOpen = true)}
 	onsettings={() => (settingsOpen = true)}
 />
@@ -608,32 +396,7 @@
 	ondelete={(n) => (deleting = n)}
 />
 
-<Dialog.Root
-	open={deleting !== null}
-	onOpenChange={(open) => {
-		if (!open) deleting = null;
-	}}
->
-	<Dialog.Content showCloseButton={false}>
-		<Dialog.Header>
-			<Dialog.Title>{m.page_delete_title()}</Dialog.Title>
-			<Dialog.Description>{m.page_delete_description()}</Dialog.Description>
-		</Dialog.Header>
-		{#if deleting}
-			<p
-				class="line-clamp-4 rounded-lg border bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap text-muted-foreground"
-			>
-				{deleting.body}
-			</p>
-		{/if}
-		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (deleting = null)}>{m.common_cancel()}</Button>
-			<Button variant="destructive" onclick={remove} disabled={removing}>
-				{removing ? m.page_deleting() : m.common_delete()}
-			</Button>
-		</Dialog.Footer>
-	</Dialog.Content>
-</Dialog.Root>
+<DeleteNoteDialog bind:note={deleting} onconfirm={remove} />
 
 <Dialog.Root bind:open={settingsOpen}>
 	<Dialog.Content

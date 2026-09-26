@@ -379,7 +379,9 @@
 		{/snippet}
 	</AppHeader>
 
-	<main class="min-h-0 flex-1 overflow-y-auto px-6 pb-28">
+	<!-- A pending note's glow spills past its card; near the window's edge
+	     that must not turn into a sideways scrollbar. -->
+	<main class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-6 pb-28">
 		<div class="mx-auto max-w-3xl">
 			<TimelineHeader {...headerProps} oncollapse={(collapsed) => (titleCollapsed = collapsed)} />
 

@@ -14,8 +14,10 @@ use notify::{EventKind, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 
+use crate::enrich::queue::Job;
 use crate::spaces::Space;
 use crate::state::AppState;
+use crate::storage::daily_file::Status;
 use crate::storage::{check_date, fingerprint, index};
 
 /// An editor writing a file emits several events; wait for quiet before
@@ -103,20 +105,38 @@ fn reindex(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     }
 
     let entries = index::parse_day(path, &date);
+    // A labelled note whose body was edited parses as pending, and so does a
+    // block typed in by hand: both go to the model.
+    let pending: Vec<String> = entries
+        .iter()
+        .filter(|entry| entry.status == Status::Pending)
+        .map(|entry| entry.id.clone())
+        .collect();
     {
         let Ok(mut idx) = space.index.write() else {
             return false;
         };
         idx.replace_day(&date, entries);
     }
+    let queued = match space.queue.lock() {
+        Ok(mut queue) => pending.into_iter().fold(false, |any, id| {
+            queue.push(Job::new(id, date.clone())) || any
+        }),
+        Err(_) => false,
+    };
 
     // Persist the refreshed cache. Failing to write it is not fatal: the file
     // is derived, and startup reparses anything newer than it.
     let app = app.clone();
     let owned = space.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = owned.persist_index(&app.state::<AppState>().writer).await {
+        let state = app.state::<AppState>();
+        if let Err(e) = owned.persist_index(&state.writer).await {
             log::warn!("could not persist the index after an external edit: {e}");
+        }
+        if queued {
+            owned.persist_queue(&state.writer).await;
+            state.wake.notify_one();
         }
     });
 

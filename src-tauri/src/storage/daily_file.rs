@@ -290,6 +290,16 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
 
     let (subject, summary, tags, body) = parse_block(block);
 
+    // A body that no longer matches the hash written with it was edited in
+    // another editor (SPEC 4.3). Labels the model wrote describe the old text,
+    // so the note is pending again; labels set by hand are the user's to keep.
+    let actual = body_hash(&body);
+    let edited = hash.is_some_and(|stored| stored != actual);
+    let status = match status.unwrap_or(Status::Pending) {
+        Status::Done | Status::Failed if edited => Status::Pending,
+        status => status,
+    };
+
     Some(Note {
         id: id?,
         date: date.to_string(),
@@ -298,8 +308,8 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
         subject,
         summary,
         tags,
-        status: status.unwrap_or(Status::Pending),
-        hash: hash.unwrap_or_else(|| body_hash(&body)),
+        status,
+        hash: actual,
         lang,
         body,
     })
@@ -509,6 +519,31 @@ mod tests {
         let note = parse_one(doc);
         assert_eq!(note.status, Status::Pending);
         assert_eq!(note.hash, body_hash("body text"));
+    }
+
+    #[test]
+    fn a_labelled_note_edited_elsewhere_is_pending_again() {
+        let rendered = render_note(&enriched());
+        let edited = rendered.replace("Friday release", "Monday release");
+        let note = parse_one(&edited);
+        assert_eq!(note.status, Status::Pending);
+        assert_eq!(note.hash, body_hash(&note.body));
+
+        let failed = rendered.replace("status=done", "status=failed");
+        let note = parse_one(&failed.replace("Friday release", "Monday release"));
+        assert_eq!(note.status, Status::Pending);
+    }
+
+    #[test]
+    fn a_manual_note_edited_elsewhere_keeps_its_labels() {
+        let rendered = render_note(&enriched()).replace("status=done", "status=manual");
+        let note = parse_one(&rendered.replace("Friday release", "Monday release"));
+        assert_eq!(note.status, Status::Manual);
+        assert_eq!(
+            note.hash,
+            body_hash(&note.body),
+            "the hash describes the new body"
+        );
     }
 
     #[test]

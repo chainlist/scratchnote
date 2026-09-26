@@ -127,39 +127,52 @@ impl Vectors {
     /// the note's vector is already here.
     ///
     /// The score is a cosine taken after removing the mean of the space's
-    /// vectors. Notes share a lot just by being short notes by one person,
-    /// so plain cosines bunch up: two unrelated work notes score about as
-    /// high as two notes on the same show, and a bland note comes up for
-    /// everything. Once the mean is removed, only what a note has beyond the
-    /// usual counts.
+    /// other vectors. Notes share a lot just by being short notes by one
+    /// person, so plain cosines bunch up: two unrelated work notes score
+    /// about as high as two notes on the same show, and a bland note comes up
+    /// for everything. Once the mean is removed, only what a note has beyond
+    /// the usual counts.
+    ///
+    /// The mean leaves out the two notes being compared. In a space of ten,
+    /// two notes on the same thing would otherwise make a fifth of what is
+    /// "usual", and taking it off would remove most of what they share. With
+    /// a few dozen notes this changes next to nothing.
     pub fn similar(&self, id: &str, k: usize, min_score: f32) -> Vec<(String, f32)> {
-        let Some((_, note)) = self.notes.get(id) else {
+        let Some((_, a)) = self.notes.get(id) else {
             return Vec::new();
         };
-        let count = self.notes.len() as f32;
-        let mut mean = vec![0.0; self.dims];
+        // Nothing is left to say what is usual.
+        if self.notes.len() < 3 {
+            return Vec::new();
+        }
+        let rest = (self.notes.len() - 2) as f32;
+        let mut sum = vec![0.0; self.dims];
         for (_, vector) in self.notes.values() {
-            for (m, x) in mean.iter_mut().zip(vector) {
-                *m += x / count;
+            for (s, x) in sum.iter_mut().zip(vector) {
+                *s += x;
             }
         }
 
-        // Expanded rather than centred copies: (a - m)·(b - m) is
-        // a·b - a·m - b·m + m·m, and |a - m|² is a·a - 2 a·m + m·m.
-        let mm = dot(&mean, &mean);
-        let centred_norm = |v: &[f32], vm: f32| (dot(v, v) - 2.0 * vm + mm).max(0.0).sqrt();
-        let note_m = dot(note, &mean);
-        let note_norm = centred_norm(note, note_m);
+        // Expanded rather than centred copies, with m = (S - a - b) / rest:
+        // (a - m)·(b - m) is a·b - a·m - b·m + m·m, and |a - m|² is
+        // a·a - 2 a·m + m·m, each dot with m written through S.
+        let ss = dot(&sum, &sum);
+        let aa = dot(a, a);
+        let a_s = dot(a, &sum);
 
         let scored: Vec<(&String, f32)> = self
             .notes
             .iter()
             .filter(|(other, _)| other.as_str() != id)
-            .filter_map(|(other, (_, vector))| {
-                let other_m = dot(vector, &mean);
-                let norm = note_norm * centred_norm(vector, other_m);
+            .filter_map(|(other, (_, b))| {
+                let (ab, bb, b_s) = (dot(a, b), dot(b, b), dot(b, &sum));
+                let am = (a_s - aa - ab) / rest;
+                let bm = (b_s - ab - bb) / rest;
+                let mm = (ss + aa + bb - 2.0 * a_s - 2.0 * b_s + 2.0 * ab) / (rest * rest);
+                let norm =
+                    (aa - 2.0 * am + mm).max(0.0).sqrt() * (bb - 2.0 * bm + mm).max(0.0).sqrt();
                 // A note that is the mean has no direction of its own left.
-                (norm > 0.0).then(|| (other, (dot(note, vector) - note_m - other_m + mm) / norm))
+                (norm > 0.0).then(|| (other, (ab - am - bm + mm) / norm))
             })
             .filter(|(_, score)| *score >= min_score)
             .collect();
@@ -472,6 +485,24 @@ mod tests {
         assert!(hits[0].1 > 0.9);
         assert_eq!(ids(&vectors.similar("01A", 2, -1.0)).len(), 2);
         assert!(vectors.similar("01Z", 5, -1.0).is_empty());
+    }
+
+    #[test]
+    fn similar_finds_the_pair_in_a_space_of_a_few_notes() {
+        // With five notes, 01A and 01B weigh two fifths of the mean, so taking
+        // it off removes most of what they share.
+        let mut vectors = Vectors::new("m", 7);
+        for (id, vector) in [
+            ("01A", vec![1.0, 0.5, 1.0, 0.0, 0.0, 0.0, 0.0]),
+            ("01B", vec![1.0, 0.5, 0.0, 1.0, 0.0, 0.0, 0.0]),
+            ("01C", vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            ("01D", vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]),
+            ("01E", vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]),
+        ] {
+            vectors.insert(id.into(), "h".into(), vector).unwrap();
+        }
+        assert_eq!(ids(&vectors.similar("01A", 5, 0.28)), vec!["01B"]);
+        assert_eq!(ids(&vectors.similar("01B", 5, 0.28)), vec!["01A"]);
     }
 
     /// Brute force is only fine while it stays this fast at the scale retrieval

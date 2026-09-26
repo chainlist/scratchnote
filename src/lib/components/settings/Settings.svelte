@@ -62,7 +62,13 @@
 	];
 </script>
 
-<Tabs.Root value="general" orientation="vertical" class="h-full min-h-0 gap-0">
+<!-- A message belongs to the tab it came from. -->
+<Tabs.Root
+	value="general"
+	orientation="vertical"
+	class="h-full min-h-0 gap-0"
+	onValueChange={() => (settings.message = null)}
+>
 	<aside class="flex w-48 shrink-0 flex-col gap-4 border-r bg-muted/40 p-3">
 		<Dialog.Title class="px-2 pt-1">{m.common_settings()}</Dialog.Title>
 		<Tabs.List class="w-full gap-0.5 bg-transparent p-0">

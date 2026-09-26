@@ -384,6 +384,15 @@ body {
 	animation: note-spin 4s linear infinite;
 }
 
+/* With the model switched off nothing is labelling, so a pending note
+   waits in a still, dimmer glow instead of looking busy. */
+[data-model-off] :is(.note-aurora, .note-glow-text) {
+	animation: none;
+}
+[data-model-off] .note-aurora {
+	--note-glow: 0.5;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.note-aurora,
 	.note-glow-text,

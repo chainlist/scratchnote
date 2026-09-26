@@ -6,11 +6,12 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import { m } from '$lib/paraglide/messages';
 	import type { SettingsState } from './state.svelte';
+	import { hint } from './styles';
 
 	/**
 	 * Checks the model in use against its published revision, on its card.
-	 * What a check finds is said above the tabs. Keyed on the model, so a
-	 * switch starts over.
+	 * What a check finds is said beside the button; only a failure goes above
+	 * the tabs. Keyed on the model, so a switch starts over.
 	 */
 	let { settings }: { settings: SettingsState } = $props();
 
@@ -18,6 +19,8 @@
 	let checking = $state(false);
 	/** Download progress of an update, null when none is running. */
 	let updating = $state<number | null>(null);
+	/** What the last check or update found, beside the button. */
+	let found = $state<string | null>(null);
 
 	onMount(() => {
 		const off = onModelUpdateProgress((percent) => (updating = percent));
@@ -29,11 +32,12 @@
 	async function check() {
 		checking = true;
 		update = null;
+		found = null;
 		try {
 			update = await checkModelUpdate();
 			if (update.state === 'upToDate')
-				settings.say(m.settings_up_to_date({ revision: short(update.revision) }));
-			else if (update.state === 'newer') settings.say(newer(update));
+				found = m.settings_up_to_date({ revision: short(update.revision) });
+			else if (update.state === 'newer') found = newer(update);
 			else settings.say(m.settings_update_failed({ reason: update.reason }), true);
 		} catch (e) {
 			settings.say(String(e), true);
@@ -51,11 +55,12 @@
 
 	async function apply() {
 		updating = 0;
+		found = null;
 		try {
 			await updateModel();
 			update = null;
 			await settings.refreshModels();
-			settings.say(m.settings_model_updated());
+			found = m.settings_model_updated();
 		} catch (e) {
 			settings.say(String(e), true);
 		} finally {
@@ -64,6 +69,9 @@
 	}
 </script>
 
+{#if found}
+	<span class={hint}>{found}</span>
+{/if}
 {#if updating !== null}
 	<Button size="sm" disabled>
 		<DownloadIcon class="animate-pulse" />

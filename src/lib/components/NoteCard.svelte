@@ -181,7 +181,7 @@
 
 	{#if !editing}
 		<div
-			class="absolute top-3 right-3 flex items-center gap-1.5 bg-neutral-900 pl-2 transition group-hover:opacity-100 focus-within:opacity-100 {menuOpen
+			class="absolute top-0.5 right-3 flex items-center gap-1.5 bg-neutral-900 pl-2 transition group-hover:opacity-100 focus-within:opacity-100 {menuOpen
 				? 'opacity-100'
 				: 'opacity-0'}"
 		>
@@ -218,7 +218,7 @@
 
 		{#if note.tags.length > 0}
 			<ul
-				class="absolute right-3 bottom-2 flex gap-1.5 bg-neutral-900 pl-2 font-mono text-[0.625rem] text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
+				class="absolute right-3 bottom-0.5 flex gap-1.5 bg-neutral-900 pl-2 font-mono text-[0.625rem] text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
 			>
 				{#each note.tags as tag (tag)}
 					<li>

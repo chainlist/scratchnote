@@ -134,6 +134,35 @@
 		}
 	}
 
+	type Block =
+		| { kind: 'text'; text: string }
+		| { kind: 'heading'; text: string }
+		| { kind: 'list'; ordered: boolean; items: string[] };
+
+	/**
+	 * A reply's lines grouped into paragraphs, headings and lists: the
+	 * markdown a small model writes unasked, which would otherwise show as
+	 * raw `-` and `#`. A blank line inside a list does not end it.
+	 */
+	function blocks(text: string): Block[] {
+		const out: Block[] = [];
+		for (const line of text.split('\n')) {
+			const last = out.at(-1);
+			const item = line.match(/^\s*(?:[-*•]|(\d+)[.)])\s+(.*)$/);
+			const heading = line.match(/^\s*#{1,6}\s+(.*)$/);
+			if (item) {
+				const ordered = item[1] !== undefined;
+				if (last?.kind === 'list' && last.ordered === ordered) last.items.push(item[2]);
+				else out.push({ kind: 'list', ordered, items: [item[2]] });
+			} else if (heading) out.push({ kind: 'heading', text: heading[1] });
+			else if (last?.kind === 'text') last.text += `\n${line}`;
+			else if (line.trim() || last?.kind !== 'list') out.push({ kind: 'text', text: line });
+		}
+		return out
+			.map((block) => (block.kind === 'text' ? { ...block, text: block.text.trim() } : block))
+			.filter((block) => block.kind !== 'text' || block.text);
+	}
+
 	/** `**bold**`, the one bit of markdown a short reply leans on. */
 	function bold(text: string): { text: string; strong: boolean }[] {
 		return text
@@ -147,7 +176,42 @@
 	}
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col">
+{#snippet inline(text: string, cursor: boolean)}
+	{#each splitCitations(text) as part, j (j)}
+		{#if typeof part === 'string'}
+			{#each bold(part) as piece, k (k)}
+				{#if piece.strong}<strong class="font-semibold">{piece.text}</strong
+					>{:else}{piece.text}{/if}
+			{/each}
+		{:else}
+			{#each part as n (n)}
+				{@const entry = notes[n - 1]}
+				{#if entry}
+					<button
+						type="button"
+						onclick={() => onopen(entry)}
+						title="{entry.date} {entry.time}: {label(entry)}"
+						class="mx-0.5 inline-flex max-w-56 cursor-pointer items-baseline rounded bg-primary/10 px-1.5 align-baseline font-mono text-xs text-primary hover:bg-primary/20"
+					>
+						<span class="truncate">{label(entry)}</span>
+					</button>
+				{:else}[{n}]{/if}
+			{/each}
+		{/if}
+	{/each}
+	{#if cursor}<span
+			class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-neutral-400 align-text-bottom"
+		></span>{/if}
+{/snippet}
+
+<!-- Esc closes the panel from anywhere inside it, as it would a dialog. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="flex min-h-0 flex-1 flex-col"
+	onkeydown={(event) => {
+		if (event.key === 'Escape' && !event.defaultPrevented) onclose();
+	}}
+>
 	<header class="flex items-center gap-2 border-b py-2 pr-2 pl-4">
 		<SparklesIcon class="size-4 text-primary" />
 		<h2 class="min-w-0 flex-1 truncate text-base font-semibold">
@@ -200,33 +264,29 @@
 				{:else}
 					<div class="flex flex-col gap-3">
 						{#if turn.content}
-							<p class="text-[0.9375rem] leading-7 whitespace-pre-wrap text-neutral-200">
-								{#each splitCitations(turn.content) as part, j (j)}
-									{#if typeof part === 'string'}
-										{#each bold(part) as piece, k (k)}
-											{#if piece.strong}<strong class="font-semibold">{piece.text}</strong
-												>{:else}{piece.text}{/if}
-										{/each}
+							{@const laid = blocks(turn.content)}
+							{@const streaming = replying && i === turns.length - 1}
+							<div class="flex flex-col gap-2 text-[0.9375rem] leading-7 text-neutral-200">
+								{#each laid as block, b (b)}
+									{@const end = streaming && b === laid.length - 1}
+									{#if block.kind === 'list'}
+										<svelte:element
+											this={block.ordered ? 'ol' : 'ul'}
+											class="flex flex-col gap-1 pl-5 {block.ordered
+												? 'list-decimal'
+												: 'list-disc'}"
+										>
+											{#each block.items as item, k (k)}
+												<li>{@render inline(item, end && k === block.items.length - 1)}</li>
+											{/each}
+										</svelte:element>
+									{:else if block.kind === 'heading'}
+										<p class="font-semibold">{@render inline(block.text, end)}</p>
 									{:else}
-										{#each part as n (n)}
-											{@const entry = notes[n - 1]}
-											{#if entry}
-												<button
-													type="button"
-													onclick={() => onopen(entry)}
-													title="{entry.date} {entry.time}: {label(entry)}"
-													class="mx-0.5 inline-flex max-w-56 cursor-pointer items-baseline rounded bg-primary/10 px-1.5 align-baseline font-mono text-xs text-primary hover:bg-primary/20"
-												>
-													<span class="truncate">{label(entry)}</span>
-												</button>
-											{:else}[{n}]{/if}
-										{/each}
+										<p class="whitespace-pre-wrap">{@render inline(block.text, end)}</p>
 									{/if}
 								{/each}
-								{#if replying && i === turns.length - 1}<span
-										class="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-neutral-400 align-text-bottom"
-									></span>{/if}
-							</p>
+							</div>
 						{:else if replying && i === turns.length - 1}
 							<p class="animate-pulse text-sm text-muted-foreground">
 								{warming ? m.chat_reading_first() : m.chat_thinking()}

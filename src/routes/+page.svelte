@@ -364,7 +364,10 @@
 
 <svelte:window onkeydown={onWindowKeydown} />
 
-<div class="flex h-screen flex-col bg-neutral-950 text-neutral-100">
+<div
+	class="flex h-screen flex-col bg-neutral-950 text-neutral-100"
+	data-model-off={model.state === 'disabled' || undefined}
+>
 	<AppHeader
 		{spaces}
 		onsearch={() => (paletteOpen = true)}
@@ -438,10 +441,11 @@
 			{/key}
 		</div>
 	</main>
-</div>
 
-<div class="fixed bottom-3 left-3 z-30">
-	<ModelStatusBar status={model} />
+	<!-- A row of its own, so the timeline never scrolls under it. -->
+	<footer class="flex h-9 shrink-0 items-center px-1">
+		<ModelStatusBar status={model} />
+	</footer>
 </div>
 
 <ChatPanel

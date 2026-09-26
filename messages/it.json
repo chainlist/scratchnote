@@ -168,6 +168,7 @@
 	"search_placeholder": "Cerca note, # per i tag",
 	"search_label": "Cerca note",
 	"search_tags_label": "Tag",
+	"search_meaning_label": "Correlate per significato",
 	"search_chat_label": "Chatta su queste note",
 	"search_chat_title": "Chatta con il modello su questo spazio. Legge l'indice dello spazio: date, soggetti, riassunti e tag, e con il modello di embedding il testo delle note più vicine alla tua domanda.",
 	"search_chat_disabled": "La chat richiede un modello. Scegline uno nelle Impostazioni.",

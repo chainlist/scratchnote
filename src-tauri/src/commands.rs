@@ -461,6 +461,60 @@ pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, St
     Ok(crate::search::search(&idx, &query, &aliases))
 }
 
+/// How many notes search by meaning adds at most.
+const MEANING_NOTES: usize = 5;
+/// How far a note's cosine to the query must sit above the mean of the
+/// space's other notes. Set on 82 real notes and 19 short queries: the notes a
+/// query was after led by 0.16 to 0.35, and queries with no answer in the
+/// notes left one note of seven above 0.15. The lead holds from five notes up.
+const MIN_LEAD: f32 = 0.15;
+
+/// Notes close in meaning to a query's words that the words themselves do
+/// not find, best first, within its `#tag` filters. Empty without the
+/// embedding model, with the model switched off, or for a query of tags only.
+#[tauri::command]
+pub async fn search_meaning(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<Note>, String> {
+    let words = crate::search::words(&query);
+    if words.is_empty() {
+        return Ok(Vec::new());
+    }
+    let space = state.space()?;
+
+    // Loading and running the model both block.
+    let embedder_app = app.clone();
+    let vector = tauri::async_runtime::spawn_blocking(move || {
+        let embedder = crate::embed::embedder(&embedder_app)?;
+        embedder
+            .embed_query(&words)
+            .map_err(|e| log::warn!("could not embed the search query: {e}"))
+            .ok()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(vector) = vector else {
+        return Ok(Vec::new());
+    };
+    state.mark_used();
+
+    let hits = space.related(&vector, usize::MAX, MIN_LEAD);
+    let aliases = space.aliases();
+    let idx = space
+        .index
+        .read()
+        .map_err(|_| "index lock poisoned".to_string())?;
+    Ok(crate::search::by_meaning(
+        &idx,
+        &query,
+        &aliases,
+        &hits,
+        MEANING_NOTES,
+    ))
+}
+
 /// How many notes "Similar notes" lists at most.
 const SIMILAR_NOTES: usize = 8;
 /// The score, a cosine once the mean of the space's other notes is removed,

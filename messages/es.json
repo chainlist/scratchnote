@@ -168,6 +168,7 @@
 	"search_placeholder": "Buscar notas, # para etiquetas",
 	"search_label": "Buscar notas",
 	"search_tags_label": "Etiquetas",
+	"search_meaning_label": "Relacionadas por el sentido",
 	"search_chat_label": "Chatear sobre estas notas",
 	"search_chat_title": "Chatea con el modelo sobre este espacio. Lee el índice del espacio: fechas, asuntos, resúmenes y etiquetas, y con el modelo de embeddings el texto de las notas más cercanas a tu pregunta.",
 	"search_chat_disabled": "Chatear necesita un modelo. Elige uno en Ajustes.",

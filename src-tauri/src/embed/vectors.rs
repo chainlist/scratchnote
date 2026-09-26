@@ -122,6 +122,33 @@ impl Vectors {
         ranked(scored, k)
     }
 
+    /// Up to `k` notes that stand out for the query, best first, each with its
+    /// lead: its cosine minus the mean cosine of every other note. Short
+    /// queries score about the same against a whole space of notes by one
+    /// person, and how high that level sits changes with the query, so no
+    /// plain cosine cut works for all of them; the lead does.
+    pub fn related(&self, query: &[f32], k: usize, min_lead: f32) -> Vec<(String, f32)> {
+        if query.len() != self.dims || self.notes.len() < 2 {
+            return Vec::new();
+        }
+        let mut query = query.to_vec();
+        normalize(&mut query);
+
+        let scores: Vec<(&String, f32)> = self
+            .notes
+            .iter()
+            .map(|(id, (_, vector))| (id, dot(&query, vector)))
+            .collect();
+        let total: f32 = scores.iter().map(|(_, score)| score).sum();
+        let others = (scores.len() - 1) as f32;
+        let leads: Vec<(&String, f32)> = scores
+            .into_iter()
+            .map(|(id, score)| (id, score - (total - score) / others))
+            .filter(|(_, lead)| *lead >= min_lead)
+            .collect();
+        ranked(leads, k)
+    }
+
     /// Up to `k` other notes that score at least `min_score` against this
     /// one, best first. Empty for a note with no vector yet. No model runs:
     /// the note's vector is already here.
@@ -503,6 +530,31 @@ mod tests {
         }
         assert_eq!(ids(&vectors.similar("01A", 5, 0.28)), vec!["01B"]);
         assert_eq!(ids(&vectors.similar("01B", 5, 0.28)), vec!["01A"]);
+    }
+
+    #[test]
+    fn related_keeps_the_notes_that_stand_out_for_the_query() {
+        // Every note leans on the first axis; only 01A is about the query.
+        let mut vectors = Vectors::new("m", 4);
+        for (id, vector) in [
+            ("01A", vec![1.0, 1.0, 0.0, 0.0]),
+            ("01B", vec![1.0, 0.0, 1.0, 0.0]),
+            ("01C", vec![1.0, 0.0, 0.0, 1.0]),
+        ] {
+            vectors.insert(id.into(), "h".into(), vector).unwrap();
+        }
+        let hits = vectors.related(&[1.0, 1.0, 0.0, 0.0], 5, 0.15);
+        assert_eq!(ids(&hits), vec!["01A"]);
+        assert!((hits[0].1 - 0.5).abs() < 1e-5, "1.0 against a mean of 0.5");
+
+        // Close to every note alike, so close to none in particular.
+        assert!(vectors.related(&[1.0, 0.0, 0.0, 0.0], 5, 0.15).is_empty());
+
+        let mut alone = Vectors::new("m", 4);
+        alone
+            .insert("01A".into(), "h".into(), vec![1.0, 1.0, 0.0, 0.0])
+            .unwrap();
+        assert!(alone.related(&[1.0, 1.0, 0.0, 0.0], 5, -1.0).is_empty());
     }
 
     /// Brute force is only fine while it stays this fast at the scale retrieval

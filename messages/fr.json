@@ -168,6 +168,7 @@
 	"search_placeholder": "Rechercher des notes, # pour les tags",
 	"search_label": "Rechercher des notes",
 	"search_tags_label": "Tags",
+	"search_meaning_label": "Proches par le sens",
 	"search_chat_label": "Discuter de ces notes",
 	"search_chat_title": "Discutez avec le modèle à propos de cet espace. Il lit l'index de l'espace : dates, sujets, résumés et tags, et avec le modèle d'embeddings le texte des notes les plus proches de votre question.",
 	"search_chat_disabled": "La discussion nécessite un modèle. Choisissez-en un dans Paramètres.",

@@ -11,7 +11,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::enrich::normalize;
 use crate::storage::daily_file::Note;
-use crate::storage::index::Index;
+use crate::storage::index::{Index, IndexEntry};
 
 /// Lowercase with accents stripped: decompose, then drop the combining marks.
 pub fn fold(text: &str) -> String {
@@ -48,6 +48,48 @@ impl Query {
     fn is_empty(&self) -> bool {
         self.words.is_empty() && self.tags.is_empty()
     }
+
+    fn has_tags(&self, entry: &IndexEntry) -> bool {
+        self.tags
+            .iter()
+            .all(|wanted| entry.tags.iter().any(|tag| fold(tag) == *wanted))
+    }
+
+    fn has_words(&self, entry: &IndexEntry) -> bool {
+        self.words.iter().all(|word| entry.folded.contains(word))
+    }
+}
+
+/// A query's words as typed, without its `#tag` filters: what search by
+/// meaning embeds.
+pub fn words(raw: &str) -> String {
+    raw.split_whitespace()
+        .filter(|token| !token.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Up to `k` notes of `hits`, best first, that pass the query's `#tag`
+/// filters without matching its words: what search by meaning adds under the
+/// word matches.
+pub fn by_meaning(
+    index: &Index,
+    raw: &str,
+    aliases: &HashMap<String, String>,
+    hits: &[(String, f32)],
+    k: usize,
+) -> Vec<Note> {
+    let query = Query::parse(raw, aliases);
+    let entries: HashMap<&str, &IndexEntry> = index
+        .entries()
+        .map(|entry| (entry.id.as_str(), entry))
+        .collect();
+    hits.iter()
+        .filter_map(|(id, _)| entries.get(id.as_str()))
+        .filter(|entry| query.has_tags(entry) && !query.has_words(entry))
+        .take(k)
+        .map(|entry| entry.to_note())
+        .collect()
 }
 
 /// Newest first: by date, then by time within the day.
@@ -59,13 +101,7 @@ pub fn search(index: &Index, raw: &str, aliases: &HashMap<String, String>) -> Ve
 
     let mut hits: Vec<Note> = index
         .entries()
-        .filter(|entry| {
-            query
-                .tags
-                .iter()
-                .all(|wanted| entry.tags.iter().any(|tag| fold(tag) == *wanted))
-                && query.words.iter().all(|word| entry.folded.contains(word))
-        })
+        .filter(|entry| query.has_tags(entry) && query.has_words(entry))
         .map(|entry| entry.to_note())
         .collect();
 
@@ -77,7 +113,6 @@ pub fn search(index: &Index, raw: &str, aliases: &HashMap<String, String>) -> Ve
 mod tests {
     use super::*;
     use crate::storage::daily_file::{body_hash, Status};
-    use crate::storage::index::IndexEntry;
     use crate::storage::relative_day_path;
 
     fn note(id: &str, date: &str, time: &str, body: &str, tags: &[&str]) -> Note {
@@ -184,6 +219,34 @@ mod tests {
     fn a_tag_must_match_whole_not_as_a_substring() {
         let idx = index(&[note("01A", "2026-09-22", "08:00", "a", &["infrastructure"])]);
         assert!(search(&idx, "#infra", &no_aliases()).is_empty());
+    }
+
+    #[test]
+    fn meaning_embeds_the_words_as_typed_without_the_tags() {
+        assert_eq!(words("#db  Slow queries #infra"), "Slow queries");
+        assert_eq!(words("#db"), "");
+    }
+
+    #[test]
+    fn by_meaning_adds_what_the_words_missed_within_the_tag_filters() {
+        let idx = index(&[
+            note("01A", "2026-09-22", "08:00", "postgres index tip", &["db"]),
+            note("01B", "2026-09-22", "09:00", "slow query plan", &["db"]),
+            note("01C", "2026-09-22", "10:00", "sql migration", &["infra"]),
+        ]);
+        let hits: Vec<(String, f32)> = [("01C", 0.4), ("01Z", 0.35), ("01B", 0.3), ("01A", 0.2)]
+            .into_iter()
+            .map(|(id, score)| (id.to_string(), score))
+            .collect();
+        // 01A already matches the words, 01C lacks the tag, 01Z is not a note.
+        assert_eq!(
+            ids(&by_meaning(&idx, "postgres #db", &no_aliases(), &hits, 5)),
+            vec!["01B"]
+        );
+        assert_eq!(
+            ids(&by_meaning(&idx, "postgres", &no_aliases(), &hits, 1)),
+            vec!["01C"]
+        );
     }
 
     #[test]

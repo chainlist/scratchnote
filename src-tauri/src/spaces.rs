@@ -300,6 +300,16 @@ impl Space {
             .unwrap_or_default()
     }
 
+    /// Notes that stand out for a query, best first, per `Vectors::related`.
+    /// Empty until the embed task has loaded the vectors.
+    pub fn related(&self, query: &[f32], k: usize, min_lead: f32) -> Vec<(String, f32)> {
+        self.vectors
+            .lock()
+            .ok()
+            .and_then(|vectors| Some(vectors.as_ref()?.related(query, k, min_lead)))
+            .unwrap_or_default()
+    }
+
     /// Notes close to this one, best first, per `Vectors::similar`. Empty
     /// until the embed task has loaded the vectors.
     pub fn similar(&self, id: &str, k: usize, min_score: f32) -> Vec<(String, f32)> {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { search, type Note } from '$lib/api';
+	import { search, searchMeaning, type Note } from '$lib/api';
 	import * as Command from '$lib/components/ui/command';
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import HashIcon from '@lucide/svelte/icons/hash';
@@ -46,9 +46,13 @@
 	/** Completions and results shown at once. */
 	const TAG_LIMIT = 6;
 	const RESULT_LIMIT = 50;
+	/** Embedding the query costs a model run, so it waits for typing to pause. */
+	const MEANING_DELAY_MS = 300;
 
 	let input = $state<HTMLInputElement | null>(null);
 	let results = $state<Note[]>([]);
+	/** Notes close in meaning that the words miss, shown under the matches. */
+	let related = $state<Note[]>([]);
 	let error = $state<string | null>(null);
 
 	const trimmed = $derived(query.trim());
@@ -100,6 +104,24 @@
 			});
 	});
 
+	// Same guard as above, against a slow answer to an earlier pause.
+	let meaningRun = 0;
+	$effect(() => {
+		const q = trimmed;
+		const run = ++meaningRun;
+		related = [];
+		if (q === '') return;
+		const timer = setTimeout(() => {
+			searchMeaning(q)
+				.then((found) => {
+					if (run === meaningRun) related = found;
+				})
+				// Search by words still works; this part is only extra.
+				.catch(() => {});
+		}, MEANING_DELAY_MS);
+		return () => clearTimeout(timer);
+	});
+
 	// The caret goes after the query, so a filter opened from a tag can be typed on.
 	$effect(() => {
 		if (!open) return;
@@ -124,6 +146,22 @@
 		return body.split('\n').find((line) => line.trim()) ?? '';
 	}
 </script>
+
+{#snippet noteItem(note: Note)}
+	<Command.Item value="n:{note.id}" onSelect={() => run(() => onpick(note))}>
+		<span class="w-24 shrink-0 self-start font-mono text-xs text-muted-foreground">
+			{note.date}<span class="block">{note.time}</span>
+		</span>
+		<span class="flex min-w-0 flex-1 flex-col gap-0.5">
+			<span class="truncate">{note.subject ?? firstLine(note.body)}</span>
+			{#if note.subject}
+				<span class="truncate text-xs text-muted-foreground">
+					{firstLine(note.body)}
+				</span>
+			{/if}
+		</span>
+	</Command.Item>
+{/snippet}
 
 <!-- The backend searches, so the palette shows what it gets back unfiltered. -->
 <Command.Dialog
@@ -180,19 +218,14 @@
 						<ListIcon />{m.command_see_all()}
 					</Command.Item>
 					{#each results as note (note.id)}
-						<Command.Item value="n:{note.id}" onSelect={() => run(() => onpick(note))}>
-							<span class="w-24 shrink-0 self-start font-mono text-xs text-muted-foreground">
-								{note.date}<span class="block">{note.time}</span>
-							</span>
-							<span class="flex min-w-0 flex-1 flex-col gap-0.5">
-								<span class="truncate">{note.subject ?? firstLine(note.body)}</span>
-								{#if note.subject}
-									<span class="truncate text-xs text-muted-foreground">
-										{firstLine(note.body)}
-									</span>
-								{/if}
-							</span>
-						</Command.Item>
+						{@render noteItem(note)}
+					{/each}
+				</Command.Group>
+			{/if}
+			{#if related.length > 0}
+				<Command.Group heading={m.search_meaning_label()}>
+					{#each related as note (note.id)}
+						{@render noteItem(note)}
 					{/each}
 				</Command.Group>
 			{/if}

@@ -168,6 +168,7 @@
 	"search_placeholder": "Search notes, # for tags",
 	"search_label": "Search notes",
 	"search_tags_label": "Tags",
+	"search_meaning_label": "Related by meaning",
 	"search_chat_label": "Chat about these notes",
 	"search_chat_title": "Chat with the model about this space. It reads the space index: dates, subjects, summaries and tags, and with the embedding model the text of the notes closest to your question.",
 	"search_chat_disabled": "Chatting needs a model. Pick one in Settings.",

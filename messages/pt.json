@@ -168,6 +168,7 @@
 	"search_placeholder": "Buscar notas, # para tags",
 	"search_label": "Buscar notas",
 	"search_tags_label": "Tags",
+	"search_meaning_label": "Relacionadas pelo sentido",
 	"search_chat_label": "Conversar sobre estas notas",
 	"search_chat_title": "Converse com o modelo sobre este espaço. Ele lê o índice do espaço: datas, assuntos, resumos e tags, e com o modelo de embeddings o texto das notas mais próximas da sua pergunta.",
 	"search_chat_disabled": "Conversar exige um modelo. Escolha um em Configurações.",

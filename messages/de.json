@@ -168,6 +168,7 @@
 	"search_placeholder": "Notizen durchsuchen, # für Tags",
 	"search_label": "Notizen durchsuchen",
 	"search_tags_label": "Tags",
+	"search_meaning_label": "Inhaltlich verwandt",
 	"search_chat_label": "Über diese Notizen chatten",
 	"search_chat_title": "Chatte mit dem Modell über diesen Space. Es liest den Space-Index: Datumsangaben, Themen, Zusammenfassungen und Tags, und mit dem Embedding-Modell den Text der Notizen, die deiner Frage am nächsten sind.",
 	"search_chat_disabled": "Zum Chatten wird ein Modell benötigt. Wähle eins in den Einstellungen.",

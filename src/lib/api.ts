@@ -58,6 +58,9 @@ export function splitCategory(names: string[], tags: string[]): [string, string[
 /** Words must all appear; `#tag` tokens are AND filters. Newest first. */
 export const search = (query: string) => invoke<Note[]>('search', { query });
 
+/** Notes close in meaning that the words miss. Empty without the embedding model. */
+export const searchMeaning = (query: string) => invoke<Note[]>('search_meaning', { query });
+
 /**
  * The notes closest in meaning to this one, best first. Empty while the note
  * has no vector yet, or without the embedding model.

@@ -27,22 +27,27 @@ pub struct DaySummary {
     pub count: usize,
 }
 
-/// Append a note to today's file and tell the rest of the app about it.
-/// An empty body is a no-op, not an error.
+/// Append a note to a day's file, today's unless another date is given, and
+/// tell the rest of the app about it. The note carries the current time
+/// either way. An empty body is a no-op, not an error.
 #[tauri::command]
 pub async fn save_note(
     app: AppHandle,
     state: State<'_, AppState>,
     body: String,
+    date: Option<String>,
 ) -> Result<Option<Note>, String> {
     let body = body.trim().to_string();
     if body.is_empty() {
         return Ok(None);
     }
+    if let Some(date) = &date {
+        check_date(date)?;
+    }
     let space = state.space()?;
 
     let now = Local::now();
-    let date = now.format("%Y-%m-%d").to_string();
+    let date = date.unwrap_or_else(|| now.format("%Y-%m-%d").to_string());
     let note = Note {
         id: Ulid::generate().to_string(),
         time: now.format("%H:%M").to_string(),

@@ -48,6 +48,7 @@
 	import Onboarding from '$lib/components/Onboarding.svelte';
 	import Settings from '$lib/components/settings/Settings.svelte';
 	import TagFilters from '$lib/components/TagFilters.svelte';
+	import CalendarPage from '$lib/components/CalendarPage.svelte';
 	import TagsPage from '$lib/components/TagsPage.svelte';
 	import TimelineHeader from '$lib/components/TimelineHeader.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
@@ -60,8 +61,10 @@
 	/** The selected day's notes. */
 	let notes = $state<Note[]>([]);
 	let selected = $state('');
-	/** New notes land on today, so only today's list offers to add one. */
+	/** The capture hotkey saves to today, so only today's empty list mentions it. */
 	let todayDate = $state('');
+	/** The empty day's editor is open, which takes the place of its message. */
+	let writingEmpty = $state(false);
 	let error = $state<string | null>(null);
 	let model = $state<ModelStatus>({ state: 'absent' });
 	let tags = $state<[string, number][]>([]);
@@ -71,6 +74,17 @@
 	let spaces = $state<SpacesView | null>(null);
 
 	let timeline = $state<Timeline>({ kind: 'day' });
+	/** Changes when a new page opens: another view, day or source note. A
+	 *  search refined by its tag filters stays the same page. */
+	const pageKey = $derived(
+		timeline.kind === 'day'
+			? `day:${selected}`
+			: timeline.kind === 'similar'
+				? `similar:${timeline.note.id}`
+				: timeline.kind
+	);
+	/** The page's title has scrolled under the top bar, which shows it instead. */
+	let titleCollapsed = $state(false);
 	/** The notes a search matches, while the timeline lists them. */
 	let results = $state<Note[]>([]);
 	/** The notes close to a note, while the timeline lists them. */
@@ -91,15 +105,26 @@
 	let embeddingInstalled = $state(false);
 	const canSimilar = $derived(embeddingInstalled && model.state !== 'disabled');
 
+	/** The page's title, in the page and, once it scrolls away, in the top bar. */
+	const headerProps = $derived({
+		timeline,
+		selected,
+		tagCount: tags.length,
+		resultCount: results.length,
+		onback: () => void select(selected),
+		oncalendar: () => (timeline = { kind: 'calendar' })
+	});
+
 	async function refresh() {
 		try {
-			[days, notes, tags, categories, categoryList, spaces] = await Promise.all([
+			[days, notes, tags, categories, categoryList, spaces, todayDate] = await Promise.all([
 				listDays(),
 				getDay(selected),
 				listTags(),
 				listCategories(),
 				categoryNames(),
-				listSpaces()
+				listSpaces(),
+				today()
 			]);
 			error = null;
 		} catch (e) {
@@ -133,6 +158,7 @@
 	async function select(date: string) {
 		timeline = { kind: 'day' };
 		selected = date;
+		writingEmpty = false;
 		await refresh();
 	}
 
@@ -232,13 +258,12 @@
 	}
 
 	/** A note written in the page rather than the capture window. */
+	/** Add a note to the day shown. */
 	async function addNote(body: string): Promise<boolean> {
 		try {
-			await saveNote(body);
+			await saveNote(body, selected);
 			error = null;
-			// Past midnight the note went to a new day, so follow it there.
-			todayDate = await today();
-			await select(todayDate);
+			await select(selected);
 			return true;
 		} catch (e) {
 			error = String(e);
@@ -293,7 +318,7 @@
 				return;
 			}
 
-			selected = todayDate = await today();
+			selected = await today();
 			await refresh();
 			// A note saved from the capture window lands in another webview.
 			off.push(onNoteUpdated(() => void refresh()));
@@ -303,15 +328,16 @@
 			off.push(onNoteEnriched(() => void refresh()));
 			off.push(onOpenSettings(() => (settingsOpen = true)));
 			// Another space has its own days and notes, so a search or similar
-			// notes from the last one would mean nothing there. Its tags are
-			// listed afresh.
+			// notes from the last one would mean nothing there. Its tags and
+			// days are listed afresh.
 			off.push(
 				onSpacesChanged((view) => {
 					const switched = view.active !== spaces?.active;
 					spaces = view;
 					if (switched) {
 						query = '';
-						if (timeline.kind !== 'tags') timeline = { kind: 'day' };
+						if (timeline.kind === 'search' || timeline.kind === 'similar')
+							timeline = { kind: 'day' };
 					}
 					void refresh();
 				})
@@ -343,19 +369,16 @@
 		{spaces}
 		onsearch={() => (paletteOpen = true)}
 		onsettings={() => (settingsOpen = true)}
-	/>
+		titleShown={titleCollapsed}
+	>
+		{#snippet title()}
+			<TimelineHeader compact {...headerProps} />
+		{/snippet}
+	</AppHeader>
 
 	<main class="min-h-0 flex-1 overflow-y-auto px-6 pb-28">
 		<div class="mx-auto max-w-3xl">
-			<TimelineHeader
-				{timeline}
-				{days}
-				{selected}
-				tagCount={tags.length}
-				resultCount={results.length}
-				onback={() => void select(selected)}
-				onselect={select}
-			/>
+			<TimelineHeader {...headerProps} oncollapse={(collapsed) => (titleCollapsed = collapsed)} />
 
 			{#if timeline.kind === 'search'}
 				<TagFilters
@@ -378,28 +401,41 @@
 				</p>
 			{/if}
 
-			{#if timeline.kind === 'tags'}
-				<TagsPage {tags} {categories} onpick={(tag) => void showResults(`#${tag}`)} />
-			{:else if timeline.kind === 'similar'}
-				<p
-					class="mb-6 line-clamp-3 rounded-lg border border-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap text-neutral-400"
-				>
-					{timeline.note.body}
-				</p>
-				<NoteList notes={similar} empty={m.page_no_similar()} showDate {...cardActions} />
-			{:else if timeline.kind === 'search'}
-				<NoteList notes={results} empty={m.page_no_match()} showDate {...cardActions} />
-			{:else}
-				<NoteList
-					{notes}
-					empty={m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })}
-					{blinking}
-					{...cardActions}
-				/>
-				{#if selected === todayDate}
-					<NewNote onsave={addNote} />
-				{/if}
-			{/if}
+			<!-- Keyed on the view, so each one rises into place as it opens. -->
+			{#key pageKey}
+				<div class="page-in">
+					{#if timeline.kind === 'calendar'}
+						<CalendarPage {days} {selected} onselect={(date) => void select(date)} />
+					{:else if timeline.kind === 'tags'}
+						<TagsPage {tags} {categories} onpick={(tag) => void showResults(`#${tag}`)} />
+					{:else if timeline.kind === 'similar'}
+						<p
+							class="mb-6 line-clamp-3 rounded-lg border border-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap text-neutral-400"
+						>
+							{timeline.note.body}
+						</p>
+						<NoteList notes={similar} empty={m.page_no_similar()} showDate {...cardActions} />
+					{:else if timeline.kind === 'search'}
+						<NoteList notes={results} empty={m.page_no_match()} showDate {...cardActions} />
+					{:else}
+						{#if notes.length === 0}
+							<div class="flex flex-col items-center gap-4 py-16 text-center">
+								{#if !writingEmpty}
+									<p class="text-base text-neutral-600">
+										{selected === todayDate
+											? m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })
+											: m.page_empty_other_day()}
+									</p>
+								{/if}
+								<NewNote onsave={addNote} centered bind:writing={writingEmpty} />
+							</div>
+						{:else}
+							<NoteList {notes} empty="" {blinking} {...cardActions} />
+							<NewNote onsave={addNote} />
+						{/if}
+					{/if}
+				</div>
+			{/key}
 		</div>
 	</main>
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import type { SpacesView } from '$lib/api';
 	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
 	import WindowControls from '$lib/components/WindowControls.svelte';
@@ -10,11 +11,16 @@
 	let {
 		spaces,
 		onsearch,
-		onsettings
+		onsettings,
+		title,
+		titleShown = false
 	}: {
 		spaces: SpacesView | null;
 		onsearch: () => void;
 		onsettings: () => void;
+		/** Centred in the bar, for what the page has scrolled out of view. */
+		title?: Snippet;
+		titleShown?: boolean;
 	} = $props();
 
 	// macOS keeps its native traffic lights over the top left corner;
@@ -24,9 +30,20 @@
 
 <header
 	data-tauri-drag-region="deep"
-	class={['flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}
+	class={['relative flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}
 >
 	<SpaceSwitcher view={spaces} />
+	{#if title}
+		<!-- Rises into place as the page's own title leaves, and sinks back out. -->
+		<div
+			inert={!titleShown}
+			class="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 transition duration-200 ease-out {titleShown
+				? 'translate-y-0 opacity-100'
+				: 'pointer-events-none translate-y-2 opacity-0'}"
+		>
+			{@render title()}
+		</div>
+	{/if}
 	<div class="ml-auto flex items-center gap-1">
 		<Button
 			variant="ghost"

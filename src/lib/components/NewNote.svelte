@@ -4,13 +4,18 @@
 	import { m } from '$lib/paraglide/messages';
 
 	let {
-		onsave
+		onsave,
+		centered = false,
+		writing = $bindable(false)
 	}: {
-		/** Save the note to today. Resolves true once saved; false keeps the editor open. */
+		/** Save the note to the day shown. Resolves true once saved; false keeps the editor open. */
 		onsave: (body: string) => Promise<boolean>;
+		/** On an empty day, with no cards to line up under: the button sits centred and the editor spans the page. */
+		centered?: boolean;
+		/** The editor is open rather than the button. */
+		writing?: boolean;
 	} = $props();
 
-	let writing = $state(false);
 	let saving = $state(false);
 	let draft = $state('');
 	let textarea = $state<HTMLTextAreaElement | null>(null);
@@ -52,8 +57,8 @@
 
 <!-- Laid out like a note card so the button and the editor sit in the body
      column, under the notes above. -->
-<div class="-mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 px-3 py-3">
-	<div class="col-start-2 min-w-0">
+<div class={centered ? 'w-full' : '-mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 px-3 py-3'}>
+	<div class={centered ? (writing ? 'text-left' : 'flex justify-center') : 'col-start-2 min-w-0'}>
 		{#if writing}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="flex flex-col gap-2" onkeydown={onKeydown}>

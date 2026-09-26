@@ -23,8 +23,12 @@ export interface DaySummary {
 	count: number;
 }
 
-/** Returns null when the body was empty, which is a no-op rather than an error. */
-export const saveNote = (body: string) => invoke<Note | null>('save_note', { body });
+/**
+ * Saves to today unless a date is given. Returns null when the body was
+ * empty, which is a no-op rather than an error.
+ */
+export const saveNote = (body: string, date?: string) =>
+	invoke<Note | null>('save_note', { body, date });
 
 export const getDay = (date: string) => invoke<Note[]>('get_day', { date });
 

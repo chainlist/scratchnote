@@ -5,6 +5,8 @@ export type Timeline =
 	| { kind: 'day' }
 	/** Every tag of the space. */
 	| { kind: 'tags' }
+	/** A month of days, to pick one from. */
+	| { kind: 'calendar' }
 	/** The notes a query matches, from the command center's "See all". */
 	| { kind: 'search'; query: string }
 	/** The notes closest in meaning to this one. */

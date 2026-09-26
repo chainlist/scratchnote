@@ -179,6 +179,54 @@ body {
 	}
 }
 
+/* A page of the timeline opening: it rises a little and comes into focus.
+   The page it replaces goes at once, so the two never share the layout. */
+@keyframes page-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+		filter: blur(3px);
+	}
+}
+
+.page-in {
+	animation: page-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.page-in {
+		animation: fade-in 0.2s ease-out backwards;
+	}
+}
+
+/* The calendar's days rising into place one after another, in a wave from
+   the top left corner. Each day sets --day-wave to its row plus its column.
+   A plain fade, all at once, when motion is reduced. */
+@keyframes calendar-day-in {
+	from {
+		opacity: 0;
+		transform: translateY(12px) scale(0.9);
+		filter: blur(4px);
+	}
+}
+
+.calendar-day-in {
+	animation: calendar-day-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+	animation-delay: calc(var(--day-wave, 0) * 30ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.calendar-day-in {
+		animation: fade-in 0.3s ease-out backwards;
+	}
+}
+
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+}
+
 /* The angle both enrichment effects turn by. Registered so it can animate
    inside the gradients; inherited so the aurora's two layers share it. */
 @property --note-spin {

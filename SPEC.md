@@ -107,7 +107,9 @@ platform config files.
   them. The binary is named `scratchnote` there rather than the crate's `app`,
   which would clash in `/usr/bin`.
 - **macOS** needs nothing: Metal is part of the OS, llama.cpp embeds its
-  shaders, and Apple's compiler has no OpenMP to link.
+  shaders, and Apple's compiler has no OpenMP to link. `tauri.macos.conf.json`
+  sets the minimum system to 11, the first on Apple Silicon, because Tauri
+  otherwise targets 10.13 and llama.cpp's `std::filesystem` code needs 10.15.
 
 ### Step 1: Create the SvelteKit app with `sv create`
 

@@ -1,0 +1,89 @@
+name: Build
+
+on:
+  # From the Release workflow, to attach the installers to a new release.
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  # By hand, for test installers as workflow artifacts.
+  workflow_dispatch:
+  # TEMPORARY: builds this branch while the workflow is being made to work.
+  push:
+    branches:
+      - ci/publish
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    env:
+      VULKAN_VERSION: 1.4.357.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.13.1
+          cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build clang libclang-dev file \
+            libvulkan-dev glslc spirv-headers \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        run: |
+          choco install ninja -y
+          curl.exe -L -o "$env:RUNNER_TEMP\VulkanSDK.exe" "https://sdk.lunarg.com/sdk/download/$env:VULKAN_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_VERSION.exe"
+          & "$env:RUNNER_TEMP\VulkanSDK.exe" --accept-licenses --default-answer --confirm-command install
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_VERSION"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$env:VULKAN_VERSION\Bin"
+          # build.rs bundles System32's vulkan-1.dll, which the SDK does not install.
+          curl.exe -L -o "$env:RUNNER_TEMP\VulkanRT.zip" "https://sdk.lunarg.com/sdk/download/$env:VULKAN_VERSION/windows/VulkanRT-X64-$env:VULKAN_VERSION-Components.zip"
+          Expand-Archive "$env:RUNNER_TEMP\VulkanRT.zip" "$env:RUNNER_TEMP\VulkanRT"
+          Copy-Item "$env:RUNNER_TEMP\VulkanRT\VulkanRT-X64-$env:VULKAN_VERSION-Components\x64\vulkan-1.dll" C:\Windows\System32\
+          # A short target dir keeps llama.cpp's nested shader build under MAX_PATH.
+          Add-Content $env:GITHUB_ENV "CARGO_TARGET_DIR=C:\t"
+          Add-Content $env:GITHUB_ENV "LIBCLANG_PATH=C:\Program Files\LLVM\bin"
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ inputs.tag }}
+          uploadWorkflowArtifacts: ${{ !inputs.tag }}
+          # Only this build signs update files (SPEC 3.6), so local builds need no key.
+          args: '--config {"bundle":{"createUpdaterArtifacts":true}}'

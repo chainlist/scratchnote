@@ -3,6 +3,7 @@
 	import { search, searchMeaning, type Note } from '$lib/api';
 	import * as Command from '$lib/components/ui/command';
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
+	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
 	import HashIcon from '@lucide/svelte/icons/hash';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
@@ -20,6 +21,7 @@
 		onpick,
 		onseeall,
 		ontoday,
+		onnewpage,
 		onchat,
 		onsettings
 	}: {
@@ -39,6 +41,8 @@
 		/** Show every note the query matches in the timeline. */
 		onseeall: (query: string) => void;
 		ontoday: () => void;
+		/** Start a page on the day shown (SPEC 3.5). */
+		onnewpage: () => void;
 		onchat: () => void;
 		onsettings: () => void;
 	} = $props();
@@ -189,6 +193,9 @@
 			<Command.Group heading={m.command_group_commands()}>
 				<Command.Item value="today" onSelect={() => run(ontoday)}>
 					<CalendarCheckIcon />{m.command_today()}
+				</Command.Item>
+				<Command.Item value="new-page" onSelect={() => run(onnewpage)}>
+					<FilePlusIcon />{m.pages_new()}
 				</Command.Item>
 				{#if canChat}
 					<Command.Item value="chat" onSelect={() => run(onchat)}>

@@ -38,7 +38,7 @@
 	"page_deleting": "Suppression",
 	"page_add_note": "Ajouter une note",
 	"capture_placeholder": "À quoi pensez-vous ?",
-	"capture_hint": "Ctrl+Enter pour enregistrer, Esc pour annuler",
+	"capture_hint": "Ctrl+Enter pour enregistrer, Ctrl+Maj+Enter pour une page, Esc pour annuler",
 	"capture_saved": "Enregistré",
 	"capture_saving": "Enregistrement…",
 	"capture_space_title": "Enregistrement dans cet espace",
@@ -338,5 +338,40 @@
 				"countPlural=other": "{count} notes mises en file d'attente. Le modèle les traite en arrière-plan."
 			}
 		}
-	]
+	],
+	"pages_new": "Nouvelle page",
+	"pages_untitled": "Page sans titre",
+	"pages_open": "Ouvrir",
+	"pages_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} mot",
+				"countPlural=other": "{count} mots"
+			}
+		}
+	],
+	"pages_read_time": "{count} min de lecture",
+	"pages_missing": "Page introuvable. Son fichier a peut-être été déplacé ou supprimé, ou n'est pas encore synchronisé.",
+	"pages_remove_stub": "Retirer de cette journée",
+	"pages_title_placeholder": "Titre",
+	"pages_title_label": "Titre de la page",
+	"pages_body_placeholder": "Écrivez ici. C'est enregistré au fil de la frappe.",
+	"pages_body_label": "Texte de la page",
+	"pages_needs_title": "Ajoutez un titre pour enregistrer cette page.",
+	"pages_saved": "Enregistré",
+	"pages_turn_into": "Transformer en page",
+	"pages_turn_into_title": "Transformer en page",
+	"pages_turn_into_description": "La note obtient son propre fichier et apparaît dans sa journée sous forme de page.",
+	"pages_turn_into_confirm": "Créer la page",
+	"pages_delete_title": "Supprimer cette page ?",
+	"pages_delete_description": "Son fichier est supprimé et elle quitte sa journée. Il n'y a pas d'annulation possible.",
+	"pages_remove_stub_title": "Retirer cette page introuvable ?",
+	"pages_remove_stub_description": "Seul son lien quitte la journée. Si son fichier réapparaît, la page revient."
 }

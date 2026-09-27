@@ -2,14 +2,33 @@
 //!
 //! Note blocks are delimited by `<!-- sn:note ... -->` / `<!-- sn:end -->`.
 //! Parsing relies only on those markers, so anything the user writes between
-//! blocks is never interpreted and never touched.
+//! blocks is never interpreted and never touched. A page's stub (SPEC 4.7)
+//! opens with `<!-- sn:page ... -->` instead, so the note parser skips it.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const NOTE_OPEN: &str = "<!-- sn:note ";
+/// Opens a page's stub here, and the marker line of a page file.
+pub const PAGE_OPEN: &str = "<!-- sn:page ";
 const NOTE_END: &str = "<!-- sn:end -->";
 const UNTITLED: &str = "(untitled)";
+
+/// A note in a day's file, or a page with a file of its own (SPEC 4.7).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    #[default]
+    Note,
+    Page,
+}
+
+impl Kind {
+    /// Notes leave `kind` out of the index, which predates pages.
+    pub fn is_note(&self) -> bool {
+        *self == Kind::Note
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -21,7 +40,7 @@ pub enum Status {
 }
 
 impl Status {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Status::Pending => "pending",
             Status::Done => "done",
@@ -30,7 +49,7 @@ impl Status {
         }
     }
 
-    fn parse(raw: &str) -> Option<Self> {
+    pub(crate) fn parse(raw: &str) -> Option<Self> {
         match raw {
             "pending" => Some(Status::Pending),
             "done" => Some(Status::Done),
@@ -57,6 +76,13 @@ pub struct Note {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
     pub body: String,
+    /// A page's subject is its title, and `file` its own file.
+    #[serde(default, skip_serializing_if = "Kind::is_note")]
+    pub kind: Kind,
+    /// A page whose stub is in the day's file but whose file is gone. Only
+    /// the day view has these; they are never indexed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub missing: bool,
 }
 
 /// First 8 hex chars of SHA-256 over the trimmed body.
@@ -97,6 +123,12 @@ pub fn render_note(note: &Note) -> String {
 
 /// Append a rendered note, preserving every existing byte of the file.
 pub fn append_note(existing: &str, note: &Note, date: &str) -> String {
+    append_block(existing, &render_note(note), date)
+}
+
+/// Append a rendered block after a blank line, starting a new file with the
+/// day's heading.
+fn append_block(existing: &str, block: &str, date: &str) -> String {
     let mut out = if existing.trim().is_empty() {
         format!("# {date}\n")
     } else {
@@ -108,7 +140,7 @@ pub fn append_note(existing: &str, note: &Note, date: &str) -> String {
     if !out.ends_with("\n\n") {
         out.push('\n');
     }
-    out.push_str(&render_note(note));
+    out.push_str(block);
     out
 }
 
@@ -143,8 +175,13 @@ pub fn parse_notes(content: &str, date: &str, file: &str) -> Vec<Note> {
 /// and any hand edits inside other blocks, is carried across verbatim.
 /// Returns `None` when the id is not in this file.
 pub fn remove_note(content: &str, id: &str) -> Option<String> {
+    remove_block(content, NOTE_OPEN, id)
+}
+
+/// Remove the block opened by `open` that carries `id`, as `remove_note`.
+fn remove_block(content: &str, open: &str, id: &str) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
-    let (start, end) = find_block(&lines, id)?;
+    let (start, end) = find_block(&lines, open, id)?;
 
     // Also take the blank line the writer puts between blocks, or deleting
     // would leave a growing gap. Prefer the one after the block; fall back to
@@ -209,12 +246,17 @@ pub fn replace_body(content: &str, id: &str, body: &str) -> Option<String> {
 
 fn rewrite_block(content: &str, id: &str, edit: impl FnOnce(&mut Note)) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
-    let (start, end) = find_block(&lines, id)?;
+    let (start, end) = find_block(&lines, NOTE_OPEN, id)?;
 
     let mut note = build_note(lines[start].trim(), &lines[start + 1..end], "", "")?;
     edit(&mut note);
 
-    let replacement = render_note(&note);
+    Some(splice(content, &lines, start, end, &render_note(&note)))
+}
+
+/// `content` with lines `start..=end` swapped for `replacement`, in the line
+/// endings the file already uses.
+fn splice(content: &str, lines: &[&str], start: usize, end: usize, replacement: &str) -> String {
     let newline = if content.contains("\r\n") {
         "\r\n"
     } else {
@@ -230,18 +272,21 @@ fn rewrite_block(content: &str, id: &str, edit: impl FnOnce(&mut Note)) -> Optio
     if !joined.is_empty() {
         joined.push_str(newline);
     }
-    Some(joined)
+    joined
 }
 
-/// Line span of the block carrying `id`, opener and end marker included.
-fn find_block(lines: &[&str], id: &str) -> Option<(usize, usize)> {
+/// Line span of the block opened by `open` that carries `id`, opener and end
+/// marker included.
+fn find_block(lines: &[&str], open: &str, id: &str) -> Option<(usize, usize)> {
     let mut start = None;
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        if trimmed.starts_with(NOTE_OPEN) && trimmed.ends_with("-->") {
+        if trimmed.starts_with(open) && trimmed.ends_with("-->") {
             // A non-matching opener clears the candidate, which also drops a
             // previous block that was never closed.
-            start = header_id(trimmed).filter(|found| *found == id).map(|_| i);
+            start = header_id(trimmed, open)
+                .filter(|found| *found == id)
+                .map(|_| i);
         } else if trimmed == NOTE_END {
             if let Some(start) = start {
                 return Some((start, i));
@@ -251,9 +296,150 @@ fn find_block(lines: &[&str], id: &str) -> Option<(usize, usize)> {
     None
 }
 
-fn header_id(header: &str) -> Option<&str> {
-    let attrs = header.strip_prefix(NOTE_OPEN)?.strip_suffix("-->")?.trim();
+fn header_id<'a>(header: &'a str, open: &str) -> Option<&'a str> {
+    let attrs = header.strip_prefix(open)?.strip_suffix("-->")?.trim();
     attrs.split_whitespace().find_map(|p| p.strip_prefix("id="))
+}
+
+/// Where a page sits in a day's file (SPEC 4.7): its id and time, and a link
+/// to its file for other editors. The page file holds everything else.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Stub {
+    pub id: String,
+    pub time: String,
+    /// The link's text: the page's title when the stub was written.
+    pub title: String,
+    /// The link's target, relative to the day's file.
+    pub target: String,
+}
+
+impl Stub {
+    /// The stub a page should have in its day's file.
+    pub fn for_page(page: &Note) -> Self {
+        Self {
+            id: page.id.clone(),
+            time: page.time.clone(),
+            title: page.subject.clone().unwrap_or_default(),
+            // Day files sit two folders down, in `notes/<year>/`.
+            target: format!("../../{}", page.file),
+        }
+    }
+}
+
+pub fn render_stub(stub: &Stub) -> String {
+    // The target goes in angle brackets, since page file names have spaces.
+    format!(
+        "{PAGE_OPEN}id={} time={} -->\n[{}](<{}>)\n{NOTE_END}\n",
+        stub.id,
+        stub.time,
+        escape_link_text(&stub.title),
+        stub.target
+    )
+}
+
+/// Every well-formed stub in a day's file, in file order.
+pub fn parse_stubs(content: &str) -> Vec<Stub> {
+    let mut stubs = Vec::new();
+    let mut open: Option<(&str, Vec<&str>)> = None;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(PAGE_OPEN) && trimmed.ends_with("-->") {
+            open = Some((trimmed, Vec::new()));
+        } else if trimmed.starts_with(NOTE_OPEN) {
+            // A note block starting means the stub before it was never closed.
+            open = None;
+        } else if trimmed == NOTE_END {
+            if let Some((header, block)) = open.take() {
+                stubs.extend(build_stub(header, &block));
+            }
+        } else if let Some((_, block)) = open.as_mut() {
+            block.push(line);
+        }
+    }
+    stubs
+}
+
+fn build_stub(header: &str, block: &[&str]) -> Option<Stub> {
+    let attrs = header.strip_prefix(PAGE_OPEN)?.strip_suffix("-->")?.trim();
+    let (mut id, mut time) = (None, None);
+    for pair in attrs.split_whitespace() {
+        match pair.split_once('=') {
+            Some(("id", v)) => id = Some(v.to_string()),
+            Some(("time", v)) => time = Some(v.to_string()),
+            _ => {}
+        }
+    }
+    // A link edited out of shape still leaves the stub, which the app then
+    // rewrites from the page.
+    let (title, target) = block
+        .iter()
+        .find(|line| !line.trim().is_empty())
+        .and_then(|line| parse_link(line.trim()))
+        .unwrap_or_default();
+    Some(Stub {
+        id: id?,
+        time: time?,
+        title,
+        target,
+    })
+}
+
+/// `[text](<target>)`, or `[text](target)` as another editor may leave it.
+fn parse_link(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix('[')?;
+    let mut text = String::new();
+    let mut chars = rest.char_indices();
+    let close = loop {
+        let (i, c) = chars.next()?;
+        match c {
+            '\\' => text.push(chars.next()?.1),
+            ']' => break i,
+            _ => text.push(c),
+        }
+    };
+    let target = rest[close + 1..].strip_prefix('(')?.strip_suffix(')')?;
+    let target = target
+        .strip_prefix('<')
+        .and_then(|t| t.strip_suffix('>'))
+        .unwrap_or(target);
+    Some((text, target.to_string()))
+}
+
+fn escape_link_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if matches!(c, '\\' | '[' | ']') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Add a stub at the end of a day's file, as a note is appended.
+pub fn append_stub(existing: &str, stub: &Stub, date: &str) -> String {
+    append_block(existing, &render_stub(stub), date)
+}
+
+/// Rewrite one stub in place. `None` when it is not in this file.
+pub fn replace_stub(content: &str, stub: &Stub) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    let (start, end) = find_block(&lines, PAGE_OPEN, &stub.id)?;
+    Some(splice(content, &lines, start, end, &render_stub(stub)))
+}
+
+/// Remove one stub, as `remove_note` removes a note. `None` when it is not
+/// in this file.
+pub fn remove_stub(content: &str, id: &str) -> Option<String> {
+    remove_block(content, PAGE_OPEN, id)
+}
+
+/// Put a stub where a note's block was, for a note turned into a page.
+/// `None` when the note is not in this file.
+pub fn note_to_stub(content: &str, note_id: &str, stub: &Stub) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    let (start, end) = find_block(&lines, NOTE_OPEN, note_id)?;
+    Some(splice(content, &lines, start, end, &render_stub(stub)))
 }
 
 fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<Note> {
@@ -294,6 +480,8 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
         hash: actual,
         lang,
         body,
+        kind: Kind::Note,
+        missing: false,
     })
 }
 
@@ -312,6 +500,14 @@ fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, String) {
         }
         None => None,
     };
+
+    let (category, body) = split_category(rest);
+    (subject, category, body)
+}
+
+/// The category line and the text under a note's heading, or a page's.
+pub(crate) fn split_category(block: &[&str]) -> (Option<String>, String) {
+    let mut rest = block;
 
     // The category is one `> #category` line and then a blank one. Requiring
     // that shape keeps a body that merely starts with a quote from being
@@ -340,7 +536,7 @@ fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, String) {
         rest = &rest[1..];
     }
 
-    (subject, category, rest.join("\n").trim_end().to_string())
+    (category, rest.join("\n").trim_end().to_string())
 }
 
 #[cfg(test)]
@@ -362,6 +558,8 @@ mod tests {
             hash: body_hash(body),
             lang: None,
             body: body.to_string(),
+            kind: Kind::Note,
+            missing: false,
         }
     }
 
@@ -731,5 +929,118 @@ mod tests {
     fn appends_a_day_header_to_a_new_file() {
         let out = append_note("", &pending("01HHH", "08:00", "first"), DATE);
         assert!(out.starts_with("# 2026-09-22\n\n<!-- sn:note "));
+    }
+
+    fn stub(id: &str, title: &str) -> Stub {
+        Stub {
+            id: id.to_string(),
+            time: "10:00".to_string(),
+            title: title.to_string(),
+            target: format!("../../pages/2026/2026-09-22 {title}.md"),
+        }
+    }
+
+    /// Notes and prose with a stub between the second and third note.
+    fn day_with_stub() -> String {
+        let mut doc = day_with_prose();
+        let at = doc.find("<!-- sn:note id=01CCC").unwrap();
+        doc.insert_str(
+            at,
+            &format!("{}\n", render_stub(&stub("01PPP", "Weekly sync"))),
+        );
+        doc
+    }
+
+    #[test]
+    fn renders_the_stub_given_in_the_spec() {
+        assert_eq!(
+            render_stub(&stub("01PPP", "Weekly sync, platform team")),
+            concat!(
+                "<!-- sn:page id=01PPP time=10:00 -->\n",
+                "[Weekly sync, platform team](<../../pages/2026/2026-09-22 Weekly sync, platform team.md>)\n",
+                "<!-- sn:end -->\n",
+            )
+        );
+    }
+
+    #[test]
+    fn stubs_round_trip_and_the_note_parser_skips_them() {
+        let doc = day_with_stub();
+        assert_eq!(parse_stubs(&doc), vec![stub("01PPP", "Weekly sync")]);
+        let notes = parse_notes(&doc, DATE, FILE);
+        assert_eq!(
+            notes.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(),
+            ["01AAA", "01BBB", "01CCC"]
+        );
+        assert!(notes.iter().all(|n| !n.body.contains("sn:page")));
+    }
+
+    #[test]
+    fn brackets_in_a_title_survive_the_link() {
+        let tricky = stub("01PPP", r"Q3 [draft] review \ notes");
+        let doc = append_stub("", &tricky, DATE);
+        assert!(doc.contains(r"[Q3 \[draft\] review \\ notes]"), "{doc}");
+        assert_eq!(parse_stubs(&doc), vec![tricky]);
+    }
+
+    #[test]
+    fn a_stub_whose_link_was_edited_out_of_shape_is_still_a_stub() {
+        let doc = "<!-- sn:page id=01PPP time=10:00 -->\nsomething else\n<!-- sn:end -->\n";
+        let stubs = parse_stubs(doc);
+        assert_eq!(stubs.len(), 1);
+        assert_eq!(
+            (stubs[0].title.as_str(), stubs[0].target.as_str()),
+            ("", "")
+        );
+        // A link without angle brackets, as another editor may write it.
+        let plain = "<!-- sn:page id=01PPP time=10:00 -->\n[Sync](../../pages/2026/a.md)\n<!-- sn:end -->\n";
+        assert_eq!(parse_stubs(plain)[0].target, "../../pages/2026/a.md");
+    }
+
+    #[test]
+    fn replacing_and_removing_a_stub_leaves_the_notes_alone() {
+        let doc = day_with_stub();
+        let renamed = stub("01PPP", "Renamed");
+        let out = replace_stub(&doc, &renamed).expect("stub is present");
+        assert_eq!(parse_stubs(&out), vec![renamed]);
+        assert_eq!(parse_notes(&out, DATE, FILE), parse_notes(&doc, DATE, FILE));
+
+        let out = remove_stub(&doc, "01PPP").expect("stub is present");
+        assert!(parse_stubs(&out).is_empty());
+        assert_eq!(out, day_with_prose(), "the file is back as it was");
+        assert!(remove_stub(&out, "01PPP").is_none());
+    }
+
+    #[test]
+    fn removing_a_note_does_not_touch_a_stub_with_its_id() {
+        let doc = append_stub(&day_with_prose(), &stub("01AAA", "Clash"), DATE);
+        let out = remove_note(&doc, "01AAA").unwrap();
+        assert_eq!(parse_stubs(&out).len(), 1);
+    }
+
+    #[test]
+    fn a_note_turned_into_a_page_leaves_its_stub_in_its_place() {
+        let doc = day_with_prose();
+        let out = note_to_stub(&doc, "01BBB", &stub("01PPP", "Second")).unwrap();
+        assert!(out.contains("stray prose the user typed"));
+        let notes = parse_notes(&out, DATE, FILE);
+        assert_eq!(
+            notes.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(),
+            ["01AAA", "01CCC"]
+        );
+        let first = out.find("01AAA").unwrap();
+        let page = out.find("01PPP").unwrap();
+        let third = out.find("01CCC").unwrap();
+        assert!(
+            first < page && page < third,
+            "the stub keeps the note's place"
+        );
+        assert!(note_to_stub(&out, "01BBB", &stub("01PPP", "x")).is_none());
+    }
+
+    #[test]
+    fn a_stub_appended_to_an_empty_day_starts_the_file() {
+        let out = append_stub("", &stub("01PPP", "Sync"), DATE);
+        assert!(out.starts_with("# 2026-09-22\n\n<!-- sn:page id=01PPP"));
     }
 }

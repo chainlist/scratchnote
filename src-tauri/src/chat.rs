@@ -391,6 +391,7 @@ mod tests {
             status: Status::Done,
             hash: "00000000".to_string(),
             lang: None,
+            kind: Default::default(),
             body: "SECRET BODY".to_string(),
             folded: String::new(),
         }

@@ -24,8 +24,9 @@ use crate::storage::{check_date, fingerprint, index};
 /// reparsing. Well inside the one second the spec allows.
 const QUIET: Duration = Duration::from_millis(250);
 
-/// Watch one space's notes. The watcher is stored on the space, so retiring
-/// the space stops it, and the processing task ends with it.
+/// Watch one space's notes and pages. The watcher is stored on the space, so
+/// retiring the space stops it, and the processing task ends with it. It
+/// watches the space's whole folder, since `pages/` may not be there yet.
 pub fn start(app: AppHandle, space: &Arc<Space>) -> notify::Result<()> {
     let notes_dir = space.root.join("notes");
     // notify cannot watch a directory that is not there yet.
@@ -55,7 +56,7 @@ pub fn start(app: AppHandle, space: &Arc<Space>) -> notify::Result<()> {
         }
     })?;
 
-    watcher.watch(&notes_dir, RecursiveMode::Recursive)?;
+    watcher.watch(&space.root, RecursiveMode::Recursive)?;
     if let Ok(mut slot) = space.watcher.lock() {
         *slot = Some(watcher);
     }
@@ -86,8 +87,103 @@ async fn process(app: AppHandle, space: Weak<Space>, mut rx: mpsc::UnboundedRece
     }
 }
 
-/// Reparse one daily file into the index. Returns whether anything changed.
+/// Reparse one changed file into the index: a daily file or a page file.
+/// Anything else in the space's folder is not the watcher's business.
+/// Returns whether anything changed.
 fn reindex(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
+    if path.starts_with(space.root.join("pages")) {
+        reindex_page(app, space, path)
+    } else if path.starts_with(space.root.join("notes")) {
+        reindex_day(app, space, path)
+    } else {
+        false
+    }
+}
+
+/// Reparse one page file (SPEC 4.3). A page renamed or moved is found again
+/// by its id, and its stub follows it. A page file that is gone leaves the
+/// index, and its stub stays.
+fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
+    let Some(state) = app.try_state::<AppState>() else {
+        return false;
+    };
+    if wrote_it_ourselves(&state, path) {
+        return false;
+    }
+    let Some(file) = index::relative(&space.root, path) else {
+        return false;
+    };
+
+    let parsed = index::parse_page(&space.root, path);
+    let before = {
+        let Ok(mut idx) = space.index.write() else {
+            return false;
+        };
+        match parsed.clone() {
+            Some(entry) => {
+                let before = idx.page(&entry.id).cloned();
+                idx.replace_page(entry);
+                before
+            }
+            // Gone, or no longer a page: whatever page this file held goes.
+            None => match idx.page_at(&file).map(|page| page.id.clone()) {
+                Some(id) => idx.remove_page(&id),
+                None => return false,
+            },
+        }
+    };
+    // Edited text parses as pending, as in a daily file.
+    let queued = parsed.as_ref().is_some_and(|entry| {
+        entry.status == Status::Pending
+            && space
+                .queue
+                .lock()
+                .is_ok_and(|mut queue| queue.push(Job::new(entry.id.clone(), entry.date.clone())))
+    });
+
+    // The stub follows the page's title, file, day and time.
+    let moved = match (&before, &parsed) {
+        (Some(before), Some(after)) => {
+            before.file != after.file
+                || before.subject != after.subject
+                || before.date != after.date
+                || before.time != after.time
+        }
+        (None, Some(_)) => true,
+        _ => false,
+    };
+
+    let app = app.clone();
+    let owned = space.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        if let (true, Some(page)) = (moved, parsed.as_ref().map(|e| e.to_note())) {
+            if let Some(before) = before.filter(|b| b.date != page.date) {
+                if let Err(e) =
+                    crate::pages::drop_stub(&state.writer, &owned, &before.date, &page.id).await
+                {
+                    log::warn!("could not take page {} off {}: {e}", page.id, before.date);
+                }
+            }
+            if let Err(e) = crate::pages::sync_stub(&state.writer, &owned, &page).await {
+                log::warn!("could not write the stub of page {}: {e}", page.id);
+            }
+        }
+        if let Err(e) = owned.persist_index(&state.writer).await {
+            log::warn!("could not persist the index after an external edit: {e}");
+        }
+        if queued {
+            owned.persist_queue(&state.writer).await;
+            state.wake.notify_one();
+        }
+    });
+
+    log::info!("reindexed {file} in {} after an external edit", space.name);
+    true
+}
+
+/// Reparse one daily file into the index. Returns whether anything changed.
+fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     let Some(date) = path.file_stem().and_then(|s| s.to_str()) else {
         return false;
     };

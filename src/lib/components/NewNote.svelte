@@ -1,16 +1,20 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
 		onsave,
+		onpage,
 		centered = false,
 		writing = $bindable(false)
 	}: {
 		/** Save the note to the day shown. Resolves true once saved; false keeps the editor open. */
 		onsave: (body: string) => Promise<boolean>;
+		/** Start a page on the day shown instead (SPEC 3.5). */
+		onpage: () => void;
 		/** On an empty day, with no cards to line up under: the button sits centred and the editor spans the page. */
 		centered?: boolean;
 		/** The editor is open rather than the button. */
@@ -81,13 +85,22 @@
 				</div>
 			</div>
 		{:else}
-			<button
-				type="button"
-				onclick={start}
-				class="-mx-1.5 flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-neutral-600 hover:bg-neutral-900 hover:text-neutral-300"
-			>
-				<PlusIcon class="size-3.5" />{m.page_add_note()}
-			</button>
+			<div class="flex items-center gap-3 {centered ? 'justify-center' : ''}">
+				<button
+					type="button"
+					onclick={start}
+					class="-mx-1.5 flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-neutral-600 hover:bg-neutral-900 hover:text-neutral-300"
+				>
+					<PlusIcon class="size-3.5" />{m.page_add_note()}
+				</button>
+				<button
+					type="button"
+					onclick={onpage}
+					class="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-neutral-600 hover:bg-neutral-900 hover:text-neutral-300"
+				>
+					<FileTextIcon class="size-3.5" />{m.pages_new()}
+				</button>
+			</div>
 		{/if}
 	</div>
 </div>

@@ -63,7 +63,30 @@ enum WriteRequest {
         line: String,
         reply: oneshot::Sender<io::Result<()>>,
     },
+    /// Read a file, `None` when it is missing, and write back what `edit`
+    /// makes of it. Read and write happen in this task, so no other write can
+    /// land between them.
+    Rewrite {
+        path: PathBuf,
+        edit: Edit,
+        /// False when `edit` left the file alone.
+        reply: oneshot::Sender<io::Result<bool>>,
+    },
+    /// Move a file, refusing to replace another.
+    Rename {
+        from: PathBuf,
+        to: PathBuf,
+        reply: oneshot::Sender<io::Result<()>>,
+    },
+    Remove {
+        path: PathBuf,
+        /// False when the file was not there.
+        reply: oneshot::Sender<io::Result<bool>>,
+    },
 }
+
+/// What `Writer::rewrite` does to a file's contents; `None` leaves it alone.
+pub type Edit = Box<dyn FnOnce(Option<&str>) -> Option<String> + Send>;
 
 #[derive(Clone)]
 pub struct Writer {
@@ -116,6 +139,15 @@ impl Writer {
                     }
                     WriteRequest::AppendIndexLine { path, line, reply } => {
                         let _ = reply.send(append_index_line(&path, &line, &seen).await);
+                    }
+                    WriteRequest::Rewrite { path, edit, reply } => {
+                        let _ = reply.send(rewrite(&path, edit, &seen).await);
+                    }
+                    WriteRequest::Rename { from, to, reply } => {
+                        let _ = reply.send(rename(&from, &to, &seen).await);
+                    }
+                    WriteRequest::Remove { path, reply } => {
+                        let _ = reply.send(remove(&path, &seen).await);
                     }
                 }
             }
@@ -212,6 +244,38 @@ impl Writer {
         .await
     }
 
+    /// Returns false when `edit` left the file alone.
+    pub async fn rewrite(
+        &self,
+        path: PathBuf,
+        edit: impl FnOnce(Option<&str>) -> Option<String> + Send + 'static,
+    ) -> Result<bool, String> {
+        let (reply, response) = oneshot::channel();
+        self.send(
+            WriteRequest::Rewrite {
+                path,
+                edit: Box::new(edit),
+                reply,
+            },
+            response,
+        )
+        .await
+    }
+
+    /// Fails rather than replace a file already at `to`.
+    pub async fn rename(&self, from: PathBuf, to: PathBuf) -> Result<(), String> {
+        let (reply, response) = oneshot::channel();
+        self.send(WriteRequest::Rename { from, to, reply }, response)
+            .await
+    }
+
+    /// Returns false when the file was not there.
+    pub async fn remove(&self, path: PathBuf) -> Result<bool, String> {
+        let (reply, response) = oneshot::channel();
+        self.send(WriteRequest::Remove { path, reply }, response)
+            .await
+    }
+
     async fn send<T>(
         &self,
         request: WriteRequest,
@@ -302,6 +366,57 @@ async fn append_index_line(path: &Path, line: &str, seen: &SelfWrites) -> io::Re
     write_atomic(path, &contents, seen).await
 }
 
+async fn rewrite(path: &Path, edit: Edit, seen: &SelfWrites) -> io::Result<bool> {
+    let existing = match tokio::fs::read_to_string(path).await {
+        Ok(contents) => Some(contents),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
+        Err(e) => return Err(e),
+    };
+    match edit(existing.as_deref()) {
+        Some(updated) => {
+            write_atomic(path, &updated, seen).await?;
+            Ok(true)
+        }
+        None => Ok(false),
+    }
+}
+
+async fn rename(from: &Path, to: &Path, seen: &SelfWrites) -> io::Result<()> {
+    // A rename replaces its target on Windows, so check first. A change of
+    // case only is the same file there and has to go through.
+    let same_file = from.to_string_lossy().to_lowercase() == to.to_string_lossy().to_lowercase();
+    if !same_file && tokio::fs::try_exists(to).await? {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!("{} is already there", to.display()),
+        ));
+    }
+    if let Some(parent) = to.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    tokio::fs::rename(from, to).await?;
+    // The file at `to` is the app's own doing, as a write there would be.
+    let contents = tokio::fs::read_to_string(to).await?;
+    if let Ok(mut seen) = seen.lock() {
+        seen.remove(from);
+        seen.insert(to.to_path_buf(), fingerprint(&contents));
+    }
+    Ok(())
+}
+
+async fn remove(path: &Path, seen: &SelfWrites) -> io::Result<bool> {
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => {
+            if let Ok(mut seen) = seen.lock() {
+                seen.remove(path);
+            }
+            Ok(true)
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
 async fn read_or_empty(path: &Path) -> io::Result<String> {
     match tokio::fs::read_to_string(path).await {
         Ok(contents) => Ok(contents),
@@ -340,7 +455,7 @@ async fn write_atomic(path: &Path, contents: &str, seen: &SelfWrites) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::daily_file::{body_hash, parse_notes, Status};
+    use crate::storage::daily_file::{body_hash, parse_notes, Kind, Status};
 
     fn scratch_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("scratchnote-test-{name}"));
@@ -360,7 +475,59 @@ mod tests {
             hash: body_hash(body),
             lang: None,
             body: body.to_string(),
+            kind: Kind::Note,
+            missing: false,
         }
+    }
+
+    #[tokio::test]
+    async fn rewrites_renames_and_removes_files() {
+        let root = scratch_dir("files");
+        let a = root.join("pages/2026/a.md");
+        let b = root.join("pages/2026/b.md");
+        let writer = Writer::spawn();
+
+        // Missing, so the edit sees None and makes the file.
+        let made = writer
+            .rewrite(a.clone(), |existing| {
+                assert!(existing.is_none());
+                Some("one".to_string())
+            })
+            .await
+            .unwrap();
+        assert!(made);
+        // Left alone when the edit says so.
+        assert!(!writer.rewrite(a.clone(), |_| None).await.unwrap());
+        assert!(writer
+            .rewrite(a.clone(), |existing| Some(format!(
+                "{} two",
+                existing.unwrap()
+            )))
+            .await
+            .unwrap());
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "one two");
+
+        std::fs::write(&b, "other").unwrap();
+        assert!(
+            writer.rename(a.clone(), b.clone()).await.is_err(),
+            "a rename must not replace another file"
+        );
+        std::fs::remove_file(&b).unwrap();
+        writer.rename(a.clone(), b.clone()).await.unwrap();
+        assert!(!a.exists());
+        assert_eq!(std::fs::read_to_string(&b).unwrap(), "one two");
+        let recorded = writer.self_writes().lock().unwrap().get(&b).cloned();
+        assert_eq!(
+            recorded,
+            Some(fingerprint("one two")),
+            "the watcher skips it"
+        );
+
+        assert!(writer.remove(b.clone()).await.unwrap());
+        assert!(!b.exists());
+        assert!(!writer.remove(b).await.unwrap());
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[tokio::test]

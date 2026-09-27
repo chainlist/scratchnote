@@ -6,6 +6,7 @@
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
@@ -21,6 +22,7 @@
 		onretry,
 		oncategory,
 		onsimilar,
+		onpage,
 		showDate = false,
 		blink = false
 	}: {
@@ -36,6 +38,8 @@
 		oncategory: (category: string) => void;
 		/** List the notes closest in meaning. Left out without the embedding model. */
 		onsimilar?: (note: Note) => void;
+		/** Turn the note into a page; the page asks for its title. */
+		onpage: (note: Note) => void;
 		/** Search results span days, so each card says which one. */
 		showDate?: boolean;
 		/** Blink once to show where a chat citation led. */
@@ -194,7 +198,7 @@
 				>
 					<EllipsisIcon class="size-3.5" />
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-40">
+				<DropdownMenu.Content align="end" class="w-44">
 					<DropdownMenu.Item onSelect={() => onedit(note)}>
 						<PencilIcon />{m.note_edit()}
 					</DropdownMenu.Item>
@@ -203,6 +207,9 @@
 							<WaypointsIcon />{m.note_similar()}
 						</DropdownMenu.Item>
 					{/if}
+					<DropdownMenu.Item onSelect={() => onpage(note)}>
+						<FileTextIcon />{m.pages_turn_into()}
+					</DropdownMenu.Item>
 					{#if canRetry}
 						<DropdownMenu.Item onSelect={() => onretry(note)}>
 							<RefreshCwIcon />{m.note_rerun()}

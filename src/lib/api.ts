@@ -16,7 +16,13 @@ export interface Note {
 	status: NoteStatus;
 	hash: string;
 	body: string;
+	/** A page has a file of its own, and its title as its subject (SPEC 3.5). */
+	kind?: 'page';
+	/** A page whose stub is in the day's file but whose file is gone. */
+	missing?: boolean;
 }
+
+export const isPage = (note: Pick<Note, 'kind'>) => note.kind === 'page';
 
 export interface DaySummary {
 	date: string;
@@ -315,6 +321,39 @@ export const updateNoteMeta = (
 	id: string,
 	meta: { subject?: string; category?: string }
 ) => invoke<Note>('update_note_meta', { date, id, ...meta });
+
+/** Start a page on a day, today's unless another is given. The title is required. */
+export const createPage = (title: string, body: string, date?: string) =>
+	invoke<Note>('create_page', { title, body, date });
+
+/** A page read afresh from its file. */
+export const getPage = (id: string) => invoke<Note>('get_page', { id });
+
+/** Replace a page's text, which may be empty. A changed text is re-enriched unless manual. */
+export const updatePage = (id: string, body: string) => invoke<Note>('update_page', { id, body });
+
+/**
+ * The page view closed. Saves while it was open leave the models alone; this
+ * sends the page to them when its text changed.
+ */
+export const finishPage = (id: string) => invoke<void>('finish_page', { id });
+
+/** Retitle a page, which renames its file and rewrites its stub. */
+export const renamePage = (id: string, title: string) => invoke<Note>('rename_page', { id, title });
+
+/** Remove a page's stub from `date`, the day showing it, then its file. */
+export const deletePage = (date: string, id: string) => invoke<void>('delete_page', { date, id });
+
+/** Turn a note into a page with that title. The page has a new id. */
+export const noteToPage = (date: string, id: string, title: string) =>
+	invoke<Note>('note_to_page', { date, id, title });
+
+/** From the capture window: hide it and open a new page with this text in the main window. */
+export const captureToPage = (body: string) => invoke<void>('capture_to_page', { body });
+
+/** Fired in the main window when the capture window hands it a draft. */
+export const onNewPage = (handler: (body: string) => void): Promise<UnlistenFn> =>
+	listen<{ body: string }>('new-page', (event) => handler(event.payload.body));
 
 /** Fired when a note has been labelled and written back. */
 export const onNoteEnriched = (handler: (id: string) => void): Promise<UnlistenFn> =>

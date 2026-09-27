@@ -5,6 +5,7 @@
 //! made there by hand is a space too. `.scratchnote/spaces.json` at the root
 //! records only what the folders cannot: which space is open.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, RwLock};
@@ -199,6 +200,9 @@ pub struct Space {
     pub vectors: Mutex<Option<Vectors>>,
     /// Nudges the embed task whenever the index changes.
     embed_wake: Wake,
+    /// Pages open in the editor. Neither model touches them until the page
+    /// view closes, so autosaves do not run either one again (SPEC 3.5).
+    editing: Mutex<HashSet<String>>,
     /// Held only to keep it alive; dropping it stops watching.
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
     /// Set once the space is deleted or renamed away, so a job still in hand
@@ -230,6 +234,7 @@ impl Space {
             retired: AtomicBool::new(false),
             root,
             embed_wake,
+            editing: Mutex::new(HashSet::new()),
         };
         // Its notes may have been written with no model, or by another one.
         space.embed_wake.notify_one();
@@ -247,6 +252,34 @@ impl Space {
 
     pub fn is_retired(&self) -> bool {
         self.retired.load(Ordering::SeqCst)
+    }
+
+    /// A page is being edited: the models leave it alone until `release`.
+    pub fn hold(&self, id: &str) {
+        if let Ok(mut editing) = self.editing.lock() {
+            editing.insert(id.to_string());
+        }
+    }
+
+    /// The page view closed. True when the page was held.
+    pub fn release(&self, id: &str) -> bool {
+        self.editing
+            .lock()
+            .is_ok_and(|mut editing| editing.remove(id))
+    }
+
+    pub fn is_held(&self, id: &str) -> bool {
+        self.editing
+            .lock()
+            .is_ok_and(|editing| editing.contains(id))
+    }
+
+    /// The pages being edited, for the embed task to skip.
+    pub fn held(&self) -> HashSet<String> {
+        self.editing
+            .lock()
+            .map(|editing| editing.clone())
+            .unwrap_or_default()
     }
 
     pub fn queued(&self) -> usize {

@@ -2,6 +2,7 @@ mod chat;
 mod commands;
 mod embed;
 mod enrich;
+mod pages;
 mod search;
 mod settings;
 mod spaces;
@@ -81,7 +82,15 @@ pub fn run() {
             commands::open_space_folder,
             commands::open_link,
             commands::set_active_space,
+            pages::create_page,
+            pages::get_page,
+            pages::update_page,
+            pages::finish_page,
+            pages::rename_page,
+            pages::delete_page,
+            pages::note_to_page,
             hide_capture,
+            capture_to_page,
             set_tray_labels,
         ])
         .setup(|app| {
@@ -185,6 +194,16 @@ fn hide_capture(app: AppHandle) {
     if let Some(window) = app.get_webview_window(CAPTURE) {
         let _ = window.hide();
     }
+}
+
+/// Hand the capture window's draft to a new page in the main window (SPEC
+/// 3.5): the capture window goes, the main window comes up and opens a page
+/// with the draft as its text.
+#[tauri::command]
+fn capture_to_page(app: AppHandle, body: String) {
+    hide_capture(app.clone());
+    show_main(&app);
+    let _ = app.emit_to(MAIN, "new-page", serde_json::json!({ "body": body }));
 }
 
 /// The capture window is built once at startup and only ever shown and

@@ -11,11 +11,11 @@ use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
-use super::daily_file::{self, Note, Status};
-use super::{check_date, relative_day_path};
+use super::daily_file::{self, Kind, Note, Status};
+use super::{check_date, page_file, relative_day_path};
 
-/// One note. The body is held in memory for search (SPEC 6) but never written
-/// to `index.jsonl`, which stays a small metadata cache.
+/// One note or page. The body is held in memory for search (SPEC 6) but
+/// never written to `index.jsonl`, which stays a small metadata cache.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IndexEntry {
     pub id: String,
@@ -28,6 +28,9 @@ pub struct IndexEntry {
     pub hash: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
+    /// A page's `file` is its own and its `subject` its title (SPEC 4.7).
+    #[serde(default, skip_serializing_if = "Kind::is_note")]
+    pub kind: Kind,
     #[serde(skip)]
     pub body: String,
     /// Subject and body folded for matching, computed once here so a
@@ -54,6 +57,7 @@ impl From<&Note> for IndexEntry {
             status: note.status,
             hash: note.hash.clone(),
             lang: note.lang.clone(),
+            kind: note.kind,
             body: note.body.clone(),
             folded,
         }
@@ -73,18 +77,35 @@ impl IndexEntry {
             hash: self.hash.clone(),
             lang: self.lang.clone(),
             body: self.body.clone(),
+            kind: self.kind,
+            missing: false,
+        }
+    }
+
+    /// Everything the cache holds, which leaves out the body.
+    fn same_meta(&self, other: &IndexEntry) -> bool {
+        IndexEntry {
+            body: String::new(),
+            folded: String::new(),
+            ..self.clone()
+        } == IndexEntry {
+            body: String::new(),
+            folded: String::new(),
+            ..other.clone()
         }
     }
 }
 
-/// Entries grouped by day, so one file's worth can be replaced wholesale when
-/// that file changes.
+/// Notes grouped by day, so one file's worth can be replaced wholesale when
+/// that file changes, and pages by id, since each has a file of its own.
 #[derive(Debug, Default)]
 pub struct Index {
     by_date: BTreeMap<String, Vec<IndexEntry>>,
+    pages: BTreeMap<String, IndexEntry>,
 }
 
 impl Index {
+    /// A day's notes. Its pages come from their own files, so they stay.
     pub fn replace_day(&mut self, date: &str, entries: Vec<IndexEntry>) {
         if entries.is_empty() {
             self.by_date.remove(date);
@@ -94,10 +115,41 @@ impl Index {
     }
 
     pub fn push(&mut self, entry: IndexEntry) {
+        if entry.kind == Kind::Page {
+            self.pages.insert(entry.id.clone(), entry);
+            return;
+        }
         self.by_date
             .entry(entry.date.clone())
             .or_default()
             .push(entry);
+    }
+
+    /// Add a page, or replace it when its id is already there.
+    pub fn replace_page(&mut self, entry: IndexEntry) {
+        self.pages.insert(entry.id.clone(), entry);
+    }
+
+    pub fn remove_page(&mut self, id: &str) -> Option<IndexEntry> {
+        self.pages.remove(id)
+    }
+
+    pub fn page(&self, id: &str) -> Option<&IndexEntry> {
+        self.pages.get(id)
+    }
+
+    /// The page held in `file`, a path relative to the space's root.
+    pub fn page_at(&self, file: &str) -> Option<&IndexEntry> {
+        self.pages.values().find(|page| page.file == file)
+    }
+
+    pub fn pages(&self) -> impl Iterator<Item = &IndexEntry> {
+        self.pages.values()
+    }
+
+    /// The pages whose day is `date`.
+    pub fn pages_on<'a>(&'a self, date: &'a str) -> impl Iterator<Item = &'a IndexEntry> {
+        self.pages.values().filter(move |page| page.date == date)
     }
 
     /// Forget days that no longer have a file on disk.
@@ -107,17 +159,25 @@ impl Index {
         self.by_date.len() != before
     }
 
-    /// Dates newest first, with how many notes each holds.
+    /// Dates newest first, with how many notes and pages each holds.
     pub fn days(&self) -> Vec<(String, usize)> {
-        self.by_date
+        let mut counts: BTreeMap<&str, usize> = self
+            .by_date
             .iter()
+            .map(|(date, entries)| (date.as_str(), entries.len()))
+            .collect();
+        for page in self.pages.values() {
+            *counts.entry(page.date.as_str()).or_insert(0) += 1;
+        }
+        counts
+            .into_iter()
             .rev()
-            .map(|(date, entries)| (date.clone(), entries.len()))
+            .map(|(date, count)| (date.to_string(), count))
             .collect()
     }
 
     pub fn len(&self) -> usize {
-        self.by_date.values().map(Vec::len).sum()
+        self.by_date.values().map(Vec::len).sum::<usize>() + self.pages.len()
     }
 
     /// How many notes each category holds. Derived, like everything else here.
@@ -129,8 +189,9 @@ impl Index {
         counts
     }
 
+    /// Notes day by day, then pages.
     pub fn entries(&self) -> impl Iterator<Item = &IndexEntry> {
-        self.by_date.values().flatten()
+        self.by_date.values().flatten().chain(self.pages.values())
     }
 
     /// Fill in bodies for a day whose metadata came from the cache, which by
@@ -150,9 +211,7 @@ impl Index {
     /// Notes still waiting on enrichment, oldest day first, so the queue can
     /// be refilled at startup from what the markdown actually says.
     pub fn pending(&self) -> Vec<(String, String)> {
-        self.by_date
-            .values()
-            .flatten()
+        self.entries()
             .filter(|entry| entry.status == Status::Pending)
             .map(|entry| (entry.id.clone(), entry.date.clone()))
             .collect()
@@ -160,7 +219,7 @@ impl Index {
 
     pub fn to_jsonl(&self) -> String {
         let mut out = String::new();
-        for entry in self.by_date.values().flatten() {
+        for entry in self.entries() {
             match serde_json::to_string(entry) {
                 Ok(line) => {
                     out.push_str(&line);
@@ -230,11 +289,76 @@ pub fn parse_day(path: &Path, date: &str) -> Vec<IndexEntry> {
         .collect()
 }
 
-/// Reparse every daily file under the root.
+/// Every markdown file under `pages/`, at any depth, since a page moved by
+/// hand is still found by its id. Folders starting with a dot are skipped.
+pub fn page_files(root: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut dirs = vec![root.join("pages")];
+    while let Some(dir) = dirs.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let hidden = entry.file_name().to_string_lossy().starts_with('.');
+            match entry.file_type() {
+                Ok(t) if t.is_dir() && !hidden => dirs.push(path),
+                Ok(t) if t.is_file() && path.extension().and_then(|e| e.to_str()) == Some("md") => {
+                    found.push(path)
+                }
+                _ => {}
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// A path under the root as the index writes it: relative, with forward
+/// slashes on every platform.
+pub fn relative(root: &Path, path: &Path) -> Option<String> {
+    let rel = path.strip_prefix(root).ok()?;
+    let parts: Vec<String> = rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    Some(parts.join("/"))
+}
+
+/// Parse one page file. `None` for a file that is missing, unreadable or not
+/// a page.
+pub fn parse_page(root: &Path, path: &Path) -> Option<IndexEntry> {
+    let contents = std::fs::read_to_string(path).ok()?;
+    let note = page_file::parse_page(&contents, &relative(root, path)?)?;
+    Some(IndexEntry::from(&note))
+}
+
+/// Every page under the root. A second file with an id already seen, such as
+/// a copy made by hand, is left out.
+fn parse_pages(root: &Path) -> Vec<IndexEntry> {
+    let mut seen = HashSet::new();
+    let mut pages = Vec::new();
+    for path in page_files(root) {
+        let Some(entry) = parse_page(root, &path) else {
+            continue;
+        };
+        if seen.insert(entry.id.clone()) {
+            pages.push(entry);
+        } else {
+            log::warn!("{} repeats page {}; skipping it", path.display(), entry.id);
+        }
+    }
+    pages
+}
+
+/// Reparse every daily file and page file under the root.
 pub fn rebuild(root: &Path) -> Index {
     let mut index = Index::default();
     for (date, path) in daily_files(root) {
         index.replace_day(&date, parse_day(&path, &date));
+    }
+    for page in parse_pages(root) {
+        index.replace_page(page);
     }
     index
 }
@@ -273,6 +397,19 @@ pub fn load(root: &Path) -> (Index, bool) {
     let present: HashSet<String> = files.into_iter().map(|(date, _)| date).collect();
     changed |= index.retain_days(&present);
 
+    // Pages are few and each file is read anyway, so what they say replaces
+    // the cache outright: a page renamed by hand keeps its mtime, which
+    // would otherwise leave the cache pointing at its old name.
+    let pages = parse_pages(root);
+    let cached = std::mem::take(&mut index.pages);
+    changed |= cached.len() != pages.len()
+        || pages
+            .iter()
+            .any(|page| !cached.get(&page.id).is_some_and(|c| c.same_meta(page)));
+    for page in pages {
+        index.replace_page(page);
+    }
+
     (index, changed)
 }
 
@@ -299,7 +436,24 @@ mod tests {
             hash: body_hash(body),
             lang: None,
             body: body.to_string(),
+            kind: Kind::Note,
+            missing: false,
         }
+    }
+
+    fn page(id: &str, date: &str, title: &str, body: &str) -> Note {
+        Note {
+            file: page_file::relative_path(date, &page_file::file_name(date, title, 1)),
+            subject: Some(title.to_string()),
+            kind: Kind::Page,
+            ..note(id, date, "10:00", body)
+        }
+    }
+
+    fn write_page(root: &Path, page: &Note) {
+        let path = root.join(&page.file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, page_file::render_page(page)).unwrap();
     }
 
     fn scratch_root(name: &str) -> PathBuf {
@@ -520,6 +674,86 @@ mod tests {
             1,
             "the newer day file should have been reparsed"
         );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn pages_are_indexed_from_their_files_and_counted_on_their_day() {
+        let root = scratch_root("pages");
+        write_day(
+            &root,
+            "2026-09-22",
+            &[note("01AAA", "2026-09-22", "08:00", "a note")],
+        );
+        write_page(
+            &root,
+            &page("01PPP", "2026-09-22", "Weekly sync", "the meeting"),
+        );
+        write_page(&root, &page("01QQQ", "2026-09-24", "Retro", "went well"));
+        // Not a page: no marker.
+        std::fs::write(root.join("pages/2026/loose.md"), "# loose\n").unwrap();
+
+        let index = rebuild(&root);
+        assert_eq!(index.len(), 3);
+        assert_eq!(
+            index.days(),
+            vec![("2026-09-24".into(), 1), ("2026-09-22".into(), 2)]
+        );
+        let sync = index.page("01PPP").unwrap();
+        assert_eq!(sync.file, "pages/2026/2026-09-22 Weekly sync.md");
+        assert_eq!(sync.subject.as_deref(), Some("Weekly sync"));
+        assert!(sync.folded.contains("weekly sync") && sync.folded.contains("the meeting"));
+        assert_eq!(
+            index.page_at(&sync.file).map(|p| p.id.as_str()),
+            Some("01PPP")
+        );
+        assert_eq!(index.pages_on("2026-09-24").count(), 1);
+
+        // A day's reparse is about its notes and leaves its pages alone.
+        let mut index = index;
+        index.replace_day("2026-09-22", Vec::new());
+        assert!(index.page("01PPP").is_some());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_kind_survives_the_cache_and_notes_leave_it_out() {
+        let mut index = Index::default();
+        index.push(IndexEntry::from(&note("01AAA", "2026-09-22", "08:00", "a")));
+        index.push(IndexEntry::from(&page("01PPP", "2026-09-22", "Sync", "b")));
+        let jsonl = index.to_jsonl();
+        let lines: Vec<&str> = jsonl.lines().collect();
+        assert!(!lines[0].contains("kind"), "{}", lines[0]);
+        assert!(lines[1].contains(r#""kind":"page""#), "{}", lines[1]);
+
+        let back = Index::from_jsonl(&jsonl);
+        assert_eq!(back.page("01PPP").map(|p| p.kind), Some(Kind::Page));
+        assert_eq!(back.days(), vec![("2026-09-22".into(), 2)]);
+    }
+
+    #[test]
+    fn load_follows_a_page_renamed_by_hand() {
+        let root = scratch_root("renamed-page");
+        let sync = page("01PPP", "2026-09-22", "Weekly sync", "the meeting");
+        write_page(&root, &sync);
+        let cache = index_path(&root);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, rebuild(&root).to_jsonl()).unwrap();
+
+        let from = root.join(&sync.file);
+        let to = root.join("pages/2026/sync.md");
+        std::fs::rename(&from, &to).unwrap();
+        // A rename keeps the mtime, so the cache still looks fresh.
+        let old = SystemTime::now() - std::time::Duration::from_secs(60);
+        filetime::set_file_mtime(&to, filetime::FileTime::from_system_time(old)).unwrap();
+
+        let (index, changed) = load(&root);
+        assert!(changed, "the cache has to be written back");
+        let moved = index.page("01PPP").unwrap();
+        assert_eq!(moved.file, "pages/2026/sync.md");
+        assert_eq!(moved.body, "the meeting");
 
         let _ = std::fs::remove_dir_all(&root);
     }

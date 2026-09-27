@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Scratchnote is a local-first desktop app for frictionless capture. The user hits a global hotkey, types a quick note, presses a key to save, and the window disappears. Every note is appended to the current day's markdown file. In the background, a small local LLM writes a **subject** for each note and files it under a **category** from the user's list, and the app maintains an index across all days so notes can be browsed by day, category, or search.
+Scratchnote is a local-first desktop app for frictionless capture. The user hits a global hotkey, types a quick note, presses a key to save, and the window disappears. Every note is appended to the current day's markdown file. In the background, a small local LLM writes a **subject** for each note and files it under a **category** from the user's list, and the app maintains an index across all days so notes can be browsed by day, category, or search. Longer writing, such as meeting notes, goes in a **page**: a note with a title and a markdown file of its own, shown on its day as a card (3.5).
 
 ### Goals
 
@@ -214,7 +214,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 Opened from tray icon or app launch. Three areas:
 
 1. **Sidebar**: the space switcher (see 4.6), a day picker, and the categories in use with counts, sorted by count. In search, `#` completes category names, and a note's category filters on click.
-2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page, a `failed` one has a faint turning red border, and the others look alike.
+2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. Pages show as cards among them (3.5). The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page, a `failed` one has a faint turning red border, and the others look alike.
 3. **Search bar** at the top: full-text over body and subject; supports a `#category` token as a filter (e.g. `#infrastructure kubernetes`). Results are note cards across all days.
 
 Note actions (on hover): edit body inline, edit subject and category manually, similar notes (with the embedding model, see 6.2), re-run enrichment, delete.
@@ -234,6 +234,18 @@ Note bodies are shown as markdown wherever they are read or written: the capture
 - A link opens in the system browser: a click on a card, Ctrl or Cmd and a click in the editor. Only `http`, `https` and `mailto` links open. Links in previews are drawn but do not open.
 - Editor and cards read the syntax through the same code, so a note looks the same written and read.
 
+### 3.5 Pages
+
+A page is a note for longer writing, such as meeting notes. It has a title and a markdown file of its own (4.7), and the day it was created shows it as a card.
+
+- Start one with New page, under the day's notes or from the command center; with Turn into page in a note's menu; or with `Ctrl+Shift+Enter` (`Cmd+Shift+Enter` on macOS) in the capture window, which hides it and hands its draft to a new page in the main window.
+- A page is saved once it has a title. Turn into page offers the note's subject as a start. Until then the draft stays in memory, as the capture window's does, and New page brings it back.
+- The day view shows a page at its time as a card: its title, the first two lines of its text, its word count and its category. The card glows while the model works on it, as a note does. A click opens the page.
+- The page view takes the timeline's place, with a way back. The title is edited in place and saved on Enter or when focus moves elsewhere in the window, not when another app takes it; an empty title goes back to the last one. The text saves itself a second after typing stops, and when the view closes. Saves leave the models alone: a page open in the view is held, and when the view closes it goes to the model, and to the embedding model, once, if its text changed. A page still pending when the app quits is queued at the next launch.
+- The page view's menu offers similar notes, re-run and delete, as a note's does. Deleting asks first.
+- A stub whose page file is gone shows as a card saying the page was not found. The stub stays: with a sync tool, the file may not have arrived yet.
+- Search, chat, similar notes and categories treat a page as a note whose subject is its title. The embedding model reads only the first 1,023 tokens of a long page, and chat sends the first 800 characters of a page it retrieves.
+
 ## 4. Storage
 
 ### 4.1 Layout
@@ -252,6 +264,9 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
         2026/
           2026-09-22.md
           2026-09-23.md
+      pages/
+        2026/
+          2026-09-22 Weekly sync, platform team.md
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
         vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
@@ -306,6 +321,7 @@ Rules:
 - All file writes go through a **single writer task** in Rust (an mpsc channel). No concurrent writes to the same file.
 - Writes are atomic: write to `file.tmp`, fsync, rename.
 - A `notify` watcher detects external edits to note files. On change: reparse the file, update the index, and for any note whose body hash changed and status is `done`, re-queue enrichment. Ignore events caused by the app's own writes (track last-written hash per file).
+- It watches `pages/` too. A page file edited outside the app is reindexed and re-queued the same way, and its stub is rewritten when its title, file name, day or time changed. A page file that disappears leaves the index; its stub stays (3.5).
 
 ### 4.4 index.jsonl
 
@@ -324,6 +340,7 @@ One JSON object per line, one line per note:
 }
 ```
 
+- A page (4.7) has a line too, with `"kind": "page"`, `file` pointing at the page file and `subject` holding its title. Notes have no `kind`.
 - New notes are appended. Updates and deletes rewrite the file (it is small; atomic rewrite is fine).
 - On startup: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written before notes had a category instead of tags is rebuilt whole.
 - Provide a "Rebuild index" button in settings that reparses everything.
@@ -348,6 +365,38 @@ A space is a separate set of notes with its own categories, index and queue. Not
 - Space names are folder names, so they must be valid on every platform: no `<>:"/\|?*`, no leading or trailing dot, no Windows reserved names, at most 40 characters, and unique ignoring case. Renaming a space renames its folder.
 - Deleting a space moves its folder to `.scratchnote/trash/<name> <timestamp>`; moving it back under `spaces/` restores it.
 - All spaces are loaded at startup and watched. Note commands act on the open space. The single enrichment worker drains every space's queue, the open space first.
+
+### 4.7 Pages
+
+A page (3.5) is a file of its own under the space's `pages/` folder:
+
+```markdown
+<!-- sn:page id=01J9ABC0 day=2026-09-22 time=10:00 status=done hash=a1b2c3d4 lang=en -->
+# Weekly sync, platform team
+
+> #infrastructure
+
+Attendees: Sara, Marc, Kevin.
+```
+
+The day's file holds a stub where the page belongs, so the day reads whole in other editors:
+
+```markdown
+<!-- sn:page id=01J9ABC0 time=10:00 -->
+[Weekly sync, platform team](<../../pages/2026/2026-09-22 Weekly sync, platform team.md>)
+<!-- sn:end -->
+```
+
+Rules:
+
+- The page file is the source of truth for everything about the page, its day and time included. The stub carries the id and time, and a link for other editors; the app writes it and rewrites it when it goes stale. The note parser skips stubs, since they are not `sn:note` blocks.
+- The marker is the file's first line. Its attributes are a note's (4.2) plus `day`, and `status` and `hash` mean what they do for a note, except that `manual` covers only the category: the title is always the user's.
+- Then come the `# Title` line, the category line and blank line as in a note, and the text. When the first line after the marker is not a `# ` heading, the title is the file name without its date.
+- A markdown file under `pages/` without a marker is not a page and is left alone.
+- The file is named after the day and the title, `pages/<year>/<date> <title>.md`. Characters Windows forbids in a file name become spaces, whitespace is collapsed, trailing dots and spaces go, and the title part is cut to 80 characters. A name already taken gets ` 2`, ` 3` and so on. Renaming the title in the app renames the file and rewrites the stub.
+- Stub and page carry the same id, so a page renamed or moved outside the app is found again by its id and its stub rewritten to point at it.
+- At startup every page gets a stub in its day's file if it has none, a stale stub is rewritten, and a stub for it in another day's file is removed. A stub whose page cannot be found is never removed. A stub deleted by hand comes back at the next launch: deleting the page file is how a page is deleted outside the app.
+- Creating a page writes the file, then the stub. Deleting removes the stub, then the file. Turning a note into a page writes the page with a new id, then replaces the note's block with the stub. A crash in between leaves at worst a page without a stub, which the next launch repairs, or the text twice, never a stub whose text is lost.
 
 ## 5. Enrichment (LLM)
 
@@ -430,6 +479,8 @@ The grammar only lets the model write a listed category, so nothing it returns n
 - On failure (model error, timeout of 30s), retry with backoff up to 3 attempts, then mark `failed`. Failed notes can be retried manually.
 - Before writing results, re-read the note: if its hash changed since the job started, discard the result and re-queue.
 - Never overwrite notes with status `manual`.
+- A page (4.7) is labelled from its `# Title` line and its text, and only its category is written back. Its title stays the user's.
+- A job for a page held in the page view (3.5) is dropped, as is one whose page changed while the model ran: closing the view, or the watcher for an edit made elsewhere, queues it again. Re-run, asked for by hand, releases the page and runs now.
 
 ## 6. Search
 
@@ -490,9 +541,19 @@ rebuild_index()
 set_tray_labels(labels)                      // the tray menu's wording, sent by the main window in its language
 list_spaces() -> SpacesView                   // open space + every space with its note count
 create_space(name) / rename_space(name, new_name) / delete_space(name) / set_active_space(name)
+create_page(title, body, date?) -> Note       // file, then stub; held until finish_page
+get_page(id) -> Note                          // read from its file
+update_page(id, body) -> Note                 // marks it pending unless manual; held until finish_page
+finish_page(id)                               // the page view closed: releases it, enqueues it if pending
+rename_page(id, title) -> Note                // renames the file, rewrites the stub
+delete_page(id)                               // stub, then file
+note_to_page(date, id, title) -> Note         // page with a new id, then the note's block becomes its stub; held
+capture_to_page(body)                         // hides the capture window, opens a new page in the main window
 ```
 
-Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`. The UI updates live when enrichment finishes.
+A page comes back as a `Note` with `kind: "page"` and its title as `subject`. `get_day` lists a day's notes and pages by time, and a stub whose page is gone as a `Note` with `missing: true` and the stub's link text as its subject.
+
+Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` (to the main window). The UI updates live when enrichment finishes.
 
 ## 9. Project Structure
 
@@ -500,7 +561,7 @@ Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `
 src-tauri/src/
   main.rs
   commands.rs
-  storage/ (daily_file.rs parser+writer, index.rs, categories.rs, writer.rs)
+  storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, categories.rs, writer.rs)
   enrich/  (model.rs, prompt.rs, grammar.rs, normalize.rs, queue.rs)
   watcher.rs
   spaces.rs
@@ -538,10 +599,11 @@ Build in this order; each milestone should be usable on its own.
 - Deleting `.scratchnote/` and relaunching fully restores the index from markdown.
 - Editing a daily file in an external editor updates the app within 1s and re-enriches changed notes.
 - User text outside note markers survives every app write.
+- Renaming a page file in another program updates the app, and the stub's link, within 1s.
 - App works with no model installed (capture, browse, search on bodies).
 
 ## 12. Testing
 
-- Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), category name cleaning, hash change detection, queue retry logic.
+- Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), category name cleaning, hash change detection, queue retry logic, page file round-trip, stubs next to note blocks, page file names.
 - Golden tests for enrichment: 20 sample notes (English and French) with a stub model returning fixed JSON, verifying write-back format.
 - An optional integration test that runs the real Light model on 5 notes and asserts schema validity (skipped in CI if no model present).

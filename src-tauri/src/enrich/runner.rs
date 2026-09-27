@@ -57,7 +57,7 @@ mod tests {
     use super::*;
     use crate::enrich::language::{self, ENGLISH};
     use crate::enrich::model::StubBackend;
-    use crate::storage::daily_file::{append_note, body_hash, parse_notes, update_note, Note};
+    use crate::storage::daily_file::{append_note, body_hash, parse_notes, update_note, Kind, Note};
 
     const DATE: &str = "2026-09-22";
     const FILE: &str = "notes/2026/2026-09-22.md";
@@ -97,6 +97,8 @@ mod tests {
             hash: body_hash(body),
             lang: None,
             body: body.to_string(),
+            kind: Kind::Note,
+            missing: false,
         }
     }
 

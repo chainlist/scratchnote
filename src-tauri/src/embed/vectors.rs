@@ -306,7 +306,7 @@ impl<'a> Reader<'a> {
 mod tests {
     use super::*;
     use crate::embed::{Embedder, StubEmbedder};
-    use crate::storage::daily_file::{body_hash, Note, Status};
+    use crate::storage::daily_file::{body_hash, Kind, Note, Status};
 
     fn entry(id: &str, body: &str) -> IndexEntry {
         IndexEntry::from(&Note {
@@ -320,6 +320,8 @@ mod tests {
             hash: body_hash(body),
             lang: None,
             body: body.to_string(),
+            kind: Kind::Note,
+            missing: false,
         })
     }
 

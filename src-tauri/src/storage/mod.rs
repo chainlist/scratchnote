@@ -1,6 +1,7 @@
 pub mod categories;
 pub mod daily_file;
 pub mod index;
+pub mod page_file;
 pub mod writer;
 
 use std::path::{Path, PathBuf};

@@ -38,7 +38,7 @@
 	"page_deleting": "Excluindo",
 	"page_add_note": "Adicionar uma nota",
 	"capture_placeholder": "O que você tem em mente?",
-	"capture_hint": "Ctrl+Enter para salvar, Esc para descartar",
+	"capture_hint": "Ctrl+Enter para salvar, Ctrl+Shift+Enter para uma página, Esc para descartar",
 	"capture_saved": "Salvo",
 	"capture_saving": "Salvando…",
 	"capture_space_title": "Salvando neste espaço",
@@ -338,5 +338,40 @@
 				"countPlural=other": "{count} notas enfileiradas. O modelo as processa em segundo plano."
 			}
 		}
-	]
+	],
+	"pages_new": "Nova página",
+	"pages_untitled": "Página sem título",
+	"pages_open": "Abrir",
+	"pages_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} palavra",
+				"countPlural=other": "{count} palavras"
+			}
+		}
+	],
+	"pages_read_time": "{count} min de leitura",
+	"pages_missing": "Página não encontrada. O arquivo dela pode ter sido movido ou excluído, ou ainda não foi sincronizado.",
+	"pages_remove_stub": "Remover deste dia",
+	"pages_title_placeholder": "Título",
+	"pages_title_label": "Título da página",
+	"pages_body_placeholder": "Escreva aqui. Salva enquanto você digita.",
+	"pages_body_label": "Texto da página",
+	"pages_needs_title": "Adicione um título para salvar esta página.",
+	"pages_saved": "Salvo",
+	"pages_turn_into": "Transformar em página",
+	"pages_turn_into_title": "Transformar em página",
+	"pages_turn_into_description": "A nota ganha um arquivo próprio e aparece no seu dia como uma página.",
+	"pages_turn_into_confirm": "Criar página",
+	"pages_delete_title": "Excluir esta página?",
+	"pages_delete_description": "O arquivo dela é excluído e ela sai do seu dia. Não há como desfazer.",
+	"pages_remove_stub_title": "Remover esta página ausente?",
+	"pages_remove_stub_description": "Só o link dela sai do dia. Se o arquivo aparecer, a página volta."
 }

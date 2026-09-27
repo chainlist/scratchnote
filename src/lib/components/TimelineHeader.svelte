@@ -87,6 +87,9 @@
 		<svelte:element this={tag} class={title}>{m.calendar_title()}</svelte:element>
 	{:else if timeline.kind === 'similar'}
 		<svelte:element this={tag} class={title}>{m.note_similar()}</svelte:element>
+	{:else if timeline.kind === 'page'}
+		<!-- The page's title is its own heading, in the view; this is its day. -->
+		<span class="text-sm font-medium whitespace-nowrap text-muted-foreground">{heading}</span>
 	{:else if timeline.kind === 'search'}
 		<!-- The whole query, so a `#category` filter shows too. -->
 		{@const shown = timeline.query.trim()}

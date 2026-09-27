@@ -38,7 +38,7 @@
 	"page_deleting": "Eliminazione",
 	"page_add_note": "Aggiungi una nota",
 	"capture_placeholder": "A cosa stai pensando?",
-	"capture_hint": "Ctrl+Enter per salvare, Esc per annullare",
+	"capture_hint": "Ctrl+Enter per salvare, Ctrl+Maiusc+Enter per una pagina, Esc per annullare",
 	"capture_saved": "Salvato",
 	"capture_saving": "Salvataggio…",
 	"capture_space_title": "Salvataggio in questo spazio",
@@ -338,5 +338,40 @@
 				"countPlural=other": "{count} note in coda. Il modello le elabora in background."
 			}
 		}
-	]
+	],
+	"pages_new": "Nuova pagina",
+	"pages_untitled": "Pagina senza titolo",
+	"pages_open": "Apri",
+	"pages_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} parola",
+				"countPlural=other": "{count} parole"
+			}
+		}
+	],
+	"pages_read_time": "{count} min di lettura",
+	"pages_missing": "Pagina non trovata. Il suo file potrebbe essere stato spostato o eliminato, o non ancora sincronizzato.",
+	"pages_remove_stub": "Togli da questa giornata",
+	"pages_title_placeholder": "Titolo",
+	"pages_title_label": "Titolo della pagina",
+	"pages_body_placeholder": "Scrivi qui. Si salva mentre scrivi.",
+	"pages_body_label": "Testo della pagina",
+	"pages_needs_title": "Aggiungi un titolo per salvare questa pagina.",
+	"pages_saved": "Salvato",
+	"pages_turn_into": "Trasforma in pagina",
+	"pages_turn_into_title": "Trasforma in pagina",
+	"pages_turn_into_description": "La nota ottiene un file tutto suo e compare nella sua giornata come pagina.",
+	"pages_turn_into_confirm": "Crea pagina",
+	"pages_delete_title": "Eliminare questa pagina?",
+	"pages_delete_description": "Il suo file viene eliminato ed esce dalla sua giornata. Non si può annullare.",
+	"pages_remove_stub_title": "Togliere questa pagina mancante?",
+	"pages_remove_stub_description": "Esce dalla giornata solo il suo link. Se il suo file ricompare, la pagina torna."
 }

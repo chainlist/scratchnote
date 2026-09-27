@@ -38,7 +38,7 @@
 	"page_deleting": "Deleting",
 	"page_add_note": "Add a new note",
 	"capture_placeholder": "What is on your mind?",
-	"capture_hint": "Ctrl+Enter to save, Esc to dismiss",
+	"capture_hint": "Ctrl+Enter to save, Ctrl+Shift+Enter for a page, Esc to dismiss",
 	"capture_saved": "Saved",
 	"capture_saving": "Saving…",
 	"capture_space_title": "Saving into this space",
@@ -338,5 +338,40 @@
 				"countPlural=other": "{count} notes queued. The model works through them in the background."
 			}
 		}
-	]
+	],
+	"pages_new": "New page",
+	"pages_untitled": "Untitled page",
+	"pages_open": "Open",
+	"pages_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} word",
+				"countPlural=other": "{count} words"
+			}
+		}
+	],
+	"pages_read_time": "{count} min read",
+	"pages_missing": "Page not found. Its file may have been moved or deleted, or not synced yet.",
+	"pages_remove_stub": "Remove from this day",
+	"pages_title_placeholder": "Title",
+	"pages_title_label": "Page title",
+	"pages_body_placeholder": "Write here. It saves as you type.",
+	"pages_body_label": "Page text",
+	"pages_needs_title": "Add a title to save this page.",
+	"pages_saved": "Saved",
+	"pages_turn_into": "Turn into page",
+	"pages_turn_into_title": "Turn into a page",
+	"pages_turn_into_description": "The note gets a file of its own and shows on its day as a page.",
+	"pages_turn_into_confirm": "Make page",
+	"pages_delete_title": "Delete this page?",
+	"pages_delete_description": "Its file is deleted and it leaves its day. There is no undo.",
+	"pages_remove_stub_title": "Remove this missing page?",
+	"pages_remove_stub_description": "Only its link leaves the day. If its file turns up, the page comes back."
 }

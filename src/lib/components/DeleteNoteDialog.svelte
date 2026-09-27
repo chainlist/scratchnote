@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Note } from '$lib/api';
+	import { isPage, type Note } from '$lib/api';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import Markdown from '$lib/components/Markdown.svelte';
@@ -37,12 +37,25 @@
 >
 	<Dialog.Content showCloseButton={false}>
 		<Dialog.Header>
-			<Dialog.Title>{m.page_delete_title()}</Dialog.Title>
-			<Dialog.Description>{m.page_delete_description()}</Dialog.Description>
+			{#if note?.missing}
+				<Dialog.Title>{m.pages_remove_stub_title()}</Dialog.Title>
+				<Dialog.Description>{m.pages_remove_stub_description()}</Dialog.Description>
+			{:else if note && isPage(note)}
+				<Dialog.Title>{m.pages_delete_title()}</Dialog.Title>
+				<Dialog.Description>{m.pages_delete_description()}</Dialog.Description>
+			{:else}
+				<Dialog.Title>{m.page_delete_title()}</Dialog.Title>
+				<Dialog.Description>{m.page_delete_description()}</Dialog.Description>
+			{/if}
 		</Dialog.Header>
 		{#if note}
 			<div class="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-				<Markdown text={note.body} links={false} class="max-h-[4lh] overflow-hidden" />
+				{#if isPage(note)}
+					<p class="truncate font-medium text-foreground">{note.subject ?? m.pages_untitled()}</p>
+				{/if}
+				{#if note.body}
+					<Markdown text={note.body} links={false} class="max-h-[4lh] overflow-hidden" />
+				{/if}
 			</div>
 		{/if}
 		<Dialog.Footer>

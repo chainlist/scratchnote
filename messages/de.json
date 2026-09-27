@@ -38,7 +38,7 @@
 	"page_deleting": "Wird gelöscht",
 	"page_add_note": "Neue Notiz hinzufügen",
 	"capture_placeholder": "Was beschäftigt dich?",
-	"capture_hint": "Strg+Enter zum Speichern, Esc zum Verwerfen",
+	"capture_hint": "Strg+Enter zum Speichern, Strg+Umschalt+Enter für eine Seite, Esc zum Verwerfen",
 	"capture_saved": "Gespeichert",
 	"capture_saving": "Speichern…",
 	"capture_space_title": "Wird in diesem Space gespeichert",
@@ -338,5 +338,40 @@
 				"countPlural=other": "{count} Notizen eingereiht. Das Modell arbeitet sie im Hintergrund ab."
 			}
 		}
-	]
+	],
+	"pages_new": "Neue Seite",
+	"pages_untitled": "Seite ohne Titel",
+	"pages_open": "Öffnen",
+	"pages_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "{count} Wort",
+				"countPlural=other": "{count} Wörter"
+			}
+		}
+	],
+	"pages_read_time": "{count} Min. Lesezeit",
+	"pages_missing": "Seite nicht gefunden. Ihre Datei wurde vielleicht verschoben oder gelöscht oder ist noch nicht synchronisiert.",
+	"pages_remove_stub": "Von diesem Tag entfernen",
+	"pages_title_placeholder": "Titel",
+	"pages_title_label": "Titel der Seite",
+	"pages_body_placeholder": "Hier schreiben. Es wird beim Tippen gespeichert.",
+	"pages_body_label": "Text der Seite",
+	"pages_needs_title": "Gib einen Titel ein, um diese Seite zu speichern.",
+	"pages_saved": "Gespeichert",
+	"pages_turn_into": "In Seite umwandeln",
+	"pages_turn_into_title": "In eine Seite umwandeln",
+	"pages_turn_into_description": "Die Notiz bekommt eine eigene Datei und erscheint an ihrem Tag als Seite.",
+	"pages_turn_into_confirm": "Seite anlegen",
+	"pages_delete_title": "Diese Seite löschen?",
+	"pages_delete_description": "Ihre Datei wird gelöscht und sie verschwindet von ihrem Tag. Das lässt sich nicht rückgängig machen.",
+	"pages_remove_stub_title": "Diese fehlende Seite entfernen?",
+	"pages_remove_stub_description": "Nur ihr Link verschwindet vom Tag. Taucht ihre Datei wieder auf, kommt die Seite zurück."
 }

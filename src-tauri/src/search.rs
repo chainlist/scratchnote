@@ -105,7 +105,7 @@ pub fn search(index: &Index, raw: &str) -> Vec<Note> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::daily_file::{body_hash, Status};
+    use crate::storage::daily_file::{body_hash, Kind, Status};
     use crate::storage::relative_day_path;
 
     fn note(id: &str, date: &str, time: &str, body: &str, category: Option<&str>) -> Note {
@@ -120,6 +120,8 @@ mod tests {
             hash: body_hash(body),
             lang: None,
             body: body.to_string(),
+            kind: Kind::Note,
+            missing: false,
         }
     }
 

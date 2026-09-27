@@ -3,6 +3,7 @@
 //! One job at a time, FIFO, surviving restarts. Nothing here ever blocks a
 //! capture: the worker only ever reads a note after it is already on disk.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -11,8 +12,8 @@ use tokio::sync::Notify;
 
 use crate::spaces::Space;
 use crate::state::AppState;
-use crate::storage::daily_file::{self, Status};
-use crate::storage::{day_path, index, relative_day_path};
+use crate::storage::daily_file::{self, Kind, Status};
+use crate::storage::{day_path, index, page_file, relative_day_path};
 
 use super::model::{Backend, TIMEOUT_SECS};
 use super::queue::Job;
@@ -130,9 +131,9 @@ fn put_back_unchanged(space: &Space, job: Job) {
 
 async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>) {
     let state = app.state::<AppState>();
-    let path = day_path(&space.root, &job.date);
+    let place = place(space, &job);
 
-    let Some(note) = read_note(&path, &job) else {
+    let Some(note) = read_note(&place, &job) else {
         // The note is gone; so is the job.
         space.persist_queue(&state.writer).await;
         return;
@@ -145,9 +146,24 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
         return;
     }
 
+    // A page open in the editor is queued again when its view closes.
+    if space.is_held(&job.id) {
+        log::info!("skipping {}: the page is being edited", job.id);
+        space.persist_queue(&state.writer).await;
+        return;
+    }
+
     let language = state.note_language();
     let categories = space.categories();
-    let body = note.body.clone();
+    // A page is labelled from its title too (SPEC 5.6).
+    let body = match &place {
+        Place::Day(_) => note.body.clone(),
+        Place::Page(..) => format!(
+            "# {}\n\n{}",
+            note.subject.as_deref().unwrap_or_default(),
+            note.body
+        ),
+    };
     let started_with = note.hash.clone();
 
     // Inference is blocking and must never run on the async runtime's
@@ -165,7 +181,12 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
         Ok(enrichment) => {
             // SPEC 5.6: if the note changed while we were thinking, the answer
             // describes text that no longer exists. Throw it away.
-            match read_note(&path, &job) {
+            match read_note(&place, &job) {
+                // A page is queued again by whatever changed it: its view
+                // closing, or the watcher for an edit made elsewhere.
+                Some(current) if current.hash != started_with && current.kind == Kind::Page => {
+                    log::info!("{} changed while enriching, dropping", job.id);
+                }
                 Some(current) if current.hash != started_with => {
                     log::info!("{} changed while enriching, requeuing", job.id);
                     put_back_unchanged(space, job);
@@ -175,7 +196,8 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
                     log::info!("{} was edited by hand while enriching, dropping", job.id);
                 }
                 Some(_) => {
-                    write_back(&state, space, &job, &runner::patch(&enrichment, language)).await;
+                    let patch = runner::patch(&enrichment, language);
+                    write_back(&state, space, &job, &place, &patch).await;
                     emit_enriched(app, space, &job);
                 }
                 None => {}
@@ -190,7 +212,7 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
             };
             if give_up {
                 log::warn!("giving up on {}", job.id);
-                write_back(&state, space, &job, &runner::failed_patch(&note)).await;
+                write_back(&state, space, &job, &place, &runner::failed_patch(&note)).await;
                 emit_enriched(app, space, &job);
             } else {
                 tokio::time::sleep(Duration::from_secs(backoff)).await;
@@ -201,11 +223,39 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
     space.persist_queue(&state.writer).await;
 }
 
-fn read_note(path: &std::path::Path, job: &Job) -> Option<daily_file::Note> {
-    let contents = std::fs::read_to_string(path).ok()?;
-    daily_file::parse_notes(&contents, &job.date, &relative_day_path(&job.date))
-        .into_iter()
-        .find(|note| note.id == job.id)
+/// Where a job's note lives: a block in its day's file, or a page's own
+/// file (SPEC 4.7).
+enum Place {
+    Day(PathBuf),
+    /// The page's file, and that path relative to the space's root.
+    Page(PathBuf, String),
+}
+
+fn place(space: &Space, job: &Job) -> Place {
+    let page = space
+        .index
+        .read()
+        .ok()
+        .and_then(|idx| idx.page(&job.id).map(|page| page.file.clone()));
+    match page {
+        Some(file) => Place::Page(space.root.join(&file), file),
+        None => Place::Day(day_path(&space.root, &job.date)),
+    }
+}
+
+fn read_note(place: &Place, job: &Job) -> Option<daily_file::Note> {
+    match place {
+        Place::Day(path) => {
+            let contents = std::fs::read_to_string(path).ok()?;
+            daily_file::parse_notes(&contents, &job.date, &relative_day_path(&job.date))
+                .into_iter()
+                .find(|note| note.id == job.id)
+        }
+        Place::Page(path, file) => {
+            let contents = std::fs::read_to_string(path).ok()?;
+            page_file::parse_page(&contents, file).filter(|page| page.id == job.id)
+        }
+    }
 }
 
 fn emit_enriched(app: &AppHandle, space: &Space, job: &Job) {
@@ -215,29 +265,62 @@ fn emit_enriched(app: &AppHandle, space: &Space, job: &Job) {
     );
 }
 
-async fn write_back(state: &AppState, space: &Space, job: &Job, patch: &daily_file::NotePatch) {
+async fn write_back(
+    state: &AppState,
+    space: &Space,
+    job: &Job,
+    place: &Place,
+    patch: &daily_file::NotePatch,
+) {
     // A space renamed or deleted mid-job: its notes are no longer at this
     // path, and a pending note is picked up again where they went.
     if space.is_retired() {
         return;
     }
-    let path = day_path(&space.root, &job.date);
 
-    if let Err(e) = state
-        .writer
-        .update_note(path.clone(), job.id.clone(), patch.clone())
-        .await
-    {
-        log::warn!("could not write enrichment for {}: {e}", job.id);
-        return;
-    }
-
-    let entries = index::parse_day(&path, &job.date);
-    {
-        let Ok(mut idx) = space.index.write() else {
-            return;
-        };
-        idx.replace_day(&job.date, entries);
+    match place {
+        Place::Day(path) => {
+            if let Err(e) = state
+                .writer
+                .update_note(path.clone(), job.id.clone(), patch.clone())
+                .await
+            {
+                log::warn!("could not write enrichment for {}: {e}", job.id);
+                return;
+            }
+            let entries = index::parse_day(path, &job.date);
+            let Ok(mut idx) = space.index.write() else {
+                return;
+            };
+            idx.replace_day(&job.date, entries);
+        }
+        // Only the category is the model's to write; the title is the user's.
+        Place::Page(path, file) => {
+            let (file, patch) = (file.clone(), patch.clone());
+            if let Err(e) = state
+                .writer
+                .rewrite(path.clone(), move |existing| {
+                    page_file::update_meta(
+                        existing?,
+                        &file,
+                        patch.category,
+                        patch.status,
+                        patch.lang,
+                    )
+                })
+                .await
+            {
+                log::warn!("could not write enrichment for {}: {e}", job.id);
+                return;
+            }
+            let Some(entry) = index::parse_page(&space.root, path) else {
+                return;
+            };
+            let Ok(mut idx) = space.index.write() else {
+                return;
+            };
+            idx.replace_page(entry);
+        }
     }
     if let Err(e) = space.persist_index(&state.writer).await {
         log::warn!("could not persist the index after enriching: {e}");

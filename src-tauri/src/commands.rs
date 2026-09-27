@@ -18,9 +18,9 @@ use crate::enrich::queue::Job;
 use crate::settings::Settings;
 use crate::spaces::{self, Space};
 use crate::state::AppState;
-use crate::storage::daily_file::{self, Note, NotePatch, Status};
-use crate::storage::index::{self, IndexEntry};
 use crate::storage::categories;
+use crate::storage::daily_file::{self, Kind, Note, NotePatch, Status};
+use crate::storage::index::{self, IndexEntry};
 use crate::storage::{check_date, day_path, relative_day_path};
 
 #[derive(Debug, Serialize)]
@@ -61,6 +61,8 @@ pub async fn save_note(
         lang: None,
         body,
         date: date.clone(),
+        kind: Kind::Note,
+        missing: false,
     };
 
     state
@@ -91,7 +93,7 @@ pub async fn save_note(
 
 /// Queue a note for enrichment and nudge the worker. Already-queued notes are
 /// left alone, so saving twice does not enrich twice.
-async fn enqueue(state: &State<'_, AppState>, space: &Space, id: String, date: String) {
+pub(crate) async fn enqueue(state: &State<'_, AppState>, space: &Space, id: String, date: String) {
     let queued = match space.queue.lock() {
         Ok(mut queue) => queue.push(Job::new(id, date)),
         Err(_) => false,
@@ -103,12 +105,14 @@ async fn enqueue(state: &State<'_, AppState>, space: &Space, id: String, date: S
     state.wake.notify_one();
 }
 
-async fn persist_queue(state: &State<'_, AppState>, space: &Space) {
+pub(crate) async fn persist_queue(state: &State<'_, AppState>, space: &Space) {
     space.persist_queue(&state.writer).await;
 }
 
 /// Read straight from the markdown, because the index deliberately carries no
-/// bodies and the day view shows them.
+/// bodies and the day view shows them. The day's pages come from the index,
+/// which holds their files' text, and a stub whose page is gone comes back
+/// as a missing page (SPEC 3.5).
 #[tauri::command]
 pub async fn get_day(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
     check_date(&date)?;
@@ -116,12 +120,42 @@ pub async fn get_day(state: State<'_, AppState>, date: String) -> Result<Vec<Not
     let path = day_path(&space.root, &date);
     let contents = match tokio::fs::read_to_string(&path).await {
         Ok(contents) => contents,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e.to_string()),
     };
     let mut notes = daily_file::parse_notes(&contents, &date, &relative_day_path(&date));
+    {
+        let idx = space
+            .index
+            .read()
+            .map_err(|_| "index lock poisoned".to_string())?;
+        notes.extend(idx.pages_on(&date).map(IndexEntry::to_note));
+        for stub in daily_file::parse_stubs(&contents) {
+            if idx.page(&stub.id).is_none() {
+                notes.push(missing_page(&date, stub));
+            }
+        }
+    }
     notes.sort_by(|a, b| a.time.cmp(&b.time));
     Ok(notes)
+}
+
+/// What the day view shows for a stub whose page file is gone.
+fn missing_page(date: &str, stub: daily_file::Stub) -> Note {
+    Note {
+        id: stub.id,
+        date: date.to_string(),
+        time: stub.time,
+        file: stub.target,
+        subject: Some(stub.title).filter(|t| !t.is_empty()),
+        category: None,
+        status: Status::Done,
+        hash: String::new(),
+        lang: None,
+        body: String::new(),
+        kind: Kind::Page,
+        missing: true,
+    }
 }
 
 #[tauri::command]
@@ -276,7 +310,11 @@ pub async fn update_note_meta(
     read_note(&space, &date, &id).await
 }
 
-async fn read_note(space: &Space, date: &str, id: &str) -> Result<Note, String> {
+fn is_page(space: &Space, id: &str) -> bool {
+    space.index.read().is_ok_and(|idx| idx.page(id).is_some())
+}
+
+pub(crate) async fn read_note(space: &Space, date: &str, id: &str) -> Result<Note, String> {
     let contents = tokio::fs::read_to_string(day_path(&space.root, date))
         .await
         .map_err(|e| e.to_string())?;
@@ -347,13 +385,13 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
     rebuild_index(app.clone(), state.clone()).await?;
     let space = state.space()?;
 
-    let notes: Vec<(String, String)> = space
+    let (notes, pages): (Vec<IndexEntry>, Vec<IndexEntry>) = space
         .index
         .read()
         .map_err(|_| "index lock poisoned".to_string())?
         .entries()
-        .map(|e| (e.id.clone(), e.date.clone()))
-        .collect();
+        .cloned()
+        .partition(|e| e.kind == Kind::Note);
 
     let cleared = NotePatch {
         subject: None,
@@ -362,12 +400,32 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
         lang: None,
     };
     let mut touched_days = std::collections::BTreeSet::new();
-    for (id, date) in &notes {
+    for note in &notes {
         state
             .writer
-            .update_note(day_path(&space.root, date), id.clone(), cleared.clone())
+            .update_note(
+                day_path(&space.root, &note.date),
+                note.id.clone(),
+                cleared.clone(),
+            )
             .await?;
-        touched_days.insert(date.clone());
+        touched_days.insert(note.date.clone());
+    }
+    // A page keeps its title, which is the user's; only its category goes.
+    for page in &pages {
+        let file = page.file.clone();
+        state
+            .writer
+            .rewrite(space.root.join(&page.file), move |existing| {
+                crate::storage::page_file::update_meta(
+                    existing?,
+                    &file,
+                    None,
+                    Status::Pending,
+                    None,
+                )
+            })
+            .await?;
     }
     // One index write for the lot, not one per day.
     {
@@ -378,7 +436,17 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
         for date in &touched_days {
             idx.replace_day(date, index::parse_day(&day_path(&space.root, date), date));
         }
+        for page in &pages {
+            if let Some(entry) = index::parse_page(&space.root, &space.root.join(&page.file)) {
+                idx.replace_page(entry);
+            }
+        }
     }
+    let notes: Vec<(String, String)> = notes
+        .iter()
+        .chain(&pages)
+        .map(|e| (e.id.clone(), e.date.clone()))
+        .collect();
     space.persist_index(&state.writer).await?;
 
     if let Ok(mut queue) = space.queue.lock() {
@@ -470,7 +538,12 @@ pub async fn search_meaning(
         .index
         .read()
         .map_err(|_| "index lock poisoned".to_string())?;
-    Ok(crate::search::by_meaning(&idx, &query, &hits, MEANING_NOTES))
+    Ok(crate::search::by_meaning(
+        &idx,
+        &query,
+        &hits,
+        MEANING_NOTES,
+    ))
 }
 
 /// How many notes "Similar notes" lists at most.
@@ -753,6 +826,9 @@ pub async fn retry_enrichment(
 ) -> Result<(), String> {
     check_date(&date)?;
     let space = state.space()?;
+    if is_page(&space, &id) {
+        return crate::pages::retry(&app, &state, &space, &id).await;
+    }
     let note = read_note(&space, &date, &id).await?;
     // A manual note is never re-enriched, so it must not be unlocked here.
     if note.status == Status::Manual {
@@ -1203,16 +1279,17 @@ pub fn open_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
     if let Err(e) = crate::watcher::start(app.clone(), &space) {
         log::error!("could not watch the notes of {name}: {e}");
     }
-    if refresh {
-        let app = app.clone();
-        let space = space.clone();
-        tauri::async_runtime::spawn(async move {
-            let state = app.state::<AppState>();
-            if let Err(e) = space.persist_index(&state.writer).await {
-                log::warn!("could not write the index of {} back: {e}", space.name);
+    let app = app.clone();
+    let opened = space.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        if refresh {
+            if let Err(e) = opened.persist_index(&state.writer).await {
+                log::warn!("could not write the index of {} back: {e}", opened.name);
             }
-        });
-    }
+        }
+        crate::pages::repair_stubs(&state.writer, &opened).await;
+    });
     space
 }
 

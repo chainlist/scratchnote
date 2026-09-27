@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import {
+		captureToPage,
 		getSettings,
 		hideCapture,
 		listSpaces,
@@ -60,8 +61,23 @@
 		}
 	}
 
+	/** Hand the draft to a new page in the main window (SPEC 3.5). */
+	async function toPage() {
+		if (saving) return;
+		try {
+			await captureToPage(draft);
+			draft = '';
+			error = null;
+		} catch (e) {
+			error = String(e);
+		}
+	}
+
 	function onKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && event.shiftKey) {
+			event.preventDefault();
+			void toPage();
+		} else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
 			event.preventDefault();
 			void save();
 		} else if (event.key === 'Escape') {

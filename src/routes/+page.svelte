@@ -5,6 +5,10 @@
 	import {
 		categoryNames,
 		deleteNote,
+		deletePage,
+		isPage,
+		noteToPage,
+		onNewPage,
 		embeddingModelInfo,
 		getDay,
 		getSettings,
@@ -44,6 +48,8 @@
 	import NewNote from '$lib/components/NewNote.svelte';
 	import NoteEditor from '$lib/components/NoteEditor.svelte';
 	import NoteList from '$lib/components/NoteList.svelte';
+	import NoteToPageDialog from '$lib/components/NoteToPageDialog.svelte';
+	import PageView from '$lib/components/PageView.svelte';
 	import Onboarding from '$lib/components/Onboarding.svelte';
 	import Settings from '$lib/components/settings/Settings.svelte';
 	import CalendarPage from '$lib/components/CalendarPage.svelte';
@@ -53,6 +59,7 @@
 	import { resumeStep } from '$lib/onboarding';
 	import { categoryLabel } from '$lib/categories';
 	import { toggleCategory } from '$lib/query';
+	import { addToPageDraft } from '$lib/page-draft';
 	import type { Timeline } from '$lib/timeline';
 
 	let days = $state<DaySummary[]>([]);
@@ -71,6 +78,9 @@
 	let spaces = $state<SpacesView | null>(null);
 
 	let timeline = $state<Timeline>({ kind: 'day' });
+	/** Counts the pages opened, so opening one is a new view while a new
+	 *  page getting its id on its first save is not. */
+	let pageSession = $state(0);
 	/** Changes when a new page opens: another view, day or source note. A
 	 *  search refined by a category click stays the same page. */
 	const pageKey = $derived(
@@ -78,7 +88,9 @@
 			? `day:${selected}`
 			: timeline.kind === 'similar'
 				? `similar:${timeline.note.id}`
-				: timeline.kind
+				: timeline.kind === 'page'
+					? `page:${pageSession}`
+					: timeline.kind
 	);
 	/** The page's title has scrolled under the top bar, which shows it instead. */
 	let titleCollapsed = $state(false);
@@ -91,6 +103,8 @@
 	let editing = $state<Note | null>(null);
 	/** The note waiting on the delete confirmation. */
 	let deleting = $state<Note | null>(null);
+	/** The note waiting on a title to become a page. */
+	let turning = $state<Note | null>(null);
 	/** The command center's query, kept between openings. */
 	let query = $state('');
 	let paletteOpen = $state(false);
@@ -173,8 +187,58 @@
 	let blinking = $state<string | null>(null);
 	let blinkTimer: ReturnType<typeof setTimeout> | undefined;
 
-	/** Open a note's day, bring the note into view and blink it. */
-	async function openCited(entry: Pick<IndexEntry, 'id' | 'date'>) {
+	/** Open a page in the timeline's place, with its day to go back to. */
+	async function openPage(page: Pick<Note, 'id' | 'date'>) {
+		selected = page.date;
+		timeline = { kind: 'page', id: page.id };
+		pageSession++;
+		await tick();
+		document.querySelector('main')?.scrollTo({ top: 0 });
+	}
+
+	/** Start a page on the day shown. Its draft comes back if there is one. */
+	function newPage() {
+		timeline = { kind: 'page', id: null };
+		pageSession++;
+	}
+
+	/** The capture window handed over its draft. An open draft is closed
+	 *  first, so it keeps what was typed in it and the text joins that. */
+	async function takeCaptureDraft(body: string) {
+		if (timeline.kind === 'page' && timeline.id === null) {
+			timeline = { kind: 'day' };
+			await tick();
+		}
+		addToPageDraft(body);
+		if (!selected) selected = await today();
+		newPage();
+	}
+
+	/** A new page has its title and its file; the view stays as it is. */
+	function pageCreated(page: Note) {
+		timeline = { kind: 'page', id: page.id };
+		void refresh();
+	}
+
+	/** Resolves to an error for the dialog to show, or null once done. */
+	async function turnIntoPage(note: Note, title: string): Promise<string | null> {
+		try {
+			const page = await noteToPage(note.date, note.id, title);
+			error = null;
+			await refresh();
+			await openPage(page);
+			return null;
+		} catch (e) {
+			return String(e);
+		}
+	}
+
+	/** Open a note's day, bring the note into view and blink it. A page opens. */
+	async function openCited(entry: Pick<IndexEntry, 'id' | 'date' | 'kind'>) {
+		if (isPage(entry)) {
+			await openPage(entry);
+			return;
+		}
 		await select(entry.date);
 		// Cleared first so a second click on the same note blinks it again.
 		blinking = null;
@@ -270,9 +334,11 @@
 
 	async function remove(note: Note) {
 		try {
-			await deleteNote(note.date, note.id);
+			if (isPage(note)) await deletePage(note.date, note.id);
+			else await deleteNote(note.date, note.id);
 			if (editing?.id === note.id) editing = null;
 			if (timeline.kind === 'similar' && timeline.note.id === note.id) timeline = { kind: 'day' };
+			if (timeline.kind === 'page' && timeline.id === note.id) timeline = { kind: 'day' };
 			await refresh();
 		} catch (e) {
 			error = String(e);
@@ -286,7 +352,9 @@
 		onsave: saveBody,
 		onretry: retry,
 		oncategory: openCategory,
-		onsimilar: canSimilar ? showSimilar : undefined
+		onsimilar: canSimilar ? showSimilar : undefined,
+		onopen: (page: Note) => void openPage(page),
+		onpage: (note: Note) => (turning = note)
 	});
 
 	onMount(() => {
@@ -316,16 +384,21 @@
 			// Enrichment finishing rewrites the note, so the card has to reload.
 			off.push(onNoteEnriched(() => void refresh()));
 			off.push(onOpenSettings(() => (settingsOpen = true)));
-			// Another space has its own days and notes, so a search or similar
-			// notes from the last one would mean nothing there. Its categories
-			// and days are listed afresh.
+			off.push(onNewPage((body) => void takeCaptureDraft(body)));
+			// Another space has its own days and notes, so a search, similar
+			// notes or a page from the last one would mean nothing there. Its
+			// categories and days are listed afresh.
 			off.push(
 				onSpacesChanged((view) => {
 					const switched = view.active !== spaces?.active;
 					spaces = view;
 					if (switched) {
 						query = '';
-						if (timeline.kind === 'search' || timeline.kind === 'similar')
+						if (
+							timeline.kind === 'search' ||
+							timeline.kind === 'similar' ||
+							timeline.kind === 'page'
+						)
 							timeline = { kind: 'day' };
 					}
 					void refresh();
@@ -389,6 +462,16 @@
 				<div class="page-in">
 					{#if timeline.kind === 'calendar'}
 						<CalendarPage {days} {selected} onselect={(date) => void select(date)} />
+					{:else if timeline.kind === 'page'}
+						<PageView
+							id={timeline.id}
+							date={selected}
+							oncreated={pageCreated}
+							ondelete={(page) => (deleting = page)}
+							onretry={retry}
+							oncategory={openCategory}
+							onsimilar={canSimilar ? showSimilar : undefined}
+						/>
 					{:else if timeline.kind === 'similar'}
 						<div
 							class="mb-6 rounded-lg border border-neutral-800 px-3 py-2 text-sm text-neutral-400"
@@ -412,11 +495,11 @@
 											: m.page_empty_other_day()}
 									</p>
 								{/if}
-								<NewNote onsave={addNote} centered bind:writing={writingEmpty} />
+								<NewNote onsave={addNote} onpage={newPage} centered bind:writing={writingEmpty} />
 							</div>
 						{:else}
 							<NoteList {notes} empty="" {blinking} {...cardActions} />
-							<NewNote onsave={addNote} />
+							<NewNote onsave={addNote} onpage={newPage} />
 						{/if}
 					{/if}
 				</div>
@@ -446,6 +529,7 @@
 	onpick={(note) => void openCited(note)}
 	onseeall={(q) => void showResults(q)}
 	ontoday={async () => void select(await today())}
+	onnewpage={newPage}
 	onchat={() => (chatOpen = true)}
 	onsettings={() => (settingsOpen = true)}
 />
@@ -458,6 +542,8 @@
 />
 
 <DeleteNoteDialog bind:note={deleting} onconfirm={remove} />
+
+<NoteToPageDialog bind:note={turning} onconfirm={turnIntoPage} />
 
 <Dialog.Root bind:open={settingsOpen}>
 	<Dialog.Content

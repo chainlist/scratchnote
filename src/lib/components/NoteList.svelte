@@ -1,12 +1,14 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
-	import type { Note } from '$lib/api';
+	import { isPage, type Note } from '$lib/api';
 	import NoteCard from '$lib/components/NoteCard.svelte';
+	import PageCard from '$lib/components/PageCard.svelte';
 
 	type Actions = Pick<
 		ComponentProps<typeof NoteCard>,
-		'onedit' | 'ondelete' | 'onsave' | 'onretry' | 'oncategory' | 'onsimilar'
-	>;
+		'onedit' | 'ondelete' | 'onsave' | 'onretry' | 'oncategory' | 'onsimilar' | 'onpage'
+	> &
+		Pick<ComponentProps<typeof PageCard>, 'onopen'>;
 
 	let {
 		notes,
@@ -31,7 +33,18 @@
 	<ul>
 		{#each notes as note (note.id)}
 			<li>
-				<NoteCard {note} {...actions} {showDate} blink={note.id === blinking} />
+				{#if isPage(note)}
+					<PageCard
+						{note}
+						onopen={actions.onopen}
+						ondelete={actions.ondelete}
+						oncategory={actions.oncategory}
+						{showDate}
+						blink={note.id === blinking}
+					/>
+				{:else}
+					<NoteCard {note} {...actions} {showDate} blink={note.id === blinking} />
+				{/if}
 			</li>
 		{/each}
 	</ul>

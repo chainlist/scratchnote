@@ -227,6 +227,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 ### 3.1 Quick Capture window
 
 - Global hotkey (default `Ctrl+Shift+Space`, `Cmd+Shift+Space` on macOS, configurable) toggles a small, borderless, always-on-top window centered on the active screen.
+- Running the app with `--capture` toggles the window too, whether the app is running or not. It is for Linux under Wayland, where apps cannot register a global hotkey: the user binds the command to a key in the desktop's own shortcut settings.
 - Contains a single multiline markdown input (3.4), auto-focused. The note goes into the open space, which the footer names when there is more than one.
 - `Cmd/Ctrl+Enter`: save and hide window. `Esc`: hide without saving (draft is kept in memory and restored next open). Empty input + save = no-op.
 - After save, a subtle toast "Saved" appears for 1s before hiding (or hide immediately; make it a setting, default immediate).
@@ -245,6 +246,8 @@ Note actions (on hover): edit body inline, edit subject and category manually, s
 ### 3.3 Tray
 
 Tray icon with: New note, Open Scratchnote, Settings, Quit, in the interface language. App keeps running in tray when main window closes.
+
+Only one instance runs. Launching the app again brings the running one's main window back, as does its Dock icon on macOS, so the window is never lost on a desktop that shows no tray icon, such as GNOME without an AppIndicator extension.
 
 ### 3.4 Markdown
 

@@ -25,10 +25,22 @@ use storage::writer::Writer;
 
 const CAPTURE: &str = "capture";
 const MAIN: &str = "main";
+/// Toggles the capture window, for desktops where apps cannot register a
+/// global shortcut (Wayland): the user binds this command there instead.
+const CAPTURE_FLAG: &str = "--capture";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Launching the app again reaches the running one instead, which also
+        // brings the main window back on desktops that show no tray icon.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.iter().any(|a| a == CAPTURE_FLAG) {
+                toggle_capture(app);
+            } else {
+                show_main(app);
+            }
+        }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -182,10 +194,24 @@ pub fn run() {
                 }
             }
 
+            if std::env::args().any(|a| a == CAPTURE_FLAG) {
+                toggle_capture(app.handle());
+            }
+
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(on_run_event);
+}
+
+/// Clicking the Dock icon brings back a main window that closing hid.
+#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+fn on_run_event(app: &AppHandle, event: tauri::RunEvent) {
+    #[cfg(target_os = "macos")]
+    if let tauri::RunEvent::Reopen { .. } = event {
+        show_main(app);
+    }
 }
 
 /// Hiding from Rust keeps the capture webview free of window permissions.

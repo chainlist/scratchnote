@@ -45,6 +45,8 @@
 	"categories_heading": "Categories",
 	"calendar_pick": "Pick a day",
 	"calendar_title": "Calendar",
+	"calendar_previous_day": "Previous day",
+	"calendar_next_day": "Next day",
 	"status_loading": "Loading model",
 	"status_loading_hint": "Loading the model into memory. The first note after launch or after an idle unload waits for this, then labelling starts.",
 	"status_enriching": "Enriching notes",
@@ -342,6 +344,7 @@
 	"pages_new": "New page",
 	"pages_untitled": "Untitled page",
 	"pages_open": "Open",
+	"pages_open_side": "Open in side panel",
 	"pages_words": [
 		{
 			"declarations": [

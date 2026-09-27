@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
@@ -23,6 +23,7 @@
 		onNoteEnriched,
 		onNoteUpdated,
 		onOpenSettings,
+		onSettingsChanged,
 		onSpacesChanged,
 		retryEnrichment,
 		saveNote,
@@ -54,8 +55,11 @@
 	import Settings from '$lib/components/settings/Settings.svelte';
 	import CalendarPage from '$lib/components/CalendarPage.svelte';
 	import TimelineHeader from '$lib/components/TimelineHeader.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import PanelRightCloseIcon from '@lucide/svelte/icons/panel-right-close';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 	import { resumeStep } from '$lib/onboarding';
 	import { categoryLabel } from '$lib/categories';
 	import { toggleCategory } from '$lib/query';
@@ -105,6 +109,8 @@
 	let deleting = $state<Note | null>(null);
 	/** The note waiting on a title to become a page. */
 	let turning = $state<Note | null>(null);
+	/** The page docked on the right, to write in while the day stays in reach. */
+	let docked = $state<Note | null>(null);
 	/** The command center's query, kept between openings. */
 	let query = $state('');
 	let paletteOpen = $state(false);
@@ -115,31 +121,98 @@
 	let embeddingInstalled = $state(false);
 	const canSimilar = $derived(embeddingInstalled && model.state !== 'disabled');
 
+	/** The days the arrows step through: those with notes, and today. Dates
+	 *  sort as strings. */
+	const stops = $derived(
+		[...new Set([...days.map((day) => day.date), todayDate])].filter(Boolean).sort()
+	);
+	const previousDay = $derived(stops.findLast((date) => date < selected));
+	const nextDay = $derived(stops.find((date) => date > selected));
+
+	/** The timeline's width, which a docked page narrows. Taken with its
+	 *  scrollbar, which comes and goes with what the columns hold. */
+	let timelineWidth = $state(0);
+	/** The text size setting, in pixels: the rem the columns are sized in. */
+	let textSize = $state(16);
+	/** How many days fit side by side in the timeline: the day alone, then
+	 *  with the day before it from Tailwind's lg (64rem), then between both
+	 *  neighbours from 2xl (96rem). The neighbours are the days the arrows
+	 *  step to. */
+	const fit = $derived.by(() => {
+		const rems = timelineWidth / textSize;
+		return rems >= 96 ? 3 : rems >= 64 ? 2 : 1;
+	});
+	/** Only the day view spreads over columns. */
+	const columns = $derived(timeline.kind === 'day' ? fit : 1);
+	/** The neighbours' notes, by date. Only the ones that fit are read. */
+	let beside = $state<Record<string, Note[]>>({});
+
 	/** The page's title, in the page and, once it scrolls away, in the top bar. */
 	const headerProps = $derived({
 		timeline,
 		selected,
 		resultCount: results.length,
 		onback: () => void select(selected),
-		oncalendar: () => (timeline = { kind: 'calendar' })
+		oncalendar: () => (timeline = { kind: 'calendar' }),
+		onprevious: previousDay ? () => void step(previousDay) : undefined,
+		onnext: nextDay ? () => void step(nextDay) : undefined
 	});
 
 	async function refresh() {
+		// Stepping through days asks for them in quick succession. An answer
+		// for a day no longer shown is dropped, so a slow one cannot land last;
+		// the refresh for the day shown now is on its way.
+		const date = selected;
 		try {
-			[days, notes, categories, categoryList, spaces, todayDate] = await Promise.all([
+			const loaded = await Promise.all([
 				listDays(),
-				getDay(selected),
+				getDay(date),
 				listCategories(),
 				categoryNames(),
 				listSpaces(),
 				today()
 			]);
+			if (date !== selected) return;
+			[days, notes, categories, categoryList, spaces, todayDate] = loaded;
 			error = null;
 		} catch (e) {
+			if (date !== selected) return;
 			error = String(e);
 		}
-		await loadTimeline();
+		await Promise.all([loadTimeline(), loadBeside()]);
 	}
+
+	let besideRun = 0;
+	/** Loads the neighbours shown beside the day, and lets go of any no longer shown. */
+	async function loadBeside() {
+		const mine = ++besideRun;
+		const dates = (fit === 3 ? [previousDay, nextDay] : fit === 2 ? [previousDay] : []).filter(
+			(date) => date !== undefined
+		);
+		try {
+			const loaded = await Promise.all(dates.map((date) => getDay(date)));
+			if (mine === besideRun)
+				beside = Object.fromEntries(dates.map((date, i) => [date, loaded[i]]));
+		} catch (e) {
+			if (mine === besideRun) error = String(e);
+		}
+	}
+
+	// Widening the timeline brings the neighbours in; narrowing it, with the
+	// window or a docked page, lets them go.
+	$effect(() => {
+		void fit;
+		untrack(() => void loadBeside());
+	});
+
+	/** A neighbour's date, over its column. */
+	const besideHeading = (date: string) =>
+		new Date(`${date}T00:00:00`).toLocaleDateString(getLocale(), {
+			weekday: 'long',
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric'
+		});
 
 	// Only the latest answer is kept, so a slow reply to an earlier query
 	// cannot overwrite a newer one.
@@ -170,6 +243,12 @@
 		await refresh();
 	}
 
+	/** Open a neighbouring day at its top, as the arrows in the top bar would leave it scrolled. */
+	async function step(date: string) {
+		await select(date);
+		document.querySelector('main')?.scrollTo({ top: 0 });
+	}
+
 	async function showResults(q: string) {
 		const trimmed = q.trim();
 		timeline = trimmed ? { kind: 'search', query: trimmed } : { kind: 'day' };
@@ -187,8 +266,10 @@
 	let blinking = $state<string | null>(null);
 	let blinkTimer: ReturnType<typeof setTimeout> | undefined;
 
-	/** Open a page in the timeline's place, with its day to go back to. */
+	/** Open a page in the timeline's place, with its day to go back to. A
+	 *  docked page leaves the dock, so no page is open in two editors at once. */
 	async function openPage(page: Pick<Note, 'id' | 'date'>) {
+		if (docked?.id === page.id) docked = null;
 		selected = page.date;
 		timeline = { kind: 'page', id: page.id };
 		pageSession++;
@@ -271,6 +352,19 @@
 		if (event.key === '/' && (event.ctrlKey || event.metaKey)) {
 			event.preventDefault();
 			paletteOpen = !paletteOpen;
+		} else if (
+			event.altKey &&
+			(event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
+			timeline.kind === 'day'
+		) {
+			// Text keeps its Alt+arrows, which move by word on macOS, and a
+			// dialog keeps them from the day behind it.
+			const target = event.target as HTMLElement;
+			if (target.isContentEditable || target.closest('input, textarea, [role="dialog"]')) return;
+			// Also stops the webview going back in its history.
+			event.preventDefault();
+			const date = event.key === 'ArrowLeft' ? previousDay : nextDay;
+			if (date) void step(date);
 		}
 	}
 
@@ -339,6 +433,7 @@
 			if (editing?.id === note.id) editing = null;
 			if (timeline.kind === 'similar' && timeline.note.id === note.id) timeline = { kind: 'day' };
 			if (timeline.kind === 'page' && timeline.id === note.id) timeline = { kind: 'day' };
+			if (docked?.id === note.id) docked = null;
 			await refresh();
 		} catch (e) {
 			error = String(e);
@@ -354,6 +449,7 @@
 		oncategory: openCategory,
 		onsimilar: canSimilar ? showSimilar : undefined,
 		onopen: (page: Note) => void openPage(page),
+		ondock: (page: Note) => (docked = page),
 		onpage: (note: Note) => (turning = note)
 	});
 
@@ -375,6 +471,8 @@
 				return;
 			}
 
+			textSize = settings.fontSize;
+			off.push(onSettingsChanged((changed) => (textSize = changed.fontSize)));
 			selected = await today();
 			await refresh();
 			// A note saved from the capture window lands in another webview.
@@ -394,6 +492,7 @@
 					spaces = view;
 					if (switched) {
 						query = '';
+						docked = null;
 						if (
 							timeline.kind === 'search' ||
 							timeline.kind === 'similar' ||
@@ -441,72 +540,144 @@
 		{/snippet}
 	</AppHeader>
 
-	<main class="min-h-0 flex-1 overflow-y-auto px-6 pb-28">
-		<div class="mx-auto max-w-3xl">
-			<TimelineHeader {...headerProps} oncollapse={(collapsed) => (titleCollapsed = collapsed)} />
+	<div class="flex min-h-0 flex-1">
+		<!-- In a wider timeline the day has the one before it on its left, and in
+		     a wide one the one after it on its right too, which centres it. -->
+		<main
+			bind:offsetWidth={timelineWidth}
+			class={[
+				'min-w-0 flex-1 overflow-y-auto px-6 pb-16',
+				columns > 1 && 'grid justify-center gap-x-8',
+				columns === 2 && 'grid-cols-[repeat(2,minmax(0,48rem))]',
+				columns === 3 && 'grid-cols-[repeat(3,minmax(0,48rem))]'
+			]}
+		>
+			{#if columns > 1}{@render besideDay(previousDay)}{/if}
+			<div class="mx-auto w-full max-w-3xl">
+				<TimelineHeader {...headerProps} oncollapse={(collapsed) => (titleCollapsed = collapsed)} />
 
-			{#if model.state === 'absent' || model.state === 'downloading'}
-				<Onboarding status={model} />
-			{/if}
+				{#if model.state === 'absent' || model.state === 'downloading'}
+					<Onboarding status={model} />
+				{/if}
 
-			{#if error}
-				<p
-					class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-				>
-					{error}
-				</p>
-			{/if}
+				{#if error}
+					<p
+						class="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+					>
+						{error}
+					</p>
+				{/if}
 
-			<!-- Keyed on the view, so each one rises into place as it opens. -->
-			{#key pageKey}
-				<div class="page-in">
-					{#if timeline.kind === 'calendar'}
-						<CalendarPage {days} {selected} onselect={(date) => void select(date)} />
-					{:else if timeline.kind === 'page'}
+				<!-- Keyed on the view, so each one rises into place as it opens. -->
+				{#key pageKey}
+					<div class="page-in">
+						{#if timeline.kind === 'calendar'}
+							<CalendarPage {days} {selected} onselect={(date) => void select(date)} />
+						{:else if timeline.kind === 'page'}
+							<PageView
+								id={timeline.id}
+								date={selected}
+								oncreated={pageCreated}
+								ondelete={(page) => (deleting = page)}
+								onretry={retry}
+								oncategory={openCategory}
+								onsimilar={canSimilar ? showSimilar : undefined}
+							/>
+						{:else if timeline.kind === 'similar'}
+							<div
+								class="mb-6 rounded-lg border border-neutral-800 px-3 py-2 text-sm text-neutral-400"
+							>
+								<Markdown
+									text={timeline.note.body}
+									links={false}
+									class="max-h-[3lh] overflow-hidden"
+								/>
+							</div>
+							<NoteList notes={similar} empty={m.page_no_similar()} showDate {...cardActions} />
+						{:else if timeline.kind === 'search'}
+							<NoteList notes={results} empty={m.page_no_match()} showDate {...cardActions} />
+						{:else}
+							{#if notes.length === 0}
+								<div class="flex flex-col items-center gap-4 py-16 text-center">
+									{#if !writingEmpty}
+										<p class="text-base text-neutral-600">
+											{selected === todayDate
+												? m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })
+												: m.page_empty_other_day()}
+										</p>
+									{/if}
+									<NewNote onsave={addNote} onpage={newPage} centered bind:writing={writingEmpty} />
+								</div>
+							{:else}
+								<NoteList {notes} empty="" {blinking} {...cardActions} />
+								<NewNote onsave={addNote} onpage={newPage} />
+							{/if}
+						{/if}
+					</div>
+				{/key}
+			</div>
+			{#if columns === 3}{@render besideDay(nextDay)}{/if}
+		</main>
+		{#if docked}
+			{@const page = docked}
+			<!-- The page docked beside the day, written in while the notes stay
+			     in reach. -->
+			<aside
+				aria-label={page.subject ?? m.pages_untitled()}
+				class="flex w-(--page-dock) shrink-0 flex-col border-l border-neutral-800"
+			>
+				<div class="flex justify-end px-3 pt-3">
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						onclick={() => (docked = null)}
+						aria-label={m.common_close()}
+						title={m.common_close()}
+						class="text-muted-foreground hover:text-foreground"
+					>
+						<PanelRightCloseIcon />
+					</Button>
+				</div>
+				<div class="min-h-0 flex-1 overflow-y-auto px-8">
+					{#key page.id}
 						<PageView
-							id={timeline.id}
-							date={selected}
-							oncreated={pageCreated}
-							ondelete={(page) => (deleting = page)}
+							id={page.id}
+							date={page.date}
+							oncreated={() => void refresh()}
+							ondelete={(p) => (deleting = p)}
 							onretry={retry}
 							oncategory={openCategory}
 							onsimilar={canSimilar ? showSimilar : undefined}
 						/>
-					{:else if timeline.kind === 'similar'}
-						<div
-							class="mb-6 rounded-lg border border-neutral-800 px-3 py-2 text-sm text-neutral-400"
-						>
-							<Markdown
-								text={timeline.note.body}
-								links={false}
-								class="max-h-[3lh] overflow-hidden"
-							/>
-						</div>
-						<NoteList notes={similar} empty={m.page_no_similar()} showDate {...cardActions} />
-					{:else if timeline.kind === 'search'}
-						<NoteList notes={results} empty={m.page_no_match()} showDate {...cardActions} />
-					{:else}
-						{#if notes.length === 0}
-							<div class="flex flex-col items-center gap-4 py-16 text-center">
-								{#if !writingEmpty}
-									<p class="text-base text-neutral-600">
-										{selected === todayDate
-											? m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })
-											: m.page_empty_other_day()}
-									</p>
-								{/if}
-								<NewNote onsave={addNote} onpage={newPage} centered bind:writing={writingEmpty} />
-							</div>
-						{:else}
-							<NoteList {notes} empty="" {blinking} {...cardActions} />
-							<NewNote onsave={addNote} onpage={newPage} />
-						{/if}
+					{/key}
+				</div>
+			</aside>
+		{/if}
+	</div>
+</div>
+
+<!-- A neighbour's column. Its date makes it the selected day; it has no new
+     note of its own. Left empty at either end, so the day keeps its place. -->
+{#snippet besideDay(date: string | undefined)}
+	<section>
+		{#if date}
+			<button
+				type="button"
+				onclick={() => void step(date)}
+				class="mt-6 mb-8 block max-w-full cursor-pointer truncate text-lg leading-8 font-medium text-muted-foreground transition-colors hover:text-foreground"
+			>
+				{besideHeading(date)}
+			</button>
+			{#key date}
+				<div class="page-in">
+					{#if beside[date]}
+						<NoteList notes={beside[date]} empty={m.page_empty_other_day()} {...cardActions} />
 					{/if}
 				</div>
 			{/key}
-		</div>
-	</main>
-</div>
+		{/if}
+	</section>
+{/snippet}
 
 <div class="fixed bottom-3 left-3 z-30">
 	<ModelStatusBar status={model} />
@@ -517,6 +688,7 @@
 	space={spaces?.active ?? ''}
 	{canChat}
 	modelOff={model.state === 'disabled'}
+	docked={docked !== null}
 	onopen={(entry) => void openCited(entry)}
 />
 

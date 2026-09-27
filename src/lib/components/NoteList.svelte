@@ -8,7 +8,7 @@
 		ComponentProps<typeof NoteCard>,
 		'onedit' | 'ondelete' | 'onsave' | 'onretry' | 'oncategory' | 'onsimilar' | 'onpage'
 	> &
-		Pick<ComponentProps<typeof PageCard>, 'onopen'>;
+		Pick<ComponentProps<typeof PageCard>, 'onopen' | 'ondock'>;
 
 	let {
 		notes,
@@ -37,6 +37,7 @@
 					<PageCard
 						{note}
 						onopen={actions.onopen}
+						ondock={actions.ondock}
 						ondelete={actions.ondelete}
 						oncategory={actions.oncategory}
 						{showDate}

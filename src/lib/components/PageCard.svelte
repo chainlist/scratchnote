@@ -5,12 +5,14 @@
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FileXIcon from '@lucide/svelte/icons/file-x';
+	import PanelRightOpenIcon from '@lucide/svelte/icons/panel-right-open';
 	import { categoryLabel } from '$lib/categories';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
 		note,
 		onopen,
+		ondock,
 		ondelete,
 		oncategory,
 		showDate = false,
@@ -19,6 +21,8 @@
 		/** A page: its subject is its title (SPEC 3.5). */
 		note: Note;
 		onopen: (page: Note) => void;
+		/** Dock the page on the right, beside the day. */
+		ondock: (page: Note) => void;
 		/** For a missing page, which takes its stub out of the day. */
 		ondelete: (page: Note) => void;
 		oncategory: (category: string) => void;
@@ -57,11 +61,11 @@
 	{/if}
 	<span
 		aria-hidden="true"
-		class="absolute top-0 left-[6.25rem] h-[26px] w-px bg-neutral-800 [li:first-child_&]:hidden"
+		class="absolute top-0 left-25 h-6.5 w-px bg-neutral-800 [li:first-child_&]:hidden"
 	></span>
 	<span
 		aria-hidden="true"
-		class="absolute top-[26px] left-[6.25rem] flex size-[18px] -translate-x-[8.5px] items-center justify-center rounded border border-neutral-700 bg-neutral-950 text-neutral-500 transition-colors duration-300 group-hover:border-neutral-500 group-hover:text-neutral-300"
+		class="absolute top-6.5 left-25 flex size-4.5 translate-x-[-8.5px] items-center justify-center rounded border border-neutral-700 bg-neutral-950 text-neutral-500 transition-colors duration-300 group-hover:border-neutral-500 group-hover:text-neutral-300"
 	>
 		{#if note.missing}<FileXIcon class="size-3" />{:else}<FileTextIcon class="size-3" />{/if}
 	</span>
@@ -104,9 +108,23 @@
 						{note.subject}
 					</button>
 					<span
-						class="flex shrink-0 items-center gap-1 text-xs text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
+						class="flex shrink-0 items-center gap-2 text-xs text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
 					>
-						{m.pages_open()}<ArrowRightIcon class="size-3" />
+						<button
+							type="button"
+							onclick={(event) => {
+								event.stopPropagation();
+								ondock(note);
+							}}
+							aria-label={m.pages_open_side()}
+							title={m.pages_open_side()}
+							class="cursor-pointer rounded px-1 py-0.5 text-neutral-400 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200"
+						>
+							<PanelRightOpenIcon class="size-3.5" />
+						</button>
+						<span class="flex items-center gap-1">
+							{m.pages_open()}<ArrowRightIcon class="size-3" />
+						</span>
 					</span>
 				</div>
 				{#if preview}

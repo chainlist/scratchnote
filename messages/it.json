@@ -45,6 +45,8 @@
 	"categories_heading": "Categorie",
 	"calendar_pick": "Scegli un giorno",
 	"calendar_title": "Calendario",
+	"calendar_previous_day": "Giorno precedente",
+	"calendar_next_day": "Giorno successivo",
 	"status_loading": "Caricamento del modello",
 	"status_loading_hint": "Caricamento del modello in memoria. La prima nota dopo l'avvio o dopo un rilascio per inattività attende questo passaggio, poi inizia l'etichettatura.",
 	"status_enriching": "Arricchimento delle note",
@@ -342,6 +344,7 @@
 	"pages_new": "Nuova pagina",
 	"pages_untitled": "Pagina senza titolo",
 	"pages_open": "Apri",
+	"pages_open_side": "Apri nel pannello laterale",
 	"pages_words": [
 		{
 			"declarations": [

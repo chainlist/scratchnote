@@ -11,6 +11,7 @@
 		space,
 		canChat,
 		modelOff,
+		docked = false,
 		onopen
 	}: {
 		open: boolean;
@@ -19,6 +20,8 @@
 		canChat: boolean;
 		/** The model is switched off in settings, which is why chat is not on offer. */
 		modelOff: boolean;
+		/** A page is docked on the right, so the chat floats beside it, over the day. */
+		docked?: boolean;
 		/** Show a cited note on its day. */
 		onopen: (entry: IndexEntry) => void;
 	} = $props();
@@ -28,7 +31,12 @@
 {#if open}
 	<section
 		aria-label={m.chat_title()}
-		class="fixed right-6 bottom-16 z-40 flex h-[min(40rem,calc(100vh-7rem))] w-[min(26rem,calc(100vw-3rem))] flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl"
+		class={[
+			'fixed bottom-16 z-40 flex h-[min(40rem,calc(100vh-7rem))] flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl',
+			docked
+				? 'right-[calc(var(--page-dock)+1.5rem)] w-[min(26rem,calc(100vw-var(--page-dock)-3rem))]'
+				: 'right-6 w-[min(26rem,calc(100vw-3rem))]'
+		]}
 	>
 		<!-- Another space has another index, so a switch starts a new chat. -->
 		{#key space}
@@ -39,7 +47,7 @@
 
 <!-- A disabled button shows no title, so the wrapper carries it. -->
 <span
-	class="fixed right-6 bottom-2 z-40"
+	class={['fixed bottom-2 z-40', docked ? 'right-[calc(var(--page-dock)+1.5rem)]' : 'right-6']}
 	title={open
 		? m.common_close()
 		: canChat

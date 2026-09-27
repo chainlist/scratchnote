@@ -45,6 +45,8 @@
 	"categories_heading": "Categorias",
 	"calendar_pick": "Escolher um dia",
 	"calendar_title": "Calendário",
+	"calendar_previous_day": "Dia anterior",
+	"calendar_next_day": "Próximo dia",
 	"status_loading": "Carregando modelo",
 	"status_loading_hint": "Carregando o modelo na memória. A primeira nota após abrir o app ou após um descarregamento por inatividade aguarda isso terminar, depois a rotulagem começa.",
 	"status_enriching": "Enriquecendo notas",
@@ -342,6 +344,7 @@
 	"pages_new": "Nova página",
 	"pages_untitled": "Página sem título",
 	"pages_open": "Abrir",
+	"pages_open_side": "Abrir no painel lateral",
 	"pages_words": [
 		{
 			"declarations": [

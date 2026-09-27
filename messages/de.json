@@ -45,6 +45,8 @@
 	"categories_heading": "Kategorien",
 	"calendar_pick": "Tag auswählen",
 	"calendar_title": "Kalender",
+	"calendar_previous_day": "Vorheriger Tag",
+	"calendar_next_day": "Nächster Tag",
 	"status_loading": "Modell wird geladen",
 	"status_loading_hint": "Das Modell wird in den Speicher geladen. Die erste Notiz nach dem Start oder nach einer Leerlauf-Entladung wartet darauf, dann beginnt die Beschriftung.",
 	"status_enriching": "Notizen werden angereichert",
@@ -342,6 +344,7 @@
 	"pages_new": "Neue Seite",
 	"pages_untitled": "Seite ohne Titel",
 	"pages_open": "Öffnen",
+	"pages_open_side": "Im Seitenbereich öffnen",
 	"pages_words": [
 		{
 			"declarations": [

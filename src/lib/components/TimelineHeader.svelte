@@ -2,6 +2,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
+	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
+	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
 	import type { Timeline } from '$lib/timeline';
@@ -12,6 +14,8 @@
 		resultCount,
 		onback,
 		oncalendar,
+		onprevious,
+		onnext,
 		oncollapse,
 		compact = false
 	}: {
@@ -21,11 +25,16 @@
 		resultCount: number;
 		onback: () => void;
 		oncalendar: () => void;
+		/** Step to the neighbouring day; left out when there is none that way. */
+		onprevious?: () => void;
+		onnext?: () => void;
 		/** Told when the title starts under the top bar, which then shows it instead, and when it is back. */
 		oncollapse?: (collapsed: boolean) => void;
 		/** The small copy the top bar shows in place of the scrolled-away title. */
 		compact?: boolean;
 	} = $props();
+
+	const mac = navigator.userAgent.includes('Mac');
 
 	let row = $state<HTMLElement>();
 
@@ -107,6 +116,32 @@
 			class="text-muted-foreground hover:text-foreground"
 		>
 			<CalendarIcon />
+		</Button>
+		<!-- Side by side ahead of the title, so they stay put while its width
+		     changes from one day to the next. -->
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			onclick={onprevious}
+			disabled={!onprevious}
+			aria-label={m.calendar_previous_day()}
+			aria-keyshortcuts="Alt+ArrowLeft"
+			title="{m.calendar_previous_day()} ({mac ? '⌥←' : 'Alt+←'})"
+			class="text-muted-foreground hover:text-foreground"
+		>
+			<ChevronLeftIcon />
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			onclick={onnext}
+			disabled={!onnext}
+			aria-label={m.calendar_next_day()}
+			aria-keyshortcuts="Alt+ArrowRight"
+			title="{m.calendar_next_day()} ({mac ? '⌥→' : 'Alt+→'})"
+			class="text-muted-foreground hover:text-foreground"
+		>
+			<ChevronRightIcon />
 		</Button>
 		<svelte:element this={tag} class={dayTitle}>{heading}</svelte:element>
 	{/if}

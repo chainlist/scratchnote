@@ -11,6 +11,11 @@ body {
 	background: var(--color-neutral-950);
 }
 
+/* The width of a page docked beside the day, which the chat keeps clear of. */
+:root {
+	--page-dock: min(42rem, 50vw);
+}
+
 /* Thin, trackless scrollbars without arrow buttons. The standard scrollbar-width
    and scrollbar-color are left unset: in Chromium they override these rules. */
 ::-webkit-scrollbar {
@@ -404,9 +409,9 @@ body {
 }
 
 /* Markdown in a note, the same in the editor and in the read-only view.
-   Colours are inherited, so a waiting note's text still turns transparent
-   under its glow. A line's indent goes through --md-indent, which the
-   editor's line padding reads as well. */
+   Colours are inherited, except bold and italic, which take the accent.
+   A line's indent goes through --md-indent, which the editor's line
+   padding reads as well. */
 .md-line {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
@@ -414,9 +419,15 @@ body {
 }
 .md-strong {
 	font-weight: 600;
+	color: var(--primary);
 }
 .md-em {
 	font-style: italic;
+	color: var(--primary);
+}
+/* A waiting note's text turns transparent under its glow, accent and all. */
+:is(.text-transparent, .note-glow-text) :is(.md-strong, .md-em) {
+	color: inherit;
 }
 .md-strike {
 	text-decoration: line-through;

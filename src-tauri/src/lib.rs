@@ -32,6 +32,8 @@ const CAPTURE_FLAG: &str = "--capture";
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // Launching the app again reaches the running one instead, which also
         // brings the main window back on desktops that show no tray icon.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {

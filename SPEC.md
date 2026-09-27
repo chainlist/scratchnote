@@ -185,6 +185,15 @@ pnpm tauri add autostart
 
 `pnpm tauri add` wires the Rust crate, JS package and capability permissions itself. Do not edit capabilities by hand beyond what a plugin's docs explicitly require.
 
+For updates (3.6), the updater, and the process plugin to restart after one:
+
+```bash
+pnpm tauri add updater
+pnpm tauri add process
+```
+
+The updater's installer turns on `plugins.updater.requireSignedVersion` itself and asks for two edits it leaves to its docs, which are allowed by hand: `plugins.updater.pubkey`, the public half of the updater key, and `plugins.updater.endpoints`, the `latest.json` of the latest GitHub Release. Neither installer adds capabilities, so `updater:default` and `process:allow-restart` go into `capabilities/desktop.json` by hand, as their docs say.
+
 Rust crates, from inside `src-tauri/`:
 
 ```bash
@@ -272,6 +281,15 @@ A page is a note for longer writing, such as meeting notes. It has a title and a
 - The page view's menu offers similar notes, re-run and delete, as a note's does. Deleting asks first.
 - A stub whose page file is gone shows as a card saying the page was not found. The stub stays: with a sync tool, the file may not have arrived yet.
 - Search, chat, similar notes and categories treat a page as a note whose subject is its title. The embedding model reads only the first 1,023 tokens of a long page, and chat sends the first 800 characters of a page it retrieves.
+
+### 3.6 Updates
+
+The app updates itself from the project's GitHub Releases.
+
+- It checks at launch and once a day while it runs. When a newer release is out, the top bar offers Update to its version, with the installed one on hover. Nothing downloads until it is clicked; then the update downloads, installs as the same kind of package the app came in, and restarts the app. A failed install says why on hover and offers a retry. A failed check says nothing, because the app works offline. Dev builds do not check.
+- Every release is signed with the project's updater key, and the app installs only what that key signed. The signature must also name the version it was signed for (`requireSignedVersion`), so an altered `latest.json` cannot pass an older release off as a newer one.
+- The private key and its password stay out of the repository: with the maintainer, and as the CI secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Losing either leaves every installed copy unable to update.
+- Only the release build in CI signs, by turning on `bundle.createUpdaterArtifacts` for that build alone, so a local `pnpm tauri build` needs no key.
 
 ## 4. Storage
 

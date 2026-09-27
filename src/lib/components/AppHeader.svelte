@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { SpacesView } from '$lib/api';
+	import AppUpdate from '$lib/components/AppUpdate.svelte';
 	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
 	import WindowControls from '$lib/components/WindowControls.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -45,6 +46,7 @@
 		</div>
 	{/if}
 	<div class="ml-auto flex items-center gap-1">
+		<AppUpdate />
 		<Button
 			variant="ghost"
 			size="sm"

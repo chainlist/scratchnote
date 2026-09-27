@@ -1,4 +1,4 @@
-name: release-please
+name: Release
 
 on:
   push:
@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   release-please:
+    name: Prepare or publish release
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4

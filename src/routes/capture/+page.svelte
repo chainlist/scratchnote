@@ -9,6 +9,7 @@
 		onSpacesChanged,
 		saveNote
 	} from '$lib/api';
+	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let draft = $state('');
@@ -19,7 +20,7 @@
 	let space = $state<string | null>(null);
 	// SPEC 3.1: hiding at once is the default; the toast is opt-in.
 	let hideImmediately = true;
-	let input: HTMLTextAreaElement;
+	let input: MarkdownEditor;
 
 	onMount(() => {
 		input?.focus();
@@ -70,17 +71,18 @@
 	}
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="flex h-screen flex-col gap-2 border border-neutral-700 bg-neutral-900 p-3 text-neutral-100"
+	onkeydown={onKeydown}
 >
-	<textarea
+	<MarkdownEditor
 		bind:this={input}
 		bind:value={draft}
-		onkeydown={onKeydown}
 		placeholder={m.capture_placeholder()}
-		spellcheck="false"
-		class="min-h-0 flex-1 resize-none rounded bg-neutral-800 p-2 text-sm leading-relaxed
-			outline-none placeholder:text-neutral-500"></textarea>
+		label={m.capture_placeholder()}
+		class="min-h-0 flex-1 rounded bg-neutral-800 p-2 text-sm leading-relaxed"
+	/>
 
 	<div class="flex items-center justify-between text-[0.6875rem] text-neutral-500">
 		{#if error}

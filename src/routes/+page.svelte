@@ -39,6 +39,7 @@
 	import ChatPanel from '$lib/components/ChatPanel.svelte';
 	import CommandCenter from '$lib/components/CommandCenter.svelte';
 	import DeleteNoteDialog from '$lib/components/DeleteNoteDialog.svelte';
+	import Markdown from '$lib/components/Markdown.svelte';
 	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
 	import NewNote from '$lib/components/NewNote.svelte';
 	import NoteEditor from '$lib/components/NoteEditor.svelte';
@@ -389,11 +390,15 @@
 					{#if timeline.kind === 'calendar'}
 						<CalendarPage {days} {selected} onselect={(date) => void select(date)} />
 					{:else if timeline.kind === 'similar'}
-						<p
-							class="mb-6 line-clamp-3 rounded-lg border border-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap text-neutral-400"
+						<div
+							class="mb-6 rounded-lg border border-neutral-800 px-3 py-2 text-sm text-neutral-400"
 						>
-							{timeline.note.body}
-						</p>
+							<Markdown
+								text={timeline.note.body}
+								links={false}
+								class="max-h-[3lh] overflow-hidden"
+							/>
+						</div>
 						<NoteList notes={similar} empty={m.page_no_similar()} showDate {...cardActions} />
 					{:else if timeline.kind === 'search'}
 						<NoteList notes={results} empty={m.page_no_match()} showDate {...cardActions} />

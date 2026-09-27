@@ -13,7 +13,7 @@ Scratchnote is a local-first desktop app for frictionless capture. The user hits
 
 ### Non-goals (v1)
 
-- No rich text editor, no images/attachments.
+- No rich text editor, no images/attachments. Bodies stay markdown as typed; the editor only previews it (3.4).
 - No sync, accounts, or cloud features.
 - No mobile app.
 
@@ -204,7 +204,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 ### 3.1 Quick Capture window
 
 - Global hotkey (default `Ctrl+Shift+Space`, `Cmd+Shift+Space` on macOS, configurable) toggles a small, borderless, always-on-top window centered on the active screen.
-- Contains a single multiline plain-text input, auto-focused. The note goes into the open space, which the footer names when there is more than one.
+- Contains a single multiline markdown input (3.4), auto-focused. The note goes into the open space, which the footer names when there is more than one.
 - `Cmd/Ctrl+Enter`: save and hide window. `Esc`: hide without saving (draft is kept in memory and restored next open). Empty input + save = no-op.
 - After save, a subtle toast "Saved" appears for 1s before hiding (or hide immediately; make it a setting, default immediate).
 - The capture window must open in under 150ms; keep it a pre-created hidden window, never create on demand.
@@ -222,6 +222,17 @@ Note actions (on hover): edit body inline, edit subject and category manually, s
 ### 3.3 Tray
 
 Tray icon with: New note, Open Scratchnote, Settings, Quit, in the interface language. App keeps running in tray when main window closes.
+
+### 3.4 Markdown
+
+Note bodies are shown as markdown wherever they are read or written: the capture window, adding a note, inline edit, the edit dialog, the note cards and the previews in the delete dialog and above similar notes.
+
+- The minimum: bold, italic, strikethrough, inline code, links (`[text](url)`, `<url>` and bare `https://`, `www.` and email addresses), bullet and numbered lists, `#` headings, quotes and fenced code. Anything else shows as typed.
+- The editor is a live preview (CodeMirror): markup is hidden except on the lines the cursor or selection is on, where it shows dimmed so it can be edited. What is typed is saved byte for byte, so the markdown in the file never changes behind the user's back.
+- A line break is a line break, as it was in the plain text input, rather than markdown's joined paragraph lines.
+- Enter carries a list or quote on to the next line; Enter on an empty item ends it.
+- A link opens in the system browser: a click on a card, Ctrl or Cmd and a click in the editor. Only `http`, `https` and `mailto` links open. Links in previews are drawn but do not open.
+- Editor and cards read the syntax through the same code, so a note looks the same written and read.
 
 ## 4. Storage
 

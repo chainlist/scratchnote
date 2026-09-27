@@ -421,6 +421,9 @@ export const setActiveSpace = (name: string) => invoke<SpacesView>('set_active_s
 /** Shows the space's folder in the system file manager. */
 export const openSpaceFolder = (name: string) => invoke<void>('open_space_folder', { name });
 
+/** Opens a web or mail link from a note in the system browser or mail client. */
+export const openLink = (url: string) => invoke<void>('open_link', { url });
+
 /** Fired to every window when a space is opened, made, renamed or deleted. */
 export const onSpacesChanged = (handler: (view: SpacesView) => void): Promise<UnlistenFn> =>
 	listen<SpacesView>('spaces-changed', (event) => handler(event.payload));

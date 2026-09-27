@@ -79,6 +79,7 @@ pub fn run() {
             commands::rename_space,
             commands::delete_space,
             commands::open_space_folder,
+            commands::open_link,
             commands::set_active_space,
             hide_capture,
             set_tray_labels,

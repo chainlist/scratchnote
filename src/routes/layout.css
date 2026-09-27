@@ -350,8 +350,7 @@ body {
 }
 
 /* Inherits the animated background, so the glow flows with the letters. */
-.note-glow-text::after {
-	content: attr(data-text);
+.note-glow-blur {
 	position: absolute;
 	inset: 0;
 	z-index: -1;
@@ -402,6 +401,85 @@ body {
 	.note-aurora {
 		--note-glow: 0.8;
 	}
+}
+
+/* Markdown in a note, the same in the editor and in the read-only view.
+   Colours are inherited, so a waiting note's text still turns transparent
+   under its glow. A line's indent goes through --md-indent, which the
+   editor's line padding reads as well. */
+.md-line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	padding-left: var(--md-indent, 0);
+}
+.md-strong {
+	font-weight: 600;
+}
+.md-em {
+	font-style: italic;
+}
+.md-strike {
+	text-decoration: line-through;
+}
+.md-code {
+	border-radius: 0.25rem;
+	padding: 0.1em 0.3em;
+	background: var(--color-neutral-800);
+	font-family: var(--font-mono);
+	font-size: 0.875em;
+}
+.md-link {
+	text-decoration: underline;
+	text-decoration-color: color-mix(in oklab, currentColor 40%, transparent);
+	text-underline-offset: 3px;
+}
+a.md-link {
+	cursor: pointer;
+}
+a.md-link:hover {
+	text-decoration-color: currentColor;
+}
+.md-h1 {
+	font-size: 1.25em;
+	font-weight: 600;
+}
+.md-h2 {
+	font-size: 1.125em;
+	font-weight: 600;
+}
+:is(.md-h3, .md-h4, .md-h5, .md-h6) {
+	font-weight: 600;
+}
+.md-quote {
+	--md-indent: 0.75em;
+	border-left: 2px solid var(--color-neutral-700);
+}
+.md-codeblock {
+	--md-indent: 0.75em;
+	/* Shows on the page, the hovered card and the editor alike. */
+	background: color-mix(in oklab, var(--color-neutral-800) 60%, transparent);
+	font-family: var(--font-mono);
+	font-size: 0.875em;
+}
+.md-bullet {
+	display: inline-block;
+	width: 1.25em;
+	text-indent: 0;
+	opacity: 0.6;
+}
+.md-bullet::before {
+	content: '•';
+}
+/* Markup the editor shows on the line being edited. */
+.md-markup {
+	color: var(--color-neutral-500);
+}
+/* The glowing copy draws letters only; the real text below keeps the boxes. */
+.note-glow-text :is(.md-code, .md-codeblock) {
+	background: none;
+}
+.note-glow-text .md-quote {
+	border-color: transparent;
 }
 
 @layer base {

@@ -2,6 +2,8 @@
 	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import type { Note } from '$lib/api';
+	import Markdown from '$lib/components/Markdown.svelte';
+	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
@@ -43,7 +45,7 @@
 	let editing = $state(false);
 	let saving = $state(false);
 	let draft = $state('');
-	let textarea = $state<HTMLTextAreaElement | null>(null);
+	let editor = $state<MarkdownEditor | null>(null);
 	let menuOpen = $state(false);
 
 	// Re-running a manual note would be skipped anyway, and a pending one is
@@ -59,7 +61,7 @@
 		draft = note.body;
 		editing = true;
 		await tick();
-		textarea?.focus();
+		editor?.focus();
 	}
 
 	async function save() {
@@ -85,7 +87,7 @@
 
 	/** A double click anywhere on the card, bar its buttons, edits the body. */
 	function onDoubleClick(event: MouseEvent) {
-		if (editing || (event.target as Element).closest('button, a, textarea')) return;
+		if (editing || (event.target as Element).closest('button, a')) return;
 		void startEditing();
 	}
 
@@ -137,14 +139,12 @@
 		{#if editing}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="flex flex-col gap-2" onkeydown={onEditKeydown}>
-				<textarea
-					bind:this={textarea}
+				<MarkdownEditor
+					bind:this={editor}
 					bind:value={draft}
-					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
-					aria-label={m.note_body_label()}
-					spellcheck="false"
-					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus:border-neutral-600 focus:outline-none"
-				></textarea>
+					label={m.note_body_label()}
+					class="-mx-2 max-h-[calc(16lh+0.5rem)] min-h-[calc(3lh+0.5rem)] w-[calc(100%+1rem)] rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus-within:border-neutral-600"
+				/>
 				<div class="flex items-center justify-end gap-1">
 					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
 					<button type="button" onclick={() => (editing = false)} class={action}
@@ -158,24 +158,23 @@
 		{:else}
 			<!-- While pending, the text turns transparent and a glowing copy fades
 			     in over it, so the two cross-fade both ways. The copy lets clicks
-			     and selection through to the real text. data-text feeds the glow
-			     drawn behind its letters. -->
-			<p
-				class="text-base leading-7 whitespace-pre-wrap transition-colors duration-500 {pending
+			     and selection through to the real text, and holds a blurred copy
+			     of its own as the glow behind its letters. -->
+			<Markdown
+				text={note.body}
+				class="text-base leading-7 transition-colors duration-500 {pending
 					? 'text-transparent'
 					: 'text-neutral-200'}"
-			>
-				{note.body}
-			</p>
+			/>
 			{#if pending}
-				<p
+				<div
 					aria-hidden="true"
-					data-text={note.body}
 					transition:fade={glowFade}
-					class="note-glow-text pointer-events-none absolute inset-0 text-base leading-7 whitespace-pre-wrap"
+					class="note-glow-text pointer-events-none absolute inset-0 text-base leading-7"
 				>
-					{note.body}
-				</p>
+					<Markdown text={note.body} />
+					<Markdown text={note.body} class="note-glow-blur" />
+				</div>
 			{/if}
 		{/if}
 	</div>

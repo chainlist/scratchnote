@@ -2,6 +2,7 @@
 	import type { Note } from '$lib/api';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import Markdown from '$lib/components/Markdown.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
@@ -40,11 +41,9 @@
 			<Dialog.Description>{m.page_delete_description()}</Dialog.Description>
 		</Dialog.Header>
 		{#if note}
-			<p
-				class="line-clamp-4 rounded-lg border bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap text-muted-foreground"
-			>
-				{note.body}
-			</p>
+			<div class="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+				<Markdown text={note.body} links={false} class="max-h-[4lh] overflow-hidden" />
+			</div>
 		{/if}
 		<Dialog.Footer>
 			<Button variant="outline" onclick={() => (note = null)}>{m.common_cancel()}</Button>

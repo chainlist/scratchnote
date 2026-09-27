@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import PlusIcon from '@lucide/svelte/icons/plus';
+	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
@@ -18,12 +19,12 @@
 
 	let saving = $state(false);
 	let draft = $state('');
-	let textarea = $state<HTMLTextAreaElement | null>(null);
+	let editor = $state<MarkdownEditor | null>(null);
 
 	async function start() {
 		writing = true;
 		await tick();
-		textarea?.focus();
+		editor?.focus();
 	}
 
 	async function save() {
@@ -62,15 +63,13 @@
 		{#if writing}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="flex flex-col gap-2" onkeydown={onKeydown}>
-				<textarea
-					bind:this={textarea}
+				<MarkdownEditor
+					bind:this={editor}
 					bind:value={draft}
-					rows={Math.min(16, Math.max(3, draft.split('\n').length))}
 					placeholder={m.capture_placeholder()}
-					aria-label={m.note_body_label()}
-					spellcheck="false"
-					class="-mx-2 w-[calc(100%+1rem)] resize-y rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
-				></textarea>
+					label={m.note_body_label()}
+					class="-mx-2 max-h-[calc(16lh+0.5rem)] min-h-[calc(3lh+0.5rem)] w-[calc(100%+1rem)] rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus-within:border-neutral-600"
+				/>
 				<div class="flex items-center justify-end gap-1">
 					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
 					<button type="button" onclick={() => (writing = false)} class={action}

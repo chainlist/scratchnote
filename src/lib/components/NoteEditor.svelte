@@ -4,6 +4,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { categoryLabel } from '$lib/categories';
@@ -125,14 +126,12 @@
 		</Dialog.Header>
 
 		<div class="flex flex-col gap-2">
-			<Label for="note-body">{m.editor_text()}</Label>
-			<textarea
-				id="note-body"
+			<span class="text-sm font-medium">{m.editor_text()}</span>
+			<MarkdownEditor
 				bind:value={body}
-				rows={Math.min(12, Math.max(4, body.split('\n').length))}
-				spellcheck="false"
-				class="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm leading-6 transition-colors outline-none focus-visible:border-ring dark:bg-input/30"
-			></textarea>
+				label={m.editor_text()}
+				class="max-h-[calc(12lh+0.75rem)] min-h-[calc(4lh+0.75rem)] w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm leading-6 transition-colors focus-within:border-ring dark:bg-input/30"
+			/>
 		</div>
 
 		<div class="flex flex-col gap-2">

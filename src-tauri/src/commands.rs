@@ -1444,3 +1444,20 @@ pub fn open_space_folder(
         .open_path(space.root.to_string_lossy(), None::<&str>)
         .map_err(|e| format!("could not open {}: {e}", space.root.display()))
 }
+
+/// Open a link from a note in the default browser or mail client. Only web
+/// and mail links go through, so a note cannot launch files or programs.
+#[tauri::command]
+pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let lower = url.to_ascii_lowercase();
+    if !["http://", "https://", "mailto:"]
+        .iter()
+        .any(|scheme| lower.starts_with(scheme))
+    {
+        return Err(format!("not a web or mail link: {url}"));
+    }
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| format!("could not open {url}: {e}"))
+}

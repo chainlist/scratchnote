@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Open journal beneath a star</title>
+  <desc id="desc">A magenta-to-violet open journal with a crescent and star on a transparent background.</desc>
+  <defs>
+    <linearGradient id="pages" x1="30" y1="57" x2="227" y2="218" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E76ABE"/>
+      <stop offset=".48" stop-color="#A14FC2"/>
+      <stop offset="1" stop-color="#493080"/>
+    </linearGradient>
+  </defs>
+  <path d="M28 68c34-12 68-9 100 12v128c-31-20-65-24-100-12V68Z" fill="url(#pages)"/>
+  <path d="M228 68c-34-12-68-9-100 12v128c31-20 65-24 100-12V68Z" fill="url(#pages)"/>
+  <path d="M128 80v128" fill="none" stroke="#F6D2EF" stroke-opacity=".8" stroke-width="5" stroke-linecap="round"/>
+  <path d="M52 96c18-3 35 0 52 8M52 121c18-3 35 0 52 8M52 146c15-2 29-1 41 4" fill="none" stroke="#FFF0FA" stroke-width="7" stroke-linecap="round"/>
+  <path d="M177 99c-4 21-19 36-37 42 28 8 58-11 61-41-7 5-16 6-24-1Z" fill="#F5D2F0"/>
+  <path d="m197 59 4.2 11.8L213 75l-11.8 4.2L197 91l-4.2-11.8L181 75l11.8-4.2Z" fill="#F9C7E9"/>
+  <circle cx="212" cy="122" r="4" fill="#F9C7E9"/>
+</svg>

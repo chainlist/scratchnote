@@ -15,7 +15,7 @@ use chrono::Local;
 use tauri::{AppHandle, Emitter, State};
 use ulid::Ulid;
 
-use crate::commands::{enqueue, persist_queue, read_note};
+use crate::commands::notes::{enqueue, persist_queue, read_note};
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::{self, body_hash, Kind, Note, Status, Stub};

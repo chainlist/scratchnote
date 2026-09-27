@@ -42,46 +42,46 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
-            commands::save_note,
-            commands::get_day,
-            commands::list_days,
-            commands::list_categories,
-            commands::category_names,
-            commands::search,
-            commands::search_meaning,
-            commands::similar_notes,
-            commands::chat,
-            commands::stop_chat,
-            commands::warm_chat,
-            commands::delete_note,
-            commands::update_note,
-            commands::update_note_meta,
-            commands::rebuild_index,
-            commands::regenerate_all,
-            commands::retry_enrichment,
-            commands::model_status,
-            commands::enrich_busy,
-            commands::enrich_progress,
-            commands::model_info,
-            commands::benchmark_model,
-            commands::gpu_devices,
-            commands::system_profile,
-            commands::download_model,
-            commands::embedding_model_info,
-            commands::download_embedding_model,
-            commands::check_model_update,
-            commands::update_model,
-            commands::today,
-            commands::get_settings,
-            commands::set_settings,
-            commands::restart_app,
-            commands::list_spaces,
-            commands::create_space,
-            commands::rename_space,
-            commands::delete_space,
-            commands::open_space_folder,
-            commands::open_link,
-            commands::set_active_space,
+            commands::notes::save_note,
+            commands::notes::get_day,
+            commands::notes::list_days,
+            commands::search::list_categories,
+            commands::search::category_names,
+            commands::search::search,
+            commands::search::search_meaning,
+            commands::search::similar_notes,
+            commands::chat::chat,
+            commands::chat::stop_chat,
+            commands::chat::warm_chat,
+            commands::notes::delete_note,
+            commands::notes::update_note,
+            commands::notes::update_note_meta,
+            commands::notes::rebuild_index,
+            commands::notes::regenerate_all,
+            commands::notes::retry_enrichment,
+            commands::models::model_status,
+            commands::models::enrich_busy,
+            commands::models::enrich_progress,
+            commands::models::model_info,
+            commands::models::benchmark_model,
+            commands::models::gpu_devices,
+            commands::models::system_profile,
+            commands::models::download_model,
+            commands::models::embedding_model_info,
+            commands::models::download_embedding_model,
+            commands::models::check_model_update,
+            commands::models::update_model,
+            commands::notes::today,
+            commands::settings::get_settings,
+            commands::settings::set_settings,
+            commands::settings::restart_app,
+            commands::spaces::list_spaces,
+            commands::spaces::create_space,
+            commands::spaces::rename_space,
+            commands::spaces::delete_space,
+            commands::spaces::open_space_folder,
+            commands::notes::open_link,
+            commands::spaces::set_active_space,
             pages::create_page,
             pages::get_page,
             pages::update_page,
@@ -155,9 +155,9 @@ pub fn run() {
             }
             let mut loaded: Vec<_> = found
                 .into_iter()
-                .map(|(name, path)| commands::open_space(app.handle(), &name, path))
+                .map(|(name, path)| commands::spaces::open_space(app.handle(), &name, path))
                 .collect();
-            commands::sort_spaces(&mut loaded);
+            commands::spaces::sort_spaces(&mut loaded);
             if let Ok(mut spaces) = state.spaces.write() {
                 *spaces = loaded;
             }
@@ -167,7 +167,7 @@ pub fn run() {
             // backfilled.
             embed::sync::spawn(app.handle().clone(), embed_wake);
             idle::spawn(app.handle().clone());
-            commands::replace_legacy_embedding_model(app.handle());
+            commands::models::replace_legacy_embedding_model(app.handle());
             // Kick the worker in case a queue came back non-empty.
             wake.notify_one();
 

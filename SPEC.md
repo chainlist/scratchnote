@@ -560,7 +560,7 @@ Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `
 ```
 src-tauri/src/
   main.rs
-  commands.rs
+  commands/ (notes.rs, search.rs, chat.rs, settings.rs, models.rs, spaces.rs)
   storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, categories.rs, writer.rs)
   enrich/  (model.rs, prompt.rs, grammar.rs, normalize.rs, queue.rs)
   watcher.rs

@@ -75,6 +75,37 @@ to a shorter path.
 > `<target>/debug/build/llama-cpp-sys-2-*/out/build` before retrying. A half written
 > `CMakeCache.txt` makes CMake skip reconfiguration and fail again with a stale error.
 
+The installers bundle `vulkan-1.dll` and the Visual C++ runtime DLLs, which `build.rs`
+copies out of `C:\Windows\System32`. The build machine therefore needs a GPU driver or
+the Vulkan runtime installed there (the SDK alone has no `vulkan-1.dll`), and the build
+fails with the missing file's name otherwise.
+
+## macOS and Linux prerequisites
+
+Neither needs a short build path. Ninja is still required, because
+`src-tauri/.cargo/config.toml` selects it on every OS.
+
+**macOS** (Apple Silicon) builds the Metal backend, so there is no Vulkan SDK:
+
+```sh
+xcode-select --install
+brew install cmake ninja
+```
+
+**Linux** builds the Vulkan backend against the system's Vulkan packages. On Ubuntu 24.04:
+
+```sh
+sudo apt install build-essential cmake ninja-build clang libclang-dev file \
+  libvulkan-dev glslc spirv-headers \
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+```
+
+If CMake cannot find `glslc`, SPIRV-Headers or `vulkan.hpp` (older distros ship them
+too old or not at all), extract the LunarG Vulkan SDK tarball instead and point
+`VULKAN_SDK` at its `x86_64` directory, with its `bin` on `PATH`. The packages only run
+on systems whose glibc is at least as new as the build machine's (2.39 on Ubuntu 24.04),
+so building on an older distro reaches more of them.
+
 ## Developing
 
 Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:

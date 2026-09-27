@@ -3,3 +3,5 @@
 /target/
 /gen/schemas
 /target-ninja/
+# Windows runtime DLLs build.rs copies out of System32
+/redist/

@@ -86,6 +86,29 @@ Building needs, once per machine:
   directory, and at the repository's own `target/` its paths pass the 260
   character limit that `cl.exe` still enforces. 19 characters works; 47 does not.
 
+**Runtime libraries.** The binary links a few libraries that a fresh machine
+may lack, and without them it does not start at all, so the CPU fallback never
+gets a chance. `tauri.windows.conf.json` and `tauri.linux.conf.json` are
+hand-written, like `tauri.macos.conf.json`, because no installer produces
+platform config files.
+
+- **Windows** imports `vulkan-1.dll`, which only a GPU driver installs, and the
+  Visual C++ runtime that llama.cpp's C++ and OpenMP code need (`msvcp140.dll`,
+  `vcomp140.dll`, and the `vcruntime140*.dll` they load). Tauri links the rest
+  of the runtime statically. `build.rs` copies the build machine's copies
+  from `System32` into `src-tauri/redist/` (ignored by git), because the
+  32-bit WiX and NSIS tools would be handed the 32-bit ones from `SysWOW64`,
+  and `tauri.windows.conf.json` bundles them from there next to the exe. The
+  build machine therefore needs a GPU driver or the Vulkan runtime, and a
+  Visual C++ redistributable at least as new as the compiler.
+- **Linux** packages declare the Vulkan loader and OpenMP (`libvulkan1` and
+  `libgomp1` for the `.deb`, their sonames for the `.rpm`). Tauri already
+  declares WebKitGTK, GTK and the tray library, and the AppImage carries all of
+  them. The binary is named `scratchnote` there rather than the crate's `app`,
+  which would clash in `/usr/bin`.
+- **macOS** needs nothing: Metal is part of the OS, llama.cpp embeds its
+  shaders, and Apple's compiler has no OpenMP to link.
+
 ### Step 1: Create the SvelteKit app with `sv create`
 
 ```bash

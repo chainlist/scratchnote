@@ -16,3 +16,7 @@ bun.lockb
 # Owned by the Tauri CLI, which rewrites them on `tauri add`
 /src-tauri/tauri.conf.json
 /src-tauri/capabilities/
+
+# Owned by release-please, which rewrites them on every release
+/CHANGELOG.md
+/.release-please-manifest.json

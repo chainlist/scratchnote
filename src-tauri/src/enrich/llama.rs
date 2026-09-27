@@ -6,7 +6,7 @@
 use std::num::NonZeroU32;
 use std::sync::{Mutex, OnceLock};
 
-use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::context::params::{KvCacheType, LlamaContextParams};
 use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
@@ -114,8 +114,20 @@ impl LlamaCpp {
         // stays valid however `self` moves, and `session` is dropped before
         // `model`, so no context outlives it.
         let model: &'static LlamaModel = unsafe { &*(&*self.model as *const LlamaModel) };
+        // An 8-bit cache is half the size of the default at no measurable
+        // cost in quality. Its V half needs flash attention, which a device
+        // may lack; the default cache is the way back then.
+        let quantised = params
+            .clone()
+            .with_type_k(KvCacheType::Q8_0)
+            .with_type_v(KvCacheType::Q8_0);
+        let backend = llama_backend()?;
         model
-            .new_context(llama_backend()?, params)
+            .new_context(backend, quantised)
+            .or_else(|e| {
+                log::warn!("no 8-bit cache, using the default one: {e}");
+                model.new_context(backend, params)
+            })
             .map_err(|e| format!("could not create a context: {e}"))
     }
 

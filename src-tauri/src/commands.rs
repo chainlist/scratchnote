@@ -10,7 +10,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use ulid::Ulid;
 
 use crate::enrich::download::{self, RemoteModel};
-use crate::enrich::model::{model_file, EmbeddingModel, ModelStatus, Variant};
+use crate::enrich::model::{
+    model_file, models_dir, EmbeddingModel, ModelStatus, Variant, LEGACY_EMBEDDING_FILE,
+};
 use crate::enrich::normalize;
 use crate::enrich::queue::Job;
 use crate::settings::Settings;
@@ -18,7 +20,7 @@ use crate::spaces::{self, Space};
 use crate::state::AppState;
 use crate::storage::daily_file::{self, Note, NotePatch, Status};
 use crate::storage::index::{self, IndexEntry};
-use crate::storage::{categories, tags};
+use crate::storage::categories;
 use crate::storage::{check_date, day_path, relative_day_path};
 
 #[derive(Debug, Serialize)]
@@ -53,8 +55,7 @@ pub async fn save_note(
         time: now.format("%H:%M").to_string(),
         file: relative_day_path(&date),
         subject: None,
-        summary: None,
-        tags: Vec::new(),
+        category: None,
         status: Status::Pending,
         hash: daily_file::body_hash(&body),
         lang: None,
@@ -213,10 +214,9 @@ pub async fn update_note(
     read_note(&space, &date, &id).await
 }
 
-/// Set a note's subject, category and tags by hand. The note becomes
-/// `manual`, which enrichment never overwrites (SPEC 4.2). `None` keeps the
-/// current value. `tags` are the tags besides the category, and an empty
-/// `category` takes the note out of every category.
+/// Set a note's subject and category by hand. The note becomes `manual`,
+/// which enrichment never overwrites (SPEC 4.2). `None` keeps the current
+/// value, and an empty `category` takes the note out of every category.
 #[tauri::command]
 pub async fn update_note_meta(
     app: AppHandle,
@@ -225,15 +225,10 @@ pub async fn update_note_meta(
     id: String,
     subject: Option<String>,
     category: Option<String>,
-    tags: Option<Vec<String>>,
 ) -> Result<Note, String> {
     check_date(&date)?;
     let space = state.space()?;
     let current = read_note(&space, &date, &id).await?;
-    let lang = state.note_language().code;
-    let vocabulary = space.vocabulary(lang);
-    let (current_category, current_tags) =
-        categories::split(&categories::load(&space.root), &current.tags);
 
     let subject = match subject {
         // The subject is the note's heading, so it has to stay on one line.
@@ -243,25 +238,15 @@ pub async fn update_note_meta(
         None => current.subject.clone(),
     };
     let category = match category {
-        Some(raw) => normalize::manual(&[raw], &vocabulary).into_iter().next(),
-        None => current_category,
+        Some(raw) => normalize::clean(&raw),
+        None => current.category.clone(),
     };
-    let rest = match tags {
-        Some(raw) => normalize::manual(&raw, &vocabulary),
-        None => current_tags,
-    };
-    let tags = categories::join(category.as_deref(), &rest);
-    // The file keeps a summary and its tags as one two-line block, and that
-    // block cannot be written with the tag line empty.
-    if tags.is_empty() && current.summary.is_some() {
-        return Err("keep a category or at least one tag".to_string());
-    }
 
-    // A category typed in by hand joins the list, as one the model invents
-    // does, so the sidebar shows it and later notes are offered it.
+    // A category typed in by hand joins the list, so the model is offered it
+    // for later notes.
     if let Some(contents) = category
         .as_deref()
-        .and_then(|c| categories::with_added(&space.root, lang, c))
+        .and_then(|c| categories::with_added(&space.root, c))
     {
         state
             .writer
@@ -271,8 +256,7 @@ pub async fn update_note_meta(
 
     let patch = NotePatch {
         subject,
-        summary: current.summary.clone(),
-        tags,
+        category,
         status: Status::Manual,
         lang: current.lang.clone(),
     };
@@ -311,8 +295,7 @@ async fn mark_pending(
 ) -> Result<(), String> {
     let patch = NotePatch {
         subject: note.subject.clone(),
-        summary: note.summary.clone(),
-        tags: note.tags.clone(),
+        category: note.category.clone(),
         status: Status::Pending,
         lang: note.lang.clone(),
     };
@@ -350,11 +333,6 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
         .index
         .write()
         .map_err(|_| "index lock poisoned".to_string())? = rebuilt;
-    // Aliases are hand-edited in tags.json, so a rebuild is also when edits
-    // made there are picked up.
-    if let Ok(mut aliases) = space.aliases.write() {
-        *aliases = tags::load_aliases(&space.root);
-    }
     space.persist_index(&state.writer).await?;
 
     let _ = app.emit("index-rebuilt", ());
@@ -362,9 +340,8 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
 }
 
 /// Rebuild the index, then hand every note back to the model for a fresh
-/// subject, summary and tags. Every note is cleared to pending first, hand
-/// edits included, so the tag list empties and the model starts from no
-/// vocabulary but the aliases. Returns how many notes were queued.
+/// subject and category. Every note is cleared to pending first, hand edits
+/// included. Returns how many notes were queued.
 #[tauri::command]
 pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
     rebuild_index(app.clone(), state.clone()).await?;
@@ -380,8 +357,7 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
 
     let cleared = NotePatch {
         subject: None,
-        summary: None,
-        tags: Vec::new(),
+        category: None,
         status: Status::Pending,
         lang: None,
     };
@@ -417,18 +393,6 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
     Ok(notes.len())
 }
 
-/// Every tag in use with how many notes carry it, most used first.
-#[tauri::command]
-pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<(String, u32)>, String> {
-    let space = state.space()?;
-    let counts = space
-        .index
-        .read()
-        .map_err(|_| "index lock poisoned".to_string())?
-        .tag_counts();
-    Ok(tags::by_count(&counts))
-}
-
 /// The categories notes are filed under, with how many carry each, most used
 /// first. Categories no note carries yet are left out.
 #[tauri::command]
@@ -438,7 +402,7 @@ pub fn list_categories(state: State<'_, AppState>) -> Result<Vec<(String, u32)>,
         .index
         .read()
         .map_err(|_| "index lock poisoned".to_string())?
-        .tag_counts();
+        .category_counts();
     Ok(categories::in_use(&categories::load(&space.root), &counts))
 }
 
@@ -449,29 +413,30 @@ pub fn category_names(state: State<'_, AppState>) -> Result<Vec<String>, String>
     Ok(categories::load(&state.space()?.root))
 }
 
-/// Words and `#tag` filters across every day (SPEC 6).
+/// Words and a `#category` filter across every day (SPEC 6).
 #[tauri::command]
 pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, String> {
     let space = state.space()?;
-    let aliases = space.aliases();
     let idx = space
         .index
         .read()
         .map_err(|_| "index lock poisoned".to_string())?;
-    Ok(crate::search::search(&idx, &query, &aliases))
+    Ok(crate::search::search(&idx, &query))
 }
 
 /// How many notes search by meaning adds at most.
 const MEANING_NOTES: usize = 5;
 /// How far a note's cosine to the query must sit above the mean of the
-/// space's other notes. Set on 82 real notes and 19 short queries: the notes a
-/// query was after led by 0.16 to 0.35, and queries with no answer in the
-/// notes left one note of seven above 0.15. The lead holds from five notes up.
+/// space's other notes. Checked with EmbeddingGemma on 85 real notes and 31
+/// short queries: the notes 23 of them were after led by 0.15 to 0.41, and 3
+/// of the 8 with no answer in the notes left a note above 0.15. The lead
+/// holds from five notes up.
 const MIN_LEAD: f32 = 0.15;
 
 /// Notes close in meaning to a query's words that the words themselves do
-/// not find, best first, within its `#tag` filters. Empty without the
-/// embedding model, with the model switched off, or for a query of tags only.
+/// not find, best first, within its `#category` filter. Empty without the
+/// embedding model, with the model switched off, or for a query of `#` tokens
+/// only.
 #[tauri::command]
 pub async fn search_meaning(
     app: AppHandle,
@@ -501,18 +466,11 @@ pub async fn search_meaning(
     state.mark_used();
 
     let hits = space.related(&vector, usize::MAX, MIN_LEAD);
-    let aliases = space.aliases();
     let idx = space
         .index
         .read()
         .map_err(|_| "index lock poisoned".to_string())?;
-    Ok(crate::search::by_meaning(
-        &idx,
-        &query,
-        &aliases,
-        &hits,
-        MEANING_NOTES,
-    ))
+    Ok(crate::search::by_meaning(&idx, &query, &hits, MEANING_NOTES))
 }
 
 /// How many notes "Similar notes" lists at most.
@@ -780,31 +738,6 @@ async fn save_settings(
 }
 
 #[tauri::command]
-pub fn get_aliases(state: State<'_, AppState>) -> std::collections::BTreeMap<String, String> {
-    state
-        .space()
-        .map(|space| space.aliases().into_iter().collect())
-        .unwrap_or_default()
-}
-
-/// Replace the tag aliases (SPEC 4.5). They steer tags from now on; tags
-/// already written into notes are left as they are.
-#[tauri::command]
-pub async fn set_aliases(
-    state: State<'_, AppState>,
-    aliases: std::collections::HashMap<String, String>,
-) -> Result<std::collections::BTreeMap<String, String>, String> {
-    let cleaned = tags::clean_aliases(&aliases)?;
-    let space = state.space()?;
-    *space
-        .aliases
-        .write()
-        .map_err(|_| "aliases lock poisoned".to_string())? = cleaned.clone();
-    space.persist_index(&state.writer).await?;
-    Ok(cleaned.into_iter().collect())
-}
-
-#[tauri::command]
 pub fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
@@ -890,13 +823,13 @@ pub async fn benchmark_model(
         }
 
         let language = state.note_language();
-        let vocabulary = space.vocabulary(language.code);
+        let categories = space.categories();
         for (i, sample) in SAMPLES.iter().enumerate() {
             // Keeps the idle unload away for as long as the benchmark runs.
             state.mark_used();
             let started = Instant::now();
             let result =
-                crate::enrich::runner::enrich(sample, language, &vocabulary, backend.as_ref());
+                crate::enrich::runner::enrich(sample, language, &categories, backend.as_ref());
             let ms = started.elapsed().as_millis() as u64;
             if let Err(e) = &result {
                 log::warn!("benchmark sample {i} failed: {e}");
@@ -1014,6 +947,11 @@ pub fn load_model(
         return Ok(());
     }
     let path = model_file(&state.root, variant);
+    // After a lazy load under way, not beside it.
+    let _one_at_a_time = state
+        .backend_loading
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let backend = crate::enrich::llama::LlamaCpp::load_with(&path, state.use_gpu())?;
 
     if let Ok(mut slot) = state.backend.write() {
@@ -1101,6 +1039,36 @@ async fn fetch_embedding_model(app: &AppHandle) -> Result<(), String> {
     result
 }
 
+/// An install from before EmbeddingGemma still has Qwen3-Embedding on disk.
+/// Its successor is fetched in the background, so search by meaning comes
+/// back without a trip to settings, and the old file goes once the new one is
+/// in.
+pub fn replace_legacy_embedding_model(app: &AppHandle) {
+    let root = app.state::<AppState>().root.clone();
+    let legacy = models_dir(&root).join(LEGACY_EMBEDDING_FILE);
+    if !legacy.exists() {
+        return;
+    }
+    let remove_legacy = move || {
+        for path in [legacy.with_extension("gguf.json"), legacy.clone()] {
+            if let Err(e) = std::fs::remove_file(&path) {
+                log::warn!("could not remove {}: {e}", path.display());
+            }
+        }
+    };
+    if download::is_installed(&root, EmbeddingModel) {
+        remove_legacy();
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        match fetch_embedding_model(&app).await {
+            Ok(()) => remove_legacy(),
+            Err(e) => log::warn!("the new embedding model did not download: {e}"),
+        }
+    });
+}
+
 /// Drop the loaded model. The next job loads whatever the settings now point
 /// at, so this is also how a model switch takes effect.
 fn unload_model(app: &AppHandle, state: &State<'_, AppState>) {
@@ -1166,9 +1134,17 @@ pub async fn update_model(app: AppHandle, state: State<'_, AppState>) -> Result<
     .await?;
 
     // Windows will not replace a file that a loaded model has mapped, so let
-    // go of it, and give a job still holding it a moment to finish.
-    state.swapping.store(true, Ordering::SeqCst);
-    unload_model(&app, &state);
+    // go of it, and give a job still holding it a moment to finish. Taking
+    // the load lock first lets a load under way finish, so it is let go of
+    // too; loads after it read the flag under the same lock and stay off.
+    {
+        let _one_at_a_time = state
+            .backend_loading
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.swapping.store(true, Ordering::SeqCst);
+        unload_model(&app, &state);
+    }
     let mut result = Err(String::new());
     for _ in 0..30 {
         result = download::install(&state.root, variant, &remote).await;
@@ -1222,8 +1198,7 @@ fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
 /// is made or renamed.
 pub fn open_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
     let embed_wake = app.state::<AppState>().embed_wake.clone();
-    let lang = app.state::<AppState>().note_language().code;
-    let (space, refresh) = Space::open(name, root, lang, embed_wake);
+    let (space, refresh) = Space::open(name, root, embed_wake);
     let space = Arc::new(space);
     if let Err(e) = crate::watcher::start(app.clone(), &space) {
         log::error!("could not watch the notes of {name}: {e}");

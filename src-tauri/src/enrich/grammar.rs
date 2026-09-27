@@ -3,111 +3,108 @@
 //! The grammar itself lives in `enrichment.gbnf` next to this file and is
 //! embedded at compile time, so it stays a real grammar file that can be read,
 //! edited and fed to llama.cpp tooling directly, with no runtime path to
-//! resolve and nothing to ship alongside the binary.
+//! resolve and nothing to ship alongside the binary. Only the category rule
+//! is written here, from the list the note is labelled against.
 
-pub const ENRICHMENT_GBNF: &str = include_str!("enrichment.gbnf");
+const ENRICHMENT_GBNF: &str = include_str!("enrichment.gbnf");
 
 /// Mirrors of the limits written into the grammar file. Used when validating
 /// what came back; a test below fails if they drift apart.
 pub const MAX_SUBJECT: usize = 60;
-pub const MAX_SUMMARY: usize = 140;
-pub const MAX_TAG: usize = 30;
-pub const MIN_TAGS: usize = 1;
-pub const MAX_TAGS: usize = 5;
+/// The longest category name, which `normalize::clean` cuts to.
+pub const MAX_CATEGORY: usize = 30;
+
+/// The grammar for a note filed under one of `categories`, or none: an empty
+/// category is the model saying none of them is what the note is about.
+/// Names come through `normalize::clean`, so none holds a quote or a
+/// backslash that would need escaping in a literal.
+pub fn enrichment(categories: &[String]) -> String {
+    let names: Vec<String> = categories
+        .iter()
+        .map(|name| format!("\"{name}\""))
+        .collect();
+    let category = if names.is_empty() {
+        "category ::= \"\\\"\\\"\"".to_string()
+    } else {
+        format!("category ::= \"\\\"\" ({})? \"\\\"\"", names.join(" | "))
+    };
+    format!("{ENRICHMENT_GBNF}{category}\n")
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn rules() -> String {
-        ENRICHMENT_GBNF
+    fn rules(grammar: &str) -> String {
+        grammar
             .lines()
             .filter(|line| !line.trim_start().starts_with('#'))
             .collect::<Vec<_>>()
             .join("\n")
     }
 
-    /// Rule names defined in the file, whatever the alignment.
-    fn defined() -> Vec<String> {
-        rules()
+    /// Rule names defined in the grammar, whatever the alignment.
+    fn defined(grammar: &str) -> Vec<String> {
+        rules(grammar)
             .lines()
             .filter_map(|line| line.split_once("::="))
             .map(|(name, _)| name.trim().to_string())
             .collect()
     }
 
+    fn rule(grammar: &str, name: &str) -> String {
+        rules(grammar)
+            .lines()
+            .find(|line| line.starts_with(name))
+            .unwrap_or_else(|| panic!("no {name} rule"))
+            .to_string()
+    }
+
+    fn listed() -> String {
+        enrichment(&["movie".to_string(), "série".to_string()])
+    }
+
     #[test]
     fn states_every_rule_the_sampler_needs() {
-        let defined = defined();
-        for rule in ["root", "subject", "summary", "tags", "tag", "char", "ws"] {
-            assert!(
-                defined.iter().any(|name| name == rule),
-                "missing rule {rule}, found {defined:?}"
+        // A rule name that is referenced but never defined makes llama.cpp
+        // reject the grammar at load time, which would fail every job.
+        for grammar in [listed(), enrichment(&[])] {
+            assert_eq!(
+                defined(&grammar),
+                ["root", "subject", "char", "ws", "category"],
+                "{grammar}"
             );
         }
     }
 
     #[test]
-    fn every_rule_the_grammar_references_is_defined() {
-        let defined = defined();
-        // A rule name that is referenced but never defined makes llama.cpp
-        // reject the grammar at load time, which would fail every job.
-        for rule in &defined {
-            assert!(!rule.is_empty(), "an unnamed rule in {defined:?}");
-        }
+    fn the_category_is_one_of_the_list_or_empty() {
         assert_eq!(
-            defined.len(),
-            7,
-            "unexpected rule set, update the test: {defined:?}"
+            rule(&listed(), "category"),
+            r#"category ::= "\"" ("movie" | "série")? "\"""#
         );
+        assert_eq!(rule(&enrichment(&[]), "category"), r#"category ::= "\"\"""#);
     }
 
     #[test]
     fn the_grammar_file_carries_the_same_limits_as_the_constants() {
-        let rules = rules();
         assert!(
-            rules.contains(&format!("char{{1,{MAX_SUBJECT}}}")),
+            rules(ENRICHMENT_GBNF).contains(&format!("char{{1,{MAX_SUBJECT}}}")),
             "subject length disagrees with MAX_SUBJECT"
-        );
-        assert!(
-            rules.contains(&format!("char{{1,{MAX_SUMMARY}}}")),
-            "summary length disagrees with MAX_SUMMARY"
-        );
-        assert!(
-            rules.contains(&format!("char{{1,{MAX_TAG}}}")),
-            "tag length disagrees with MAX_TAG"
-        );
-        // The first tag is written out, so the repetition covers the rest.
-        assert!(
-            rules.contains(&format!("{{{},{}}}", MIN_TAGS - 1, MAX_TAGS - 1)),
-            "tag count disagrees with MIN_TAGS/MAX_TAGS"
         );
     }
 
     #[test]
     fn pins_the_field_order_so_the_object_cannot_come_out_shuffled() {
-        let root = rules()
-            .lines()
-            .find(|line| line.starts_with("root"))
-            .expect("a root rule")
-            .to_string();
+        let root = rule(&listed(), "root");
         let subject = root.find("subject").unwrap();
-        let summary = root.find("summary").unwrap();
         let category = root.find("category").unwrap();
-        let tags = root.find("\"tags").unwrap();
-        assert!(
-            subject < summary && summary < category && category < tags,
-            "{root}"
-        );
+        assert!(subject < category, "{root}");
     }
 
     #[test]
     fn whitespace_between_tokens_is_bounded() {
-        let ws = rules()
-            .lines()
-            .find(|line| line.starts_with("ws"))
-            .expect("a ws rule")
-            .to_string();
+        let ws = rule(&listed(), "ws");
         // Unbounded, it spends output tokens on layout and can run the
         // answer into the token limit.
         assert!(!ws.contains('*') && !ws.contains('+'), "{ws}");
@@ -115,12 +112,8 @@ mod tests {
 
     #[test]
     fn every_field_is_required() {
-        let root = rules()
-            .lines()
-            .find(|line| line.starts_with("root"))
-            .expect("a root rule")
-            .to_string();
-        // No optional markers anywhere in root: all three fields must appear.
+        let root = rule(&listed(), "root");
+        // No optional markers anywhere in root: both fields must appear.
         assert!(!root.contains('?'), "a field is optional: {root}");
     }
 }

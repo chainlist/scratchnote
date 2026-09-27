@@ -8,6 +8,7 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
+	import { categoryLabel } from '$lib/categories';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
@@ -16,21 +17,21 @@
 		ondelete,
 		onsave,
 		onretry,
-		ontag,
+		oncategory,
 		onsimilar,
 		showDate = false,
 		blink = false
 	}: {
 		note: Note;
-		/** Open the full editor: body, subject, category and tags. */
+		/** Open the full editor: body, subject and category. */
 		onedit: (note: Note) => void;
 		/** Ask to delete; the page confirms before anything is removed. */
 		ondelete: (note: Note) => void;
 		/** Save a new body. Resolves true once saved; false keeps the editor open. */
 		onsave: (note: Note, body: string) => Promise<boolean>;
 		onretry: (note: Note) => void;
-		/** Filter on a tag, as a click on it in the card does. */
-		ontag: (tag: string) => void;
+		/** Filter on a category, as a click on it in the card does. */
+		oncategory: (category: string) => void;
 		/** List the notes closest in meaning. Left out without the embedding model. */
 		onsimilar?: (note: Note) => void;
 		/** Search results span days, so each card says which one. */
@@ -216,21 +217,15 @@
 			</DropdownMenu.Root>
 		</div>
 
-		{#if note.tags.length > 0}
-			<ul
-				class="absolute right-3 bottom-0.5 flex gap-1.5 bg-neutral-900 pl-2 font-mono text-[0.625rem] text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
+		{#if note.category}
+			{@const category = note.category}
+			<button
+				type="button"
+				onclick={() => oncategory(category)}
+				title={m.note_show_tag({ tag: categoryLabel(category) })}
+				class="absolute right-3 bottom-0.5 cursor-pointer bg-neutral-900 pl-2 font-mono text-[0.625rem] text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100 hover:text-neutral-200"
+				>#{categoryLabel(category)}</button
 			>
-				{#each note.tags as tag (tag)}
-					<li>
-						<button
-							type="button"
-							onclick={() => ontag(tag)}
-							title={m.note_show_tag({ tag })}
-							class="cursor-pointer hover:text-neutral-200">#{tag}</button
-						>
-					</li>
-				{/each}
-			</ul>
 		{/if}
 	{/if}
 </article>

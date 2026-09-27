@@ -7,44 +7,44 @@
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import TagsIcon from '@lucide/svelte/icons/tags';
+	import { categoryLabel } from '$lib/categories';
 	import { m } from '$lib/paraglide/messages';
-	import { queryTags } from '$lib/query';
+	import { queryCategories } from '$lib/query';
 
 	let {
 		open = $bindable(),
 		query = $bindable(),
-		tags,
 		categories,
 		canChat,
+		canMeaning,
 		onpick,
 		onseeall,
 		ontoday,
-		ontags,
 		onchat,
 		onsettings
 	}: {
 		open: boolean;
-		/** Bound so a tag clicked on a card can open the palette filtered on it. */
+		/** Bound so a category clicked on a card can open the palette filtered on it. */
 		query: string;
-		/** Every tag with its count, most used first, offered as `#` completions. */
-		tags: [string, number][];
-		/** Offered as filters while the query is empty. */
+		/**
+		 * Every category in use with its count, most used first. Offered as
+		 * filters while the query is empty, and as `#` completions.
+		 */
 		categories: [string, number][];
 		canChat: boolean;
+		/** Whether search by meaning can run: the embedding model is there and on. */
+		canMeaning: boolean;
 		/** Show a found note on its day. */
 		onpick: (note: Note) => void;
 		/** Show every note the query matches in the timeline. */
 		onseeall: (query: string) => void;
 		ontoday: () => void;
-		/** List every tag in the timeline. */
-		ontags: () => void;
 		onchat: () => void;
 		onsettings: () => void;
 	} = $props();
 
 	/** Completions and results shown at once. */
-	const TAG_LIMIT = 6;
+	const CATEGORY_LIMIT = 6;
 	const RESULT_LIMIT = 50;
 	/** Embedding the query costs a model run, so it waits for typing to pause. */
 	const MEANING_DELAY_MS = 300;
@@ -53,6 +53,8 @@
 	let results = $state<Note[]>([]);
 	/** Notes close in meaning that the words miss, shown under the matches. */
 	let related = $state<Note[]>([]);
+	/** From a keystroke until the search by meaning for it has answered. */
+	let meaningPending = $state(false);
 	let error = $state<string | null>(null);
 
 	const trimmed = $derived(query.trim());
@@ -64,20 +66,23 @@
 		return last.startsWith('#') ? last.slice(1).toLowerCase() : null;
 	});
 
-	// Tags already in the query are not offered again. Names starting with
-	// the prefix come before names that only contain it, each most used first.
+	// Categories already in the query are not offered again. Names starting
+	// with the prefix come before names that only contain it, each most used
+	// first. The name in the interface language matches too, so `#jeu` offers
+	// `game`.
 	const completions = $derived.by(() => {
 		if (prefix === null) return [];
-		const used = new Set(queryTags(query));
+		const used = new Set(queryCategories(query));
 		const starts: [string, number][] = [];
 		const contains: [string, number][] = [];
-		for (const entry of tags) {
+		for (const entry of categories) {
 			// The token being typed is in `used` too, so a complete one drops out.
-			if (used.has(entry[0])) continue;
-			if (entry[0].startsWith(prefix)) starts.push(entry);
-			else if (entry[0].includes(prefix)) contains.push(entry);
+			if (used.has(categoryLabel(entry[0]).toLowerCase())) continue;
+			const names = [entry[0], categoryLabel(entry[0]).toLowerCase()];
+			if (names.some((name) => name.startsWith(prefix))) starts.push(entry);
+			else if (names.some((name) => name.includes(prefix))) contains.push(entry);
 		}
-		return [...starts, ...contains].slice(0, TAG_LIMIT);
+		return [...starts, ...contains].slice(0, CATEGORY_LIMIT);
 	});
 
 	// Only the latest query's answer is kept, so a slow reply to an earlier
@@ -110,29 +115,36 @@
 		const q = trimmed;
 		const run = ++meaningRun;
 		related = [];
-		if (q === '') return;
+		// Kept in a local: read back here, the state would make the answer
+		// clearing it run this effect again, and search again.
+		const pending = q !== '' && canMeaning;
+		meaningPending = pending;
+		if (!pending) return;
 		const timer = setTimeout(() => {
 			searchMeaning(q)
 				.then((found) => {
 					if (run === meaningRun) related = found;
 				})
 				// Search by words still works; this part is only extra.
-				.catch(() => {});
+				.catch(() => {})
+				.finally(() => {
+					if (run === meaningRun) meaningPending = false;
+				});
 		}, MEANING_DELAY_MS);
 		return () => clearTimeout(timer);
 	});
 
-	// The caret goes after the query, so a filter opened from a tag can be typed on.
+	// The caret goes after the query, so a filter opened from a category can be typed on.
 	$effect(() => {
 		if (!open) return;
 		void tick().then(() => input?.setSelectionRange(query.length, query.length));
 	});
 
-	/** Put a tag filter in the query, completing the `#` token if one is being typed. */
+	/** Put a category filter in the query, completing the `#` token if one is being typed. */
 	function filter(name: string) {
 		const words = query.split(' ');
 		if (prefix !== null) words.pop();
-		query = [...words.filter(Boolean), `#${name}`, ''].join(' ');
+		query = [...words.filter(Boolean), `#${categoryLabel(name)}`, ''].join(' ');
 		input?.focus();
 	}
 
@@ -178,9 +190,6 @@
 				<Command.Item value="today" onSelect={() => run(ontoday)}>
 					<CalendarCheckIcon />{m.command_today()}
 				</Command.Item>
-				<Command.Item value="tags" onSelect={() => run(ontags)}>
-					<TagsIcon />{m.command_tags()}
-				</Command.Item>
 				{#if canChat}
 					<Command.Item value="chat" onSelect={() => run(onchat)}>
 						<SparklesIcon />{m.search_chat_label()}
@@ -194,7 +203,7 @@
 				<Command.Group heading={m.categories_heading()}>
 					{#each categories as [name, count] (name)}
 						<Command.Item value="c:{name}" onSelect={() => filter(name)}>
-							<HashIcon />{name}
+							<HashIcon />{categoryLabel(name)}
 							<Command.Shortcut class="font-mono">{count}</Command.Shortcut>
 						</Command.Item>
 					{/each}
@@ -202,10 +211,10 @@
 			{/if}
 		{:else}
 			{#if completions.length > 0}
-				<Command.Group heading={m.search_tags_label()}>
+				<Command.Group heading={m.categories_heading()}>
 					{#each completions as [name, count] (name)}
-						<Command.Item value="t:{name}" onSelect={() => filter(name)}>
-							<HashIcon />{name}
+						<Command.Item value="c:{name}" onSelect={() => filter(name)}>
+							<HashIcon />{categoryLabel(name)}
 							<Command.Shortcut class="font-mono">{count}</Command.Shortcut>
 						</Command.Item>
 					{/each}
@@ -228,10 +237,36 @@
 						{@render noteItem(note)}
 					{/each}
 				</Command.Group>
+			{:else if meaningPending}
+				<!-- The embedding model at work looks like a note waiting for the
+				     model: its words in the flowing colours of the glow. bits-ui
+				     labels its loader "Loading..." in English; the label set after
+				     its props says what is loading, in the interface language. -->
+				<Command.Group heading={m.search_meaning_label()}>
+					<Command.Loading>
+						{#snippet child({ props })}
+							<div
+								{...props}
+								aria-label={m.search_meaning_pending()}
+								class="flex items-center gap-2 px-2 py-1.5 text-sm [&_svg]:size-4 [&_svg]:shrink-0"
+							>
+								<SparklesIcon class="text-violet-600 dark:text-violet-400" />
+								<span
+									data-text={m.search_meaning_pending()}
+									class="note-glow-text relative isolate inline-block"
+								>
+									{m.search_meaning_pending()}
+								</span>
+							</div>
+						{/snippet}
+					</Command.Loading>
+				</Command.Group>
 			{/if}
 			{#if error}
 				<p class="px-3 py-2 text-sm text-red-400">{error}</p>
-			{:else}
+			{:else if !meaningPending}
+				<!-- Only once both searches have answered: said earlier, it would
+				     claim nothing matches while the one by meaning still looks. -->
 				<Command.Empty>{m.page_no_match()}</Command.Empty>
 			{/if}
 		{/if}

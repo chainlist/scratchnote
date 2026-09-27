@@ -11,6 +11,9 @@ importers:
       '@fontsource-variable/atkinson-hyperlegible-next':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource-variable/caveat':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource-variable/geist':
         specifier: ^5.3.0
         version: 5.3.0
@@ -21,6 +24,12 @@ importers:
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource-variable/literata':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource-variable/playpen-sans':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource-variable/shantell-sans':
         specifier: ^5.3.0
         version: 5.3.0
       '@tauri-apps/api':
@@ -253,6 +262,9 @@ packages:
   '@fontsource-variable/atkinson-hyperlegible-next@5.3.0':
     resolution: {integrity: sha512-UnLzNUy1RWoLDfydAatP4NaRm99X/WbQEph7q/PymJnCFIOOwKOx3pBmp5ys8trO0dM+CKGuJgeZP9fAR4mQpA==}
 
+  '@fontsource-variable/caveat@5.3.0':
+    resolution: {integrity: sha512-Q3mjghoYIlXgwqBPJKZ4q6f3zu921Gq7UU76r9Z+NAmhapHfX130GIFpOCYf8vt2SIcgCi9RHDT7anfJKg/kiA==}
+
   '@fontsource-variable/geist@5.3.0':
     resolution: {integrity: sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA==}
 
@@ -264,6 +276,12 @@ packages:
 
   '@fontsource-variable/literata@5.3.0':
     resolution: {integrity: sha512-1Jw7xvOcoGyB83lxB2nG4bfNbqtX2/TTbdh9sHAOmU064SvmSdulDtA5RBu5JYWf64fdaKX7xU+z3GO1T2bCHA==}
+
+  '@fontsource-variable/playpen-sans@5.3.0':
+    resolution: {integrity: sha512-IoqGZSrVkaGXgD61IGkSOF0nTNmb8I4gyxZxpuHXCocAj4he5sL4oLWy1BmyiZiDv0pUeopaKQv9Q2Zpnse87Q==}
+
+  '@fontsource-variable/shantell-sans@5.3.0':
+    resolution: {integrity: sha512-FPdHvSi6cngE/DMVCm7Xlls70U0b4/NMJLlcAPvVoq6eot1X8tNOZMRc22Rh9KoAfmmBz7yjsSXvpsYmkhXXVQ==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -1928,6 +1946,8 @@ snapshots:
 
   '@fontsource-variable/atkinson-hyperlegible-next@5.3.0': {}
 
+  '@fontsource-variable/caveat@5.3.0': {}
+
   '@fontsource-variable/geist@5.3.0': {}
 
   '@fontsource-variable/ibm-plex-sans@5.3.0': {}
@@ -1935,6 +1955,10 @@ snapshots:
   '@fontsource-variable/inter@5.3.0': {}
 
   '@fontsource-variable/literata@5.3.0': {}
+
+  '@fontsource-variable/playpen-sans@5.3.0': {}
+
+  '@fontsource-variable/shantell-sans@5.3.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

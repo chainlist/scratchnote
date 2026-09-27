@@ -10,9 +10,7 @@
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
-	import TagIcon from '@lucide/svelte/icons/tag';
 	import { m } from '$lib/paraglide/messages';
-	import AliasesTab from './AliasesTab.svelte';
 	import AppearanceTab from './AppearanceTab.svelte';
 	import GeneralTab from './GeneralTab.svelte';
 	import IndexTab from './IndexTab.svelte';
@@ -44,13 +42,6 @@
 			description: m.settings_model_description,
 			icon: BrainIcon,
 			content: ModelTab
-		},
-		{
-			value: 'tags',
-			label: m.settings_tab_tags,
-			description: m.settings_aliases_description,
-			icon: TagIcon,
-			content: AliasesTab
 		},
 		{
 			value: 'index',

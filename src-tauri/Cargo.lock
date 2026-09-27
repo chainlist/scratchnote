@@ -79,7 +79,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "strsim",
  "sys-locale",
  "tauri",
  "tauri-build",

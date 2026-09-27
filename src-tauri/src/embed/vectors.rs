@@ -5,8 +5,9 @@
 //! as empty and the notes are simply embedded again.
 //!
 //! Little endian throughout. The header is `SNVB`, a u32 version, the model
-//! id, the dims as u32 and the count as u32. Each note follows as its id, its
-//! body hash and `dims` f32 values. A string is a u32 byte length then UTF-8.
+//! id, the dims as u32 and the count as u32. Each note follows, in id order,
+//! as its id, its body hash and `dims` f32 values. A string is a u32 byte
+//! length then UTF-8.
 
 use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
@@ -213,7 +214,11 @@ impl Vectors {
         put_str(&mut out, &self.model_id);
         out.extend_from_slice(&(self.dims as u32).to_le_bytes());
         out.extend_from_slice(&(self.notes.len() as u32).to_le_bytes());
-        for (id, (hash, vector)) in &self.notes {
+        // In id order, so a save changes only the bytes of the notes that
+        // changed and a synced copy only sends those.
+        let mut notes: Vec<_> = self.notes.iter().collect();
+        notes.sort_by(|a, b| a.0.cmp(b.0));
+        for (id, (hash, vector)) in notes {
             put_str(&mut out, id);
             put_str(&mut out, hash);
             for x in vector {
@@ -310,8 +315,7 @@ mod tests {
             time: "08:00".to_string(),
             file: "notes/2026/2026-09-22.md".to_string(),
             subject: None,
-            summary: None,
-            tags: Vec::new(),
+            category: None,
             status: Status::Done,
             hash: body_hash(body),
             lang: None,
@@ -394,6 +398,28 @@ mod tests {
         let mut longer = bytes;
         longer.push(0);
         assert!(Vectors::decode(&longer).is_none());
+    }
+
+    #[test]
+    fn a_new_note_only_adds_to_the_end_of_the_file() {
+        // Ids start with their creation time, so a new note sorts last. Saved
+        // in id order, the notes already there keep their bytes, and a tool
+        // that syncs a file by blocks sends only the end again.
+        let mut vectors = Vectors::new("m", 2);
+        for i in 0..100 {
+            vectors
+                .insert(format!("01A{i:03}"), "h".into(), vec![1.0, i as f32])
+                .unwrap();
+        }
+        let before = vectors.encode();
+        vectors
+            .insert("01B000".into(), "h".into(), vec![0.0, 1.0])
+            .unwrap();
+        let after = vectors.encode();
+
+        // Past the header, which holds the count.
+        let header = 4 + 4 + (4 + "m".len()) + 4 + 4;
+        assert!(after[header..].starts_with(&before[header..]));
     }
 
     #[test]

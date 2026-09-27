@@ -9,79 +9,25 @@ use crate::storage::daily_file::{NotePatch, Status};
 
 use super::language::Language;
 use super::model::Backend;
-use super::normalize::{self, Vocabulary};
 use super::{grammar, prompt, Enrichment};
 
-/// Label one note, in `language` whatever the note is written in. The
-/// vocabulary, that language's, steers the model towards tags already in use
-/// and then normalises whatever it returns anyway.
+/// Label one note, its subject in `language` whatever the note is written
+/// in, its category one of `categories`, that language's list.
 pub fn enrich(
     body: &str,
     language: Language,
-    vocabulary: &Vocabulary,
+    categories: &[String],
     backend: &dyn Backend,
 ) -> Result<Enrichment, String> {
-    let existing = related_tags(vocabulary.by_frequency(), body);
-    let text = prompt::build(body, language.name, &vocabulary.categories, &existing);
-
-    let raw = backend.generate(&text, grammar::ENRICHMENT_GBNF)?;
+    let text = prompt::build(body, language.name, categories);
+    let raw = backend.generate(&text, &grammar::enrichment(categories))?;
     let mut enrichment = Enrichment::parse(&raw)?;
-
-    // Normalised on its own, so what gets remembered as a category is the
-    // spelling that lands on the note.
-    enrichment.category = normalize::normalize(&[enrichment.category.clone()], vocabulary)
-        .into_iter()
-        .next()
-        .unwrap_or_default();
-    // The category goes first so the tag cap never drops it.
-    let raw_tags: Vec<String> = std::iter::once(enrichment.category.clone())
-        .chain(enrichment.tags.iter().cloned())
-        .collect();
-    enrichment.tags = normalize::normalize(&raw_tags, vocabulary);
-    if enrichment.tags.is_empty() {
-        return Err("every tag normalised away to nothing".to_string());
+    // The grammar only lets listed ones through; this covers a backend that
+    // ignores it.
+    if !categories.contains(&enrichment.category) {
+        enrichment.category.clear();
     }
-
     Ok(enrichment)
-}
-
-/// Parts of a tag shorter than this match too much of any note (`cd`, `go`).
-const MIN_MATCH_LEN: usize = 3;
-
-/// Only the existing tags whose every part appears in the note. Offered the
-/// whole vocabulary, the model picks tags because they are there (`job` and
-/// `emails` on a meeting note); offered these, it only reuses a spelling.
-/// Every part, not any: `team` alone would offer `data-team` to any team note.
-fn related_tags(tags: Vec<String>, body: &str) -> Vec<String> {
-    // Split on anything that is not a letter or digit, so `Angular's` and
-    // `d'Angular` both give `angular`, whatever the language.
-    let body = body.to_lowercase();
-    let words: Vec<&str> = body
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| !word.is_empty())
-        .collect();
-    tags.into_iter()
-        .filter(|tag| {
-            let mut parts = tag
-                .split('-')
-                .filter(|part| part.chars().count() >= MIN_MATCH_LEN)
-                .peekable();
-            parts.peek().is_some() && parts.all(|part| mentions(&words, part))
-        })
-        .collect()
-}
-
-/// A word contains the part (`argocd` for `argo`), or is one typo away from
-/// it (`versionning` for `versioning`), the same edit the normaliser folds.
-/// The first letter must match: a typo rarely hits it, while a different word
-/// often differs only there (`review` and `preview`).
-fn mentions(words: &[&str], part: &str) -> bool {
-    words.iter().any(|word| {
-        word.contains(part)
-            || (part.chars().count() >= normalize::FUZZY_MIN_LEN
-                && word.chars().next() == part.chars().next()
-                && strsim::levenshtein(word, part) == 1)
-    })
 }
 
 /// What to write into the note block, recording the language it was
@@ -89,20 +35,18 @@ fn mentions(words: &[&str], part: &str) -> bool {
 pub fn patch(enrichment: &Enrichment, language: Language) -> NotePatch {
     NotePatch {
         subject: Some(enrichment.subject.clone()),
-        summary: Some(enrichment.summary.clone()),
-        tags: enrichment.tags.clone(),
+        category: Some(enrichment.category.clone()).filter(|c| !c.is_empty()),
         status: Status::Done,
         lang: Some(language.code.to_string()),
     }
 }
 
-/// Marks a note the queue has given up on (SPEC 5.6). Subject and summary are
-/// left alone so a later retry, or the user, can fill them in.
+/// Marks a note the queue has given up on (SPEC 5.6). Subject and category
+/// are left alone so a later retry, or the user, can fill them in.
 pub fn failed_patch(current: &crate::storage::daily_file::Note) -> NotePatch {
     NotePatch {
         subject: current.subject.clone(),
-        summary: current.summary.clone(),
-        tags: current.tags.clone(),
+        category: current.category.clone(),
         status: Status::Failed,
         lang: current.lang.clone(),
     }
@@ -119,9 +63,26 @@ mod tests {
     const FILE: &str = "notes/2026/2026-09-22.md";
 
     fn fixed_stub() -> StubBackend {
-        StubBackend::new(
-            r#"{"subject":"Rollback plan","summary":"Pin the chart and roll back staging.","tags":["ArgoCD","Staging","staging"]}"#,
-        )
+        StubBackend::new(r#"{"subject":"Rollback plan","category":"infrastructure"}"#)
+    }
+
+    fn categories(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| n.to_string()).collect()
+    }
+
+    /// The list a new space starts with.
+    fn english() -> Vec<String> {
+        categories(&[
+            "development",
+            "infrastructure",
+            "movie",
+            "tv",
+            "game",
+            "music",
+            "book",
+            "food",
+            "home",
+        ])
     }
 
     fn pending(id: &str, body: &str) -> Note {
@@ -131,8 +92,7 @@ mod tests {
             time: "09:00".to_string(),
             file: FILE.to_string(),
             subject: None,
-            summary: None,
-            tags: Vec::new(),
+            category: None,
             status: Status::Pending,
             hash: body_hash(body),
             lang: None,
@@ -175,7 +135,7 @@ mod tests {
 
     #[test]
     fn every_sample_writes_back_in_the_format_from_the_spec() {
-        let vocabulary = Vocabulary::default();
+        let list = categories(&["development", "infrastructure"]);
         let backend = fixed_stub();
 
         for (i, body) in samples().iter().enumerate() {
@@ -183,8 +143,7 @@ mod tests {
             let note = pending(&id, body);
             let doc = append_note("", &note, DATE);
 
-            let enrichment =
-                enrich(body, ENGLISH, &vocabulary, &backend).expect("stub always succeeds");
+            let enrichment = enrich(body, ENGLISH, &list, &backend).expect("stub always succeeds");
             let out =
                 update_note(&doc, &id, &patch(&enrichment, ENGLISH)).expect("id is present");
 
@@ -197,67 +156,50 @@ mod tests {
             assert_eq!(parsed.status, Status::Done);
             assert_eq!(parsed.lang.as_deref(), Some("en"), "language for {body}");
             assert_eq!(parsed.subject.as_deref(), Some("Rollback plan"));
-            assert_eq!(
-                parsed.summary.as_deref(),
-                Some("Pin the chart and roll back staging.")
-            );
-            // Duplicates and casing are normalised away.
-            assert_eq!(parsed.tags, vec!["argocd", "staging"]);
+            assert_eq!(parsed.category.as_deref(), Some("infrastructure"));
 
-            // And the literal shape: heading, then exactly two blockquote lines.
-            assert!(out.contains("### Rollback plan\n"), "heading for {body}");
+            // And the literal shape: heading, then the category as a tag.
             assert!(
-                out.contains("> Pin the chart and roll back staging.\n> #argocd #staging\n\n"),
-                "summary and tag lines for {body}:\n{out}"
+                out.contains("### Rollback plan\n> #infrastructure\n\n"),
+                "heading and category for {body}:\n{out}"
             );
         }
     }
 
     #[test]
-    fn steers_tags_towards_the_vocabulary_already_in_use() {
-        let vocabulary = Vocabulary {
-            counts: [("staging".to_string(), 12)].into_iter().collect(),
-            aliases: Default::default(),
-            categories: Default::default(),
-        };
-        // The stub answers "Stagging", one edit away from the known tag.
-        let backend = StubBackend::new(r#"{"subject":"a","summary":"b","tags":["Stagging"]}"#);
-        let out = enrich("some note", ENGLISH, &vocabulary, &backend).unwrap();
-        assert_eq!(out.tags, vec!["staging"]);
+    fn a_category_off_the_list_is_none() {
+        let out = enrich("note", ENGLISH, &categories(&["movie"]), &fixed_stub()).unwrap();
+        assert_eq!(out.category, "");
     }
 
     #[test]
-    fn the_category_becomes_the_first_tag_and_survives_the_cap() {
-        let backend = StubBackend::new(
-            r#"{"subject":"a","summary":"b","category":"Gaming","tags":["silksong","boss","gaming","map","secret","waterfall"]}"#,
-        );
-        let out = enrich("note", ENGLISH, &Vocabulary::default(), &backend).unwrap();
-        assert_eq!(out.category, "gaming");
-        assert_eq!(out.tags, vec!["gaming", "silksong", "boss", "map", "secret"]);
+    fn no_category_writes_no_category_line() {
+        let backend = StubBackend::new(r#"{"subject":"Hello","category":""}"#);
+        let out = enrich("hello", ENGLISH, &categories(&["movie"]), &backend).unwrap();
+        let doc = append_note("", &pending("01AAA", "hello"), DATE);
+        let written = update_note(&doc, "01AAA", &patch(&out, ENGLISH)).unwrap();
+        assert!(written.contains("### Hello\nhello\n"), "{written}");
+        assert_eq!(parse_notes(&written, DATE, FILE)[0].category, None);
     }
 
     #[test]
-    fn offers_only_existing_tags_the_note_mentions() {
-        let tags = ["argo-cd", "job", "emails", "cd", "home-assistant", "data-team"]
-            .iter()
-            .map(|t| t.to_string())
-            .collect();
-        assert_eq!(
-            related_tags(tags, "ArgoCD sync broke for the team, and Home Assistant"),
-            vec!["argo-cd", "home-assistant"]
-        );
-    }
-
-    #[test]
-    fn offers_tags_through_possessives_elisions_and_one_typo() {
-        let tags = ["angular", "versioning", "api", "argo-cd", "staging", "preview"]
-            .iter()
-            .map(|t| t.to_string())
-            .collect();
-        assert_eq!(
-            related_tags(tags, "Le versionning de l'API d'Angular, Angular's review"),
-            vec!["angular", "versioning", "api"]
-        );
+    fn the_prompt_and_the_grammar_offer_the_list() {
+        struct Recording(std::sync::Mutex<Vec<String>>);
+        impl Backend for Recording {
+            fn generate(&self, prompt: &str, grammar: &str) -> Result<String, String> {
+                let mut seen = self.0.lock().unwrap();
+                seen.push(prompt.to_string());
+                seen.push(grammar.to_string());
+                Ok(r#"{"subject":"a","category":"game"}"#.to_string())
+            }
+        }
+        let backend = Recording(Default::default());
+        let french = language::find("fr").unwrap();
+        let out = enrich("Silksong", french, &categories(&["movie", "game"]), &backend).unwrap();
+        assert_eq!(out.category, "game");
+        let seen = backend.0.lock().unwrap();
+        assert!(seen[0].contains("CATEGORIES: movie, game"), "{}", seen[0]);
+        assert!(seen[1].contains(r#"("movie" | "game")?"#), "{}", seen[1]);
     }
 
     #[test]
@@ -268,158 +210,64 @@ mod tests {
                 Err("model exploded".to_string())
             }
         }
-        let err = enrich("note", ENGLISH, &Vocabulary::default(), &Failing).unwrap_err();
+        let err = enrich("note", ENGLISH, &[], &Failing).unwrap_err();
         assert!(err.contains("model exploded"));
     }
 
     #[test]
     fn output_that_is_not_the_object_is_a_failure_not_a_bad_write() {
         let backend = StubBackend::new("I'm sorry, I cannot do that.");
-        assert!(enrich("note", ENGLISH, &Vocabulary::default(), &backend).is_err());
+        assert!(enrich("note", ENGLISH, &[], &backend).is_err());
     }
 
-    #[test]
-    fn tags_that_all_normalise_away_are_a_failure() {
-        let backend =
-            StubBackend::new("{\"subject\":\"a\",\"summary\":\"b\",\"tags\":[\"###\",\"!!!\"]}");
-        assert!(enrich("note", ENGLISH, &Vocabulary::default(), &backend).is_err());
-    }
-
-    /// A note should be tagged with what it is about, including the project or
-    /// broad subject it belongs to, not with what kind of note it is.
-    /// Needs a model; `cargo test -- --ignored`.
+    /// A note is filed under what it is about, from the one English list,
+    /// whatever language it is written or labelled in, while its subject
+    /// follows the language. Needs a model; `cargo test -- --ignored`.
     #[test]
     #[ignore = "needs a downloaded model"]
-    fn tags_a_technical_note_topically() {
+    fn files_notes_under_the_category_they_are_about_in_either_language() {
         let Some(backend) = load_installed_model() else {
             return;
         };
-
-        // The vocabulary a few generic tags have already polluted, which is the
-        // situation the prompt has to cope with.
-        let vocabulary = Vocabulary {
-            counts: [
-                ("plan", 4u32),
-                ("test", 4),
-                ("sync", 3),
-                ("issue", 2),
-                ("rollback", 1),
-                ("argocd", 1),
-            ]
-            .into_iter()
-            .map(|(t, c)| (t.to_string(), c))
-            .collect(),
-            aliases: Default::default(),
-            categories: Default::default(),
-        };
-
-        let cases: [(&str, &[&str]); 3] = [
+        let list = english();
+        let cases: [(&str, &str); 6] = [
             (
-                "Translation issue with the API request, and prefer to go from API to pure json file",
-                &["translation", "api", "json"],
+                "Hollow Knight: Silksong, finally beat the second boss. Took me 25 tries.",
+                "game",
+            ),
+            ("Cooked ramen from scratch, 6 hours of broth. Worth it.", "food"),
+            (
+                "Watched two episodes of Severance season 2. Still no idea what the goats are for.",
+                "tv",
             ),
             (
-                "The grammar crashed because sampler.accept was called twice per token in the Rust decode loop of llama.cpp",
-                &["grammar", "rust"],
+                "Pair programming with Julie on the NestJS guard for scoped API keys.",
+                "development",
             ),
             (
-                "Is Scratchnote app replacing Balise? I don't think so, they don't serve de same purpose. Though they are complementary",
-                &["scratchnote", "balise"],
+                "Rappel: acheter les places pour le concert de Justice en octobre.",
+                "music",
+            ),
+            (
+                "Reviewed Tom's PR on the Angular HTTP interceptor for refresh tokens.",
+                "development",
             ),
         ];
 
-        let mut missing = Vec::new();
+        let mut wrong = Vec::new();
         for (note, wanted) in cases {
-            let out = enrich(note, ENGLISH, &vocabulary, backend.as_ref()).expect("should label");
-            eprintln!(
-                "{note}
-  -> {} | {:?}",
-                out.subject, out.tags
-            );
-
-            for topic in wanted {
-                if !out.tags.iter().any(|tag| tag == topic) {
-                    missing.push(format!("{topic:?} for {note:?} (got {:?})", out.tags));
+            for language in [ENGLISH, language::find("fr").unwrap()] {
+                let out = enrich(note, language, &list, backend.as_ref()).expect("should label");
+                eprintln!("[{}] {} | {} <- {note}", language.code, out.category, out.subject);
+                if out.category != wanted {
+                    wrong.push(format!(
+                        "{note:?} in {}: {:?} not {wanted}",
+                        language.code, out.category
+                    ));
                 }
             }
-            assert!(
-                !out.tags
-                    .iter()
-                    .any(|t| ["issue", "sync", "comparison"].contains(&t.as_str())),
-                "a genre tag survived: {:?}",
-                out.tags
-            );
         }
-        assert!(
-            missing.is_empty(),
-            "missing topical tags:
-  {}",
-            missing.join(
-                "
-  "
-            )
-        );
-    }
-
-    /// An existing tag is a spelling to reuse, not a list to pick from. With a
-    /// real vocabulary on offer, a note about a memory leak came back tagged
-    /// `tools` and `ux` because those were there, and without `memory` or
-    /// `leak`. Needs a model; `cargo test -- --ignored`.
-    #[test]
-    #[ignore = "needs a downloaded model"]
-    fn does_not_pad_with_existing_tags_that_do_not_fit() {
-        let Some(backend) = load_installed_model() else {
-            return;
-        };
-
-        // The vocabulary as it stood when the bad tags appeared.
-        let vocabulary = Vocabulary {
-            counts: [
-                ("test", 4u32),
-                ("plan", 3),
-                ("scratchnote", 2),
-                ("sync", 2),
-                ("tools", 2),
-                ("ux", 2),
-                ("argocd", 1),
-                ("balise", 1),
-                ("bandwidth", 1),
-                ("documentation", 1),
-                ("migration", 1),
-                ("primeng", 1),
-                ("rollback", 1),
-                ("translation", 1),
-            ]
-            .into_iter()
-            .map(|(t, c)| (t.to_string(), c))
-            .collect(),
-            aliases: Default::default(),
-            categories: Default::default(),
-        };
-
-        let note = "memory burst usage of Scratchnote to check if there's a memory leak";
-        let out = enrich(note, ENGLISH, &vocabulary, backend.as_ref()).expect("should label");
-        eprintln!("{note}\n  -> {} | {:?}", out.subject, out.tags);
-
-        assert!(
-            out.tags.iter().any(|t| t == "scratchnote"),
-            "{:?}",
-            out.tags
-        );
-        assert!(
-            out.tags
-                .iter()
-                .any(|t| t.contains("memory") || t.contains("leak")),
-            "the topic is missing: {:?}",
-            out.tags
-        );
-        for unrelated in ["tools", "ux"] {
-            assert!(
-                !out.tags.iter().any(|t| t == unrelated),
-                "padded with {unrelated}: {:?}",
-                out.tags
-            );
-        }
+        assert!(wrong.is_empty(), "misfiled:\n  {}", wrong.join("\n  "));
     }
 
     /// A note at the length cap used to abort the whole process inside
@@ -434,21 +282,27 @@ mod tests {
         };
         let sentence = "Staging deploy notes: the ArgoCD sync wave order was wrong again. ";
         let long = sentence.repeat(12_000 / sentence.len() + 1);
-        let out = enrich(&long, ENGLISH, &Vocabulary::default(), backend.as_ref())
-            .expect("a note at the cap should label");
-        assert!(!out.tags.is_empty());
+        let out = enrich(
+            &long,
+            ENGLISH,
+            &categories(&["infrastructure"]),
+            backend.as_ref(),
+        )
+        .expect("a note at the cap should label");
+        assert!(!out.subject.is_empty());
 
         // Straight to the backend, past the truncation, so the prompt is
         // longer than the context.
-        let huge = prompt::build(&"é ".repeat(20_000), "English", &[], &[]);
+        let huge = prompt::build(&"é ".repeat(20_000), "English", &[]);
         let err = backend
-            .generate(&huge, grammar::ENRICHMENT_GBNF)
+            .generate(&huge, &grammar::enrichment(&[]))
             .unwrap_err();
         assert!(err.contains("too long"), "{err}");
     }
 
-    /// The labels follow the language the user picked, not the note's. Needs
-    /// a model; `cargo test -- --ignored`.
+    /// The subject follows the language the user picked, not the note's,
+    /// even though the categories on offer are English. Needs a model;
+    /// `cargo test -- --ignored`.
     #[test]
     #[ignore = "needs a downloaded model"]
     fn labels_in_the_chosen_language_whatever_the_note_is_in() {
@@ -470,18 +324,14 @@ mod tests {
         ];
 
         for (note, language, common_words) in cases {
-            let out = enrich(note, language, &Vocabulary::default(), backend.as_ref())
-                .expect("should label");
-            eprintln!(
-                "{note}\n  -> [{}] {} | {} | {:?}",
-                language.name, out.subject, out.summary, out.tags
-            );
-            let summary = format!(" {} ", out.summary.to_lowercase());
+            let out = enrich(note, language, &english(), backend.as_ref()).expect("should label");
+            eprintln!("{note}\n  -> [{}] {} | {}", language.name, out.subject, out.category);
+            let subject = format!(" {} ", out.subject.to_lowercase());
             assert!(
-                common_words.iter().any(|word| summary.contains(word)),
-                "the summary is not in {}: {}",
+                common_words.iter().any(|word| subject.contains(word)),
+                "the subject is not in {}: {}",
                 language.name,
-                out.summary
+                out.subject
             );
         }
     }
@@ -506,48 +356,23 @@ mod tests {
     #[test]
     #[ignore = "needs a downloaded model"]
     fn the_real_model_returns_schema_valid_json_for_every_sample() {
-        use crate::enrich::download;
-        use crate::enrich::llama::LlamaCpp;
-        use crate::enrich::model::model_file;
-
-        let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))
-        else {
-            eprintln!("no home directory, skipping");
-            return;
-        };
-        let root = std::path::PathBuf::from(home).join("Scratchnote");
-
-        let Some(variant) = download::installed_variant(&root) else {
+        let Some(backend) = load_installed_model() else {
             eprintln!("no model installed, skipping");
             return;
         };
-
-        let backend = LlamaCpp::load(&model_file(&root, variant)).expect("the model should load");
-        let vocabulary = Vocabulary::default();
+        let list = categories(&["development", "infrastructure", "home", "food"]);
 
         for body in samples().iter().take(5) {
-            let out = enrich(body, ENGLISH, &vocabulary, &backend)
+            let out = enrich(body, ENGLISH, &list, backend.as_ref())
                 .unwrap_or_else(|e| panic!("{body:?} failed: {e}"));
 
             assert!(!out.subject.trim().is_empty(), "empty subject for {body:?}");
-            assert!(!out.summary.trim().is_empty(), "empty summary for {body:?}");
             assert!(
-                (1..=5).contains(&out.tags.len()),
-                "{} tags for {body:?}: {:?}",
-                out.tags.len(),
-                out.tags
+                out.category.is_empty() || list.contains(&out.category),
+                "{:?} is off the list for {body:?}",
+                out.category
             );
-            for tag in &out.tags {
-                assert!(
-                    tag.chars().all(|c| c.is_alphanumeric() || c == '-'),
-                    "tag {tag:?} is not normalised for {body:?}"
-                );
-            }
-            eprintln!(
-                "{body:?}
-  -> {} | {:?}",
-                out.subject, out.tags
-            );
+            eprintln!("{body:?}\n  -> {} | {}", out.subject, out.category);
         }
     }
 
@@ -555,11 +380,11 @@ mod tests {
     fn the_failed_patch_keeps_what_was_already_there() {
         let mut note = pending("01AAA", "body");
         note.subject = Some("kept".to_string());
-        note.tags = vec!["kept-tag".to_string()];
+        note.category = Some("kept-category".to_string());
 
         let patch = failed_patch(&note);
         assert_eq!(patch.status, Status::Failed);
         assert_eq!(patch.subject.as_deref(), Some("kept"));
-        assert_eq!(patch.tags, vec!["kept-tag"]);
+        assert_eq!(patch.category.as_deref(), Some("kept-category"));
     }
 }

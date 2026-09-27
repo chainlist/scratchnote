@@ -1,8 +1,8 @@
 //! In-memory search, SPEC 6.
 //!
-//! A query is words and `#tag` tokens. Every word must appear somewhere in the
-//! subject, summary or body, and every tag must be on the note. Matching
-//! ignores case and accents, so `reunion` finds `Réunion`.
+//! A query is words and `#category` tokens. Every word must appear somewhere
+//! in the subject or body, and the note must be filed under the category.
+//! Matching ignores case and accents, so `reunion` finds `Réunion`.
 
 use std::collections::HashMap;
 
@@ -24,19 +24,18 @@ pub fn fold(text: &str) -> String {
 #[derive(Debug, Default, PartialEq, Eq)]
 struct Query {
     words: Vec<String>,
-    tags: Vec<String>,
+    categories: Vec<String>,
 }
 
 impl Query {
-    /// Tag tokens go through the same cleaning and aliases as the model's
-    /// tags, so `#K8s` finds notes tagged `kubernetes` when that alias exists.
-    fn parse(raw: &str, aliases: &HashMap<String, String>) -> Self {
+    /// Category tokens go through the same cleaning as a category typed in
+    /// the editor, so `#Home Lab` is not needed to find `home-lab`.
+    fn parse(raw: &str) -> Self {
         let mut query = Query::default();
         for token in raw.split_whitespace() {
             if token.starts_with('#') {
-                if let Some(tag) = normalize::clean(token) {
-                    let tag = aliases.get(&tag).cloned().unwrap_or(tag);
-                    query.tags.push(fold(&tag));
+                if let Some(category) = normalize::clean(token) {
+                    query.categories.push(fold(&category));
                 }
             } else {
                 query.words.push(fold(token));
@@ -46,13 +45,13 @@ impl Query {
     }
 
     fn is_empty(&self) -> bool {
-        self.words.is_empty() && self.tags.is_empty()
+        self.words.is_empty() && self.categories.is_empty()
     }
 
-    fn has_tags(&self, entry: &IndexEntry) -> bool {
-        self.tags
+    fn has_category(&self, entry: &IndexEntry) -> bool {
+        self.categories
             .iter()
-            .all(|wanted| entry.tags.iter().any(|tag| fold(tag) == *wanted))
+            .all(|wanted| entry.category.as_deref().map(fold).as_ref() == Some(wanted))
     }
 
     fn has_words(&self, entry: &IndexEntry) -> bool {
@@ -60,7 +59,7 @@ impl Query {
     }
 }
 
-/// A query's words as typed, without its `#tag` filters: what search by
+/// A query's words as typed, without its `#category` filter: what search by
 /// meaning embeds.
 pub fn words(raw: &str) -> String {
     raw.split_whitespace()
@@ -69,39 +68,33 @@ pub fn words(raw: &str) -> String {
         .join(" ")
 }
 
-/// Up to `k` notes of `hits`, best first, that pass the query's `#tag`
-/// filters without matching its words: what search by meaning adds under the
+/// Up to `k` notes of `hits`, best first, that pass the query's `#category`
+/// filter without matching its words: what search by meaning adds under the
 /// word matches.
-pub fn by_meaning(
-    index: &Index,
-    raw: &str,
-    aliases: &HashMap<String, String>,
-    hits: &[(String, f32)],
-    k: usize,
-) -> Vec<Note> {
-    let query = Query::parse(raw, aliases);
+pub fn by_meaning(index: &Index, raw: &str, hits: &[(String, f32)], k: usize) -> Vec<Note> {
+    let query = Query::parse(raw);
     let entries: HashMap<&str, &IndexEntry> = index
         .entries()
         .map(|entry| (entry.id.as_str(), entry))
         .collect();
     hits.iter()
         .filter_map(|(id, _)| entries.get(id.as_str()))
-        .filter(|entry| query.has_tags(entry) && !query.has_words(entry))
+        .filter(|entry| query.has_category(entry) && !query.has_words(entry))
         .take(k)
         .map(|entry| entry.to_note())
         .collect()
 }
 
 /// Newest first: by date, then by time within the day.
-pub fn search(index: &Index, raw: &str, aliases: &HashMap<String, String>) -> Vec<Note> {
-    let query = Query::parse(raw, aliases);
+pub fn search(index: &Index, raw: &str) -> Vec<Note> {
+    let query = Query::parse(raw);
     if query.is_empty() {
         return Vec::new();
     }
 
     let mut hits: Vec<Note> = index
         .entries()
-        .filter(|entry| query.has_tags(entry) && query.has_words(entry))
+        .filter(|entry| query.has_category(entry) && query.has_words(entry))
         .map(|entry| entry.to_note())
         .collect();
 
@@ -115,15 +108,14 @@ mod tests {
     use crate::storage::daily_file::{body_hash, Status};
     use crate::storage::relative_day_path;
 
-    fn note(id: &str, date: &str, time: &str, body: &str, tags: &[&str]) -> Note {
+    fn note(id: &str, date: &str, time: &str, body: &str, category: Option<&str>) -> Note {
         Note {
             id: id.to_string(),
             date: date.to_string(),
             time: time.to_string(),
             file: relative_day_path(date),
             subject: None,
-            summary: None,
-            tags: tags.iter().map(|t| t.to_string()).collect(),
+            category: category.map(str::to_string),
             status: Status::Done,
             hash: body_hash(body),
             lang: None,
@@ -143,159 +135,126 @@ mod tests {
         hits.iter().map(|n| n.id.as_str()).collect()
     }
 
-    fn no_aliases() -> HashMap<String, String> {
-        HashMap::new()
-    }
-
     #[test]
     fn folds_case_and_accents() {
         assert_eq!(fold("Réunion ÉQUIPE"), "reunion equipe");
     }
 
     #[test]
-    fn splits_words_from_tags() {
-        let query = Query::parse("#Infra  kubernetes #k8s", &no_aliases());
+    fn splits_words_from_categories() {
+        let query = Query::parse("#Infra  kubernetes");
         assert_eq!(query.words, vec!["kubernetes"]);
-        assert_eq!(query.tags, vec!["infra", "k8s"]);
+        assert_eq!(query.categories, vec!["infra"]);
     }
 
     #[test]
     fn an_empty_query_finds_nothing() {
-        let idx = index(&[note("01A", "2026-09-22", "08:00", "anything", &[])]);
-        assert!(search(&idx, "   ", &no_aliases()).is_empty());
-        assert!(search(&idx, "#", &no_aliases()).is_empty());
+        let idx = index(&[note("01A", "2026-09-22", "08:00", "anything", None)]);
+        assert!(search(&idx, "   ").is_empty());
+        assert!(search(&idx, "#").is_empty());
     }
 
     #[test]
     fn matches_substrings_ignoring_case_and_accents() {
         let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "Réunion demain", &[]),
-            note("01B", "2026-09-22", "09:00", "Buy coffee", &[]),
+            note("01A", "2026-09-22", "08:00", "Réunion demain", None),
+            note("01B", "2026-09-22", "09:00", "Buy coffee", None),
         ]);
-        assert_eq!(ids(&search(&idx, "REUNION", &no_aliases())), vec!["01A"]);
-        assert_eq!(ids(&search(&idx, "offe", &no_aliases())), vec!["01B"]);
+        assert_eq!(ids(&search(&idx, "REUNION")), vec!["01A"]);
+        assert_eq!(ids(&search(&idx, "offe")), vec!["01B"]);
     }
 
     #[test]
-    fn searches_subject_and_summary_too() {
-        let mut n = note("01A", "2026-09-22", "08:00", "body text", &[]);
+    fn searches_the_subject_too() {
+        let mut n = note("01A", "2026-09-22", "08:00", "body text", None);
         n.subject = Some("Rollback plan".into());
-        n.summary = Some("Pin the chart".into());
         let idx = index(&[n]);
-        assert_eq!(ids(&search(&idx, "rollback", &no_aliases())), vec!["01A"]);
-        assert_eq!(ids(&search(&idx, "chart", &no_aliases())), vec!["01A"]);
+        assert_eq!(ids(&search(&idx, "rollback")), vec!["01A"]);
     }
 
     #[test]
     fn every_word_must_match() {
         let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "staging broke again", &[]),
-            note("01B", "2026-09-22", "09:00", "staging is fine", &[]),
+            note("01A", "2026-09-22", "08:00", "staging broke again", None),
+            note("01B", "2026-09-22", "09:00", "staging is fine", None),
         ]);
-        assert_eq!(
-            ids(&search(&idx, "staging broke", &no_aliases())),
-            vec!["01A"]
-        );
+        assert_eq!(ids(&search(&idx, "staging broke")), vec!["01A"]);
     }
 
     #[test]
-    fn tags_are_and_filters() {
+    fn a_category_filters_on_the_notes_filed_under_it() {
         let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "a", &["infra", "kubernetes"]),
-            note("01B", "2026-09-22", "09:00", "b", &["infra"]),
-            note("01C", "2026-09-22", "10:00", "c", &["kubernetes"]),
+            note("01A", "2026-09-22", "08:00", "a", Some("infra")),
+            note("01B", "2026-09-22", "09:00", "b", Some("infra")),
+            note("01C", "2026-09-22", "10:00", "c", Some("movie")),
+            note("01D", "2026-09-22", "11:00", "d", None),
         ]);
-        assert_eq!(
-            ids(&search(&idx, "#infra", &no_aliases())),
-            vec!["01B", "01A"]
-        );
-        assert_eq!(
-            ids(&search(&idx, "#infra #kubernetes", &no_aliases())),
-            vec!["01A"]
-        );
+        assert_eq!(ids(&search(&idx, "#infra")), vec!["01B", "01A"]);
+        // A note has one category, so two never match together.
+        assert!(search(&idx, "#infra #movie").is_empty());
     }
 
     #[test]
-    fn a_tag_must_match_whole_not_as_a_substring() {
-        let idx = index(&[note("01A", "2026-09-22", "08:00", "a", &["infrastructure"])]);
-        assert!(search(&idx, "#infra", &no_aliases()).is_empty());
+    fn a_category_must_match_whole_not_as_a_substring() {
+        let idx = index(&[note("01A", "2026-09-22", "08:00", "a", Some("infrastructure"))]);
+        assert!(search(&idx, "#infra").is_empty());
     }
 
     #[test]
-    fn meaning_embeds_the_words_as_typed_without_the_tags() {
-        assert_eq!(words("#db  Slow queries #infra"), "Slow queries");
+    fn meaning_embeds_the_words_as_typed_without_the_category() {
+        assert_eq!(words("#db  Slow queries"), "Slow queries");
         assert_eq!(words("#db"), "");
     }
 
     #[test]
-    fn by_meaning_adds_what_the_words_missed_within_the_tag_filters() {
+    fn by_meaning_adds_what_the_words_missed_within_the_category() {
         let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "postgres index tip", &["db"]),
-            note("01B", "2026-09-22", "09:00", "slow query plan", &["db"]),
-            note("01C", "2026-09-22", "10:00", "sql migration", &["infra"]),
+            note("01A", "2026-09-22", "08:00", "postgres index tip", Some("db")),
+            note("01B", "2026-09-22", "09:00", "slow query plan", Some("db")),
+            note("01C", "2026-09-22", "10:00", "sql migration", Some("infra")),
         ]);
         let hits: Vec<(String, f32)> = [("01C", 0.4), ("01Z", 0.35), ("01B", 0.3), ("01A", 0.2)]
             .into_iter()
             .map(|(id, score)| (id.to_string(), score))
             .collect();
-        // 01A already matches the words, 01C lacks the tag, 01Z is not a note.
-        assert_eq!(
-            ids(&by_meaning(&idx, "postgres #db", &no_aliases(), &hits, 5)),
-            vec!["01B"]
-        );
-        assert_eq!(
-            ids(&by_meaning(&idx, "postgres", &no_aliases(), &hits, 1)),
-            vec!["01C"]
-        );
+        // 01A already matches the words, 01C is filed elsewhere, 01Z is not a note.
+        assert_eq!(ids(&by_meaning(&idx, "postgres #db", &hits, 5)), vec!["01B"]);
+        assert_eq!(ids(&by_meaning(&idx, "postgres", &hits, 1)), vec!["01C"]);
     }
 
     #[test]
-    fn combines_tags_and_words() {
+    fn combines_a_category_and_words() {
         let idx = index(&[
-            note(
-                "01A",
-                "2026-09-22",
-                "08:00",
-                "kubernetes upgrade",
-                &["infra"],
-            ),
-            note("01B", "2026-09-22", "09:00", "kubernetes talk", &["meetup"]),
+            note("01A", "2026-09-22", "08:00", "kubernetes upgrade", Some("infra")),
+            note("01B", "2026-09-22", "09:00", "kubernetes talk", Some("meetup")),
         ]);
-        assert_eq!(
-            ids(&search(&idx, "#infra kubernetes", &no_aliases())),
-            vec!["01A"]
-        );
+        assert_eq!(ids(&search(&idx, "#infra kubernetes")), vec!["01A"]);
     }
 
     #[test]
-    fn tag_tokens_resolve_through_aliases_and_ignore_accents() {
+    fn category_tokens_are_cleaned_and_ignore_accents() {
         let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "a", &["kubernetes"]),
-            note("01B", "2026-09-22", "09:00", "b", &["réunion"]),
+            note("01A", "2026-09-22", "08:00", "a", Some("home-lab")),
+            note("01B", "2026-09-22", "09:00", "b", Some("série")),
         ]);
-        let aliases: HashMap<String, String> =
-            [("k8s".to_string(), "kubernetes".to_string())].into();
-        assert_eq!(ids(&search(&idx, "#K8s", &aliases)), vec!["01A"]);
-        assert_eq!(ids(&search(&idx, "#reunion", &aliases)), vec!["01B"]);
+        assert_eq!(ids(&search(&idx, "#Home_Lab")), vec!["01A"]);
+        assert_eq!(ids(&search(&idx, "#serie")), vec!["01B"]);
     }
 
     #[test]
     fn newest_first_by_date_then_time() {
         let idx = index(&[
-            note("01A", "2026-09-21", "23:00", "x", &[]),
-            note("01B", "2026-09-22", "08:00", "x", &[]),
-            note("01C", "2026-09-22", "17:00", "x", &[]),
+            note("01A", "2026-09-21", "23:00", "x", None),
+            note("01B", "2026-09-22", "08:00", "x", None),
+            note("01C", "2026-09-22", "17:00", "x", None),
         ]);
-        assert_eq!(
-            ids(&search(&idx, "x", &no_aliases())),
-            vec!["01C", "01B", "01A"]
-        );
+        assert_eq!(ids(&search(&idx, "x")), vec!["01C", "01B", "01A"]);
     }
 
     #[test]
     fn results_carry_the_body_for_the_note_card() {
-        let idx = index(&[note("01A", "2026-09-22", "08:00", "the body", &[])]);
-        assert_eq!(search(&idx, "body", &no_aliases())[0].body, "the body");
+        let idx = index(&[note("01A", "2026-09-22", "08:00", "the body", None)]);
+        assert_eq!(search(&idx, "body")[0].body, "the body");
     }
 
     /// SPEC 6: under 50ms for 10,000 notes. Debug builds are several times
@@ -311,19 +270,13 @@ mod tests {
                      Réunion avec l'équipe infra pour le déploiement."
                 );
                 let date = format!("2026-{:02}-{:02}", 1 + i % 12, 1 + i % 28);
-                note(
-                    &format!("{i:05}"),
-                    &date,
-                    "12:00",
-                    &body,
-                    &["infra", "staging"],
-                )
+                note(&format!("{i:05}"), &date, "12:00", &body, Some("infra"))
             })
             .collect();
         let idx = index(&notes);
 
         let started = std::time::Instant::now();
-        let hits = search(&idx, "#infra deploiement friday", &no_aliases());
+        let hits = search(&idx, "#infra deploiement friday");
         let took = started.elapsed();
 
         assert_eq!(hits.len(), 10_000);

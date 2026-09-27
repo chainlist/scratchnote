@@ -90,40 +90,36 @@ fn next_job(app: &AppHandle) -> Option<(Arc<Space>, Job)> {
 /// SPEC 5.1: the model is loaded once, lazily, on the first job, and then
 /// stays resident. Returns `None` when there is nothing on disk to load, or
 /// the model is switched off. An ask loads it the same way when no job has
-/// yet.
+/// yet. One load runs at a time: a chat opened while a job loads the model
+/// waits for that one.
 pub(crate) fn backend(app: &AppHandle) -> Option<Arc<dyn Backend>> {
     let state = app.state::<AppState>();
     if !state.model_enabled() {
         return None;
     }
 
-    if let Ok(guard) = state.backend.read() {
-        if let Some(backend) = guard.clone() {
-            return Some(backend);
+    crate::state::load_once(&state.backend, &state.backend_loading, || {
+        // Read under the lock `update_model` takes to set it, so no load
+        // starts once a swap has begun.
+        if state.swapping.load(std::sync::atomic::Ordering::SeqCst) {
+            return None;
         }
-    }
+        let path = state.active_model()?.path;
+        log::info!("loading {}", path.display());
 
-    if state.swapping.load(std::sync::atomic::Ordering::SeqCst) {
-        return None;
-    }
-    let path = state.active_model()?.path;
-    log::info!("loading {}", path.display());
-
-    match super::llama::LlamaCpp::load_with(&path, state.use_gpu()) {
-        Ok(loaded) => {
-            let backend: Arc<dyn Backend> = Arc::new(loaded);
-            if let Ok(mut slot) = state.backend.write() {
-                *slot = Some(backend.clone());
+        match super::llama::LlamaCpp::load_with(&path, state.use_gpu()) {
+            Ok(loaded) => {
+                state.set_model_status(super::model::ModelStatus::Loaded);
+                let _ = app.emit("model-status", serde_json::json!({ "state": "loaded" }));
+                let backend: Arc<dyn Backend> = Arc::new(loaded);
+                Some(backend)
             }
-            state.set_model_status(super::model::ModelStatus::Loaded);
-            let _ = app.emit("model-status", serde_json::json!({ "state": "loaded" }));
-            Some(backend)
+            Err(e) => {
+                log::error!("could not load the model: {e}");
+                None
+            }
         }
-        Err(e) => {
-            log::error!("could not load the model: {e}");
-            None
-        }
-    }
+    })
 }
 
 fn put_back_unchanged(space: &Space, job: Job) {
@@ -150,14 +146,14 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
     }
 
     let language = state.note_language();
-    let vocabulary = space.vocabulary(language.code);
+    let categories = space.categories();
     let body = note.body.clone();
     let started_with = note.hash.clone();
 
     // Inference is blocking and must never run on the async runtime's
     // reactor, nor outlive the timeout in SPEC 5.6.
     let work = tauri::async_runtime::spawn_blocking(move || {
-        runner::enrich(&body, language, &vocabulary, backend.as_ref())
+        runner::enrich(&body, language, &categories, backend.as_ref())
     });
     let outcome = match tokio::time::timeout(Duration::from_secs(TIMEOUT_SECS), work).await {
         Ok(Ok(result)) => result,
@@ -174,12 +170,11 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
                     log::info!("{} changed while enriching, requeuing", job.id);
                     put_back_unchanged(space, job);
                 }
-                // The user set the subject or tags by hand in the meantime.
+                // The user set the subject or category by hand in the meantime.
                 Some(current) if current.status == Status::Manual => {
                     log::info!("{} was edited by hand while enriching, dropping", job.id);
                 }
                 Some(_) => {
-                    remember_category(&state, space, language.code, &enrichment.category).await;
                     write_back(&state, space, &job, &runner::patch(&enrichment, language)).await;
                     emit_enriched(app, space, &job);
                 }
@@ -204,22 +199,6 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
     }
 
     space.persist_queue(&state.writer).await;
-}
-
-/// Append a category the model invented to its language's list in
-/// `categories.json`, so the next notes are offered it.
-async fn remember_category(state: &AppState, space: &Space, lang: &str, category: &str) {
-    use crate::storage::categories;
-    if space.is_retired() {
-        return;
-    }
-    let Some(contents) = categories::with_added(&space.root, lang, category) else {
-        return;
-    };
-    let path = categories::categories_path(&space.root);
-    if let Err(e) = state.writer.write_index(path, contents).await {
-        log::warn!("could not add {category} to categories.json: {e}");
-    }
 }
 
 fn read_note(path: &std::path::Path, job: &Job) -> Option<daily_file::Note> {

@@ -48,8 +48,8 @@ pub struct Note {
     pub time: String,
     pub file: String,
     pub subject: Option<String>,
-    pub summary: Option<String>,
-    pub tags: Vec<String>,
+    /// The broad subject the note is filed under, one of `categories.json`.
+    pub category: Option<String>,
     pub status: Status,
     pub hash: String,
     /// The locale the model labelled the note in, such as "fr". `None` on a
@@ -82,25 +82,10 @@ pub fn render_note(note: &Note) -> String {
     out.push_str("### ");
     out.push_str(note.subject.as_deref().unwrap_or(UNTITLED));
     out.push('\n');
-    // Tags set by hand on a note the model never reached have no summary to
-    // go with them, so the summary line is left bare rather than dropped.
-    if note.summary.is_some() || !note.tags.is_empty() {
-        match note.summary.as_deref().filter(|s| !s.is_empty()) {
-            Some(summary) => {
-                out.push_str("> ");
-                out.push_str(summary);
-            }
-            None => out.push('>'),
-        }
-        out.push('\n');
-        out.push_str("> ");
-        for (i, tag) in note.tags.iter().enumerate() {
-            if i > 0 {
-                out.push(' ');
-            }
-            out.push('#');
-            out.push_str(tag);
-        }
+    // Written as a tag, so other markdown tools see it as one too.
+    if let Some(category) = &note.category {
+        out.push_str("> #");
+        out.push_str(category);
         out.push_str("\n\n");
     }
     out.push_str(note.body.trim_end());
@@ -197,8 +182,7 @@ pub fn remove_note(content: &str, id: &str) -> Option<String> {
 #[derive(Debug, Clone)]
 pub struct NotePatch {
     pub subject: Option<String>,
-    pub summary: Option<String>,
-    pub tags: Vec<String>,
+    pub category: Option<String>,
     pub status: Status,
     pub lang: Option<String>,
 }
@@ -208,8 +192,7 @@ pub struct NotePatch {
 pub fn update_note(content: &str, id: &str, patch: &NotePatch) -> Option<String> {
     rewrite_block(content, id, |note| {
         note.subject = patch.subject.clone();
-        note.summary = patch.summary.clone();
-        note.tags = patch.tags.clone();
+        note.category = patch.category.clone();
         note.status = patch.status;
         note.lang = patch.lang.clone();
     })
@@ -288,7 +271,7 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
         }
     }
 
-    let (subject, summary, tags, body) = parse_block(block);
+    let (subject, category, body) = parse_block(block);
 
     // A body that no longer matches the hash written with it was edited in
     // another editor (SPEC 4.3). Labels the model wrote describe the old text,
@@ -306,8 +289,7 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
         time: time?,
         file: file.to_string(),
         subject,
-        summary,
-        tags,
+        category,
         status,
         hash: actual,
         lang,
@@ -315,7 +297,7 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
     })
 }
 
-fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, Vec<String>, String) {
+fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, String) {
     let mut rest = block;
 
     let subject = match rest.first().and_then(|l| l.strip_prefix("### ")) {
@@ -331,20 +313,26 @@ fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, Vec<String>, 
         None => None,
     };
 
-    // The enrichment block is exactly two blockquote lines, the second holding
-    // the tags. Requiring that shape keeps a body that merely starts with a
-    // quote from being swallowed.
-    let mut summary = None;
-    let mut tags = Vec::new();
-    let quote = |line: &str| line.starts_with("> ") || line.trim_end() == ">";
-    if rest.len() >= 2 && quote(rest[0]) && rest[1].starts_with("> #") {
-        summary = Some(rest[0][1..].trim().to_string()).filter(|s| !s.is_empty());
-        tags = rest[1][2..]
+    // The category is one `> #category` line and then a blank one. Requiring
+    // that shape keeps a body that merely starts with a quote from being
+    // swallowed. Notes labelled before tags were dropped carry a summary line
+    // and then a line of tags, the category first; the other tags are let go.
+    let first_tag = |line: &str| {
+        line[2..]
             .split_whitespace()
             .map(|t| t.trim_start_matches('#'))
-            .filter(|t| !t.is_empty())
+            .find(|t| !t.is_empty())
             .map(str::to_string)
-            .collect();
+    };
+    let quote = |line: &str| line.starts_with("> ") || line.trim_end() == ">";
+    let mut category = None;
+    if rest.first().is_some_and(|l| l.starts_with("> #"))
+        && rest.get(1).is_none_or(|l| l.trim().is_empty())
+    {
+        category = first_tag(rest[0]);
+        rest = &rest[1..];
+    } else if rest.len() >= 2 && quote(rest[0]) && rest[1].starts_with("> #") {
+        category = first_tag(rest[1]);
         rest = &rest[2..];
     }
 
@@ -352,12 +340,7 @@ fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, Vec<String>, 
         rest = &rest[1..];
     }
 
-    (
-        subject,
-        summary,
-        tags,
-        rest.join("\n").trim_end().to_string(),
-    )
+    (subject, category, rest.join("\n").trim_end().to_string())
 }
 
 #[cfg(test)]
@@ -374,8 +357,7 @@ mod tests {
             time: time.to_string(),
             file: FILE.to_string(),
             subject: None,
-            summary: None,
-            tags: Vec::new(),
+            category: None,
             status: Status::Pending,
             hash: body_hash(body),
             lang: None,
@@ -386,14 +368,7 @@ mod tests {
     fn enriched() -> Note {
         Note {
             subject: Some("Rollback plan for ArgoCD sync issue".to_string()),
-            summary: Some(
-                "Decided to pin the chart version and roll back staging before Friday.".to_string(),
-            ),
-            tags: vec![
-                "argocd".to_string(),
-                "deployment".to_string(),
-                "staging".to_string(),
-            ],
+            category: Some("infrastructure".to_string()),
             status: Status::Done,
             ..pending(
                 "01J8Z3K6Q9X2",
@@ -450,8 +425,7 @@ mod tests {
             concat!(
                 "<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 status=done hash={} -->\n",
                 "### Rollback plan for ArgoCD sync issue\n",
-                "> Decided to pin the chart version and roll back staging before Friday.\n",
-                "> #argocd #deployment #staging\n",
+                "> #infrastructure\n",
                 "\n",
                 "Talked with the team, the auto-sync broke staging again.\n",
                 "We pin the chart version and roll back before Friday release.\n",
@@ -463,7 +437,7 @@ mod tests {
     }
 
     #[test]
-    fn renders_a_pending_note_without_a_summary_block() {
+    fn renders_a_pending_note_without_a_category_line() {
         let rendered = render_note(&pending("01J8Z4P1M7T0", "15:10", "Buy a USB-C hub"));
         assert!(rendered.contains("### (untitled)\nBuy a USB-C hub\n"));
         assert!(!rendered.lines().any(|l| l.starts_with("> ")));
@@ -491,7 +465,15 @@ mod tests {
     fn a_body_starting_with_a_blockquote_is_not_read_as_enrichment() {
         let note = pending("01DDD", "11:00", "> quoted thought\n> and more");
         let parsed = parse_one(&render_note(&note));
-        assert_eq!(parsed.summary, None);
+        assert_eq!(parsed.category, None);
+        assert_eq!(parsed, note);
+    }
+
+    #[test]
+    fn a_body_starting_with_a_quoted_hashtag_is_not_read_as_a_category() {
+        let note = pending("01DDD", "11:00", "> #1 priority\n> ship it");
+        let parsed = parse_one(&render_note(&note));
+        assert_eq!(parsed.category, None);
         assert_eq!(parsed, note);
     }
 
@@ -627,8 +609,7 @@ mod tests {
     fn enrich_patch() -> NotePatch {
         NotePatch {
             subject: Some("Rollback plan for ArgoCD sync issue".to_string()),
-            summary: Some("Pin the chart version and roll back staging.".to_string()),
-            tags: vec!["argocd".to_string(), "staging".to_string()],
+            category: Some("infrastructure".to_string()),
             status: Status::Done,
             lang: Some("fr".to_string()),
         }
@@ -663,7 +644,7 @@ mod tests {
             after.subject.as_deref(),
             Some("Rollback plan for ArgoCD sync issue")
         );
-        assert_eq!(after.tags, vec!["argocd", "staging"]);
+        assert_eq!(after.category.as_deref(), Some("infrastructure"));
     }
 
     #[test]
@@ -708,24 +689,20 @@ mod tests {
     }
 
     #[test]
-    fn hand_set_tags_survive_on_a_note_with_no_summary() {
-        let note = Note {
-            subject: Some("Hub shopping".to_string()),
-            tags: vec!["homelab".to_string()],
-            status: Status::Manual,
-            ..pending("01J8Z4P1M7T0", "15:10", "Buy a new USB-C hub")
-        };
-        let rendered = render_note(&note);
-        assert!(rendered.contains("### Hub shopping\n>\n> #homelab\n\nBuy"));
-        assert_eq!(parse_one(&rendered), note);
+    fn a_note_labelled_with_a_summary_and_tags_keeps_its_first_tag_as_category() {
+        let doc = "<!-- sn:note id=01AAA time=08:00 status=done hash=dead -->\n### s\n> A summary.\n> #infra #argocd #staging\n\nbody\n<!-- sn:end -->\n";
+        let note = parse_one(doc);
+        assert_eq!(note.category.as_deref(), Some("infra"));
+        assert_eq!(note.body, "body");
+        // Written back, the summary and the other tags are gone.
+        assert!(render_note(&note).contains("### s\n> #infra\n\nbody\n"));
     }
 
     #[test]
     fn a_bare_summary_line_with_trailing_spaces_still_parses() {
         let doc = "<!-- sn:note id=01AAA time=08:00 status=manual hash=dead -->\n### s\n>   \n> #infra\n\nbody\n<!-- sn:end -->\n";
         let note = parse_one(doc);
-        assert_eq!(note.summary, None);
-        assert_eq!(note.tags, vec!["infra"]);
+        assert_eq!(note.category.as_deref(), Some("infra"));
         assert_eq!(note.body, "body");
     }
 
@@ -741,8 +718,7 @@ mod tests {
         assert_eq!(after.body, "a new body");
         assert_eq!(after.hash, body_hash("a new body"));
         assert_eq!(after.subject, before.subject);
-        assert_eq!(after.summary, before.summary);
-        assert_eq!(after.tags, before.tags);
+        assert_eq!(after.category, before.category);
         assert_eq!(after.status, before.status);
     }
 

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Instant;
 
 use crate::embed::Embedder;
@@ -20,7 +20,7 @@ pub struct AppState {
     /// What settings.json says now, for the parts that apply live.
     pub settings: RwLock<Settings>,
     pub writer: Writer,
-    /// Every space, the default one first. Each keeps its own notes, tags,
+    /// Every space, the default one first. Each keeps its own notes,
     /// categories and queue.
     pub spaces: RwLock<Vec<Arc<Space>>>,
     /// What spaces.json says: which space is open, and the default's name.
@@ -28,6 +28,9 @@ pub struct AppState {
     /// `None` until a model is loaded. Absent is a normal state: capture,
     /// browsing and search all work without one (SPEC 11).
     pub backend: RwLock<Option<Arc<dyn Backend>>>,
+    /// Held while that model loads or its file is swapped, so the two never
+    /// overlap and two loads never run at once (`load_once`).
+    pub backend_loading: Mutex<()>,
     pub model_status: RwLock<ModelStatus>,
     /// Set while a new model file is being moved into place. The old one has
     /// to be unloaded for that on Windows, and this keeps the worker from
@@ -46,6 +49,8 @@ pub struct AppState {
     /// `None` until an embedding model is loaded. Read through
     /// `embed::embedder`, which also honours the model switch.
     pub embedder: RwLock<Option<Arc<dyn Embedder>>>,
+    /// Held while the embedding model loads (`load_once`).
+    pub embedder_loading: Mutex<()>,
     /// Nudges the embed task when an index changes or a model becomes
     /// available.
     pub embed_wake: Wake,
@@ -70,6 +75,31 @@ pub fn resting_status(enabled: bool, on_disk: bool) -> ModelStatus {
         (true, true) => ModelStatus::Idle,
         (true, false) => ModelStatus::Absent,
     }
+}
+
+/// What `slot` holds, or else what `load` makes, which is stored there. One
+/// load runs at a time under `loading`: a caller that comes while one runs
+/// waits for it, then finds its model in the slot instead of loading another
+/// copy. A load that fails leaves the slot empty for the next caller.
+pub fn load_once<T: ?Sized>(
+    slot: &RwLock<Option<Arc<T>>>,
+    loading: &Mutex<()>,
+    load: impl FnOnce() -> Option<Arc<T>>,
+) -> Option<Arc<T>> {
+    let held = || slot.read().ok().and_then(|model| model.clone());
+    if let Some(model) = held() {
+        return Some(model);
+    }
+    // Only `()` is guarded, so a load that panicked leaves nothing to repair.
+    let _one_at_a_time = loading.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(model) = held() {
+        return Some(model);
+    }
+    let model = load()?;
+    if let Ok(mut slot) = slot.write() {
+        *slot = Some(model.clone());
+    }
+    Some(model)
 }
 
 impl AppState {
@@ -199,5 +229,39 @@ mod tests {
         assert_eq!(resting_status(false, false), ModelStatus::Disabled);
         assert_eq!(resting_status(true, true), ModelStatus::Idle);
         assert_eq!(resting_status(true, false), ModelStatus::Absent);
+    }
+
+    /// A load slow enough for a second caller to arrive while it runs.
+    fn slow_load(loads: &AtomicUsize) -> Option<Arc<String>> {
+        loads.fetch_add(1, Ordering::SeqCst);
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        Some(Arc::new("model".to_string()))
+    }
+
+    #[test]
+    fn a_caller_during_a_load_waits_for_it_instead_of_loading_again() {
+        let slot = RwLock::new(None);
+        let loading = Mutex::new(());
+        let loads = AtomicUsize::new(0);
+        let (first, second) = std::thread::scope(|scope| {
+            let first = scope.spawn(|| load_once(&slot, &loading, || slow_load(&loads)));
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let second = scope.spawn(|| load_once(&slot, &loading, || slow_load(&loads)));
+            (first.join().unwrap(), second.join().unwrap())
+        });
+        assert_eq!(loads.load(Ordering::SeqCst), 1);
+        assert!(Arc::ptr_eq(&first.unwrap(), &second.unwrap()));
+    }
+
+    #[test]
+    fn a_failed_load_leaves_the_slot_for_the_next_caller() {
+        let slot = RwLock::new(None);
+        let loading = Mutex::new(());
+        assert!(load_once(&slot, &loading, || None::<Arc<String>>).is_none());
+        let model = load_once(&slot, &loading, || Some(Arc::new("model".to_string())));
+        assert_eq!(model.as_deref().map(String::as_str), Some("model"));
+        // In the slot now, so nothing loads.
+        let again = load_once(&slot, &loading, || panic!("loaded twice"));
+        assert!(Arc::ptr_eq(&model.unwrap(), &again.unwrap()));
     }
 }

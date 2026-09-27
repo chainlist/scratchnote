@@ -3,7 +3,7 @@
 	import LayersIcon from '@lucide/svelte/icons/layers';
 	import MessageCircleIcon from '@lucide/svelte/icons/message-circle';
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
-	import TagsIcon from '@lucide/svelte/icons/tags';
+	import TagIcon from '@lucide/svelte/icons/tag';
 	import { m } from '$lib/paraglide/messages';
 
 	const features = [
@@ -13,7 +13,7 @@
 			body: m.onboarding_feature_capture_body
 		},
 		{
-			icon: TagsIcon,
+			icon: TagIcon,
 			title: m.onboarding_feature_labels_title,
 			body: m.onboarding_feature_labels_body
 		},

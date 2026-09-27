@@ -11,7 +11,6 @@
 		listCategories,
 		listDays,
 		listSpaces,
-		listTags,
 		modelInfo,
 		modelStatus,
 		onEmbeddingStatus,
@@ -26,7 +25,6 @@
 		search,
 		setTrayLabels,
 		similarNotes,
-		splitCategory,
 		today,
 		updateNote,
 		updateNoteMeta,
@@ -47,14 +45,13 @@
 	import NoteList from '$lib/components/NoteList.svelte';
 	import Onboarding from '$lib/components/Onboarding.svelte';
 	import Settings from '$lib/components/settings/Settings.svelte';
-	import TagFilters from '$lib/components/TagFilters.svelte';
 	import CalendarPage from '$lib/components/CalendarPage.svelte';
-	import TagsPage from '$lib/components/TagsPage.svelte';
 	import TimelineHeader from '$lib/components/TimelineHeader.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { m } from '$lib/paraglide/messages';
 	import { resumeStep } from '$lib/onboarding';
-	import { queryTags, toggleTag } from '$lib/query';
+	import { categoryLabel } from '$lib/categories';
+	import { toggleCategory } from '$lib/query';
 	import type { Timeline } from '$lib/timeline';
 
 	let days = $state<DaySummary[]>([]);
@@ -67,7 +64,6 @@
 	let writingEmpty = $state(false);
 	let error = $state<string | null>(null);
 	let model = $state<ModelStatus>({ state: 'absent' });
-	let tags = $state<[string, number][]>([]);
 	let categories = $state<[string, number][]>([]);
 	/** Every category on the list, for the editor to offer. */
 	let categoryList = $state<string[]>([]);
@@ -75,7 +71,7 @@
 
 	let timeline = $state<Timeline>({ kind: 'day' });
 	/** Changes when a new page opens: another view, day or source note. A
-	 *  search refined by its tag filters stays the same page. */
+	 *  search refined by a category click stays the same page. */
 	const pageKey = $derived(
 		timeline.kind === 'day'
 			? `day:${selected}`
@@ -89,7 +85,6 @@
 	let results = $state<Note[]>([]);
 	/** The notes close to a note, while the timeline lists them. */
 	let similar = $state<Note[]>([]);
-	const activeTags = $derived(timeline.kind === 'search' ? queryTags(timeline.query) : []);
 
 	/** The note open in the editor. */
 	let editing = $state<Note | null>(null);
@@ -109,7 +104,6 @@
 	const headerProps = $derived({
 		timeline,
 		selected,
-		tagCount: tags.length,
 		resultCount: results.length,
 		onback: () => void select(selected),
 		oncalendar: () => (timeline = { kind: 'calendar' })
@@ -117,10 +111,9 @@
 
 	async function refresh() {
 		try {
-			[days, notes, tags, categories, categoryList, spaces, todayDate] = await Promise.all([
+			[days, notes, categories, categoryList, spaces, todayDate] = await Promise.all([
 				listDays(),
 				getDay(selected),
-				listTags(),
 				listCategories(),
 				categoryNames(),
 				listSpaces(),
@@ -196,16 +189,17 @@
 	}
 
 	/**
-	 * A tag clicked on a card opens the command center filtered on it. While
-	 * the timeline lists results, it narrows them instead, see `toggleTag`.
+	 * A category clicked on a card opens the command center filtered on it.
+	 * While the timeline lists results, it narrows them instead, see
+	 * `toggleCategory`.
 	 */
-	function openTag(tag: string, additive = false) {
+	function openCategory(category: string) {
 		if (timeline.kind !== 'search') {
-			query = `#${tag} `;
+			query = `#${categoryLabel(category)} `;
 			paletteOpen = true;
 			return;
 		}
-		void showResults(toggleTag(timeline.query, tag, additive));
+		void showResults(toggleCategory(timeline.query, categoryLabel(category)));
 	}
 
 	function onWindowKeydown(event: KeyboardEvent) {
@@ -230,23 +224,17 @@
 
 	/** The full editor. Resolves to an error for it to show, or null once saved. */
 	async function saveEdit(note: Note, edit: NoteEdit): Promise<string | null> {
-		const [category, rest] = splitCategory(categoryList, note.tags);
-		const tags = edit.tags.map((tag) => tag.replace(/^#+/, '')).filter(Boolean);
 		const bodyChanged = edit.body.trim() !== note.body;
-		// Only a real change to subject, category or tags takes the note away
-		// from the model, so an edit to the body alone leaves it to be
-		// re-enriched.
+		// Only a real change to subject or category takes the note away from
+		// the model, so an edit to the body alone leaves it to be re-enriched.
 		const metaChanged =
-			edit.subject.trim() !== (note.subject ?? '') ||
-			edit.category !== category ||
-			tags.join(' ') !== rest.join(' ');
+			edit.subject.trim() !== (note.subject ?? '') || edit.category !== (note.category ?? '');
 		try {
 			if (bodyChanged) await updateNote(note.date, note.id, edit.body);
 			if (metaChanged)
 				await updateNoteMeta(note.date, note.id, {
 					subject: edit.subject,
-					category: edit.category,
-					tags
+					category: edit.category
 				});
 			error = null;
 			await refresh();
@@ -296,7 +284,7 @@
 		ondelete: (note: Note) => (deleting = note),
 		onsave: saveBody,
 		onretry: retry,
-		ontag: openTag,
+		oncategory: openCategory,
 		onsimilar: canSimilar ? showSimilar : undefined
 	});
 
@@ -328,8 +316,8 @@
 			off.push(onNoteEnriched(() => void refresh()));
 			off.push(onOpenSettings(() => (settingsOpen = true)));
 			// Another space has its own days and notes, so a search or similar
-			// notes from the last one would mean nothing there. Its tags and
-			// days are listed afresh.
+			// notes from the last one would mean nothing there. Its categories
+			// and days are listed afresh.
 			off.push(
 				onSpacesChanged((view) => {
 					const switched = view.active !== spaces?.active;
@@ -379,20 +367,9 @@
 		{/snippet}
 	</AppHeader>
 
-	<!-- A pending note's glow spills past its card; near the window's edge
-	     that must not turn into a sideways scrollbar. -->
-	<main class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-6 pb-28">
+	<main class="min-h-0 flex-1 overflow-y-auto px-6 pb-28">
 		<div class="mx-auto max-w-3xl">
 			<TimelineHeader {...headerProps} oncollapse={(collapsed) => (titleCollapsed = collapsed)} />
-
-			{#if timeline.kind === 'search'}
-				<TagFilters
-					active={activeTags}
-					{results}
-					onremove={(tag) => openTag(tag, true)}
-					onadd={(tag) => openTag(tag, true)}
-				/>
-			{/if}
 
 			{#if model.state === 'absent' || model.state === 'downloading'}
 				<Onboarding status={model} />
@@ -411,8 +388,6 @@
 				<div class="page-in">
 					{#if timeline.kind === 'calendar'}
 						<CalendarPage {days} {selected} onselect={(date) => void select(date)} />
-					{:else if timeline.kind === 'tags'}
-						<TagsPage {tags} {categories} onpick={(tag) => void showResults(`#${tag}`)} />
 					{:else if timeline.kind === 'similar'}
 						<p
 							class="mb-6 line-clamp-3 rounded-lg border border-neutral-800 px-3 py-2 text-sm whitespace-pre-wrap text-neutral-400"
@@ -443,11 +418,10 @@
 			{/key}
 		</div>
 	</main>
+</div>
 
-	<!-- A row of its own, so the timeline never scrolls under it. -->
-	<footer class="flex h-9 shrink-0 items-center px-1">
-		<ModelStatusBar status={model} />
-	</footer>
+<div class="fixed bottom-3 left-3 z-30">
+	<ModelStatusBar status={model} />
 </div>
 
 <ChatPanel
@@ -461,13 +435,12 @@
 <CommandCenter
 	bind:open={paletteOpen}
 	bind:query
-	{tags}
 	{categories}
 	{canChat}
+	canMeaning={canSimilar}
 	onpick={(note) => void openCited(note)}
 	onseeall={(q) => void showResults(q)}
 	ontoday={async () => void select(await today())}
-	ontags={() => (timeline = { kind: 'tags' })}
 	onchat={() => (chatOpen = true)}
 	onsettings={() => (settingsOpen = true)}
 />
@@ -475,7 +448,6 @@
 <NoteEditor
 	bind:note={editing}
 	categories={categoryList}
-	{tags}
 	onsave={saveEdit}
 	ondelete={(n) => (deleting = n)}
 />

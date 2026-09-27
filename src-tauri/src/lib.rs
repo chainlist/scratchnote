@@ -44,7 +44,6 @@ pub fn run() {
             commands::save_note,
             commands::get_day,
             commands::list_days,
-            commands::list_tags,
             commands::list_categories,
             commands::category_names,
             commands::search,
@@ -75,8 +74,6 @@ pub fn run() {
             commands::get_settings,
             commands::set_settings,
             commands::restart_app,
-            commands::get_aliases,
-            commands::set_aliases,
             commands::list_spaces,
             commands::create_space,
             commands::rename_space,
@@ -122,6 +119,7 @@ pub fn run() {
                 spaces: std::sync::RwLock::new(Vec::new()),
                 registry: std::sync::RwLock::new(spaces::Registry::load(&root)),
                 backend: std::sync::RwLock::new(None),
+                backend_loading: std::sync::Mutex::new(()),
                 model_status: std::sync::RwLock::new(status),
                 swapping: std::sync::atomic::AtomicBool::new(false),
                 last_used: std::sync::Mutex::new(std::time::Instant::now()),
@@ -129,6 +127,7 @@ pub fn run() {
                 batch_done: std::sync::atomic::AtomicUsize::new(0),
                 wake: wake.clone(),
                 embedder: std::sync::RwLock::new(None),
+                embedder_loading: std::sync::Mutex::new(()),
                 embed_wake: embed_wake.clone(),
                 embedding_download: std::sync::Mutex::new(None),
             });
@@ -158,6 +157,7 @@ pub fn run() {
             // backfilled.
             embed::sync::spawn(app.handle().clone(), embed_wake);
             idle::spawn(app.handle().clone());
+            commands::replace_legacy_embedding_model(app.handle());
             // Kick the worker in case a queue came back non-empty.
             wake.notify_one();
 

@@ -10,7 +10,6 @@ use super::benchmark::SAMPLES as NOTES;
 use super::language::ENGLISH;
 use super::llama::LlamaCpp;
 use super::model::Backend;
-use super::normalize::Vocabulary;
 use super::runner::enrich;
 
 fn now_ms() -> u128 {
@@ -34,14 +33,10 @@ fn bench_cold_batch() {
         std::env::var("SN_BENCH_MODEL").expect("set SN_BENCH_MODEL to a .gguf path"),
     );
 
-    // The same vocabulary the app would send, so the prompt is realistic.
+    // The same categories the app would send, so the prompt is realistic.
     let home = std::env::var_os("USERPROFILE").expect("USERPROFILE");
     let root = std::path::PathBuf::from(home).join("Scratchnote");
-    let vocabulary = Vocabulary {
-        counts: crate::storage::index::rebuild(&root).tag_counts(),
-        aliases: crate::storage::tags::load_aliases(&root),
-        categories: crate::storage::categories::load_in(&root, "en"),
-    };
+    let categories = crate::storage::categories::load(&root);
 
     // A quiet stretch first, so the sampler sees the baseline.
     mark(
@@ -66,7 +61,7 @@ fn bench_cold_batch() {
 
     for (i, note) in NOTES.iter().enumerate() {
         let started = Instant::now();
-        let result = enrich(note, ENGLISH, &vocabulary, backend.as_ref());
+        let result = enrich(note, ENGLISH, &categories, backend.as_ref());
         mark(
             "note",
             serde_json::json!({
@@ -74,7 +69,7 @@ fn bench_cold_batch() {
                 "words": note.split_whitespace().count(),
                 "ms": started.elapsed().as_millis() as u64,
                 "ok": result.is_ok(),
-                "tags": result.map(|e| e.tags).unwrap_or_default(),
+                "category": result.map(|e| e.category).unwrap_or_default(),
             }),
         );
     }

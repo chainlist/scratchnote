@@ -4,13 +4,11 @@
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
-	import { queryWords } from '$lib/query';
 	import type { Timeline } from '$lib/timeline';
 
 	let {
 		timeline,
 		selected,
-		tagCount,
 		resultCount,
 		onback,
 		oncalendar,
@@ -20,7 +18,6 @@
 		timeline: Timeline;
 		/** The day shown, and the one to go back to. */
 		selected: string;
-		tagCount: number;
 		resultCount: number;
 		onback: () => void;
 		oncalendar: () => void;
@@ -88,20 +85,14 @@
 	{/if}
 	{#if timeline.kind === 'calendar'}
 		<svelte:element this={tag} class={title}>{m.calendar_title()}</svelte:element>
-	{:else if timeline.kind === 'tags'}
-		<svelte:element this={tag} class={title}>
-			{m.tags_title()}
-			<span class="font-normal text-muted-foreground">
-				{m.tags_count({ count: tagCount })}
-			</span>
-		</svelte:element>
 	{:else if timeline.kind === 'similar'}
 		<svelte:element this={tag} class={title}>{m.note_similar()}</svelte:element>
 	{:else if timeline.kind === 'search'}
-		{@const words = queryWords(timeline.query)}
+		<!-- The whole query, so a `#category` filter shows too. -->
+		{@const shown = timeline.query.trim()}
 		<svelte:element this={tag} class={title}>
 			{m.page_results({ count: resultCount })}
-			{#if words}<span class="font-normal text-muted-foreground">{words}</span>{/if}
+			{#if shown}<span class="font-normal text-muted-foreground">{shown}</span>{/if}
 		</svelte:element>
 	{:else}
 		<Button

@@ -5,7 +5,7 @@
 
 	type Actions = Pick<
 		ComponentProps<typeof NoteCard>,
-		'onedit' | 'ondelete' | 'onsave' | 'onretry' | 'ontag' | 'onsimilar'
+		'onedit' | 'ondelete' | 'onsave' | 'onretry' | 'oncategory' | 'onsimilar'
 	>;
 
 	let {

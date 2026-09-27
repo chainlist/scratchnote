@@ -1,8 +1,11 @@
 import '@fontsource-variable/atkinson-hyperlegible-next';
+import '@fontsource-variable/caveat';
 import '@fontsource-variable/geist';
 import '@fontsource-variable/ibm-plex-sans';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/literata';
+import '@fontsource-variable/playpen-sans';
+import '@fontsource-variable/shantell-sans';
 import type { Settings } from '$lib/api';
 import { m } from '$lib/paraglide/messages';
 
@@ -12,7 +15,7 @@ const SANS = 'ui-sans-serif, system-ui, sans-serif';
 
 /**
  * Font presets, bundled with the app so they render offline. The first is the
- * default. Only the sans stack changes: tags, dates and counts stay monospace.
+ * default. Only the sans stack changes: categories, dates and counts stay monospace.
  */
 export const FONTS = [
 	{ name: 'inter', label: () => 'Inter', family: `'Inter Variable', ${SANS}` },
@@ -24,6 +27,9 @@ export const FONTS = [
 		family: `'Atkinson Hyperlegible Next Variable', ${SANS}`
 	},
 	{ name: 'literata', label: () => 'Literata', family: `'Literata Variable', ui-serif, serif` },
+	{ name: 'caveat', label: () => 'Caveat', family: `'Caveat Variable', ${SANS}` },
+	{ name: 'shantell', label: () => 'Shantell Sans', family: `'Shantell Sans Variable', ${SANS}` },
+	{ name: 'playpen', label: () => 'Playpen Sans', family: `'Playpen Sans Variable', ${SANS}` },
 	{ name: 'system', label: m.settings_font_system, family: SANS }
 ];
 

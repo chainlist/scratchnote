@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 
 use super::daily_file::{self, Note, Status};
 use super::{check_date, relative_day_path};
-use crate::enrich::language;
 
 /// One note. The body is held in memory for search (SPEC 6) but never written
 /// to `index.jsonl`, which stays a small metadata cache.
@@ -24,15 +23,14 @@ pub struct IndexEntry {
     pub time: String,
     pub file: String,
     pub subject: Option<String>,
-    pub summary: Option<String>,
-    pub tags: Vec<String>,
+    pub category: Option<String>,
     pub status: Status,
     pub hash: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
     #[serde(skip)]
     pub body: String,
-    /// Subject, summary and body folded for matching, computed once here so a
+    /// Subject and body folded for matching, computed once here so a
     /// search does not fold ten thousand bodies per keystroke.
     #[serde(skip)]
     pub folded: String,
@@ -42,10 +40,8 @@ impl From<&Note> for IndexEntry {
     fn from(note: &Note) -> Self {
         let folded = crate::search::fold(&format!(
             "{}
-{}
 {}",
             note.subject.as_deref().unwrap_or(""),
-            note.summary.as_deref().unwrap_or(""),
             note.body
         ));
         Self {
@@ -54,8 +50,7 @@ impl From<&Note> for IndexEntry {
             time: note.time.clone(),
             file: note.file.clone(),
             subject: note.subject.clone(),
-            summary: note.summary.clone(),
-            tags: note.tags.clone(),
+            category: note.category.clone(),
             status: note.status,
             hash: note.hash.clone(),
             lang: note.lang.clone(),
@@ -73,8 +68,7 @@ impl IndexEntry {
             time: self.time.clone(),
             file: self.file.clone(),
             subject: self.subject.clone(),
-            summary: self.summary.clone(),
-            tags: self.tags.clone(),
+            category: self.category.clone(),
             status: self.status,
             hash: self.hash.clone(),
             lang: self.lang.clone(),
@@ -126,27 +120,11 @@ impl Index {
         self.by_date.values().map(Vec::len).sum()
     }
 
-    /// How many notes carry each tag. Derived, like everything else here.
-    pub fn tag_counts(&self) -> HashMap<String, u32> {
+    /// How many notes each category holds. Derived, like everything else here.
+    pub fn category_counts(&self) -> HashMap<String, u32> {
         let mut counts = HashMap::new();
-        for tag in self.entries().flat_map(|entry| entry.tags.iter()) {
-            *counts.entry(tag.clone()).or_insert(0) += 1;
-        }
-        counts
-    }
-
-    /// The tags of the notes labelled in `lang`, for the vocabulary the model
-    /// reuses: offered tags in another language, it keeps writing that one.
-    /// A note with no language recorded counts as English, the language
-    /// notes were labelled in before it was.
-    pub fn tag_counts_in(&self, lang: &str) -> HashMap<String, u32> {
-        let mut counts = HashMap::new();
-        let tags = self
-            .entries()
-            .filter(|entry| entry.lang.as_deref().unwrap_or(language::ENGLISH.code) == lang)
-            .flat_map(|entry| entry.tags.iter());
-        for tag in tags {
-            *counts.entry(tag.clone()).or_insert(0) += 1;
+        for category in self.entries().filter_map(|entry| entry.category.as_ref()) {
+            *counts.entry(category.clone()).or_insert(0) += 1;
         }
         counts
     }
@@ -270,6 +248,12 @@ pub fn load(root: &Path) -> (Index, bool) {
         return (rebuild(root), true);
     };
 
+    // A cache from before notes had a category instead of tags would read
+    // as notes with none.
+    if raw.contains("\"tags\":") {
+        return (rebuild(root), true);
+    }
+
     let cached_at = modified_at(&path);
     let mut index = Index::from_jsonl(&raw);
     let files = daily_files(root);
@@ -310,8 +294,7 @@ mod tests {
             time: time.to_string(),
             file: relative_day_path(date),
             subject: None,
-            summary: None,
-            tags: Vec::new(),
+            category: None,
             status: Status::Pending,
             hash: body_hash(body),
             lang: None,
@@ -363,7 +346,7 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
 
         for key in [
-            "id", "date", "time", "file", "subject", "summary", "tags", "status", "hash",
+            "id", "date", "time", "file", "subject", "category", "status", "hash",
         ] {
             assert!(value.get(key).is_some(), "missing {key} in {line}");
         }
@@ -397,46 +380,56 @@ mod tests {
     }
 
     #[test]
-    fn counts_each_tag_once_per_note() {
+    fn counts_the_notes_in_each_category() {
         let mut index = Index::default();
         let mut a = note("01AAA", "2026-09-22", "08:00", "a");
-        a.tags = vec!["infra".into(), "k8s".into()];
+        a.category = Some("infra".into());
         let mut b = note("01BBB", "2026-09-23", "08:00", "b");
-        b.tags = vec!["infra".into()];
-        index.push(IndexEntry::from(&a));
-        index.push(IndexEntry::from(&b));
+        b.category = Some("infra".into());
+        let mut c = note("01CCC", "2026-09-23", "09:00", "c");
+        c.category = Some("movie".into());
+        for entry in [&a, &b, &c, &note("01DDD", "2026-09-23", "10:00", "d")] {
+            index.push(IndexEntry::from(entry));
+        }
 
-        let counts = index.tag_counts();
+        let counts = index.category_counts();
+        assert_eq!(counts.len(), 2);
         assert_eq!(counts["infra"], 2);
-        assert_eq!(counts["k8s"], 1);
+        assert_eq!(counts["movie"], 1);
     }
 
     #[test]
-    fn counts_a_languages_tags_with_unrecorded_notes_as_english() {
+    fn the_label_language_survives_the_cache() {
         let mut index = Index::default();
-        let mut old = note("01AAA", "2026-09-22", "08:00", "a");
-        old.tags = vec!["movie".into()];
         let mut french = note("01BBB", "2026-09-23", "08:00", "b");
-        french.tags = vec!["film".into()];
         french.lang = Some("fr".into());
-        index.push(IndexEntry::from(&old));
         index.push(IndexEntry::from(&french));
-
-        assert_eq!(
-            index.tag_counts_in("en").keys().collect::<Vec<_>>(),
-            ["movie"]
-        );
-        assert_eq!(
-            index.tag_counts_in("fr").keys().collect::<Vec<_>>(),
-            ["film"]
-        );
-        assert!(index.tag_counts_in("de").is_empty());
-        // The lang survives the index.jsonl cache.
         let back = Index::from_jsonl(&index.to_jsonl());
+        assert_eq!(back.entries().next().unwrap().lang.as_deref(), Some("fr"));
+    }
+
+    #[test]
+    fn a_cache_written_with_tags_is_rebuilt_from_the_markdown() {
+        let root = scratch_root("tags-cache");
+        let mut labelled = note("01AAA", "2026-09-22", "08:00", "the body");
+        labelled.category = Some("movie".into());
+        write_day(&root, "2026-09-22", &[labelled]);
+        let cache = index_path(&root);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(
+            &cache,
+            r#"{"id":"01AAA","date":"2026-09-22","time":"08:00","file":"notes/2026/2026-09-22.md","subject":null,"summary":null,"tags":["movie"],"status":"pending","hash":"x"}"#,
+        )
+        .unwrap();
+
+        let (index, changed) = load(&root);
+        assert!(changed);
         assert_eq!(
-            back.tag_counts_in("fr").keys().collect::<Vec<_>>(),
-            ["film"]
+            index.entries().next().unwrap().category.as_deref(),
+            Some("movie")
         );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

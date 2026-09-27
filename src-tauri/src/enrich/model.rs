@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 /// SPEC 5.1.
 pub const CONTEXT_TOKENS: u32 = 4096;
 /// The context a chat reads the whole index in, with room for the talk.
-/// Around 200 notes fit; its cache costs about 1.2 GB with the 4B model, and
+/// Around 200 notes fit; its 8-bit cache costs about 610 MB with the 4B model, and
 /// only once a chat has started.
 pub const LONG_CONTEXT_TOKENS: u32 = 8192;
 pub const TEMPERATURE: f32 = 0.2;
@@ -56,21 +56,27 @@ impl Catalogued for Variant {
     }
 }
 
-/// Qwen3-Embedding-0.6B, which turns notes into vectors for chat retrieval.
+/// EmbeddingGemma-300M, which turns notes into vectors for chat retrieval.
 /// One model, so nothing to choose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EmbeddingModel;
 
 impl Catalogued for EmbeddingModel {
-    /// Qwen publishes this one as GGUF itself, about 640 MB at Q8_0.
+    /// Google's own repo is gated behind a licence click, which a plain
+    /// download cannot do; ggml-org publishes the same weights openly, about
+    /// 330 MB at Q8_0.
     fn repo(self) -> &'static str {
-        "Qwen/Qwen3-Embedding-0.6B-GGUF"
+        "ggml-org/embeddinggemma-300M-GGUF"
     }
 
     fn file(self) -> &'static str {
-        "Qwen3-Embedding-0.6B-Q8_0.gguf"
+        "embeddinggemma-300M-Q8_0.gguf"
     }
 }
+
+/// The embedding model the app shipped before, removed once its successor is
+/// in.
+pub const LEGACY_EMBEDDING_FILE: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
 
 /// SPEC 8. `Absent` is a normal state, not an error.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -169,8 +175,8 @@ mod tests {
         );
         assert_eq!(Variant::Light.repo(), "unsloth/Qwen3-1.7B-GGUF");
         assert_eq!(Variant::Light.file(), "Qwen3-1.7B-Q4_K_M.gguf");
-        assert_eq!(EmbeddingModel.repo(), "Qwen/Qwen3-Embedding-0.6B-GGUF");
-        assert_eq!(EmbeddingModel.file(), "Qwen3-Embedding-0.6B-Q8_0.gguf");
+        assert_eq!(EmbeddingModel.repo(), "ggml-org/embeddinggemma-300M-GGUF");
+        assert_eq!(EmbeddingModel.file(), "embeddinggemma-300M-Q8_0.gguf");
     }
 
     #[test]
@@ -184,10 +190,10 @@ mod tests {
 
     #[test]
     fn the_stub_returns_what_it_was_given() {
-        let stub = StubBackend::new(r#"{"subject":"a","summary":"b","tags":["c"]}"#);
+        let stub = StubBackend::new(r#"{"subject":"a","category":"c"}"#);
         assert_eq!(
             stub.generate("any prompt", "any grammar").unwrap(),
-            r#"{"subject":"a","summary":"b","tags":["c"]}"#
+            r#"{"subject":"a","category":"c"}"#
         );
     }
 

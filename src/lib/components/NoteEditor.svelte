@@ -1,18 +1,17 @@
 <script lang="ts">
-	import { splitCategory, type Note, type NoteEdit } from '$lib/api';
+	import type { Note, NoteEdit } from '$lib/api';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import XIcon from '@lucide/svelte/icons/x';
+	import { categoryLabel } from '$lib/categories';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
 		note = $bindable(),
 		categories,
-		tags,
 		onsave,
 		ondelete
 	}: {
@@ -20,22 +19,15 @@
 		note: Note | null;
 		/** Every category on the list, in its order. */
 		categories: string[];
-		/** Every tag in use with its count, most used first, offered as suggestions. */
-		tags: [string, number][];
 		/** Resolves to an error to show, or null once saved. */
 		onsave: (note: Note, edit: NoteEdit) => Promise<string | null>;
 		/** Ask to delete; the page confirms. */
 		ondelete: (note: Note) => void;
 	} = $props();
 
-	/** Suggestions shown at once. */
-	const LIMIT = 6;
-
 	let body = $state('');
 	let subject = $state('');
 	let category = $state('');
-	let chosen = $state<string[]>([]);
-	let tagDraft = $state('');
 	let newCategory = $state<string | null>(null);
 	let saving = $state(false);
 	let error = $state<string | null>(null);
@@ -48,17 +40,14 @@
 		if (id === loaded) return;
 		loaded = id;
 		if (!note) return;
-		const [current, rest] = splitCategory(categories, note.tags);
 		body = note.body;
 		subject = note.subject ?? '';
-		category = current;
-		chosen = [...rest];
-		tagDraft = '';
+		category = note.category ?? '';
 		newCategory = null;
 		error = null;
 	});
 
-	/** What a typed tag or category will be saved as; the backend cleans it the same way. */
+	/** What a typed category will be saved as; the backend cleans it the same way. */
 	const clean = (raw: string) =>
 		raw
 			.trim()
@@ -75,53 +64,14 @@
 		category && !categories.includes(category) ? [...categories, category] : categories
 	);
 
-	const suggestions = $derived.by(() => {
-		const prefix = clean(tagDraft);
-		if (!prefix) return [];
-		const starts: string[] = [];
-		const contains: string[] = [];
-		for (const [name] of tags) {
-			if (chosen.includes(name) || name === category) continue;
-			if (name.startsWith(prefix)) starts.push(name);
-			else if (name.includes(prefix)) contains.push(name);
-		}
-		return [...starts, ...contains].slice(0, LIMIT);
-	});
-
-	function addTag(raw: string) {
-		const tag = clean(raw);
-		tagDraft = '';
-		if (!tag || tag === category || chosen.includes(tag)) return;
-		chosen = [...chosen, tag];
-	}
-
-	function removeTag(tag: string) {
-		chosen = chosen.filter((t) => t !== tag);
-	}
-
-	function onTagKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' || event.key === ',' || event.key === ' ') {
-			if (tagDraft.trim() === '') return;
-			event.preventDefault();
-			addTag(tagDraft);
-		} else if (event.key === 'Backspace' && tagDraft === '' && chosen.length > 0) {
-			chosen = chosen.slice(0, -1);
-		}
-	}
-
 	function pickCategory(name: string) {
 		category = category === name ? '' : name;
-		// A category is not also one of the tags.
-		chosen = chosen.filter((t) => t !== category);
 	}
 
 	function commitNewCategory() {
 		const name = clean(newCategory ?? '');
 		newCategory = null;
-		if (name) {
-			category = name;
-			chosen = chosen.filter((t) => t !== name);
-		}
+		if (name) category = name;
 	}
 
 	function onNewCategoryKeydown(event: KeyboardEvent) {
@@ -142,10 +92,8 @@
 			error = m.editor_empty();
 			return;
 		}
-		// A half-typed tag counts; leaving it behind would surprise.
-		if (tagDraft.trim() !== '') addTag(tagDraft);
 		saving = true;
-		error = await onsave(note, { body, subject, category, tags: chosen });
+		error = await onsave(note, { body, subject, category });
 		saving = false;
 		if (error === null) note = null;
 	}
@@ -205,7 +153,7 @@
 							? 'border-primary bg-primary text-primary-foreground'
 							: 'border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground'}"
 					>
-						{name}
+						{categoryLabel(name)}
 					</button>
 				{/each}
 				{#if newCategory === null}
@@ -232,51 +180,6 @@
 			<p class="text-xs text-muted-foreground">
 				{m.editor_uncategorised_hint()}
 			</p>
-		</div>
-
-		<div class="flex flex-col gap-2">
-			<Label for="note-tags">{m.editor_tags()}</Label>
-			<div
-				class="flex min-h-8 flex-wrap items-center gap-1.5 rounded-lg border border-input px-1.5 py-1 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30"
-			>
-				{#each chosen as tag (tag)}
-					<span
-						class="inline-flex h-6 items-center gap-0.5 rounded-md bg-muted pr-0.5 pl-2 font-mono text-xs"
-					>
-						#{tag}
-						<button
-							type="button"
-							onclick={() => removeTag(tag)}
-							aria-label={m.editor_remove_tag({ tag })}
-							class="cursor-pointer rounded p-0.5 text-muted-foreground hover:text-foreground"
-						>
-							<XIcon class="size-3" />
-						</button>
-					</span>
-				{/each}
-				<input
-					id="note-tags"
-					bind:value={tagDraft}
-					onkeydown={onTagKeydown}
-					placeholder={chosen.length === 0 ? m.editor_add_tag() : ''}
-					autocomplete="off"
-					spellcheck="false"
-					class="h-6 min-w-24 flex-1 bg-transparent px-1 font-mono text-xs outline-none placeholder:text-muted-foreground"
-				/>
-			</div>
-			{#if suggestions.length > 0}
-				<div class="flex flex-wrap gap-1.5">
-					{#each suggestions as name (name)}
-						<button
-							type="button"
-							onclick={() => addTag(name)}
-							class="{chip} border-dashed border-border text-muted-foreground hover:text-foreground"
-						>
-							#{name}
-						</button>
-					{/each}
-				</div>
-			{/if}
 		</div>
 
 		{#if error}

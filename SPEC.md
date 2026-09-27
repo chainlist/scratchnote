@@ -2,14 +2,14 @@
 
 ## 1. Overview
 
-Scratchnote is a local-first desktop app for frictionless capture. The user hits a global hotkey, types a quick note, presses a key to save, and the window disappears. Every note is appended to the current day's markdown file. In the background, a small local LLM generates a **subject**, a **one-line summary**, and **tags** for each note, and the app maintains an index across all days so notes can be browsed by day, tag, or search.
+Scratchnote is a local-first desktop app for frictionless capture. The user hits a global hotkey, types a quick note, presses a key to save, and the window disappears. Every note is appended to the current day's markdown file. In the background, a small local LLM writes a **subject** for each note and files it under a **category** from the user's list, and the app maintains an index across all days so notes can be browsed by day, category, or search.
 
 ### Goals
 
 - Capture in under 2 seconds from hotkey to saved. The LLM never blocks saving.
 - 100% local: the only network calls are downloading a model and, when the user explicitly clicks it, checking whether a newer revision of the installed model exists. Nothing contacts the network on a timer or at launch.
 - Plain markdown files as the source of truth. The user can open, edit, sync (git, Syncthing, iCloud) or grep them without the app.
-- Tags stay clean over time (controlled vocabulary, normalization).
+- Categories stay few and consistent over time: the model picks from the user's list and never invents one.
 
 ### Non-goals (v1)
 
@@ -213,11 +213,11 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 
 Opened from tray icon or app launch. Three areas:
 
-1. **Sidebar**: the space switcher (see 4.6), a day picker, and the categories in use with counts, sorted by count. Tags are too many and too fluid to browse as a list, so they are reached from search instead: `#` completes tag names, a note's tags filter on click, and search results offer the tags they share as chips to narrow down.
-2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Subject, summary and tags are not displayed; they exist for search and indexing. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page, a `failed` one has a faint turning red border, and the others look alike.
-3. **Search bar** at the top: full-text over body, subject, summary; supports `#tag` tokens as filters (e.g. `#infra kubernetes`). Results are note cards across all days.
+1. **Sidebar**: the space switcher (see 4.6), a day picker, and the categories in use with counts, sorted by count. In search, `#` completes category names, and a note's category filters on click.
+2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page, a `failed` one has a faint turning red border, and the others look alike.
+3. **Search bar** at the top: full-text over body and subject; supports a `#category` token as a filter (e.g. `#infrastructure kubernetes`). Results are note cards across all days.
 
-Note actions (on hover): edit body inline, edit tags manually, similar notes (with the embedding model, see 6.2), re-run enrichment, delete.
+Note actions (on hover): edit body inline, edit subject and category manually, similar notes (with the embedding model, see 6.2), re-run enrichment, delete.
 
 ### 3.3 Tray
 
@@ -244,9 +244,8 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
         vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
-        tags.json        # tag vocabulary + aliases
         queue.json       # pending enrichment jobs
-        categories.json  # category lists by label language: {"en": [...], "fr": [...]}
+        categories.json  # the categories the model picks from, English names: ["development", ...]
     Work/
       notes/...
       .scratchnote/...
@@ -266,8 +265,7 @@ The daily markdown file holds both the note body and its enrichment metadata. `i
 
 ### Rollback plan for ArgoCD sync issue
 
-> Decided to pin the chart version and roll back staging before Friday.
-> #argocd #deployment #staging
+> #infrastructure
 
 Talked with the team, the auto-sync broke staging again.
 We pin the chart version and roll back before Friday's release.
@@ -285,9 +283,10 @@ Rules:
 
 - Each note is delimited by `<!-- sn:note ... -->` and `<!-- sn:end -->`. Parsing relies only on these markers.
 - `hash` is the first 8 hex chars of SHA-256 of the body (trimmed). It is used to detect external edits.
-- Before enrichment: heading is `### (untitled)` and there is no summary/tags block.
-- After enrichment: the heading becomes the subject, and a two-line blockquote holds summary and tags.
-- `status` is one of `pending`, `done`, `failed`, `manual` (`manual` = user edited tags/subject; never overwrite automatically). A note sent back to the model (body edited, re-run) returns to `pending`, keeping its subject and tags until the model replaces them.
+- Before enrichment: heading is `### (untitled)` and there is no category line.
+- After enrichment: the heading becomes the subject, followed by a `> #category` line and a blank line when the model found a category that fits. Written as a tag, other markdown tools see it as one.
+- Notes labelled before tags were dropped carry a summary line and then a line of tags, the category first. That first tag is read as the category; the summary and the other tags are dropped the next time the note is written.
+- `status` is one of `pending`, `done`, `failed`, `manual` (`manual` = user edited subject/category; never overwrite automatically). A note sent back to the model (body edited, re-run) returns to `pending`, keeping its subject and category until the model replaces them.
 - `lang` is the locale the model labelled the note in (`en`, `fr`, ...), written with its labels. A note without one was labelled before it was recorded and counts as English.
 - Anything outside note blocks (user's own text) must be preserved untouched on rewrite.
 
@@ -308,31 +307,29 @@ One JSON object per line, one line per note:
 	"time": "14:32",
 	"file": "notes/2026/2026-09-22.md",
 	"subject": "Rollback plan for ArgoCD sync issue",
-	"summary": "Decided to pin the chart version and roll back staging before Friday.",
-	"tags": ["argocd", "deployment", "staging"],
+	"category": "infrastructure",
 	"status": "done",
 	"hash": "a1b2c3d4"
 }
 ```
 
 - New notes are appended. Updates and deletes rewrite the file (it is small; atomic rewrite is fine).
-- On startup: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown.
+- On startup: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written before notes had a category instead of tags is rebuilt whole.
 - Provide a "Rebuild index" button in settings that reparses everything.
 
-### 4.5 tags.json
+### 4.5 categories.json
 
 ```json
-{
-	"tags": { "argocd": 12, "deployment": 30, "staging": 7 },
-	"aliases": { "k8s": "kubernetes", "meetings": "meeting" }
-}
+["development", "infrastructure", "movie", "tv", "game", "music", "book", "food", "home"]
 ```
 
-Counts are derived and recomputed on index rebuild. Aliases are user-editable in settings.
+One list of English names per space, seeded with the defaults above, edited by hand, and added to when a category is typed in the note editor. The model only ever picks from it, whatever language it labels in, so notes and the markdown always carry the English name. Names are cleaned like a typed category (5.5). A file from when each language had its own list (`{"en": [...], "fr": [...]}`) is rewritten as its English list when the space opens.
+
+The interface shows each category in its own language through `src/lib/category-names.json`, a table of 807 categories in the six languages, row for row. A name the table does not know, such as one typed by hand, shows as written. A `#` token typed in the interface language (`#jeu`) is turned into the English name (`#game`) before a search reaches the backend, and completion matches either name.
 
 ### 4.6 Spaces
 
-A space is a separate set of notes with its own tags, aliases, categories, index and queue. Nothing is shared between spaces except settings and models.
+A space is a separate set of notes with its own categories, index and queue. Nothing is shared between spaces except settings and models.
 
 - Every space is a folder under `spaces/`, named after the space, holding its own `notes/` and `.scratchnote/`. Any folder there whose name is a valid space name is a space, including one made by hand. No space is special: the list is in name order, and any space can be deleted except the last one.
 - A first launch with no space makes `spaces/Personal/`. `spaces.json` records only which space is open; if that space is gone, the first one opens.
@@ -358,29 +355,23 @@ A space is a separate set of notes with its own tags, aliases, categories, index
 - A "Use the model" switch turns the model off entirely, for machines too small to run it. Off, it is never loaded, notes stay `pending` in the queue until it is back on, chat is unavailable, and the status bar says the model is turned off. It defaults to off on Android and iOS. The onboarding screen offers the same choice as "Continue without a model".
 - Record the resolved Hugging Face revision (commit SHA) alongside the downloaded file, so "which build of this model do I have" has an exact answer. Quant repos are re-uploaded in place, so a filename is not an identity.
 - Settings allow switching model or pointing to any local GGUF file.
-- An optional embedding model, Qwen3-Embedding-0.6B (Q8_0, ~640 MB, from `Qwen/Qwen3-Embedding-0.6B-GGUF`), has its own download row in settings, fetched, verified and recorded like the others. It is not a chat model: downloading it changes no model setting. It follows the "Use the model" switch, the GPU setting and the idle unload, and loads lazily. Once it is there, a background task embeds each space's note bodies into `vectors.bin`, again whenever a body's hash changes.
+- An optional embedding model, EmbeddingGemma-300M (Q8_0, ~330 MB, from `ggml-org/embeddinggemma-300M-GGUF`; Google's own repo is gated), has its own download row in settings, fetched, verified and recorded like the others. It is not a chat model: downloading it changes no model setting. It follows the "Use the model" switch, the GPU setting and the idle unload, and loads lazily. Once it is there, a background task embeds each space's note bodies into `vectors.bin`, again whenever a body's hash changes. An install that still has the earlier Qwen3-Embedding-0.6B fetches EmbeddingGemma on launch and deletes the old file once the new one is verified; `vectors.bin` records the model and how it embeds a note, and a change to either embeds every note again.
 - Settings has a "Check for updates" button. It is the only thing that triggers this check: never on launch, never on a timer. It compares the recorded revision against the current one on Hugging Face and, if they differ, offers to download the new one. The existing model file stays in place and in use until the replacement has finished downloading and passed SHA-256 verification.
 - A model pointed at by a custom GGUF path is not checked; the app did not fetch it and has no revision to compare against.
 - If the check fails (offline, rate limited), say so and carry on. It is never blocking, and a failed check must not affect enrichment.
 
 ### 5.3 Constrained output
 
-Use llama.cpp grammar-constrained sampling (JSON schema converted to GBNF) so output is always valid JSON:
+Use llama.cpp grammar-constrained sampling so output is always valid JSON. The grammar (`enrichment.gbnf`) fixes the object and the subject's length; the category rule is appended per note and allows exactly the names in the list offered, or an empty string for none:
 
 ```json
 {
 	"type": "object",
 	"properties": {
 		"subject": { "type": "string", "maxLength": 60 },
-		"summary": { "type": "string", "maxLength": 140 },
-		"tags": {
-			"type": "array",
-			"items": { "type": "string", "maxLength": 30 },
-			"minItems": 1,
-			"maxItems": 5
-		}
+		"category": { "enum": ["", "<each category of the list>"] }
 	},
-	"required": ["subject", "summary", "tags"]
+	"required": ["subject", "category"]
 }
 ```
 
@@ -392,53 +383,34 @@ System:
 
 ```
 You label short personal notes. Return JSON only.
-- subject: a short title, max 8 words, no trailing punctuation.
-- summary: one sentence, max 20 words, stating the key point or action.
-- tags: 1 to 5 lowercase tags, single words or kebab-case. Tag what the note is
-  about: technologies, tools, projects, people, places, topics. When the note
-  names a specific project, product, tool, person or place, tag it by that name,
-  then add the topics it covers. Prefer the specific name over a broad category
-  like tools or software.
-  Do not tag what kind of note it is, such as issue, plan, update, sync, task,
-  note, question or comparison.
-First decide the note's topics from its own words. EXISTING TAGS only tells
-you how a topic is already spelled: when one of your topics is there, use that
-spelling. Never add a tag just because it is in the list. When none of them fit,
-make a new tag rather than forcing a poor match.
-Write subject, summary, category and tags in {language}, whatever language the
-note is in: a note in another language is labelled in {language}, translated.
-Names of projects, products, tools, people and places stay as they are.
+Write the subject in {language}, whatever language the note is in: a note in
+another language gets a subject in {language}, translated. Names of projects,
+products, tools, people and places stay as they are.
+- subject: a title of 3 to 8 words naming what the note is about. Do not copy
+  the note's first sentence. No trailing punctuation.
+- category: the broad subject the note belongs to, such as its field,
+  technology, hobby or medium, so it sits next to related notes that name
+  other things. Not what kind of note it is. Pick it from CATEGORIES, spelled
+  exactly as listed. Leave it empty only when none of them is the subject of
+  the note.
 ```
 
 User:
 
 ```
-EXISTING TAGS: {top 150 tags by count, comma-separated}
+CATEGORIES: {the English categories of categories.json, comma-separated}
 
 NOTE:
 {note body}
 
-LABEL IN: {language}. The category and every tag are {language} words, except names.
+LABEL IN: {language}.
 ```
 
-`{language}` is the language setting (section 7) in English, such as French: the OS language under System, English when that is not one of the six. The vocabulary is that language's alone: EXISTING TAGS come from the notes whose `lang` it is, and EXISTING CATEGORIES from its list in `categories.json`, which starts from that language's defaults (`développement`, `film`, `série`, `jeu`... for French; a plain list from before is the English one). Offered another language's words, the model reuses them whatever it is told. The sidebar and the note editor still list every language's categories, so older notes keep theirs.
+`{language}` is the language setting (section 7) in English, such as French: the OS language under System, English when that is not one of the six. The categories stay English whatever `{language}` is, while the subject follows it. Measured on 83 real notes, the 4B filed 78 as expected with English categories and 77 with French ones, where an embedding classifier fell to about half across languages, which is why the category is picked by the 4B and not by embeddings.
 
-### 5.5 Tag normalization (post-processing, in Rust)
+### 5.5 Category names
 
-Applied to every tag the model returns, in order:
-
-1. Lowercase, trim, strip leading `#`, replace spaces/underscores with `-`, remove chars outside `[a-z0-9-]` (keep accented letters: use Unicode letters/digits).
-2. Resolve through `aliases`.
-3. Naive singularization for English (`meetings` → `meeting`) only if the singular form already exists in the vocabulary.
-4. If a new tag is within Levenshtein distance 1 of an existing tag of length ≥ 5, map it to the existing one.
-5. Deduplicate; cap at 5.
-6. Drop tags that name the kind of note rather than its subject (`issue`, `plan`,
-   `update`, `sync`, `task`, `note`, `todo`, `misc`, `general`, `question`,
-   `comparison`), unless that would
-   leave the note with none. These are worthless for browsing because every note
-   is one of them, and once a few are in the vocabulary the "reuse an existing
-   tag" instruction keeps electing them for everything. The prompt discourages
-   them; this step makes it certain.
+The grammar only lets the model write a listed category, so nothing it returns needs normalizing. Names read from `categories.json`, typed in the note editor, or typed after `#` in search are cleaned the same way: lowercase, trim, strip a leading `#`, spaces and underscores become `-`, anything but Unicode letters, digits and `-` goes, at most 30 characters.
 
 ### 5.6 Queue
 
@@ -450,13 +422,13 @@ Applied to every tag the model returns, in order:
 
 ## 6. Search
 
-- v1: in-memory. On startup, load index + note bodies into memory. Case-insensitive, accent-insensitive substring match over body, subject, summary. `#tag` tokens are AND filters on tags.
+- v1: in-memory. On startup, load index + note bodies into memory. Case-insensitive, accent-insensitive substring match over body and subject. A `#category` token keeps the notes filed under that category.
 - Results sorted by date desc, then time desc.
 - Must stay under 50ms for 10,000 notes. If it doesn't, switch to `tantivy` (out of scope unless needed).
 
 ### 6.1 Chat
 
-- A chat talks with the model about the open space's notes. It reads `index.jsonl` and never the markdown: each note's number, date, weekday, subject, summary and tags, oldest first. Past a budget of about 20,000 characters only the most recent notes are shown, from a multiple of 10 on, so the start of the prompt, and the model's cache of it, holds while notes are added. Numbers stay those of the whole index.
+- A chat talks with the model about the open space's notes. It reads `index.jsonl` and never the markdown: each note's number, date, weekday, subject and category, oldest first. Past a budget of about 20,000 characters only the most recent notes are shown, from a multiple of 10 on, so the start of the prompt, and the model's cache of it, holds while notes are added. Numbers stay those of the whole index.
 - With the embedding model, the last question is embedded and the 5 closest notes of the space are found in `vectors.bin`. Their text, cut to about 800 characters, goes with that question only, after the index, so it never breaks the cache.
 - The model cites notes by number, like `[12]`, and the page resolves a number against the whole index, shown or not.
 - The embedding model is optional. Without it, or when embedding fails, the chat answers from the index alone. When a prompt does not fit, the oldest turns go first, then the retrieved notes from the worst up.
@@ -466,7 +438,7 @@ Applied to every tag the model returns, in order:
 - A note's menu offers "Similar notes" when the embedding model is installed and the model switch is on. The timeline then lists up to 8 notes of the space closest to it in meaning, best first, under the note itself.
 - No model runs: the note's vector is already in `vectors.bin`, so it costs one pass over the space's vectors. A note not embedded yet has no similar notes.
 - The score is a cosine taken after removing the mean of the space's vectors. Plain cosines between notes bunch up (two unrelated work notes score about as high as two notes on the same show), and a bland note comes up for everything. Notes under 0.28 are left out, so a note on its own subject lists none. The cutoff was set on 75 real notes and may need tuning as spaces grow.
-- Similar notes complement tags rather than replace them: tags are exact, editable, live in the markdown and work without the embedding model.
+- Similar notes and search by meaning do what tags used to: find the few notes on the same thing. Categories stay for broad browsing that is exact, editable, lives in the markdown and works without the embedding model.
 
 ## 7. Settings
 
@@ -478,22 +450,22 @@ Applied to every tag the model returns, in order:
 - Model idle unload timeout
 - Embedding model download (optional, for chat and similar notes)
 - Hide immediately after save vs. show toast
-- Tag aliases editor
 - Rebuild index
 - Launch at login
-- Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It also sets the language new subjects, summaries and tags are written in (the OS language under System, English when that is not one of the six); note bodies are untouched, and chat replies follow the language the user writes in.
+- Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It also sets the language new subjects are written in and the language categories are shown in (the OS language under System, English when that is not one of the six); note bodies are untouched, and chat replies follow the language the user writes in.
 
 ## 8. Tauri Commands (backend API)
 
 ```
 save_note(body: String) -> NoteMeta           // appends to today's file, enqueues job
 update_note(id, body) -> NoteMeta             // re-enqueues if hash changed
-update_note_meta(id, subject?, tags?) -> NoteMeta  // sets status=manual
+update_note_meta(id, subject?, category?) -> NoteMeta  // sets status=manual
 delete_note(id)
 retry_enrichment(id)
 get_day(date: String) -> Vec<Note>
 list_days() -> Vec<DaySummary>                // date + note count
-list_tags() -> Vec<(String, u32)>
+list_categories() -> Vec<(String, u32)>      // in use, most used first
+category_names() -> Vec<String>               // every listed category
 search(query: String) -> Vec<Note>
 similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
 get_settings() / set_settings(...)
@@ -517,7 +489,7 @@ Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `
 src-tauri/src/
   main.rs
   commands.rs
-  storage/ (daily_file.rs parser+writer, index.rs, tags.rs, writer.rs)
+  storage/ (daily_file.rs parser+writer, index.rs, categories.rs, writer.rs)
   enrich/  (model.rs, prompt.rs, grammar.rs, normalize.rs, queue.rs)
   watcher.rs
   spaces.rs
@@ -529,7 +501,7 @@ src/
     +page.svelte      # main window
     capture/+page.svelte   # quick capture window (Tauri window loads /capture)
     settings/+page.svelte
-  lib/components/ (NoteCard, DayCalendar, CategoryList, TagFilters, SearchBar, SpaceSwitcher, Onboarding)
+  lib/components/ (NoteCard, DayCalendar, CategoryList, SearchBar, SpaceSwitcher, Onboarding)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy
   lib/api.ts          # typed wrappers around Tauri invoke/listen
@@ -559,6 +531,6 @@ Build in this order; each milestone should be usable on its own.
 
 ## 12. Testing
 
-- Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), tag normalization cases, hash change detection, queue retry logic.
+- Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), category name cleaning, hash change detection, queue retry logic.
 - Golden tests for enrichment: 20 sample notes (English and French) with a stub model returning fixed JSON, verifying write-back format.
 - An optional integration test that runs the real Light model on 5 notes and asserts schema validity (skipped in CI if no model present).

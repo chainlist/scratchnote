@@ -1,5 +1,6 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { storedQuery } from '$lib/categories';
 import type { Language } from '$lib/i18n.svelte';
 import { m } from '$lib/paraglide/messages';
 
@@ -11,8 +12,7 @@ export interface Note {
 	time: string;
 	file: string;
 	subject: string | null;
-	summary: string | null;
-	tags: string[];
+	category: string | null;
 	status: NoteStatus;
 	hash: string;
 	body: string;
@@ -34,32 +34,21 @@ export const getDay = (date: string) => invoke<Note[]>('get_day', { date });
 
 export const listDays = () => invoke<DaySummary[]>('list_days');
 
-/** Every tag in use and how many notes carry it, most used first. */
-export const listTags = () => invoke<[string, number][]>('list_tags');
-
 /**
  * The categories notes are filed under, with how many carry each, most used
- * first. A category is also a tag, so `#category` filters on it.
+ * first. `#category` in a search filters on one.
  */
 export const listCategories = () => invoke<[string, number][]>('list_categories');
 
 /** Every category on the list, used or not, in the list's order. */
 export const categoryNames = () => invoke<string[]>('category_names');
 
-/**
- * A note's category and its other tags. The category is the first tag, and
- * only when it is on the list, as the backend reads it.
- */
-export function splitCategory(names: string[], tags: string[]): [string, string[]] {
-	const [first, ...rest] = tags;
-	return first !== undefined && names.includes(first) ? [first, rest] : ['', tags];
-}
-
-/** Words must all appear; `#tag` tokens are AND filters. Newest first. */
-export const search = (query: string) => invoke<Note[]>('search', { query });
+/** Words must all appear; a `#category` token filters on the category. Newest first. */
+export const search = (query: string) => invoke<Note[]>('search', { query: storedQuery(query) });
 
 /** Notes close in meaning that the words miss. Empty without the embedding model. */
-export const searchMeaning = (query: string) => invoke<Note[]>('search_meaning', { query });
+export const searchMeaning = (query: string) =>
+	invoke<Note[]>('search_meaning', { query: storedQuery(query) });
 
 /**
  * The notes closest in meaning to this one, best first. Empty while the note
@@ -141,8 +130,8 @@ export const setTrayLabels = (labels: TrayLabels) => invoke<void>('set_tray_labe
 export const rebuildIndex = () => invoke<number>('rebuild_index');
 
 /**
- * Rebuild the index and queue every note for a fresh subject, summary and
- * tags, hand-edited ones included. Returns how many notes were queued.
+ * Rebuild the index and queue every note for a fresh subject and category,
+ * hand-edited ones included. Returns how many notes were queued.
  */
 export const regenerateAll = () => invoke<number>('regenerate_all');
 
@@ -279,8 +268,8 @@ export const onModelUpdateProgress = (handler: (percent: number) => void): Promi
  */
 export const downloadModel = (variant: ModelVariant) => invoke<void>('download_model', { variant });
 
-/** Qwen3-Embedding-0.6B at Q8_0, which lets the chat find notes by meaning. */
-export const EMBEDDING_SIZE = '~640 MB';
+/** EmbeddingGemma-300M at Q8_0, which lets the chat find notes by meaning. */
+export const EMBEDDING_SIZE = '~330 MB';
 
 export interface EmbeddingModelInfo {
 	installed: boolean;
@@ -304,13 +293,12 @@ export const onEmbeddingStatus = (
 export const retryEnrichment = (date: string, id: string) =>
 	invoke<void>('retry_enrichment', { date, id });
 
-/** What the note editor hands back. `tags` leaves out the category. */
+/** What the note editor hands back. */
 export interface NoteEdit {
 	body: string;
 	subject: string;
 	/** Empty for none. */
 	category: string;
-	tags: string[];
 }
 
 /** Replace a note's body. A changed body is re-enriched unless the note is manual. */
@@ -318,14 +306,14 @@ export const updateNote = (date: string, id: string, body: string) =>
 	invoke<Note>('update_note', { date, id, body });
 
 /**
- * Set subject, category and tags by hand, which makes the note manual so the
- * model leaves it alone from then on. Omitted fields are kept; `tags` are the
- * ones besides the category, and an empty category clears it.
+ * Set subject and category by hand, which makes the note manual so the model
+ * leaves it alone from then on. Omitted fields are kept, and an empty
+ * category clears it.
  */
 export const updateNoteMeta = (
 	date: string,
 	id: string,
-	meta: { subject?: string; category?: string; tags?: string[] }
+	meta: { subject?: string; category?: string }
 ) => invoke<Note>('update_note_meta', { date, id, ...meta });
 
 /** Fired when a note has been labelled and written back. */
@@ -395,12 +383,6 @@ export const setSettings = (settings: Settings) =>
 
 /** Relaunch the app, which is how a new notes root takes effect. */
 export const restartApp = () => invoke<void>('restart_app');
-
-export const getAliases = () => invoke<Record<string, string>>('get_aliases');
-
-/** Returns the aliases as cleaned and saved. */
-export const setAliases = (aliases: Record<string, string>) =>
-	invoke<Record<string, string>>('set_aliases', { aliases });
 
 export const onSettingsChanged = (handler: (settings: Settings) => void): Promise<UnlistenFn> =>
 	listen<Settings>('settings-changed', (event) => handler(event.payload));

@@ -1,11 +1,10 @@
-//! Spaces: separate sets of notes, each with its own tags, categories, index
-//! and queue.
+//! Spaces: separate sets of notes, each with its own categories, index and
+//! queue.
 //!
 //! Every space is a folder under `spaces/`, named after the space, so a folder
 //! made there by hand is a space too. `.scratchnote/spaces.json` at the root
 //! records only what the folders cannot: which space is open.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, RwLock};
@@ -13,12 +12,11 @@ use std::sync::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 
 use crate::embed::vectors::Vectors;
-use crate::enrich::normalize::Vocabulary;
 use crate::enrich::queue::{queue_path, Job, Queue};
 use crate::enrich::worker::Wake;
 use crate::storage::index::{self, Index};
 use crate::storage::writer::Writer;
-use crate::storage::{categories, tags};
+use crate::storage::categories;
 
 /// Made on first launch, when there is no space yet.
 pub const FIRST_NAME: &str = "Personal";
@@ -106,9 +104,8 @@ pub fn migrate_root(root: &Path) {
         );
         return;
     }
-    let own: [fn(&Path) -> PathBuf; 4] = [
+    let own: [fn(&Path) -> PathBuf; 3] = [
         index::index_path,
-        tags::tags_path,
         queue_path,
         categories::categories_path,
     ];
@@ -188,16 +185,13 @@ pub fn check_name(raw: &str) -> Result<String, String> {
     Ok(name)
 }
 
-/// One space as loaded: its cache, vocabulary and queue.
+/// One space as loaded: its cache and queue.
 pub struct Space {
     pub name: String,
     pub root: PathBuf,
     /// The derived cache from SPEC 4.4. Guards are held only for the length of
     /// a read or a swap, never across an await.
     pub index: RwLock<Index>,
-    /// The user's half of `tags.json` (SPEC 4.5), read at startup and again on
-    /// a rebuild.
-    pub aliases: RwLock<HashMap<String, String>>,
     /// Pending enrichment jobs (SPEC 5.6).
     pub queue: Mutex<Queue>,
     /// The note embeddings the chat searches. `None` until the embed task
@@ -215,13 +209,9 @@ pub struct Space {
 impl Space {
     /// Load a space from disk. The flag says the index on disk is out of date
     /// and should be written back.
-    /// `lang` seeds the categories of a space that has none yet.
-    pub fn open(name: &str, root: PathBuf, lang: &str, embed_wake: Wake) -> (Self, bool) {
+    pub fn open(name: &str, root: PathBuf, embed_wake: Wake) -> (Self, bool) {
         let (loaded, stale) = index::load(&root);
-        categories::ensure(&root, lang);
-        // tags.json is written alongside the index, so a missing one means
-        // the counts were never written, not that there are no tags.
-        let refresh = stale || !tags::tags_path(&root).exists();
+        categories::ensure(&root);
         log::info!("space {name} holds {} notes", loaded.len());
 
         // The queue survives restarts, and anything still pending in the
@@ -233,7 +223,6 @@ impl Space {
 
         let space = Self {
             name: name.to_string(),
-            aliases: RwLock::new(tags::load_aliases(&root)),
             index: RwLock::new(loaded),
             queue: Mutex::new(queue),
             vectors: Mutex::new(None),
@@ -244,7 +233,7 @@ impl Space {
         };
         // Its notes may have been written with no model, or by another one.
         space.embed_wake.notify_one();
-        (space, refresh)
+        (space, stale)
     }
 
     /// Stop watching and writing. The folder itself is the caller's to move
@@ -268,26 +257,9 @@ impl Space {
         self.index.read().map(|idx| idx.len()).unwrap_or(0)
     }
 
-    pub fn aliases(&self) -> HashMap<String, String> {
-        self.aliases
-            .read()
-            .map(|aliases| aliases.clone())
-            .unwrap_or_default()
-    }
-
-    /// What enrichment normalises against (SPEC 5.5).
-    /// The tags and categories of the notes labelled in `lang`, so the model
-    /// is steered towards that language's spellings, never another's.
-    pub fn vocabulary(&self, lang: &str) -> Vocabulary {
-        Vocabulary {
-            counts: self
-                .index
-                .read()
-                .map(|idx| idx.tag_counts_in(lang))
-                .unwrap_or_default(),
-            aliases: self.aliases(),
-            categories: categories::load_in(&self.root, lang),
-        }
+    /// The categories the model picks from, in whatever language it labels.
+    pub fn categories(&self) -> Vec<String> {
+        categories::load(&self.root)
     }
 
     /// The `k` notes closest to a query, best first, with their cosine. Empty
@@ -326,9 +298,7 @@ impl Space {
         self.embed_wake.notify_one();
     }
 
-    /// Write `index.jsonl` and `tags.json` from what is in memory. The tag
-    /// counts are derived from the index, so they are rewritten whenever it is
-    /// and the two never drift apart.
+    /// Write `index.jsonl` from what is in memory.
     pub async fn persist_index(&self, writer: &Writer) -> Result<(), String> {
         if self.is_retired() {
             return Ok(());
@@ -336,21 +306,13 @@ impl Space {
         // Every change to the index but a capture ends here, so the vectors
         // follow it from this one place.
         self.index_changed();
-        let (jsonl, counts) = {
-            let idx = self
-                .index
-                .read()
-                .map_err(|_| "index lock poisoned".to_string())?;
-            (idx.to_jsonl(), idx.tag_counts())
-        };
+        let jsonl = self
+            .index
+            .read()
+            .map_err(|_| "index lock poisoned".to_string())?
+            .to_jsonl();
         writer
             .write_index(index::index_path(&self.root), jsonl)
-            .await?;
-        writer
-            .write_index(
-                tags::tags_path(&self.root),
-                tags::render(&counts, &self.aliases()),
-            )
             .await
     }
 

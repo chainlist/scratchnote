@@ -127,6 +127,8 @@ export class Shell {
 
 	showPages = () => goto(resolve('/pages/'));
 
+	showTasks = () => goto(resolve('/tasks/'));
+
 	/** Every note a query matches, from the command center's "See all". */
 	showResults = async (q: string) => {
 		const trimmed = q.trim();

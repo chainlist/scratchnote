@@ -7,6 +7,7 @@
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import HashIcon from '@lucide/svelte/icons/hash';
 	import ListIcon from '@lucide/svelte/icons/list';
+	import ListTodoIcon from '@lucide/svelte/icons/list-todo';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import { categoryLabel } from '$lib/categories';
@@ -24,6 +25,7 @@
 		ontoday,
 		onnewpage,
 		onpages,
+		ontasks,
 		onchat,
 		onsettings
 	}: {
@@ -47,6 +49,8 @@
 		onnewpage: () => void;
 		/** List every page of the space. */
 		onpages: () => void;
+		/** List the open tasks of the space (SPEC 3.8). */
+		ontasks: () => void;
 		onchat: () => void;
 		onsettings: () => void;
 	} = $props();
@@ -203,6 +207,9 @@
 				</Command.Item>
 				<Command.Item value="all-pages" onSelect={() => run(onpages)}>
 					<FilesIcon />{m.pages_all()}
+				</Command.Item>
+				<Command.Item value="open-tasks" onSelect={() => run(ontasks)}>
+					<ListTodoIcon />{m.tasks_open()}
 				</Command.Item>
 				{#if canChat}
 					<Command.Item value="chat" onSelect={() => run(onchat)}>

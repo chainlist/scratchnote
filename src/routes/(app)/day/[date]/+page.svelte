@@ -11,6 +11,7 @@
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import FilesIcon from '@lucide/svelte/icons/files';
+	import ListTodoIcon from '@lucide/svelte/icons/list-todo';
 	import { m } from '$lib/paraglide/messages';
 	import { getShell } from '$lib/shell.svelte';
 	import type { Day } from './+page';
@@ -97,6 +98,16 @@
 				class="text-muted-foreground hover:text-foreground"
 			>
 				<FilesIcon />
+			</Button>
+			<Button
+				variant="ghost"
+				size="icon-sm"
+				href={resolve('/tasks/')}
+				aria-label={m.tasks_open()}
+				title={m.tasks_open()}
+				class="text-muted-foreground hover:text-foreground"
+			>
+				<ListTodoIcon />
 			</Button>
 			<!-- Side by side ahead of the title, so they stay put while its width
 			     changes from one day to the next. -->

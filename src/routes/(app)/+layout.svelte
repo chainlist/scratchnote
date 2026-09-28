@@ -202,6 +202,7 @@
 	ontoday={async () => void shell.openDay(await today())}
 	onnewpage={shell.newPage}
 	onpages={() => void shell.showPages()}
+	ontasks={() => void shell.showTasks()}
 	onchat={() => (shell.chatOpen = true)}
 	onsettings={() => (shell.settingsOpen = true)}
 />

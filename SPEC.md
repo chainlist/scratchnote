@@ -315,6 +315,16 @@ A note or a page can carry files: screenshots, photos, PDFs, anything. Each is c
 - Deleting a note, a page or a link leaves the file where it is. Files nothing links to are removed by hand.
 - Search, chat, the models and the index see the link as part of the text. Nothing reads what is inside an attachment.
 
+### 3.8 Tasks
+
+Open tasks lists every task of the space not yet ticked, in notes and pages alike, so a `- [ ]` jotted in the capture window does not sink out of sight with its day.
+
+- The button beside All pages above the day opens it, as does the command center.
+- Newest first, one row per note or page: its date and time on the left, which show the note on its day or open the page, and its open tasks on the right, each as the first line of its list item. A page's title shows above its tasks.
+- A click on a box ticks the task and saves the note or page at once, as on a card (3.4): only the box changes, so it keeps its subject and category. A task ticked here stays in the list, ticked, until the view closes, so a box ticked by mistake can be cleared again.
+- The title counts the open tasks. With none, the view says how to write one.
+- The tasks are read from the markdown, through the same code as the cards. Search by meaning cannot do this: an open task and a done one embed almost alike.
+
 ## 4. Storage
 
 ### 4.1 Layout
@@ -621,6 +631,7 @@ list_categories() -> Vec<(String, u32)>      // in use, most used first
 category_names() -> Vec<String>               // every listed category
 search(query: String) -> Vec<Note>
 similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
+task_notes() -> Vec<Note>                   // every note and page with a task box, newest first
 get_settings() / set_settings(...)
 model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle | disabled
 download_model(variant)

@@ -401,5 +401,8 @@
 	"pages_delete_title": "Eliminare questa pagina?",
 	"pages_delete_description": "Il suo file viene eliminato ed esce dalla sua giornata. Non si può annullare.",
 	"pages_remove_stub_title": "Togliere questa pagina mancante?",
-	"pages_remove_stub_description": "Esce dalla giornata solo il suo link. Se il suo file ricompare, la pagina torna."
+	"pages_remove_stub_description": "Esce dalla giornata solo il suo link. Se il suo file ricompare, la pagina torna.",
+	"tasks_open": "Attività da fare",
+	"tasks_none": "Nessuna attività da fare. Inizia una riga con - [ ] in una nota o in una pagina per aggiungerne una.",
+	"tasks_show_in_day": "Mostra nella sua giornata"
 }

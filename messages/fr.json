@@ -401,5 +401,8 @@
 	"pages_delete_title": "Supprimer cette page ?",
 	"pages_delete_description": "Son fichier est supprimé et elle quitte sa journée. Il n'y a pas d'annulation possible.",
 	"pages_remove_stub_title": "Retirer cette page introuvable ?",
-	"pages_remove_stub_description": "Seul son lien quitte la journée. Si son fichier réapparaît, la page revient."
+	"pages_remove_stub_description": "Seul son lien quitte la journée. Si son fichier réapparaît, la page revient.",
+	"tasks_open": "Tâches à faire",
+	"tasks_none": "Aucune tâche à faire. Commencez une ligne par - [ ] dans une note ou une page pour en ajouter une.",
+	"tasks_show_in_day": "Voir dans sa journée"
 }

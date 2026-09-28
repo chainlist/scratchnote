@@ -4,9 +4,14 @@
  */
 export const pageDraft = { title: '', body: '' };
 
+/** Text added after a draft's, a blank line between them. */
+export function joinText(draft: string, text: string) {
+	const added = text.trim();
+	if (!added) return draft;
+	return draft.trim() ? `${draft.trimEnd()}\n\n${added}` : added;
+}
+
 /** Add text handed over from the capture window to whatever the draft holds. */
 export function addToPageDraft(body: string) {
-	const text = body.trim();
-	if (!text) return;
-	pageDraft.body = pageDraft.body.trim() ? `${pageDraft.body.trimEnd()}\n\n${text}` : text;
+	pageDraft.body = joinText(pageDraft.body, body);
 }

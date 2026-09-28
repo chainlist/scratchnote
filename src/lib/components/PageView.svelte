@@ -19,7 +19,7 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
 	import { categoryLabel } from '$lib/categories';
-	import { pageDraft } from '$lib/page-draft';
+	import { joinText, pageDraft } from '$lib/page-draft';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
@@ -146,6 +146,11 @@
 	function keepDraft() {
 		pageDraft.title = title;
 		pageDraft.body = body;
+	}
+
+	/** Text handed over from the capture window, after what is typed. */
+	export function addText(text: string) {
+		body = joinText(body, text);
 	}
 
 	// The editor binds `body`, so a change to it is typing, or a reload.

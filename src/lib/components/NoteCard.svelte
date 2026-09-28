@@ -55,6 +55,10 @@
 	let draft = $state('');
 	let editor = $state<MarkdownEditor | null>(null);
 	let menuOpen = $state(false);
+	/** The body with task boxes ticked but not saved yet, shown meanwhile. */
+	let ticked = $state<string | null>(null);
+	let ticking = Promise.resolve();
+	const body = $derived(ticked ?? note.body);
 
 	// Re-running a manual note would be skipped anyway, and a pending one is
 	// already in the queue.
@@ -66,7 +70,7 @@
 
 	async function startEditing() {
 		if (editing) return;
-		draft = note.body;
+		draft = body;
 		editing = true;
 		await tick();
 		editor?.focus();
@@ -78,6 +82,15 @@
 		const saved = await onsave(note, draft);
 		saving = false;
 		if (saved) editing = false;
+	}
+
+	/** A task box clicked saves at once; clicks in a row save one after another. */
+	function saveTicks(next: string) {
+		ticked = next;
+		ticking = ticking.then(async () => {
+			const saved = await onsave(note, next);
+			if (!saved || ticked === next) ticked = null;
+		});
 	}
 
 	const action =
@@ -179,7 +192,8 @@
 			     and selection through to the real text, and holds a blurred copy
 			     of its own as the glow behind its letters. -->
 			<Markdown
-				text={note.body}
+				text={body}
+				ontoggle={saveTicks}
 				class="text-base leading-7 transition-colors duration-500 {pending
 					? 'text-transparent'
 					: 'text-neutral-200'}"
@@ -190,8 +204,8 @@
 					transition:fade={glowFade}
 					class="note-glow-text pointer-events-none absolute inset-0 text-base leading-7"
 				>
-					<Markdown text={note.body} />
-					<Markdown text={note.body} class="note-glow-blur" />
+					<Markdown text={body} />
+					<Markdown text={body} class="note-glow-blur" />
 				</div>
 			{/if}
 		{/if}

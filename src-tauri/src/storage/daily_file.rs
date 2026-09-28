@@ -91,6 +91,22 @@ pub fn body_hash(body: &str) -> String {
     digest[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// The two bodies differ only in task boxes ticked or cleared, `[ ]` against
+/// `[x]`: what the note says is the same, so its labels still fit (SPEC 3.4).
+pub fn only_ticks_changed(old: &str, new: &str) -> bool {
+    let tick = |b: u8| matches!(b, b' ' | b'x' | b'X');
+    let (old, new) = (old.as_bytes(), new.as_bytes());
+    old.len() == new.len()
+        && (0..old.len()).all(|i| {
+            old[i] == new[i]
+                || (i > 0
+                    && old[i - 1] == b'['
+                    && old.get(i + 1) == Some(&b']')
+                    && tick(old[i])
+                    && tick(new[i]))
+        })
+}
+
 pub fn render_note(note: &Note) -> String {
     let lang = note
         .lang
@@ -588,6 +604,16 @@ mod tests {
         assert_eq!(h.len(), 8);
         assert_eq!(h, body_hash("hello"));
         assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn a_ticked_task_box_is_not_a_change_of_text() {
+        let body = "- [ ] milk\n- [x] eggs";
+        assert!(only_ticks_changed(body, "- [x] milk\n- [ ] eggs"));
+        assert!(only_ticks_changed(body, "- [X] milk\n- [x] eggs"));
+        assert!(!only_ticks_changed(body, "- [ ] milk\n- [x] bread"));
+        assert!(!only_ticks_changed(body, "- [ ] milk\n- [x] eggs!"));
+        assert!(!only_ticks_changed("a b", "a x"));
     }
 
     #[test]

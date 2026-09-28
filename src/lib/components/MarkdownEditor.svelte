@@ -46,6 +46,29 @@
 		}
 	}
 	const bullet = Decoration.replace({ widget: new Bullet() });
+
+	/** A task's box, drawn as the read-only view draws it. */
+	class TaskBox extends WidgetType {
+		readonly done: boolean;
+		constructor(done: boolean) {
+			super();
+			this.done = done;
+		}
+		eq(other: TaskBox) {
+			return other.done === this.done;
+		}
+		toDOM() {
+			const box = document.createElement('span');
+			box.className = this.done ? 'md-task md-ticked' : 'md-task';
+			return box;
+		}
+		// `taskBoxes`, below, handles its click.
+		ignoreEvent() {
+			return false;
+		}
+	}
+	const openBox = Decoration.replace({ widget: new TaskBox(false) });
+	const tickedBox = Decoration.replace({ widget: new TaskBox(true) });
 	const hide = Decoration.replace({});
 	const markup = Decoration.mark({ class: 'md-markup' });
 
@@ -123,7 +146,15 @@
 		for (const range of hidden) {
 			// A plugin may not hide a line break; a link split over two lines keeps its markup.
 			if (range.from === range.to || text.slice(range.from, range.to).includes('\n')) continue;
-			const deco = shown(range.from) ? markup : range.bullet ? bullet : hide;
+			const deco = shown(range.from)
+				? markup
+				: range.task
+					? range.task.done
+						? tickedBox
+						: openBox
+					: range.bullet
+						? bullet
+						: hide;
 			ranges.push(deco.range(range.from, range.to));
 		}
 		// On the line being edited an attachment stays in view after its markup.
@@ -170,6 +201,19 @@
 			const href = target.getAttribute('data-href');
 			if (href) void openLink(href);
 			else void openAttachment(target.getAttribute('data-attachment')!);
+			return true;
+		}
+	});
+
+	/** A click on a task's box ticks or clears it, and leaves the cursor where it was. */
+	const taskBoxes = EditorView.domEventHandlers({
+		mousedown(event, view) {
+			const box = (event.target as Element).closest('.md-task');
+			if (!box) return false;
+			event.preventDefault();
+			const at = view.posAtDOM(box) + 1;
+			const done = view.state.sliceDoc(at, at + 1) !== ' ';
+			view.dispatch({ changes: { from: at, to: at + 1, insert: done ? ' ' : 'x' } });
 			return true;
 		}
 	});
@@ -292,6 +336,7 @@
 					language,
 					livePreview,
 					links,
+					taskBoxes,
 					pasteFiles,
 					EditorView.lineWrapping,
 					placeholderText(placeholder),

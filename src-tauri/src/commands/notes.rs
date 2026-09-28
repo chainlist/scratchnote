@@ -202,7 +202,8 @@ pub async fn delete_note(
 }
 
 /// Edit a note's body in the app. A changed body goes back to the model,
-/// unless the user has taken the note over (SPEC 4.2).
+/// unless the user has taken the note over (SPEC 4.2) or only ticked task
+/// boxes (SPEC 3.4).
 #[tauri::command]
 pub async fn update_note(
     app: AppHandle,
@@ -222,11 +223,12 @@ pub async fn update_note(
         return Ok(current);
     }
 
+    let requeue =
+        current.status != Status::Manual && !daily_file::only_ticks_changed(&current.body, &body);
     let path = day_path(&space.root, &date);
     if !state.writer.replace_body(path, id.clone(), body).await? {
         return Err(format!("no note {id} in {date}"));
     }
-    let requeue = current.status != Status::Manual;
     if requeue {
         mark_pending(&state, &space, &current).await?;
     }

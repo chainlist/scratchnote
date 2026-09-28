@@ -150,6 +150,7 @@
 	],
 	"note_body_label": "Text",
 	"note_edit_hint": "Strg+Enter zum Speichern, Esc zum Abbrechen",
+	"note_task_done": "Erledigt",
 	"note_dblclick_hint": "Doppelklick zum Bearbeiten",
 	"note_actions": "Notizaktionen",
 	"note_edit": "Bearbeiten",

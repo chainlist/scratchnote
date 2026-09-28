@@ -150,6 +150,7 @@
 	],
 	"note_body_label": "Corpo",
 	"note_edit_hint": "Ctrl+Enter per salvare, Esc per annullare",
+	"note_task_done": "Fatto",
 	"note_dblclick_hint": "Doppio click per modificare",
 	"note_actions": "Azioni nota",
 	"note_edit": "Modifica",

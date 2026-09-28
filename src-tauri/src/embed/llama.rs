@@ -139,18 +139,47 @@ fn query_prompt(query: &str) -> String {
 /// have no title of their own: the subject is the model's work, and would tie
 /// the vector to the labels.
 fn document_prompt(text: &str) -> String {
-    format!("title: none | text: {text}")
+    format!("title: none | text: {}", spell_tasks(text))
+}
+
+/// The text with each task's box spelled out, `- [ ] milk` as `To do: milk`
+/// and `- [x] eggs` as `Done: eggs`: to the model a box is only punctuation,
+/// while the words bring the note closer to a question about what is left to
+/// do, asked in English or in another language.
+fn spell_tasks(text: &str) -> String {
+    text.split_inclusive('\n')
+        .map(|line| {
+            let item = line.trim_start_matches([' ', '\t']);
+            let indent = &line[..line.len() - item.len()];
+            let word = match item.get(..5) {
+                Some("- [ ]") => "To do:",
+                Some("- [x]" | "- [X]") => "Done:",
+                _ => return line.to_string(),
+            };
+            // As in markdown, a box is only a task's when a space or the end
+            // of the line follows it.
+            let rest = &item[5..];
+            if rest.is_empty() || rest.starts_with([' ', '\t', '\r', '\n']) {
+                format!("{indent}{word}{rest}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect()
 }
 
 /// What `vectors.bin` records its vectors as: the model, their size, and how
-/// a note is turned into one. Vectors made another way then load as none and
-/// every note is embedded again. Named after the file alone, notes embedded
-/// at the last token for Qwen3-Embedding were kept and compared with queries
-/// averaged for EmbeddingGemma, which ranked notes close to at random.
+/// a note is turned into one, its framing and the words its tasks become.
+/// Vectors made another way then load as none and every note is embedded
+/// again. Named after the file alone, notes embedded at the last token for
+/// Qwen3-Embedding were kept and compared with queries averaged for
+/// EmbeddingGemma, which ranked notes close to at random.
 fn model_id(stem: &str, dims: usize) -> String {
     format!(
-        "{stem}/{dims}/{POOLING:?}/{}",
-        document_prompt("").trim_end()
+        "{stem}/{dims}/{POOLING:?}/{}/{}|{}",
+        document_prompt("").trim_end(),
+        spell_tasks("- [ ]"),
+        spell_tasks("- [x]")
     )
 }
 
@@ -220,10 +249,22 @@ mod tests {
     }
 
     #[test]
+    fn task_boxes_are_spelled_out_as_words() {
+        assert_eq!(
+            spell_tasks("Shopping\n- [ ] milk\n  - [x] eggs\r\n- [X] bread\n- [ ]"),
+            "Shopping\nTo do: milk\n  Done: eggs\r\nDone: bread\nTo do:"
+        );
+        // Not a task: no space after the box, no bullet, or not at the start.
+        assert_eq!(spell_tasks("- [x]y"), "- [x]y");
+        assert_eq!(spell_tasks("[ ] milk"), "[ ] milk");
+        assert_eq!(spell_tasks("buy - [ ] milk"), "buy - [ ] milk");
+    }
+
+    #[test]
     fn the_vectors_are_named_after_how_notes_are_embedded() {
         assert_eq!(
             model_id("embeddinggemma-300M-Q8_0", 768),
-            "embeddinggemma-300M-Q8_0/768/Mean/title: none | text:"
+            "embeddinggemma-300M-Q8_0/768/Mean/title: none | text:/To do:|Done:"
         );
     }
 
@@ -244,7 +285,7 @@ mod tests {
         let embedder = LlamaEmbedder::load_with(&path, true).expect("the model should load");
         assert_eq!(
             embedder.model_id(),
-            "embeddinggemma-300M-Q8_0/768/Mean/title: none | text:"
+            "embeddinggemma-300M-Q8_0/768/Mean/title: none | text:/To do:|Done:"
         );
         assert_eq!(embedder.dims(), 768);
 

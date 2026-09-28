@@ -255,10 +255,11 @@ pub async fn get_page(state: State<'_, AppState>, id: String) -> Result<Note, St
 }
 
 /// Replace a page's text, as the page view autosaves it. A changed text
-/// marks the page pending, unless the user set the category by hand, but it
-/// only goes to the model once the view closes (`finish_page`). Pending in
-/// the file, it is queued at the next launch should the app quit first. An
-/// empty text is allowed: the title is still there.
+/// marks the page pending, unless the user set the category by hand or only
+/// ticked task boxes, but it only goes to the model once the view closes
+/// (`finish_page`). Pending in the file, it is queued at the next launch
+/// should the app quit first. An empty text is allowed: the title is still
+/// there.
 #[tauri::command]
 pub async fn update_page(
     app: AppHandle,
@@ -274,7 +275,8 @@ pub async fn update_page(
         return Ok(current);
     }
 
-    let relabel = current.status != Status::Manual;
+    let relabel =
+        current.status != Status::Manual && !daily_file::only_ticks_changed(&current.body, &body);
     let file = current.file.clone();
     let written = {
         let file = file.clone();

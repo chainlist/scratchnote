@@ -1,19 +1,22 @@
-import { Autolink, Strikethrough, parser as commonmark } from '@lezer/markdown';
+import { Autolink, Strikethrough, TaskList, parser as commonmark } from '@lezer/markdown';
 import type { SyntaxNode, Tree } from '@lezer/common';
 
 /**
- * The markdown notes are shown with: CommonMark, bare links and
- * ~~strikethrough~~. The editor and the read-only view both go through
+ * The markdown notes are shown with: CommonMark, bare links,
+ * ~~strikethrough~~ and `- [ ]` tasks. The editor and the read-only view both go through
  * `preview`, so a note looks the same written and read.
  */
-export const syntax = [Strikethrough, Autolink];
+export const syntax = [Strikethrough, Autolink, TaskList];
 export const parser = commonmark.configure(syntax);
 
 export type Preview = {
 	/** Styled stretches; a link carries where it opens. */
 	marks: { from: number; to: number; class: string; href?: string }[];
-	/** Markup hidden while the cursor is off its line: `**`, `](url)`, `# `. A bullet stands in for a list mark. */
-	hidden: { from: number; to: number; bullet?: boolean }[];
+	/**
+	 * Markup hidden while the cursor is off its line: `**`, `](url)`, `# `.
+	 * A bullet stands in for a list mark, and a checkbox for a task's `[ ]`.
+	 */
+	hidden: { from: number; to: number; bullet?: boolean; task?: { done: boolean } }[];
 	/** Classes and styles for whole lines, by the offset each line starts at. */
 	lines: Map<number, { class: string; style?: string }>;
 	/**
@@ -166,12 +169,20 @@ export function preview(tree: Tree, text: string): Preview {
 					while (start > 0 && (text[start - 1] === ' ' || text[start - 1] === '\t')) start--;
 					let end = to;
 					while (text[end] === ' ') end++;
-					hidden.push({ from: start, to: end, bullet: true });
+					// A task's checkbox takes the bullet's place.
+					const task = node.node.parent.getChild('Task') !== null;
+					hidden.push({ from: start, to: end, bullet: !task });
 					addLine(
 						lineStart(from),
 						'md-li',
 						`padding-left: calc(var(--md-indent, 0em) + ${depth * BULLET_EM}em); text-indent: -${BULLET_EM}em`
 					);
+					break;
+				}
+				case 'TaskMarker': {
+					let end = to;
+					while (text[end] === ' ') end++;
+					hidden.push({ from, to: end, task: { done: text[from + 1] !== ' ' } });
 					break;
 				}
 				case 'Link': {
@@ -219,6 +230,8 @@ export function preview(tree: Tree, text: string): Preview {
 export type Part =
 	| { text: string; class: string; href?: string }
 	| { bullet: true }
+	/** A task's checkbox, by the offset of its `[`. */
+	| { task: number; done: boolean }
 	| { attachment: string; name: string; image: boolean };
 export type Line = { class: string; style?: string; parts: Part[] };
 
@@ -234,11 +247,13 @@ export function renderLines(text: string): Line[] {
 			if (mark.href) hrefs[i] = mark.href;
 		}
 	}
-	// 1 hides a character, 2 draws a bullet in its place, 3 an attachment.
+	// 1 hides a character, 2 draws a bullet in its place, 3 an attachment,
+	// 4 a task's checkbox.
 	const skip = new Uint8Array(text.length);
 	for (const range of hidden) {
 		skip.fill(1, range.from, range.to);
 		if (range.bullet) skip[range.from] = 2;
+		if (range.task) skip[range.from] = 4;
 	}
 	const attachmentAt = new Map(attachments.map((attached) => [attached.from, attached]));
 	for (const attached of attachments) {
@@ -254,6 +269,7 @@ export function renderLines(text: string): Line[] {
 		for (let i = start; i < end;) {
 			if (skip[i]) {
 				if (skip[i] === 2) parts.push({ bullet: true });
+				if (skip[i] === 4) parts.push({ task: i, done: text[i + 1] !== ' ' });
 				if (skip[i] === 3) {
 					const { path, name, image } = attachmentAt.get(i)!;
 					parts.push({ attachment: path, name, image });
@@ -272,3 +288,7 @@ export function renderLines(text: string): Line[] {
 	}
 	return out;
 }
+
+/** The text with the task box whose `[` is at `at` ticked, or cleared if it was. */
+export const toggleTask = (text: string, at: number) =>
+	text.slice(0, at + 1) + (text[at + 1] === ' ' ? 'x' : ' ') + text.slice(at + 2);

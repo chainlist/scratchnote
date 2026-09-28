@@ -1,17 +1,21 @@
 <script lang="ts">
 	import { openAttachment, openLink } from '$lib/api';
 	import { attachmentUrl } from '$lib/attachments.svelte';
-	import { cardName, fileName, fileType, renderLines } from '$lib/markdown';
+	import { cardName, fileName, fileType, renderLines, toggleTask } from '$lib/markdown';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		text,
 		links = true,
+		ontoggle,
 		class: className = ''
 	}: {
 		/** A note body, in markdown. */
 		text: string;
 		/** Off for a preview: its links are drawn but neither open nor take focus, and an attachment shows as its name. */
 		links?: boolean;
+		/** A task box was clicked: the text with it ticked or cleared. Left out, the boxes do not click. */
+		ontoggle?: (text: string) => void;
 		class?: string;
 	} = $props();
 
@@ -36,7 +40,15 @@
 	{#each lines as line, i (i)}
 		<div class="md-line {line.class}" style={line.style}>
 			{#each line.parts as part, k (k)}{#if 'bullet' in part}<span class="md-bullet"
-					></span>{:else if 'attachment' in part}{@const path = part.attachment}{@const name =
+					></span>{:else if 'task' in part}{@const at = part.task}<button
+						type="button"
+						role="checkbox"
+						aria-checked={part.done}
+						aria-label={m.note_task_done()}
+						class={['md-task', part.done && 'md-ticked']}
+						disabled={!ontoggle}
+						onclick={() => ontoggle?.(toggleTask(text, at))}
+					></button>{:else if 'attachment' in part}{@const path = part.attachment}{@const name =
 						part.name || fileName(path)}{#if !links}<span class="md-chip">{name}</span
 						>{:else if part.image}<button
 							type="button"

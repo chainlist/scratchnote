@@ -150,6 +150,7 @@
 	],
 	"note_body_label": "Body",
 	"note_edit_hint": "Ctrl+Enter to save, Esc to cancel",
+	"note_task_done": "Done",
 	"note_dblclick_hint": "Double-click to edit",
 	"note_actions": "Note actions",
 	"note_edit": "Edit",

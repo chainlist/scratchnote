@@ -9,10 +9,6 @@ on:
         required: true
   # By hand, for test installers as workflow artifacts.
   workflow_dispatch:
-  # TEMPORARY: builds this branch while the workflow is being made to work.
-  push:
-    branches:
-      - ci/publish
 
 permissions:
   contents: write

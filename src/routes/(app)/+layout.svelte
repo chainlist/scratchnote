@@ -4,7 +4,6 @@
 	import {
 		embeddingModelInfo,
 		getSettings,
-		modelStatus,
 		onEmbeddingStatus,
 		onIndexRebuilt,
 		onModelStatus,
@@ -39,8 +38,14 @@
 
 	let { data, children } = $props();
 
-	// Until a day is shown, the views go back to today.
-	const shell = setShell(new Shell(untrack(() => data.today)));
+	// Until a day is shown, the views go back to today. The model's state
+	// follows its events from here on.
+	const shell = setShell(
+		new Shell(
+			untrack(() => data.today),
+			untrack(() => data.model)
+		)
+	);
 
 	/** Release notes waiting to be read after an update. */
 	let releaseNotes = $state<Release[] | null>(null);
@@ -74,7 +79,7 @@
 	}
 
 	onMount(() => {
-		const off: Promise<() => void>[] = [];
+		const off: Promise<() => void>[] = [onModelStatus((status) => (shell.model = status))];
 		void (async () => {
 			const settings = await getSettings();
 			void showReleaseNotes(settings).catch((e) => shell.showError(String(e)));
@@ -99,8 +104,6 @@
 			off.push(
 				onEmbeddingStatus((status) => (shell.embeddingInstalled = status.state === 'installed'))
 			);
-			shell.model = await modelStatus();
-			off.push(onModelStatus((status) => (shell.model = status)));
 		})();
 		return () => off.forEach((p) => void p.then((stop) => stop()));
 	});

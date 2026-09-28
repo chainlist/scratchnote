@@ -72,8 +72,9 @@ export class Shell {
 	/** The view's title has scrolled under the top bar, which shows it instead. */
 	titleCollapsed = $state(false);
 
-	constructor(today: string) {
+	constructor(today: string, model: ModelStatus) {
 		this.day = today;
+		this.model = model;
 	}
 
 	/** The day to go back to. */

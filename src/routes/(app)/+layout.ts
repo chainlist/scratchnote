@@ -7,6 +7,7 @@ import {
 	listDays,
 	listSpaces,
 	modelInfo,
+	modelStatus,
 	today
 } from '$lib/api';
 import { resumeStep } from '$lib/onboarding';
@@ -32,14 +33,16 @@ export const load: LayoutLoad = async ({ depends }) => {
 	}
 
 	// What every view uses: the days to step through, the categories to
-	// filter and file by, the spaces, and today.
+	// filter and file by, the spaces, and today. The model's state too, so
+	// the first paint does not offer to install a model that is there.
 	depends('app:notes');
-	const [days, categories, categoryList, spaces, todayDate] = await Promise.all([
+	const [days, categories, categoryList, spaces, todayDate, model] = await Promise.all([
 		listDays(),
 		listCategories(),
 		categoryNames(),
 		listSpaces(),
-		today()
+		today(),
+		modelStatus()
 	]);
-	return { days, categories, categoryList, spaces, today: todayDate };
+	return { days, categories, categoryList, spaces, today: todayDate, model };
 };

@@ -160,6 +160,8 @@ export function applyAppearance(appearance: Appearance) {
 	style.setProperty('--font-sans', font.family);
 	style.fontSize = `${fontSize}px`;
 	style.setProperty('--radius', `${radius}rem`);
+	// app.html restores this at the next launch, before the settings arrive.
+	localStorage.setItem('appearance', JSON.stringify({ dark, style: style.cssText }));
 }
 
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');

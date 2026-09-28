@@ -4,6 +4,17 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<script>
+			// Repaint what applyAppearance last painted before anything renders,
+			// so a light window does not open dark and wait for the settings.
+			{
+				const painted = JSON.parse(localStorage.getItem('appearance'));
+				if (painted) {
+					document.documentElement.classList.toggle('dark', painted.dark);
+					document.documentElement.style.cssText = painted.style;
+				}
+			}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

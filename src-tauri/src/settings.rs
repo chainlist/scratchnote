@@ -45,6 +45,9 @@ pub struct Settings {
     pub language: String,
     /// The first-run walkthrough has been finished or skipped.
     pub onboarded: bool,
+    /// The app version whose release notes were last shown. None from 0.1.0,
+    /// which did not record it.
+    pub last_seen_version: Option<String>,
 }
 
 impl Default for Settings {
@@ -66,6 +69,7 @@ impl Default for Settings {
             theme: "dark".to_string(),
             language: "system".to_string(),
             onboarded: false,
+            last_seen_version: None,
         }
     }
 }
@@ -172,6 +176,7 @@ mod tests {
         assert_eq!(back.theme, "dark");
         assert_eq!(back.language, "system");
         assert!(!back.onboarded);
+        assert_eq!(back.last_seen_version, None);
     }
 
     #[test]

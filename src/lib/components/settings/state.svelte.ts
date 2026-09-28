@@ -29,7 +29,8 @@ const editable = (s: Settings): Settings => ({
 	radius: s.radius,
 	theme: s.theme,
 	language: s.language,
-	onboarded: s.onboarded
+	onboarded: s.onboarded,
+	lastSeenVersion: s.lastSeenVersion
 });
 
 /**
@@ -49,7 +50,8 @@ export class SettingsState {
 		useGpu: true,
 		...DEFAULT_APPEARANCE,
 		language: 'system',
-		onboarded: false
+		onboarded: false,
+		lastSeenVersion: null
 	});
 	info = $state<ModelInfo | null>(null);
 	model = $state<ModelStatus>({ state: 'absent' });

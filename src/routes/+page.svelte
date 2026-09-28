@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, tick, untrack } from 'svelte';
+	import { getVersion } from '@tauri-apps/api/app';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
@@ -28,6 +29,7 @@
 		retryEnrichment,
 		saveNote,
 		search,
+		setSettings,
 		setTrayLabels,
 		similarNotes,
 		today,
@@ -36,6 +38,7 @@
 		type DaySummary,
 		type IndexEntry,
 		type ModelStatus,
+		type SettingsView,
 		type SpacesView,
 		type NoteEdit,
 		type Note
@@ -55,6 +58,7 @@
 	import Settings from '$lib/components/settings/Settings.svelte';
 	import CalendarPage from '$lib/components/CalendarPage.svelte';
 	import TimelineHeader from '$lib/components/TimelineHeader.svelte';
+	import WhatsNew from '$lib/components/WhatsNew.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import PanelRightCloseIcon from '@lucide/svelte/icons/panel-right-close';
@@ -62,6 +66,7 @@
 	import { getLocale } from '$lib/paraglide/runtime';
 	import { resumeStep } from '$lib/onboarding';
 	import { categoryLabel } from '$lib/categories';
+	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '$lib/changelog';
 	import { toggleCategory } from '$lib/query';
 	import { addToPageDraft } from '$lib/page-draft';
 	import type { Timeline } from '$lib/timeline';
@@ -115,6 +120,8 @@
 	let query = $state('');
 	let paletteOpen = $state(false);
 	let settingsOpen = $state(false);
+	/** Release notes waiting to be read after an update. */
+	let releaseNotes = $state<Release[] | null>(null);
 	let chatOpen = $state(false);
 	const canChat = $derived(model.state === 'loaded' || model.state === 'idle');
 	/** Similar notes come from the embedding model's vectors. */
@@ -458,6 +465,19 @@
 		error = message;
 	}
 
+	/**
+	 * After an update, the notes of every release since the version last
+	 * opened. A settings file without one is from 0.1.0, which kept none.
+	 */
+	async function showReleaseNotes(settings: SettingsView) {
+		const current = await getVersion();
+		const since = settings.lastSeenVersion ?? FIRST_RELEASE;
+		if (compareVersions(current, since) <= 0) return;
+		const news = releasesSince(since, current);
+		if (news.length) releaseNotes = news;
+		await setSettings({ ...settings, lastSeenVersion: current });
+	}
+
 	onMount(() => {
 		const off: Promise<() => void>[] = [];
 		void (async () => {
@@ -475,6 +495,7 @@
 				await goto(resolve('/onboarding/'));
 				return;
 			}
+			void showReleaseNotes(settings).catch((e) => showError(String(e)));
 
 			textSize = settings.fontSize;
 			off.push(onSettingsChanged((changed) => (textSize = changed.fontSize)));
@@ -727,6 +748,8 @@
 <DeleteNoteDialog bind:note={deleting} onconfirm={remove} />
 
 <NoteToPageDialog bind:note={turning} onconfirm={turnIntoPage} />
+
+<WhatsNew bind:releases={releaseNotes} />
 
 <Dialog.Root bind:open={settingsOpen}>
 	<Dialog.Content

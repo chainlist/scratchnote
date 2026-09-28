@@ -298,6 +298,7 @@ The app updates itself from the project's GitHub Releases.
 - Every release is signed with the project's updater key, and the app installs only what that key signed. The signature must also name the version it was signed for (`requireSignedVersion`), so an altered `latest.json` cannot pass an older release off as a newer one.
 - The private key stays out of the repository: with the maintainer, and as the CI secret `TAURI_SIGNING_PRIVATE_KEY`, with `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` beside it if the key has a password. Losing the key leaves every installed copy unable to update.
 - Only the release build in CI signs, by turning on `bundle.createUpdaterArtifacts` for that build alone, so a local `pnpm tauri build` needs no key.
+- After an update, the first launch shows What's new: the CHANGELOG.md entries of every release since the version last opened, built into the app so it needs no network. A sidebar lists each kind of change (features, bug fixes and so on), and each kind shows its entries release by release, newest first. The kinds and dates follow the interface language; the entries stay in English, with the commit links taken out. Settings records that version as `lastSeenVersion`; finishing the onboarding sets it, so a new install is not shown notes, and a settings file without it is from 0.1.0. News in Settings > About shows every release's notes again.
 
 ### 3.7 Attachments
 
@@ -599,6 +600,7 @@ The grammar only lets the model write a listed category, so nothing it returns n
 - Hide immediately after save vs. show toast
 - Rebuild index
 - Launch at login
+- About: the app's icon, name and version, and News for the release notes of every version (3.6)
 - Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It also sets the language new subjects are written in and the language categories are shown in (the OS language under System, English when that is not one of the six); note bodies are untouched, and chat replies follow the language the user writes in.
 
 ## 8. Tauri Commands (backend API)

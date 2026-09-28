@@ -8,9 +8,11 @@
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
+	import InfoIcon from '@lucide/svelte/icons/info';
 	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import { m } from '$lib/paraglide/messages';
+	import AboutTab from './AboutTab.svelte';
 	import AppearanceTab from './AppearanceTab.svelte';
 	import GeneralTab from './GeneralTab.svelte';
 	import IndexTab from './IndexTab.svelte';
@@ -49,6 +51,13 @@
 			description: m.settings_index_description,
 			icon: DatabaseIcon,
 			content: IndexTab
+		},
+		{
+			value: 'about',
+			label: m.settings_tab_about,
+			description: m.settings_about_description,
+			icon: InfoIcon,
+			content: AboutTab
 		}
 	];
 </script>

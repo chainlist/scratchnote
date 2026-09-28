@@ -408,6 +408,8 @@ export interface Settings {
 	language: Language;
 	/** The first-run walkthrough has been finished or skipped. */
 	onboarded: boolean;
+	/** The app version whose release notes were last shown; null from 0.1.0. */
+	lastSeenVersion: string | null;
 }
 
 export interface SettingsView extends Settings {

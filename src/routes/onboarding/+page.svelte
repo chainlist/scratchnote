@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { getVersion } from '@tauri-apps/api/app';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { EMBEDDING_SIZE, restartApp, systemProfile, type Hardware } from '$lib/api';
@@ -128,7 +129,10 @@
 		try {
 			if (step.id === 'folder' && !(await saveFolder())) return;
 			if (!last) return go(index + 1);
-			if (!(await settings.apply({ onboarded: true }))) return;
+			// The walkthrough is a new install's introduction, so its release
+			// notes are not shown after it.
+			const lastSeenVersion = await getVersion();
+			if (!(await settings.apply({ onboarded: true, lastSeenVersion }))) return;
 			clearResumeStep();
 			await goto(resolve('/'));
 		} finally {

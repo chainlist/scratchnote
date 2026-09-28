@@ -4,12 +4,14 @@
 	import type { Note } from '$lib/api';
 	import Markdown from '$lib/components/Markdown.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
 	import { categoryLabel } from '$lib/categories';
@@ -181,9 +183,15 @@
 					<button type="button" onclick={() => (editing = false)} class={action}
 						>{m.common_cancel()}</button
 					>
-					<button type="button" onclick={save} disabled={saving} class={action}>
-						{saving ? m.common_saving() : m.common_save()}
-					</button>
+					<Button
+						size="icon-sm"
+						onclick={save}
+						disabled={saving}
+						aria-label={m.common_save()}
+						title={m.common_save()}
+					>
+						<SendHorizontalIcon />
+					</Button>
 				</div>
 			</div>
 		{:else}

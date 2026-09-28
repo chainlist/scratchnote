@@ -3,7 +3,9 @@
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import PlusIcon from '@lucide/svelte/icons/plus';
+	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import { m } from '$lib/paraglide/messages';
 
 	let {
@@ -93,9 +95,15 @@
 					<button type="button" onclick={() => (writing = false)} class={action}
 						>{m.common_cancel()}</button
 					>
-					<button type="button" onclick={save} disabled={saving} class={action}>
-						{saving ? m.common_saving() : m.common_save()}
-					</button>
+					<Button
+						size="icon-sm"
+						onclick={save}
+						disabled={saving}
+						aria-label={m.common_save()}
+						title={m.common_save()}
+					>
+						<SendHorizontalIcon />
+					</Button>
 				</div>
 			</div>
 		{:else}

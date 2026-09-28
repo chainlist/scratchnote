@@ -450,8 +450,13 @@
 		onsimilar: canSimilar ? showSimilar : undefined,
 		onopen: (page: Note) => void openPage(page),
 		ondock: (page: Note) => (docked = page),
-		onpage: (note: Note) => (turning = note)
+		onpage: (note: Note) => (turning = note),
+		onerror: showError
 	});
+
+	function showError(message: string) {
+		error = message;
+	}
 
 	onMount(() => {
 		const off: Promise<() => void>[] = [];
@@ -606,11 +611,17 @@
 												: m.page_empty_other_day()}
 										</p>
 									{/if}
-									<NewNote onsave={addNote} onpage={newPage} centered bind:writing={writingEmpty} />
+									<NewNote
+										onsave={addNote}
+										onpage={newPage}
+										onerror={showError}
+										centered
+										bind:writing={writingEmpty}
+									/>
 								</div>
 							{:else}
 								<NoteList {notes} empty="" {blinking} {...cardActions} />
-								<NewNote onsave={addNote} onpage={newPage} />
+								<NewNote onsave={addNote} onpage={newPage} onerror={showError} />
 							{/if}
 						{/if}
 					</div>

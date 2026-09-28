@@ -4,6 +4,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { getSettings, onSettingsChanged, type Settings } from '$lib/api';
 	import { applyAppearance } from '$lib/appearance';
+	import { followSpace } from '$lib/attachments.svelte';
 	import { applyLanguage } from '$lib/i18n.svelte';
 	import { getLocale } from '$lib/paraglide/runtime';
 
@@ -15,11 +16,11 @@
 	}
 
 	// Both windows mount this layout, so an appearance or language change
-	// reaches the capture window too.
+	// reaches the capture window too, and both know whose attachments they show.
 	onMount(() => {
 		void getSettings().then(apply);
-		const off = onSettingsChanged(apply);
-		return () => void off.then((stop) => stop());
+		const off = [onSettingsChanged(apply), followSpace()];
+		return () => off.forEach((p) => void p.then((stop) => stop()));
 	});
 
 	$effect(() => {

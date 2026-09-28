@@ -75,6 +75,7 @@ dependencies = [
  "llama-cpp-2",
  "log",
  "notify",
+ "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",

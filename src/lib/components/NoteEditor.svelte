@@ -5,6 +5,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { categoryLabel } from '$lib/categories';
@@ -32,6 +33,7 @@
 	let newCategory = $state<string | null>(null);
 	let saving = $state(false);
 	let error = $state<string | null>(null);
+	let editor = $state<MarkdownEditor | null>(null);
 
 	// Loaded afresh each time a note is opened, so a cancelled edit leaves
 	// nothing behind for the next one.
@@ -126,10 +128,24 @@
 		</Dialog.Header>
 
 		<div class="flex flex-col gap-2">
-			<span class="text-sm font-medium">{m.editor_text()}</span>
+			<div class="flex items-center justify-between">
+				<span class="text-sm font-medium">{m.editor_text()}</span>
+				<Button
+					variant="ghost"
+					size="icon-xs"
+					onclick={() => editor?.attachFiles()}
+					aria-label={m.attach_file()}
+					title={m.attach_file()}
+					class="text-muted-foreground hover:text-foreground"
+				>
+					<PaperclipIcon />
+				</Button>
+			</div>
 			<MarkdownEditor
+				bind:this={editor}
 				bind:value={body}
 				label={m.editor_text()}
+				onerror={(message) => (error = message)}
 				class="max-h-[calc(12lh+0.75rem)] min-h-[calc(4lh+0.75rem)] w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm leading-6 transition-colors focus-within:border-ring dark:bg-input/30"
 			/>
 		</div>

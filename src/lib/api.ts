@@ -463,6 +463,27 @@ export const openSpaceFolder = (name: string) => invoke<void>('open_space_folder
 /** Opens a web or mail link from a note in the system browser or mail client. */
 export const openLink = (url: string) => invoke<void>('open_link', { url });
 
+/** A file copied into the open space's `attachments/` folder (SPEC 3.7). */
+export interface Attachment {
+	/** The name it came with, for the link's text. */
+	name: string;
+	/** From the space's folder: `attachments/2026/2026-09-28 shot.png`. */
+	path: string;
+}
+
+/** Copies files from disk into the open space, in order. */
+export const addAttachments = (paths: string[]) =>
+	invoke<Attachment[]>('add_attachments', { paths });
+
+/** A pasted file has no path, so its bytes go over as they are and its name in a header. */
+export const saveAttachment = async (file: File) =>
+	invoke<Attachment>('save_attachment', new Uint8Array(await file.arrayBuffer()), {
+		headers: { 'x-name': encodeURIComponent(file.name || 'image.png') }
+	});
+
+/** Opens an attachment of the open space in its own app. */
+export const openAttachment = (path: string) => invoke<void>('open_attachment', { path });
+
 /** Fired to every window when a space is opened, made, renamed or deleted. */
 export const onSpacesChanged = (handler: (view: SpacesView) => void): Promise<UnlistenFn> =>
 	listen<SpacesView>('spaces-changed', (event) => handler(event.payload));

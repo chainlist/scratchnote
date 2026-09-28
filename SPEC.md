@@ -13,7 +13,7 @@ Scratchnote is a local-first desktop app for frictionless capture. The user hits
 
 ### Non-goals (v1)
 
-- No rich text editor, no images/attachments. Bodies stay markdown as typed; the editor only previews it (3.4).
+- No rich text editor. Bodies stay markdown as typed; the editor only previews it (3.4), and an attachment is a plain link in it (3.7).
 - No sync, accounts, or cloud features.
 - No mobile app.
 
@@ -205,6 +205,12 @@ cargo add tokio --features full
 cargo add tauri --features tray-icon
 ```
 
+For attachments (3.7), to decode the paths the webview asks for:
+
+```bash
+cargo add percent-encoding
+```
+
 (`cargo add tauri --features tray-icon` only adds the feature to the existing dependency; it is the sanctioned way to enable the tray.)
 
 ### Step 4b: Internationalization (added after v1)
@@ -264,7 +270,7 @@ Only one instance runs. Launching the app again brings the running one's main wi
 
 Note bodies are shown as markdown wherever they are read or written: the capture window, adding a note, inline edit, the edit dialog, the note cards and the previews in the delete dialog and above similar notes.
 
-- The minimum: bold, italic, strikethrough, inline code, links (`[text](url)`, `<url>` and bare `https://`, `www.` and email addresses), bullet and numbered lists, `#` headings, quotes and fenced code. Anything else shows as typed.
+- The minimum: bold, italic, strikethrough, inline code, links (`[text](url)`, `<url>` and bare `https://`, `www.` and email addresses), bullet and numbered lists, `#` headings, quotes, fenced code and attachments (3.7). Anything else shows as typed.
 - The editor is a live preview (CodeMirror): markup is hidden except on the lines the cursor or selection is on, where it shows dimmed so it can be edited. What is typed is saved byte for byte, so the markdown in the file never changes behind the user's back.
 - A line break is a line break, as it was in the plain text input, rather than markdown's joined paragraph lines.
 - Enter carries a list or quote on to the next line; Enter on an empty item ends it.
@@ -293,6 +299,17 @@ The app updates itself from the project's GitHub Releases.
 - The private key stays out of the repository: with the maintainer, and as the CI secret `TAURI_SIGNING_PRIVATE_KEY`, with `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` beside it if the key has a password. Losing the key leaves every installed copy unable to update.
 - Only the release build in CI signs, by turning on `bundle.createUpdaterArtifacts` for that build alone, so a local `pnpm tauri build` needs no key.
 
+### 3.7 Attachments
+
+A note or a page can carry files: screenshots, photos, PDFs, anything. Each is copied into the space (4.8) and linked from the text in plain markdown, so the markdown stays the source of truth and other editors show the files too.
+
+- Attach with `Ctrl+V` (`Cmd+V` on macOS) of a screenshot or of files copied in the file manager, by dropping files from the file manager on the text, or with the paperclip button, which opens a file picker. All three work wherever a note is written: the capture window, New note, inline edit, the edit dialog and the page view. Text on the clipboard is pasted as text even when a picture of it comes along, as office apps send one.
+- The link goes where the cursor is, or where the files were dropped, one per line: `![name](<../../attachments/...>)` for an image (PNG, JPEG, GIF, WebP, AVIF, BMP, SVG, ICO) and `[name](<../../attachments/...>)` for any other file, named as the file came.
+- An image shows in the text, in the editor and on the card, at most 20rem tall (6rem in the capture window). Any other file shows as a small card: its type (the extension, such as PDF or DOCX, or a paperclip when the name has none) beside its name without that extension, cut short, with the full name on hover. On the line being edited the markup shows as well, with the image or card after it. A click on a note card, or Ctrl or Cmd and a click in the editor, opens the file in its own app, a PDF in the default PDF viewer. The previews on page cards, in dialogs and above similar notes, which clip to a few lines, show any attachment as its name after a paperclip.
+- Only attachments are drawn. An image link to anywhere else, such as the web, shows as typed: nothing is fetched (1).
+- Deleting a note, a page or a link leaves the file where it is. Files nothing links to are removed by hand.
+- Search, chat, the models and the index see the link as part of the text. Nothing reads what is inside an attachment.
+
 ## 4. Storage
 
 ### 4.1 Layout
@@ -314,6 +331,9 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
       pages/
         2026/
           2026-09-22 Weekly sync, platform team.md
+      attachments/
+        2026/
+          2026-09-22 image.png
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
         vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
@@ -444,6 +464,24 @@ Rules:
 - Stub and page carry the same id, so a page renamed or moved outside the app is found again by its id and its stub rewritten to point at it.
 - At startup every page gets a stub in its day's file if it has none, a stale stub is rewritten, and a stub for it in another day's file is removed. A stub whose page cannot be found is never removed. A stub deleted by hand comes back at the next launch: deleting the page file is how a page is deleted outside the app.
 - Creating a page writes the file, then the stub. Deleting removes the stub, then the file. Turning a note into a page writes the page with a new id, then replaces the note's block with the stub. A crash in between leaves at worst a page without a stub, which the next launch repairs, or the text twice, never a stub whose text is lost.
+
+### 4.8 Attachments
+
+An attachment (3.7) is a copy of the file under the space's `attachments/` folder, linked from a note or a page:
+
+```markdown
+Printer jams on every second page.
+![image.png](<../../attachments/2026/2026-09-28 image.png>)
+[Service manual.pdf](<../../attachments/2026/2026-09-28 Service manual.pdf>)
+```
+
+Rules:
+
+- The file is named after the day it was attached and the name it came with, `attachments/<year>/<date> <name>.<ext>`, cleaned as a page's file name is (4.7), except that `#` and `%` become spaces too, since they break a link in other editors. A pasted screenshot comes as `image.png`. A name already taken gets ` 2`, ` 3` and so on before the extension. The name is claimed as the file is created (`create_new`), so two attachments never share a file.
+- Day files and page files both sit two folders below the space, so the one link `../../attachments/...` reaches the file from either. It keeps working through Turn into page, a renamed space, or the whole folder synced elsewhere. The destination is in angle brackets, as in a page's stub, because names have spaces.
+- An attachment is a new file that is never rewritten, so it does not go through the single writer (4.3): it is written in place and fsynced, and a copy that fails is removed. Files dropped or picked are all checked before any is copied, so a folder among them copies nothing. The watcher ignores the folder.
+- Nothing indexes attachments: the links in the text are all there is.
+- The webview reads attachments through the `attachment` protocol, `attachment://localhost/<space>/attachments/...` (`http://attachment.localhost/...` on Windows), which serves only files inside a space's `attachments/` folder. It is registered in code rather than with Tauri's asset protocol, whose scope is fixed in the config while the notes root is chosen at runtime. The space is in the path, so files of the same name in two spaces are never taken for one another's cached image. Its responses carry `Content-Security-Policy: sandbox`, so an SVG opened as a page runs no script.
 
 ## 5. Enrichment (LLM)
 
@@ -596,9 +634,14 @@ rename_page(id, title) -> Note                // renames the file, rewrites the 
 delete_page(id)                               // stub, then file
 note_to_page(date, id, title) -> Note         // page with a new id, then the note's block becomes its stub; held
 capture_to_page(body)                         // hides the capture window, opens a new page in the main window
+add_attachments(paths) -> Vec<Attachment>     // copies files into the open space's attachments/; every path checked first
+save_attachment(bytes) -> Attachment          // a pasted file as the raw body, its name in the `x-name` header
+open_attachment(path)                         // in its own app; path from the space's folder, inside attachments/
 ```
 
 A page comes back as a `Note` with `kind: "page"` and its title as `subject`. `get_day` lists a day's notes and pages by time, and a stub whose page is gone as a `Note` with `missing: true` and the stub's link text as its subject.
+
+An `Attachment` is `{ name, path }`: the name the file came with, and where it was copied from the space's folder (`attachments/2026/2026-09-28 image.png`). The webview loads attachments through the `attachment` protocol (4.8).
 
 Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` (to the main window). The UI updates live when enrichment finishes.
 
@@ -614,6 +657,7 @@ src-tauri/src/
   spaces.rs
   search.rs
   settings.rs
+  attachments.rs     # copying files in, the `attachment` protocol, opening them
 src/
   routes/
     +layout.ts        # ssr = false, prerender = true
@@ -623,6 +667,7 @@ src/
   lib/components/ (NoteCard, DayCalendar, CategoryList, SearchBar, SpaceSwitcher, Onboarding)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy
+  lib/attachments.svelte.ts  # the open space, for the attachment protocol's URLs
   lib/api.ts          # typed wrappers around Tauri invoke/listen
 ```
 

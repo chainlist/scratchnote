@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import { m } from '$lib/paraglide/messages';
@@ -8,6 +9,7 @@
 	let {
 		onsave,
 		onpage,
+		onerror,
 		centered = false,
 		writing = $bindable(false)
 	}: {
@@ -15,6 +17,8 @@
 		onsave: (body: string) => Promise<boolean>;
 		/** Start a page on the day shown instead (SPEC 3.5). */
 		onpage: () => void;
+		/** A file could not be attached. */
+		onerror: (message: string) => void;
 		/** On an empty day, with no cards to line up under: the button sits centred and the editor spans the page. */
 		centered?: boolean;
 		/** The editor is open rather than the button. */
@@ -72,10 +76,20 @@
 					bind:value={draft}
 					placeholder={m.capture_placeholder()}
 					label={m.note_body_label()}
+					{onerror}
 					class="-mx-2 max-h-[calc(16lh+0.5rem)] min-h-[calc(3lh+0.5rem)] w-[calc(100%+1rem)] rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus-within:border-neutral-600"
 				/>
 				<div class="flex items-center justify-end gap-1">
 					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
+					<button
+						type="button"
+						onclick={() => editor?.attachFiles()}
+						aria-label={m.attach_file()}
+						title={m.attach_file()}
+						class={action}
+					>
+						<PaperclipIcon class="size-3" />
+					</button>
 					<button type="button" onclick={() => (writing = false)} class={action}
 						>{m.common_cancel()}</button
 					>

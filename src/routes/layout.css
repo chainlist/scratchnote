@@ -426,7 +426,7 @@ body {
 	color: var(--primary);
 }
 /* A waiting note's text turns transparent under its glow, accent and all. */
-:is(.text-transparent, .note-glow-text) :is(.md-strong, .md-em) {
+:is(.text-transparent, .note-glow-text) :is(.md-strong, .md-em, .md-file-type) {
 	color: inherit;
 }
 .md-strike {
@@ -485,12 +485,111 @@ a.md-link:hover {
 .md-markup {
 	color: var(--color-neutral-500);
 }
+/* An attached image. The capture window, a small one, lowers
+   --md-image-height. */
+.md-image {
+	display: inline-block;
+	max-width: 100%;
+	max-height: var(--md-image-height, 20rem);
+	border-radius: 0.375rem;
+	vertical-align: top;
+}
+.md-image-button {
+	display: inline-block;
+	max-width: 100%;
+	vertical-align: top;
+	cursor: pointer;
+}
+.md-image-button .md-image {
+	display: block;
+}
+/* An attached file other than an image: a small card with its type and
+   name, opened in its own app. */
+.md-file {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.6em;
+	max-width: min(100%, 20rem);
+	margin: 0.125em 0;
+	padding: 0.3125em 0.875em 0.3125em 0.3125em;
+	border: 1px solid var(--color-neutral-800);
+	border-radius: 0.5rem;
+	background: var(--color-neutral-900);
+	vertical-align: top;
+	text-align: left;
+	line-height: 1.3;
+}
+button.md-file {
+	cursor: pointer;
+	transition:
+		border-color 150ms,
+		background-color 150ms;
+}
+button.md-file:hover {
+	border-color: var(--color-neutral-700);
+	background: var(--color-neutral-800);
+}
+.md-file-type {
+	display: flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 3.25em;
+	height: 2.5em;
+	border-radius: 0.375rem;
+	background: var(--color-neutral-800);
+	color: var(--color-neutral-300);
+	font-size: 0.75em;
+	font-weight: 600;
+	letter-spacing: 0.03em;
+}
+button.md-file:hover .md-file-type {
+	background: var(--color-neutral-700);
+}
+.md-file-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* A paperclip stands in for a type the name does not give, and leads an
+   attachment's name where a preview has no room for more. */
+:is(.md-file-type:empty, .md-chip)::before {
+	content: '';
+	display: inline-block;
+	width: 0.9em;
+	height: 0.9em;
+	background: currentColor;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+}
+.md-file-type:empty::before {
+	width: 1.5em;
+	height: 1.5em;
+}
+.md-chip {
+	border-radius: 0.25rem;
+	padding: 0.1em 0.4em;
+	background: var(--color-neutral-800);
+}
+.md-chip::before {
+	margin-right: 0.3em;
+	vertical-align: -0.1em;
+}
+/* An editor that files dragged in from the file manager would land in. */
+.md-drop {
+	outline: 1px dashed var(--color-neutral-500);
+	outline-offset: 2px;
+}
 /* The glowing copy draws letters only; the real text below keeps the boxes. */
-.note-glow-text :is(.md-code, .md-codeblock) {
+.note-glow-text :is(.md-code, .md-codeblock, .md-chip, .md-file, .md-file-type) {
 	background: none;
 }
-.note-glow-text .md-quote {
+.note-glow-text :is(.md-quote, .md-file) {
 	border-color: transparent;
+}
+.note-glow-text .md-image {
+	visibility: hidden;
 }
 
 @layer base {

@@ -6,7 +6,7 @@
 
 	type Actions = Pick<
 		ComponentProps<typeof NoteCard>,
-		'onedit' | 'ondelete' | 'onsave' | 'onretry' | 'oncategory' | 'onsimilar' | 'onpage'
+		'onedit' | 'ondelete' | 'onsave' | 'onretry' | 'oncategory' | 'onsimilar' | 'onpage' | 'onerror'
 	> &
 		Pick<ComponentProps<typeof PageCard>, 'onopen' | 'ondock'>;
 

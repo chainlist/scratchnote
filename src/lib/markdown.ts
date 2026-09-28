@@ -16,6 +16,11 @@ export type Preview = {
 	hidden: { from: number; to: number; bullet?: boolean }[];
 	/** Classes and styles for whole lines, by the offset each line starts at. */
 	lines: Map<number, { class: string; style?: string }>;
+	/**
+	 * Links to attached files, each drawn in place of its markup: the image
+	 * for `![name](path)` to an image, a card for any other.
+	 */
+	attachments: { from: number; to: number; path: string; name: string; image: boolean }[];
 };
 
 /** Width of a list bullet and the gap after it; nested lists step in by as much. */
@@ -29,10 +34,57 @@ function href(url: string): string | undefined {
 	return undefined;
 }
 
+/** The files an attachment link shows as a picture; the backend serves them as images. */
+export const isImage = (path: string) => /\.(png|jpe?g|gif|webp|avif|bmp|svg|ico)$/i.test(path);
+
+/**
+ * The way from a note's file up to its space's folder. Day files and page
+ * files both sit two folders down, so one link reaches an attachment from
+ * either (SPEC 4.8).
+ */
+const TO_SPACE = '../../';
+
+/**
+ * The attached file a link points at, from the space's folder
+ * (`attachments/2026/…`), or nothing when it points elsewhere.
+ */
+export function attachmentPath(url: string): string | undefined {
+	let path = url.startsWith('<') && url.endsWith('>') ? url.slice(1, -1) : url;
+	try {
+		path = decodeURI(path);
+	} catch {
+		// A stray `%` stays as typed.
+	}
+	return path.startsWith(`${TO_SPACE}attachments/`) ? path.slice(TO_SPACE.length) : undefined;
+}
+
+/** The markdown linking an attachment: an image shows in the text, any other file as a card. */
+export function attachmentLink(attachment: { name: string; path: string }): string {
+	const text = attachment.name.replace(/[\\`*_[\]]/g, '\\$&');
+	return `${isImage(attachment.path) ? '!' : ''}[${text}](<${TO_SPACE}${attachment.path}>)`;
+}
+
+/** The last part of a path, for an attachment linked without a name. */
+export const fileName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
+
+/** A file's type as its card shows it: a short extension in capitals, or nothing. */
+export const fileType = (path: string) =>
+	/\.([a-z0-9]{1,4})$/i.exec(fileName(path))?.[1].toUpperCase() ?? '';
+
+/** A file's name on its card, without the extension its type already shows. */
+export function cardName(name: string, path: string): string {
+	const type = fileType(path);
+	const stem = name.slice(0, -type.length - 1);
+	return type && stem && name.toUpperCase().endsWith(`.${type}`) ? stem : name;
+}
+
 export function preview(tree: Tree, text: string): Preview {
 	const marks: Preview['marks'] = [];
 	const hidden: Preview['hidden'] = [];
 	const lines: Preview['lines'] = new Map();
+	const attachments: Preview['attachments'] = [];
+	/** Link text as it reads, its backslash escapes undone. */
+	const unescape = (from: number, to: number) => text.slice(from, to).replace(/\\(.)/g, '$1');
 
 	const lineStart = (pos: number) => text.lastIndexOf('\n', pos - 1) + 1;
 	const addLine = (start: number, cls: string, style?: string) => {
@@ -127,12 +179,14 @@ export function preview(tree: Tree, text: string): Preview {
 					const close = node.node.getChildren('LinkMark').find((m) => text[m.from] === ']');
 					// A reference link, `[text][ref]`, is left as typed.
 					if (!url || !close) break;
-					marks.push({
-						from: from + 1,
-						to: close.from,
-						class: 'md-link',
-						href: href(text.slice(url.from, url.to))
-					});
+					const target = text.slice(url.from, url.to);
+					const attachment = attachmentPath(target);
+					if (attachment) {
+						const name = unescape(from + 1, close.from);
+						attachments.push({ from, to, path: attachment, name, image: false });
+						return false;
+					}
+					marks.push({ from: from + 1, to: close.from, class: 'md-link', href: href(target) });
 					hidden.push({ from, to: from + 1 }, { from: close.from, to });
 					break;
 				}
@@ -144,21 +198,33 @@ export function preview(tree: Tree, text: string): Preview {
 					if (parent === 'Link' || parent === 'Image' || parent === 'LinkReference') break;
 					marks.push({ from, to, class: 'md-link', href: href(text.slice(from, to)) });
 					break;
-				case 'Image':
+				case 'Image': {
+					const url = node.node.getChild('URL');
+					const close = node.node.getChildren('LinkMark').find((m) => text[m.from] === ']');
+					const attachment =
+						url && close ? attachmentPath(text.slice(url.from, url.to)) : undefined;
+					// Any other image, one on the web say, is left as typed: nothing is fetched.
+					if (!attachment || !close) return false;
+					const name = unescape(from + 2, close.from);
+					attachments.push({ from, to, path: attachment, name, image: isImage(attachment) });
 					return false;
+				}
 			}
 		}
 	});
 
-	return { marks, hidden, lines };
+	return { marks, hidden, lines, attachments };
 }
 
-export type Part = { text: string; class: string; href?: string } | { bullet: true };
+export type Part =
+	| { text: string; class: string; href?: string }
+	| { bullet: true }
+	| { attachment: string; name: string; image: boolean };
 export type Line = { class: string; style?: string; parts: Part[] };
 
 /** The note as lines of styled text with its markup hidden, for reading. */
 export function renderLines(text: string): Line[] {
-	const { marks, hidden, lines } = preview(parser.parse(text), text);
+	const { marks, hidden, lines, attachments } = preview(parser.parse(text), text);
 
 	const classes = new Array<string>(text.length).fill('');
 	const hrefs = new Array<string | undefined>(text.length);
@@ -168,11 +234,16 @@ export function renderLines(text: string): Line[] {
 			if (mark.href) hrefs[i] = mark.href;
 		}
 	}
-	// 1 hides a character, 2 draws a bullet in its place.
+	// 1 hides a character, 2 draws a bullet in its place, 3 an attachment.
 	const skip = new Uint8Array(text.length);
 	for (const range of hidden) {
 		skip.fill(1, range.from, range.to);
 		if (range.bullet) skip[range.from] = 2;
+	}
+	const attachmentAt = new Map(attachments.map((attached) => [attached.from, attached]));
+	for (const attached of attachments) {
+		skip.fill(1, attached.from, attached.to);
+		skip[attached.from] = 3;
 	}
 
 	const out: Line[] = [];
@@ -183,6 +254,10 @@ export function renderLines(text: string): Line[] {
 		for (let i = start; i < end;) {
 			if (skip[i]) {
 				if (skip[i] === 2) parts.push({ bullet: true });
+				if (skip[i] === 3) {
+					const { path, name, image } = attachmentAt.get(i)!;
+					parts.push({ attachment: path, name, image });
+				}
 				i++;
 				continue;
 			}

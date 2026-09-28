@@ -14,8 +14,17 @@
 		type ViewUpdate
 	} from '@codemirror/view';
 	import type { MarkdownParser } from '@lezer/markdown';
-	import { openLink } from '$lib/api';
-	import { preview, syntax } from '$lib/markdown';
+	import { getCurrentWebview } from '@tauri-apps/api/webview';
+	import { open as pickFiles } from '@tauri-apps/plugin-dialog';
+	import {
+		addAttachments,
+		openAttachment,
+		openLink,
+		saveAttachment,
+		type Attachment
+	} from '$lib/api';
+	import { attachmentUrl } from '$lib/attachments.svelte';
+	import { attachmentLink, cardName, fileName, fileType, preview, syntax } from '$lib/markdown';
 
 	// CommonMark's language data, so the list keys below recognise it, with
 	// the same syntax the read-only view parses.
@@ -40,11 +49,58 @@
 	const hide = Decoration.replace({});
 	const markup = Decoration.mark({ class: 'md-markup' });
 
+	function element(tag: string, className: string, text = '') {
+		const node = document.createElement(tag);
+		node.className = className;
+		node.textContent = text;
+		return node;
+	}
+
+	/** An attachment drawn where its markup is: its image, or the card the read-only view draws. */
+	class Attached extends WidgetType {
+		readonly path: string;
+		readonly name: string;
+		readonly image: boolean;
+		constructor(path: string, name: string, image: boolean) {
+			super();
+			this.path = path;
+			this.name = name || fileName(path);
+			this.image = image;
+		}
+		eq(other: Attached) {
+			return other.path === this.path && other.name === this.name && other.image === this.image;
+		}
+		toDOM(view: EditorView) {
+			if (this.image) {
+				const img = document.createElement('img');
+				img.className = 'md-image';
+				img.src = attachmentUrl(this.path);
+				img.alt = this.name;
+				img.dataset.attachment = this.path;
+				// Its height is known once it loads, and the editor's lines move for it.
+				img.onload = () => view.requestMeasure();
+				return img;
+			}
+			const card = element('span', 'md-file');
+			card.title = this.name;
+			card.dataset.attachment = this.path;
+			card.append(
+				element('span', 'md-file-type', fileType(this.path)),
+				element('span', 'md-file-name', cardName(this.name, this.path))
+			);
+			return card;
+		}
+		// A click on it puts the cursor there, which brings its markup back to edit.
+		ignoreEvent() {
+			return false;
+		}
+	}
+
 	function decorate(view: EditorView): DecorationSet {
 		const { state } = view;
 		const { doc } = state;
 		const text = doc.toString();
-		const { marks, hidden, lines } = preview(syntaxTree(state), text);
+		const { marks, hidden, lines, attachments } = preview(syntaxTree(state), text);
 
 		// The lines the cursor or selection is on show their markup, to edit it.
 		const shown = (pos: number) => {
@@ -70,6 +126,18 @@
 			const deco = shown(range.from) ? markup : range.bullet ? bullet : hide;
 			ranges.push(deco.range(range.from, range.to));
 		}
+		// On the line being edited an attachment stays in view after its markup.
+		for (const attached of attachments) {
+			const { from, to } = attached;
+			if (text.slice(from, to).includes('\n')) continue;
+			const widget = new Attached(attached.path, attached.name, attached.image);
+			if (shown(from)) {
+				ranges.push(markup.range(from, to));
+				ranges.push(Decoration.widget({ widget, side: 1 }).range(to));
+			} else {
+				ranges.push(Decoration.replace({ widget }).range(from, to));
+			}
+		}
 		return Decoration.set(ranges, true);
 	}
 
@@ -92,17 +160,46 @@
 		{ decorations: (plugin) => plugin.decorations }
 	);
 
-	/** Ctrl or Cmd and a click opens a link; a plain click edits it. */
+	/** Ctrl or Cmd and a click opens a link or an attachment; a plain click edits it. */
 	const links = EditorView.domEventHandlers({
 		mousedown(event) {
 			if (!(event.ctrlKey || event.metaKey)) return false;
-			const href = (event.target as Element).closest('[data-href]')?.getAttribute('data-href');
-			if (!href) return false;
+			const target = (event.target as Element).closest('[data-href], [data-attachment]');
+			if (!target) return false;
 			event.preventDefault();
-			void openLink(href);
+			const href = target.getAttribute('data-href');
+			if (href) void openLink(href);
+			else void openAttachment(target.getAttribute('data-attachment')!);
 			return true;
 		}
 	});
+
+	/** What each editor's box, `.md-editor`, does with files dropped on it. */
+	const dropTargets = new WeakMap<
+		Element,
+		(paths: string[], at: { x: number; y: number }) => void
+	>();
+	let listening = false;
+
+	/**
+	 * Files dragged in from the file manager go to Tauri rather than the page,
+	 * with their paths, so one listener per window finds the editor under the
+	 * pointer, outlines it while they hover, and hands it the drop.
+	 */
+	function listenForDrops() {
+		if (listening) return;
+		listening = true;
+		void getCurrentWebview().onDragDropEvent(({ payload }) => {
+			for (const box of document.querySelectorAll('.md-drop')) box.classList.remove('md-drop');
+			if (payload.type === 'leave') return;
+			const at = payload.position.toLogical(window.devicePixelRatio);
+			const box = document.elementFromPoint(at.x, at.y)?.closest('.md-editor');
+			const drop = box && dropTargets.get(box);
+			if (!drop) return;
+			if (payload.type === 'drop') drop(payload.paths, at);
+			else box.classList.add('md-drop');
+		});
+	}
 
 	// Type, spacing and colours come from the page, as they did for the textarea.
 	const theme = EditorView.theme({
@@ -122,6 +219,7 @@
 		value = $bindable(''),
 		placeholder = '',
 		label,
+		onerror,
 		class: className = ''
 	}: {
 		/** The markdown being edited. */
@@ -129,12 +227,56 @@
 		placeholder?: string;
 		/** Accessible name of the text field. */
 		label: string;
+		/** A file pasted, dropped or picked could not be attached. */
+		onerror: (message: string) => void;
 		/** Box, padding and type; a max height makes it scroll past it. */
 		class?: string;
 	} = $props();
 
 	let host: HTMLDivElement;
 	let view: EditorView | undefined;
+
+	/** Link what `pending` attaches at the cursor once it is copied in (SPEC 3.7). */
+	async function attach(pending: Promise<Attachment[]>) {
+		try {
+			const attached = await pending;
+			if (!view) return;
+			view.focus();
+			if (attached.length === 0) return;
+			view.dispatch(view.state.replaceSelection(attached.map(attachmentLink).join('\n')));
+		} catch (e) {
+			onerror(String(e));
+		}
+	}
+
+	/** A screenshot or a file copied in the file manager is attached rather than pasted. */
+	const pasteFiles = EditorView.domEventHandlers({
+		paste(event) {
+			const data = event.clipboardData;
+			const files = [...(data?.files ?? [])];
+			// Text wins: an office app puts a picture of the text on the clipboard too.
+			if (files.length === 0 || data?.getData('text/plain')) return false;
+			event.preventDefault();
+			void attach(Promise.all(files.map(saveAttachment)));
+			return true;
+		}
+	});
+
+	function drop(paths: string[], at: { x: number; y: number }) {
+		if (!view) return;
+		view.dispatch({ selection: { anchor: view.posAtCoords(at, false) } });
+		void attach(addAttachments(paths));
+	}
+
+	/** Pick files to attach at the cursor, for an attach button. */
+	export function attachFiles() {
+		void attach(
+			(async () => {
+				const picked = await pickFiles({ multiple: true });
+				return picked ? addAttachments(picked) : [];
+			})()
+		);
+	}
 
 	onMount(() => {
 		view = new EditorView({
@@ -150,6 +292,7 @@
 					language,
 					livePreview,
 					links,
+					pasteFiles,
 					EditorView.lineWrapping,
 					placeholderText(placeholder),
 					EditorView.contentAttributes.of({ 'aria-label': label }),
@@ -160,7 +303,12 @@
 				]
 			})
 		});
-		return () => view?.destroy();
+		dropTargets.set(host, drop);
+		listenForDrops();
+		return () => {
+			dropTargets.delete(host);
+			view?.destroy();
+		};
 	});
 
 	// A value set from outside, such as a draft cleared after saving.
@@ -179,4 +327,4 @@
 	}
 </script>
 
-<div bind:this={host} class="flex flex-col {className}"></div>
+<div bind:this={host} class="md-editor flex flex-col {className}"></div>

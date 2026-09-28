@@ -1,0 +1,58 @@
+# Changelog
+
+## 0.1.0 (2026-09-28)
+
+
+### Features
+
+* add app icon ([5eec1ee](https://github.com/chainlist/scratchnote/commit/5eec1ee1ddd510422500291e759694f768023442))
+* added markdown edition and rendering ([44bbda7](https://github.com/chainlist/scratchnote/commit/44bbda743d704cba6e831a56303829c63e8c5d75))
+* alphabet rail to jump through the tags page ([cef159d](https://github.com/chainlist/scratchnote/commit/cef159d687e7fca5c6e45c9cf97ea42851e74832))
+* ask your notes, a streamed chat over the space's index ([4f6d6cc](https://github.com/chainlist/scratchnote/commit/4f6d6cc488dc541091c706348456269e009d7606))
+* attach files and images to notes and pages ([3d58222](https://github.com/chainlist/scratchnote/commit/3d58222ad31214991912559e7702e5a2f7cf5816))
+* calendar page, notes on any day, top bar title on scroll ([81b6d58](https://github.com/chainlist/scratchnote/commit/81b6d5809fac159bfd3b0e2d5cadd727b45a9685))
+* capture and storage (milestone 1) ([8259673](https://github.com/chainlist/scratchnote/commit/82596737d82e7f84ea3356d06ef17a732aae6001))
+* categories, appearance settings, custom window chrome ([e47e985](https://github.com/chainlist/scratchnote/commit/e47e985d17689be229b5332ee9ac1cb624ee7f3f))
+* category sidebar, tag filter chips in search ([d6c05d9](https://github.com/chainlist/scratchnote/commit/d6c05d9716a0b1cdd2d22cb606a66a7cddfa1e35))
+* chat prompt with a recent window and retrieved notes ([5392f31](https://github.com/chainlist/scratchnote/commit/5392f31144e93001e4f7a77f3240f348fb1a249c))
+* delete a note from the day view ([d5c98c8](https://github.com/chainlist/scratchnote/commit/d5c98c894df0e37789ef46e9c1c755e6ef110fed))
+* dock a page beside the day, neighbouring days, accent bold and italic ([72e141f](https://github.com/chainlist/scratchnote/commit/72e141fe27e2f9ed232ca0aea5273efb36bb160c))
+* edit notes by hand and re-run enrichment ([8d91d94](https://github.com/chainlist/scratchnote/commit/8d91d9407362190762f44d966f2c643cb5855671))
+* embedding model download in settings ([a1ed647](https://github.com/chainlist/scratchnote/commit/a1ed6473d33bf5f6c939ea6e924b36d8feb174cd))
+* embedding trait and per-space vector store ([75ca071](https://github.com/chainlist/scratchnote/commit/75ca071cd15f660d9d272c1f412f769dc70e56e9))
+* enrichment (milestone 3) ([0272982](https://github.com/chainlist/scratchnote/commit/027298270f9b407273171ffe920fd0d3f62a3f99))
+* first-run onboarding, model benchmark, folder and hotkey pickers ([2be3c42](https://github.com/chainlist/scratchnote/commit/2be3c42be61a74401691e6b44564f06b73354629))
+* GPU acceleration with a settings toggle ([da7a6a5](https://github.com/chainlist/scratchnote/commit/da7a6a554cbfe1632047442575abc46ae3312c34))
+* index.jsonl, startup rebuild and the file watcher (milestone 2) ([444e4f1](https://github.com/chainlist/scratchnote/commit/444e4f12404588c1dd07bc7ee8b538d6831356c9))
+* interface translations, font and model settings ([62de692](https://github.com/chainlist/scratchnote/commit/62de692a22785f8e34c9735661a5a7f3d8b05f4a))
+* journal day view, always-on GPU build, clearer enrichment errors ([25d835b](https://github.com/chainlist/scratchnote/commit/25d835be886f0ae415bd005013731910d833bd2a))
+* journal-focused layout with command center and floating chat ([7408b9f](https://github.com/chainlist/scratchnote/commit/7408b9f4b51ec2c47599babc131ff690d7b1fea8))
+* keep each space's vectors in sync with its index ([84bde1a](https://github.com/chainlist/scratchnote/commit/84bde1a989eb2954cb4c7077eb27670f2d8d969c))
+* label notes in the interface language, add notes from the day view ([af0a547](https://github.com/chainlist/scratchnote/commit/af0a547ed55295a8de7c6c8a17533d70b23a02fb))
+* llama.cpp embedder for Qwen3-Embedding-0.6B ([208c296](https://github.com/chainlist/scratchnote/commit/208c2966596d6ac2fe05f65b186eeae28b738b8d))
+* pages for longer writing ([657a69f](https://github.com/chainlist/scratchnote/commit/657a69f8114ece5203c8e7f02aa6e82120427e15))
+* retrieve notes for the chat with the embedding model ([9e7cb9a](https://github.com/chainlist/scratchnote/commit/9e7cb9aba98211e835f67b63617ca844df2c7372))
+* rework font + models handling ([b0a0e12](https://github.com/chainlist/scratchnote/commit/b0a0e1222c2c07d078dead5ebaf27c0aed1a5c5b))
+* search by meaning in the command center ([df4acf4](https://github.com/chainlist/scratchnote/commit/df4acf46fb2c839b5e5143bea1330ebbc054d829))
+* settings screen ([9121983](https://github.com/chainlist/scratchnote/commit/9121983c869c5f12910797df5505f2e2a2995673))
+* similar notes from the embedding vectors ([ba56c8a](https://github.com/chainlist/scratchnote/commit/ba56c8a78aa7466c3bb084d3af385713ad88441f))
+* single instance, Dock reopen and a --capture flag for Wayland ([5c5b6c5](https://github.com/chainlist/scratchnote/commit/5c5b6c5ac69b42ff09ce70d2a659957c03d34485))
+* spaces, full note editor, model status tooltips ([2ffd037](https://github.com/chainlist/scratchnote/commit/2ffd037456eeff67e7908231502e63271d91e72d))
+* switch models, use a custom GGUF and check for updates ([b088c9e](https://github.com/chainlist/scratchnote/commit/b088c9e2db592823898ffd7d351dab9fc7cc7852))
+* tags and search (milestone 4) ([4931e5f](https://github.com/chainlist/scratchnote/commit/4931e5fd525ea16d48568b074e9a957de4a19a1e))
+* unload the model after it sits idle (milestone 5) ([726f4cf](https://github.com/chainlist/scratchnote/commit/726f4cf0668b08fd92a3ddab0d790e10ed91c3c5))
+* update the app from GitHub Releases ([c83f1a7](https://github.com/chainlist/scratchnote/commit/c83f1a76057f354e2487545eef49a40116d04e78))
+
+
+### Bug Fixes
+
+* installers carry the runtime libraries a fresh machine lacks ([8b59b5b](https://github.com/chainlist/scratchnote/commit/8b59b5bf4cb9397ab53decb5e245c2c26fa125c7))
+* no sideways scrollbar while a note is enriching ([dc0a128](https://github.com/chainlist/scratchnote/commit/dc0a128a216135453a6da384fe63209ca8a7d794))
+* overlaps, settings notices, chat lists and Esc, still glow with the model off ([7c445a7](https://github.com/chainlist/scratchnote/commit/7c445a779ad4437a400063721e1558a5bb21f0a5))
+* point the model catalog at repos that actually exist ([2a37523](https://github.com/chainlist/scratchnote/commit/2a375234cd1fd5fadaa700f0040ce99f78507527))
+* relabel notes whose body was edited in another editor ([c5c7675](https://github.com/chainlist/scratchnote/commit/c5c7675ba6b2c499e5dcf62f3165685c9bc0ac2d))
+* save vectors every 500 notes so a first backfill survives a quit ([7aafe62](https://github.com/chainlist/scratchnote/commit/7aafe623154bdb4a3327882ecbf16c745fd713c9))
+* similar notes in small spaces ([8a33cca](https://github.com/chainlist/scratchnote/commit/8a33cca5dacfe81be3554b2578663412bd480a9a))
+* size the chat's index window by characters ([4f72429](https://github.com/chainlist/scratchnote/commit/4f724298c322d04065fc2ca1979b8b4bf05bc3ad))
+* tag named things by name and stop padding with existing tags ([d4177e7](https://github.com/chainlist/scratchnote/commit/d4177e7e762fc2fa5ac0c6292ee059414282c71d))
+* tag notes by subject matter, not by kind of note ([b40deee](https://github.com/chainlist/scratchnote/commit/b40deeecc8fe66376e36fe8334767b1996bbeaba))

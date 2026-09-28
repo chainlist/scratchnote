@@ -11,7 +11,9 @@
 		saveNote
 	} from '$lib/api';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
+	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import { m } from '$lib/paraglide/messages';
 
 	let draft = $state('');
@@ -120,6 +122,15 @@
 			>
 				<PaperclipIcon class="size-3.5" />
 			</button>
+			<Button
+				size="icon-sm"
+				onclick={save}
+				disabled={saving}
+				aria-label={m.common_save()}
+				title={m.common_save()}
+			>
+				<SendHorizontalIcon />
+			</Button>
 		</span>
 	</div>
 </div>

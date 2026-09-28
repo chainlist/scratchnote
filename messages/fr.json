@@ -358,6 +358,8 @@
 	],
 	"pages_new": "Nouvelle page",
 	"pages_untitled": "Page sans titre",
+	"pages_all": "Toutes les pages",
+	"pages_none": "Aucune page dans cet espace pour l'instant.",
 	"pages_open": "Ouvrir",
 	"pages_open_side": "Ouvrir dans le panneau latéral",
 	"pages_words": [

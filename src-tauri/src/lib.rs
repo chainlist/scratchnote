@@ -110,6 +110,7 @@ pub fn run() {
             commands::notes::open_link,
             commands::spaces::set_active_space,
             pages::create_page,
+            pages::list_pages,
             pages::get_page,
             pages::update_page,
             pages::finish_page,

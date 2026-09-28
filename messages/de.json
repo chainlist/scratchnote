@@ -358,6 +358,8 @@
 	],
 	"pages_new": "Neue Seite",
 	"pages_untitled": "Seite ohne Titel",
+	"pages_all": "Alle Seiten",
+	"pages_none": "In diesem Space gibt es noch keine Seiten.",
 	"pages_open": "Öffnen",
 	"pages_open_side": "Im Seitenbereich öffnen",
 	"pages_words": [

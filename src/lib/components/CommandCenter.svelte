@@ -4,6 +4,7 @@
 	import * as Command from '$lib/components/ui/command';
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
+	import FilesIcon from '@lucide/svelte/icons/files';
 	import HashIcon from '@lucide/svelte/icons/hash';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
@@ -22,6 +23,7 @@
 		onseeall,
 		ontoday,
 		onnewpage,
+		onpages,
 		onchat,
 		onsettings
 	}: {
@@ -43,6 +45,8 @@
 		ontoday: () => void;
 		/** Start a page on the day shown (SPEC 3.5). */
 		onnewpage: () => void;
+		/** List every page of the space. */
+		onpages: () => void;
 		onchat: () => void;
 		onsettings: () => void;
 	} = $props();
@@ -196,6 +200,9 @@
 				</Command.Item>
 				<Command.Item value="new-page" onSelect={() => run(onnewpage)}>
 					<FilePlusIcon />{m.pages_new()}
+				</Command.Item>
+				<Command.Item value="all-pages" onSelect={() => run(onpages)}>
+					<FilesIcon />{m.pages_all()}
 				</Command.Item>
 				{#if canChat}
 					<Command.Item value="chat" onSelect={() => run(onchat)}>

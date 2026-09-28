@@ -284,6 +284,7 @@ A page is a note for longer writing, such as meeting notes. It has a title and a
 - Start one with New page, under the day's notes or from the command center; with Turn into page in a note's menu; or with `Ctrl+Shift+Enter` (`Cmd+Shift+Enter` on macOS) in the capture window, which hides it and hands its draft to a new page in the main window.
 - A page is saved once it has a title. Turn into page offers the note's subject as a start. Until then the draft stays in memory, as the capture window's does, and New page brings it back.
 - The day view shows a page at its time as a card: its title, the first two lines of its text, its word count and its category. The card glows while the model works on it, as a note does. A click opens the page.
+- All pages lists every page of the space, newest first, as the same cards, each with its date. The button beside the calendar's above the day opens it, as does the command center. Its cards open and dock a page as a day's do.
 - A button on the card docks the page on the right instead, so it can be written while the timeline beside it goes through days, search and similar notes. The dock holds the page view, which works there as it does in the timeline, and its close button closes the view. The narrower timeline shows only the neighbouring days its width holds, and the chat floats clear of the dock. Opening the docked page in the timeline takes it out of the dock, so a page is never open twice.
 - The page view takes the timeline's place, with a way back. The title is edited in place and saved on Enter or when focus moves elsewhere in the window, not when another app takes it; an empty title goes back to the last one. The text saves itself a second after typing stops, and when the view closes. Saves leave the models alone: a page open in the view is held, and when the view closes it goes to the model, and to the embedding model, once, if its text changed. A page still pending when the app quits is queued at the next launch.
 - The page view's menu offers similar notes, re-run and delete, as a note's does. Deleting asks first.
@@ -629,6 +630,7 @@ set_tray_labels(labels)                      // the tray menu's wording, sent by
 list_spaces() -> SpacesView                   // open space + every space with its note count
 create_space(name) / rename_space(name, new_name) / delete_space(name) / set_active_space(name)
 create_page(title, body, date?) -> Note       // file, then stub; held until finish_page
+list_pages() -> Vec<Note>                     // every page of the open space, newest first
 get_page(id) -> Note                          // read from its file
 update_page(id, body) -> Note                 // marks it pending unless manual; held until finish_page
 finish_page(id)                               // the page view closed: releases it, enqueues it if pending

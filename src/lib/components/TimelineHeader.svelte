@@ -4,6 +4,7 @@
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import FilesIcon from '@lucide/svelte/icons/files';
 	import { m } from '$lib/paraglide/messages';
 	import { getLocale } from '$lib/paraglide/runtime';
 	import type { Timeline } from '$lib/timeline';
@@ -14,6 +15,7 @@
 		resultCount,
 		onback,
 		oncalendar,
+		onpages,
 		onprevious,
 		onnext,
 		oncollapse,
@@ -25,6 +27,8 @@
 		resultCount: number;
 		onback: () => void;
 		oncalendar: () => void;
+		/** List every page of the space. */
+		onpages: () => void;
 		/** Step to the neighbouring day; left out when there is none that way. */
 		onprevious?: () => void;
 		onnext?: () => void;
@@ -94,6 +98,8 @@
 	{/if}
 	{#if timeline.kind === 'calendar'}
 		<svelte:element this={tag} class={title}>{m.calendar_title()}</svelte:element>
+	{:else if timeline.kind === 'pages'}
+		<svelte:element this={tag} class={title}>{m.pages_all()}</svelte:element>
 	{:else if timeline.kind === 'similar'}
 		<svelte:element this={tag} class={title}>{m.note_similar()}</svelte:element>
 	{:else if timeline.kind === 'page'}
@@ -116,6 +122,16 @@
 			class="text-muted-foreground hover:text-foreground"
 		>
 			<CalendarIcon />
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			onclick={onpages}
+			aria-label={m.pages_all()}
+			title={m.pages_all()}
+			class="text-muted-foreground hover:text-foreground"
+		>
+			<FilesIcon />
 		</Button>
 		<!-- Side by side ahead of the title, so they stay put while its width
 		     changes from one day to the next. -->

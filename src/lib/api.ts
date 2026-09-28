@@ -326,6 +326,9 @@ export const updateNoteMeta = (
 export const createPage = (title: string, body: string, date?: string) =>
 	invoke<Note>('create_page', { title, body, date });
 
+/** Every page of the open space, newest first. */
+export const listPages = () => invoke<Note[]>('list_pages');
+
 /** A page read afresh from its file. */
 export const getPage = (id: string) => invoke<Note>('get_page', { id });
 

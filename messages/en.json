@@ -358,6 +358,8 @@
 	],
 	"pages_new": "New page",
 	"pages_untitled": "Untitled page",
+	"pages_all": "All pages",
+	"pages_none": "No pages in this space yet.",
 	"pages_open": "Open",
 	"pages_open_side": "Open in side panel",
 	"pages_words": [

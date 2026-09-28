@@ -15,6 +15,7 @@
 		getSettings,
 		listCategories,
 		listDays,
+		listPages,
 		listSpaces,
 		modelInfo,
 		modelStatus,
@@ -107,6 +108,8 @@
 	let results = $state<Note[]>([]);
 	/** The notes close to a note, while the timeline lists them. */
 	let similar = $state<Note[]>([]);
+	/** Every page of the space, while the timeline lists them. */
+	let allPages = $state<Note[]>([]);
 
 	/** The note open in the editor. */
 	let editing = $state<Note | null>(null);
@@ -161,6 +164,7 @@
 		resultCount: results.length,
 		onback: () => void select(selected),
 		oncalendar: () => (timeline = { kind: 'calendar' }),
+		onpages: () => void showPages(),
 		onprevious: previousDay ? () => void step(previousDay) : undefined,
 		onnext: nextDay ? () => void step(nextDay) : undefined
 	});
@@ -230,6 +234,7 @@
 		const current = timeline;
 		if (current.kind !== 'search') results = [];
 		if (current.kind !== 'similar') similar = [];
+		if (current.kind !== 'pages') allPages = [];
 		try {
 			if (current.kind === 'search') {
 				const found = await search(current.query);
@@ -237,6 +242,9 @@
 			} else if (current.kind === 'similar') {
 				const found = await similarNotes(current.note.id);
 				if (mine === run) similar = found;
+			} else if (current.kind === 'pages') {
+				const found = await listPages();
+				if (mine === run) allPages = found;
 			}
 		} catch (e) {
 			error = String(e);
@@ -265,6 +273,12 @@
 
 	async function showSimilar(note: Note) {
 		timeline = { kind: 'similar', note };
+		await loadTimeline();
+		document.querySelector('main')?.scrollTo({ top: 0 });
+	}
+
+	async function showPages() {
+		timeline = { kind: 'pages' };
 		await loadTimeline();
 		document.querySelector('main')?.scrollTo({ top: 0 });
 	}
@@ -622,6 +636,8 @@
 							<NoteList notes={similar} empty={m.page_no_similar()} showDate {...cardActions} />
 						{:else if timeline.kind === 'search'}
 							<NoteList notes={results} empty={m.page_no_match()} showDate {...cardActions} />
+						{:else if timeline.kind === 'pages'}
+							<NoteList notes={allPages} empty={m.pages_none()} showDate {...cardActions} />
 						{:else}
 							{#if notes.length === 0}
 								<div class="flex flex-col items-center gap-4 py-16 text-center">
@@ -734,6 +750,7 @@
 	onseeall={(q) => void showResults(q)}
 	ontoday={async () => void select(await today())}
 	onnewpage={newPage}
+	onpages={() => void showPages()}
 	onchat={() => (chatOpen = true)}
 	onsettings={() => (settingsOpen = true)}
 />

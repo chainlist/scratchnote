@@ -19,7 +19,7 @@ use crate::commands::notes::{enqueue, persist_queue, read_note};
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::{self, body_hash, Kind, Note, Status, Stub};
-use crate::storage::index::{self, IndexEntry};
+use crate::storage::index::{self, Index, IndexEntry};
 use crate::storage::page_file;
 use crate::storage::writer::Writer;
 use crate::storage::{check_date, day_path};
@@ -231,6 +231,21 @@ pub async fn create_page(
 
     emit_updated(&app, &page.id);
     Ok(page)
+}
+
+/// Every page in the index, newest first: by date, then by time within the day.
+fn newest_first(index: &Index) -> Vec<Note> {
+    let mut pages: Vec<Note> = index.pages().map(IndexEntry::to_note).collect();
+    pages.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
+    pages
+}
+
+/// Every page of the open space, for the list of pages (SPEC 3.5).
+#[tauri::command]
+pub fn list_pages(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
+    let space = state.space()?;
+    let index = space.index.read().map_err(lock_poisoned)?;
+    Ok(newest_first(&index))
 }
 
 #[tauri::command]
@@ -524,6 +539,26 @@ mod tests {
         std::fs::read_to_string(day_path(root, date))
             .map(|c| daily_file::parse_stubs(&c))
             .unwrap_or_default()
+    }
+
+    #[test]
+    fn lists_every_page_newest_first_without_the_notes() {
+        let at = |id: &str, date: &str, time: &str| Note {
+            date: date.to_string(),
+            time: time.to_string(),
+            ..page(id, id)
+        };
+        let mut index = Index::default();
+        index.push(IndexEntry::from(&at("01OLD", "2026-09-01", "18:00")));
+        index.push(IndexEntry::from(&at("01MORNING", DATE, "09:00")));
+        index.push(IndexEntry::from(&at("01EVENING", DATE, "17:30")));
+        index.push(IndexEntry::from(&Note {
+            kind: Kind::Note,
+            ..at("01NOTE", DATE, "12:00")
+        }));
+
+        let ids: Vec<String> = newest_first(&index).into_iter().map(|p| p.id).collect();
+        assert_eq!(ids, ["01EVENING", "01MORNING", "01OLD"]);
     }
 
     #[tokio::test]

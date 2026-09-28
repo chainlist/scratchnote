@@ -90,10 +90,13 @@
 	}
 </script>
 
+<!-- The frame and the footer drag the window; the buttons in the footer
+     still click, as Tauri skips them. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="flex h-screen flex-col gap-2 border border-neutral-700 bg-neutral-900 p-3 text-neutral-100"
 	onkeydown={onKeydown}
+	data-tauri-drag-region
 >
 	<MarkdownEditor
 		bind:this={input}
@@ -104,7 +107,10 @@
 		class="min-h-0 flex-1 rounded bg-neutral-800 p-2 text-sm leading-relaxed [--md-image-height:6rem]"
 	/>
 
-	<div class="flex items-center justify-between text-[0.6875rem] text-neutral-500">
+	<div
+		class="flex items-center justify-between text-[0.6875rem] text-neutral-500"
+		data-tauri-drag-region="deep"
+	>
 		{#if error}
 			<span class="text-red-400">{error}</span>
 		{:else}

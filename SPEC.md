@@ -243,7 +243,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 
 ### 3.1 Quick Capture window
 
-- Global hotkey (default `Ctrl+Shift+Space`, `Cmd+Shift+Space` on macOS, configurable) toggles a small, borderless, always-on-top window centered on the active screen.
+- Global hotkey (default `Ctrl+Shift+Space`, `Cmd+Shift+Space` on macOS, configurable) toggles a small, borderless, always-on-top window centered on the active screen. Its frame and footer move it and its edges resize it; it keeps that place and size until the app quits.
 - Running the app with `--capture` toggles the window too, whether the app is running or not. It is for Linux under Wayland, where apps cannot register a global hotkey: the user binds the command to a key in the desktop's own shortcut settings.
 - Contains a single multiline markdown input (3.4), auto-focused. The note goes into the open space, which the footer names when there is more than one.
 - `Cmd/Ctrl+Enter`: save and hide window. `Esc`: hide without saving (draft is kept in memory and restored next open). Empty input + save = no-op.

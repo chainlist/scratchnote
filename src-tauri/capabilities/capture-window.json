@@ -1,0 +1,11 @@
+{
+  "identifier": "capture-window",
+  "description": "lets the capture window drag itself",
+  "local": true,
+  "windows": [
+    "capture"
+  ],
+  "permissions": [
+    "core:window:allow-start-dragging"
+  ]
+}

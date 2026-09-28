@@ -232,7 +232,8 @@ fn on_run_event(app: &AppHandle, event: tauri::RunEvent) {
     }
 }
 
-/// Hiding from Rust keeps the capture webview free of window permissions.
+/// Hiding from Rust keeps the capture webview free of window permissions
+/// beyond dragging itself.
 #[tauri::command]
 fn hide_capture(app: AppHandle) {
     if let Some(window) = app.get_webview_window(CAPTURE) {
@@ -251,15 +252,17 @@ fn capture_to_page(app: AppHandle, body: String) {
 }
 
 /// The capture window is built once at startup and only ever shown and
-/// hidden, so the hotkey never pays for window creation.
+/// hidden, so the hotkey never pays for window creation. It opens centred;
+/// where the user moves and sizes it then holds until the app quits.
 fn build_capture_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     WebviewWindowBuilder::new(app, CAPTURE, WebviewUrl::App("capture/".into()))
         .title("Scratchnote capture")
         .inner_size(620.0, 200.0)
+        .min_inner_size(420.0, 150.0)
         .decorations(false)
         .always_on_top(true)
         .skip_taskbar(true)
-        .resizable(false)
+        .maximizable(false)
         .visible(false)
         .center()
         .build()
@@ -272,7 +275,6 @@ fn toggle_capture(app: &AppHandle) {
     if window.is_visible().unwrap_or(false) {
         let _ = window.hide();
     } else {
-        let _ = window.center();
         let _ = window.show();
         let _ = window.set_focus();
         // Tells the webview to focus the input; it is already loaded.

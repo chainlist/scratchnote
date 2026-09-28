@@ -20,6 +20,8 @@
 	let checking = $state(false);
 	/** Said under the version once a check finds nothing newer. */
 	let upToDate = $state(false);
+	/** The notes of the version running, not the whole changelog. */
+	const current = $derived(releases.filter((r) => r.version === version));
 
 	onMount(async () => {
 		try {
@@ -83,9 +85,11 @@
 					{checking ? m.settings_checking() : m.settings_check_updates()}
 				</Button>
 			{/if}
-			<Button variant="secondary" size="sm" onclick={() => (releaseNotes = releases)}>
-				{m.settings_about_news()}
-			</Button>
+			{#if current.length}
+				<Button variant="secondary" size="sm" onclick={() => (releaseNotes = current)}>
+					{m.settings_about_news()}
+				</Button>
+			{/if}
 		</div>
 	</div>
 </div>

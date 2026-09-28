@@ -40,6 +40,18 @@ pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, St
     Ok(crate::search::search(&idx, &query))
 }
 
+/// Every note and page with a task box, newest first, for the tasks view to
+/// pick the open tasks out of (SPEC 3.8).
+#[tauri::command]
+pub fn task_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
+    let space = state.space()?;
+    let idx = space
+        .index
+        .read()
+        .map_err(|_| "index lock poisoned".to_string())?;
+    Ok(crate::search::with_tasks(&idx))
+}
+
 /// How many notes search by meaning adds at most.
 const MEANING_NOTES: usize = 5;
 /// How far a note's cosine to the query must sit above the mean of the

@@ -401,5 +401,8 @@
 	"pages_delete_title": "Excluir esta página?",
 	"pages_delete_description": "O arquivo dela é excluído e ela sai do seu dia. Não há como desfazer.",
 	"pages_remove_stub_title": "Remover esta página ausente?",
-	"pages_remove_stub_description": "Só o link dela sai do dia. Se o arquivo aparecer, a página volta."
+	"pages_remove_stub_description": "Só o link dela sai do dia. Se o arquivo aparecer, a página volta.",
+	"tasks_open": "Tarefas pendentes",
+	"tasks_none": "Nenhuma tarefa pendente. Comece uma linha com - [ ] em uma nota ou página para adicionar uma.",
+	"tasks_show_in_day": "Mostrar no dia"
 }

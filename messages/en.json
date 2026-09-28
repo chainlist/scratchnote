@@ -401,5 +401,8 @@
 	"pages_delete_title": "Delete this page?",
 	"pages_delete_description": "Its file is deleted and it leaves its day. There is no undo.",
 	"pages_remove_stub_title": "Remove this missing page?",
-	"pages_remove_stub_description": "Only its link leaves the day. If its file turns up, the page comes back."
+	"pages_remove_stub_description": "Only its link leaves the day. If its file turns up, the page comes back.",
+	"tasks_open": "Open tasks",
+	"tasks_none": "No open tasks. Start a line with - [ ] in a note or a page to add one.",
+	"tasks_show_in_day": "Show in its day"
 }

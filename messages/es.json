@@ -401,5 +401,8 @@
 	"pages_delete_title": "¿Eliminar esta página?",
 	"pages_delete_description": "Se elimina su archivo y sale de su día. No se puede deshacer.",
 	"pages_remove_stub_title": "¿Quitar esta página que falta?",
-	"pages_remove_stub_description": "Solo su enlace sale del día. Si su archivo aparece, la página vuelve."
+	"pages_remove_stub_description": "Solo su enlace sale del día. Si su archivo aparece, la página vuelve.",
+	"tasks_open": "Tareas pendientes",
+	"tasks_none": "No hay tareas pendientes. Empieza una línea con - [ ] en una nota o una página para añadir una.",
+	"tasks_show_in_day": "Ver en su día"
 }

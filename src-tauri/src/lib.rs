@@ -77,6 +77,7 @@ pub fn run() {
             commands::search::search,
             commands::search::search_meaning,
             commands::search::similar_notes,
+            commands::search::task_notes,
             commands::chat::chat,
             commands::chat::stop_chat,
             commands::chat::warm_chat,

@@ -401,5 +401,8 @@
 	"pages_delete_title": "Diese Seite löschen?",
 	"pages_delete_description": "Ihre Datei wird gelöscht und sie verschwindet von ihrem Tag. Das lässt sich nicht rückgängig machen.",
 	"pages_remove_stub_title": "Diese fehlende Seite entfernen?",
-	"pages_remove_stub_description": "Nur ihr Link verschwindet vom Tag. Taucht ihre Datei wieder auf, kommt die Seite zurück."
+	"pages_remove_stub_description": "Nur ihr Link verschwindet vom Tag. Taucht ihre Datei wieder auf, kommt die Seite zurück.",
+	"tasks_open": "Offene Aufgaben",
+	"tasks_none": "Keine offenen Aufgaben. Beginne eine Zeile in einer Notiz oder Seite mit - [ ], um eine hinzuzufügen.",
+	"tasks_show_in_day": "Am Tag anzeigen"
 }

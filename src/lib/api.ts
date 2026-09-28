@@ -62,6 +62,9 @@ export const searchMeaning = (query: string) =>
  */
 export const similarNotes = (id: string) => invoke<Note[]>('similar_notes', { id });
 
+/** Every note and page with a task box, open or ticked, newest first. */
+export const taskNotes = () => invoke<Note[]>('task_notes');
+
 /** One line of `index.jsonl`, parsed. The index holds no bodies. */
 export type IndexEntry = Omit<Note, 'body'>;
 

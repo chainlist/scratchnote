@@ -102,6 +102,24 @@ pub fn search(index: &Index, raw: &str) -> Vec<Note> {
     hits
 }
 
+/// Notes and pages with a task box, open or ticked, newest first. Anything
+/// that reads `[ ]` or `[x]` comes along: the tasks view parses the markdown
+/// as the cards do and keeps the real tasks (SPEC 3.8).
+pub fn with_tasks(index: &Index) -> Vec<Note> {
+    let mut hits: Vec<Note> = index
+        .entries()
+        .filter(|entry| {
+            ["[ ]", "[x]", "[X]"]
+                .iter()
+                .any(|mark| entry.body.contains(mark))
+        })
+        .map(|entry| entry.to_note())
+        .collect();
+
+    hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
+    hits
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,6 +269,16 @@ mod tests {
             note("01C", "2026-09-22", "17:00", "x", None),
         ]);
         assert_eq!(ids(&search(&idx, "x")), vec!["01C", "01B", "01A"]);
+    }
+
+    #[test]
+    fn with_tasks_keeps_notes_with_a_task_box_open_or_ticked() {
+        let idx = index(&[
+            note("01A", "2026-09-21", "08:00", "- [ ] call the bank", None),
+            note("01B", "2026-09-22", "08:00", "no tasks here", None),
+            note("01C", "2026-09-22", "09:00", "Shopping\n- [X] milk", None),
+        ]);
+        assert_eq!(ids(&with_tasks(&idx)), vec!["01C", "01A"]);
     }
 
     #[test]

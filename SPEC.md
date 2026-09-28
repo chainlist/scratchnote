@@ -298,6 +298,7 @@ A page is a note for longer writing, such as meeting notes. It has a title and a
 The app updates itself from the project's GitHub Releases.
 
 - It checks at launch and once a day while it runs. When a newer release is out, the top bar offers Update to its version, with the installed one on hover. Nothing downloads until it is clicked; then the update downloads, installs as the same kind of package the app came in, and restarts the app. A failed install says why on hover and offers a retry. A failed check says nothing, because the app works offline. Dev builds do not check.
+- Check for updates in Settings > About looks at once. It says Up to date when nothing is newer, and says why when the check fails, since it was asked for. When a release is out, the button becomes Update to its version, which installs as the top bar's does; either one's find shows in both. Dev builds do not show it.
 - Every release is signed with the project's updater key, and the app installs only what that key signed. The signature must also name the version it was signed for (`requireSignedVersion`), so an altered `latest.json` cannot pass an older release off as a newer one.
 - The private key stays out of the repository: with the maintainer, and as the CI secret `TAURI_SIGNING_PRIVATE_KEY`, with `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` beside it if the key has a password. Losing the key leaves every installed copy unable to update.
 - Only the release build in CI signs, by turning on `bundle.createUpdaterArtifacts` for that build alone, so a local `pnpm tauri build` needs no key.
@@ -603,7 +604,7 @@ The grammar only lets the model write a listed category, so nothing it returns n
 - Hide immediately after save vs. show toast
 - Rebuild index
 - Launch at login
-- About: the app's icon, name and version, and News for the release notes of every version (3.6)
+- About: the app's icon, name and version, Check for updates, and News for the release notes of every version (3.6)
 - Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It also sets the language new subjects are written in and the language categories are shown in (the OS language under System, English when that is not one of the six); note bodies are untouched, and chat replies follow the language the user writes in.
 
 ## 8. Tauri Commands (backend API)

@@ -322,6 +322,7 @@
 	"settings_index_description": "Der Suchindex ist nur ein Cache deiner Markdown-Dateien. Jeder Space hat seinen eigenen; diese Aktionen wirken auf den geöffneten.",
 	"settings_about_description": "Die installierte Version und die Änderungen jeder Version, auf Englisch.",
 	"settings_about_version": "Version {version}",
+	"settings_about_up_to_date": "Aktuell.",
 	"settings_about_news": "Neuigkeiten",
 	"settings_rebuild_title": "Index neu aufbauen",
 	"settings_rebuild_hint": "Liest jede Tagesdatei neu ein. Immer gefahrlos auszuführen.",

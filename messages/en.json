@@ -322,6 +322,7 @@
 	"settings_index_description": "The search index is only a cache of your markdown files. Each space has its own; these act on the open one.",
 	"settings_about_description": "The version you have, and what changed in each release.",
 	"settings_about_version": "Version {version}",
+	"settings_about_up_to_date": "Up to date.",
 	"settings_about_news": "News",
 	"settings_rebuild_title": "Rebuild index",
 	"settings_rebuild_hint": "Reparse every daily file. Always safe to run.",

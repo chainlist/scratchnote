@@ -322,6 +322,7 @@
 	"settings_index_description": "O índice de busca é apenas um cache dos seus arquivos markdown. Cada espaço tem o seu próprio; estas ações agem sobre o aberto.",
 	"settings_about_description": "A versão instalada e as mudanças de cada versão, em inglês.",
 	"settings_about_version": "Versão {version}",
+	"settings_about_up_to_date": "Atualizado.",
 	"settings_about_news": "Novidades",
 	"settings_rebuild_title": "Reconstruir índice",
 	"settings_rebuild_hint": "Reprocessa todos os arquivos diários. Sempre seguro de executar.",

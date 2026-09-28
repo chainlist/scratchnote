@@ -322,6 +322,7 @@
 	"settings_index_description": "L'indice di ricerca è solo una cache dei tuoi file markdown. Ogni spazio ha il proprio; queste azioni agiscono su quello aperto.",
 	"settings_about_description": "La versione installata e le modifiche di ogni versione, in inglese.",
 	"settings_about_version": "Versione {version}",
+	"settings_about_up_to_date": "Aggiornato.",
 	"settings_about_news": "Novità",
 	"settings_rebuild_title": "Ricostruisci indice",
 	"settings_rebuild_hint": "Rianalizza ogni file giornaliero. Sempre sicuro da eseguire.",

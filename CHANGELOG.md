@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0](https://github.com/chainlist/scratchnote/compare/v0.1.0...v0.2.0) (2026-09-28)
+
+
+### Features
+
+* add a send button to the capture window ([fa1456b](https://github.com/chainlist/scratchnote/commit/fa1456b9dd1229bd057597edab85cc5d5eec8a82))
+* list every page of the space ([4de305c](https://github.com/chainlist/scratchnote/commit/4de305cf7ce5fe6ec199521eeae1fda99b283190))
+* move and resize the capture window ([458a62e](https://github.com/chainlist/scratchnote/commit/458a62e05385823326a52d6f53726973a2c33b73))
+* show what's new after an update, and an About tab in settings ([c622569](https://github.com/chainlist/scratchnote/commit/c622569fd5d345ca0c00751426eb913e3106baa1))
+
 ## 0.1.0 (2026-09-28)
 
 

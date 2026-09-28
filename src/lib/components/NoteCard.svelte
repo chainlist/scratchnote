@@ -8,7 +8,6 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
-	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
@@ -171,15 +170,6 @@
 				/>
 				<div class="flex items-center justify-end gap-1">
 					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
-					<button
-						type="button"
-						onclick={() => editor?.attachFiles()}
-						aria-label={m.attach_file()}
-						title={m.attach_file()}
-						class={action}
-					>
-						<PaperclipIcon class="size-3" />
-					</button>
 					<button type="button" onclick={() => (editing = false)} class={action}
 						>{m.common_cancel()}</button
 					>

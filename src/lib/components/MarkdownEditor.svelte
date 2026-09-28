@@ -24,6 +24,7 @@
 		type Attachment
 	} from '$lib/api';
 	import { attachmentUrl } from '$lib/attachments.svelte';
+	import { bold, bullets, checklist, formats, italic, link } from '$lib/format';
 	import { attachmentLink, cardName, fileName, fileType, preview, syntax } from '$lib/markdown';
 
 	// CommonMark's language data, so the list keys below recognise it, with
@@ -218,6 +219,13 @@
 		}
 	});
 
+	/** The toolbar's word-processor keys. */
+	const formatKeys = keymap.of([
+		{ key: 'Mod-b', run: bold },
+		{ key: 'Mod-i', run: italic },
+		{ key: 'Mod-k', run: link }
+	]);
+
 	/** What each editor's box, `.md-editor`, does with files dropped on it. */
 	const dropTargets = new WeakMap<
 		Element,
@@ -258,13 +266,25 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import type { StateCommand } from '@codemirror/state';
+	import BoldIcon from '@lucide/svelte/icons/bold';
+	import ItalicIcon from '@lucide/svelte/icons/italic';
+	import LinkIcon from '@lucide/svelte/icons/link';
+	import ListIcon from '@lucide/svelte/icons/list';
+	import ListTodoIcon from '@lucide/svelte/icons/list-todo';
+	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
+	import { Button } from '$lib/components/ui/button';
+	import { Separator } from '$lib/components/ui/separator';
+	import { Toggle } from '$lib/components/ui/toggle';
+	import { m } from '$lib/paraglide/messages';
 
 	let {
 		value = $bindable(''),
 		placeholder = '',
 		label,
 		onerror,
-		class: className = ''
+		class: className = '',
+		toolbarClass = ''
 	}: {
 		/** The markdown being edited. */
 		value?: string;
@@ -275,10 +295,26 @@
 		onerror: (message: string) => void;
 		/** Box, padding and type; a max height makes it scroll past it. */
 		class?: string;
+		/** The toolbar's, such as a background to keep it in view on a long page. */
+		toolbarClass?: string;
 	} = $props();
 
 	let host: HTMLDivElement;
 	let view: EditorView | undefined;
+	/** The formats at the cursor, which the toolbar shows pressed. */
+	let active = $state({ bold: false, italic: false, bullets: false, checklist: false });
+
+	// See-through greys, so the buttons show on every editor's background.
+	const tool =
+		'size-6 min-w-6 px-0 text-neutral-500 hover:bg-neutral-500/15 hover:text-neutral-200 dark:hover:bg-neutral-500/15 aria-pressed:bg-neutral-500/25 aria-pressed:text-neutral-100 data-[state=on]:bg-neutral-500/25';
+	const divider = 'mx-1 h-4 bg-neutral-500/30 data-vertical:self-center';
+
+	/** A toolbar button: the text keeps the focus, so the next one acts on it too. */
+	function run(command: StateCommand) {
+		if (!view) return;
+		command(view);
+		view.focus();
+	}
 
 	/** Link what `pending` attaches at the cursor once it is copied in (SPEC 3.7). */
 	async function attach(pending: Promise<Attachment[]>) {
@@ -312,8 +348,8 @@
 		void attach(addAttachments(paths));
 	}
 
-	/** Pick files to attach at the cursor, for an attach button. */
-	export function attachFiles() {
+	/** Pick files to attach at the cursor, for the paperclip. */
+	function attachFiles() {
 		void attach(
 			(async () => {
 				const picked = await pickFiles({ multiple: true });
@@ -332,6 +368,7 @@
 					history(),
 					// Enter carries a list or quote on to the next line.
 					Prec.high(keymap.of(markdownKeymap)),
+					formatKeys,
 					keymap.of([...standardKeymap, ...historyKeymap]),
 					language,
 					livePreview,
@@ -344,10 +381,17 @@
 					theme,
 					EditorView.updateListener.of((update) => {
 						if (update.docChanged) value = update.state.doc.toString();
+						if (
+							update.docChanged ||
+							update.selectionSet ||
+							syntaxTree(update.startState) !== syntaxTree(update.state)
+						)
+							active = formats(update.state);
 					})
 				]
 			})
 		});
+		active = formats(view.state);
 		dropTargets.set(host, drop);
 		listenForDrops();
 		return () => {
@@ -372,4 +416,75 @@
 	}
 </script>
 
-<div bind:this={host} class="md-editor flex flex-col {className}"></div>
+<!-- The text goes in after the toolbar. -->
+<div bind:this={host} class="md-editor flex flex-col {className}">
+	<!-- For those who do not write markdown (SPEC 3.4). A press keeps the
+	     focus, and so the selection, in the text; its buttons are what take
+	     the focus from the keyboard. -->
+	<!-- svelte-ignore a11y_interactive_supports_focus -->
+	<div
+		role="toolbar"
+		aria-label={m.format_toolbar()}
+		onmousedown={(event) => event.preventDefault()}
+		class="mb-1 -ml-1 flex shrink-0 items-center gap-0.5 {toolbarClass}"
+	>
+		<Toggle
+			size="sm"
+			class={tool}
+			bind:pressed={() => active.bold, () => run(bold)}
+			aria-label={m.format_bold()}
+			title={m.format_bold()}
+		>
+			<BoldIcon class="size-3.5" />
+		</Toggle>
+		<Toggle
+			size="sm"
+			class={tool}
+			bind:pressed={() => active.italic, () => run(italic)}
+			aria-label={m.format_italic()}
+			title={m.format_italic()}
+		>
+			<ItalicIcon class="size-3.5" />
+		</Toggle>
+		<Separator orientation="vertical" class={divider} />
+		<Toggle
+			size="sm"
+			class={tool}
+			bind:pressed={() => active.bullets, () => run(bullets)}
+			aria-label={m.format_bullets()}
+			title={m.format_bullets()}
+		>
+			<ListIcon class="size-3.5" />
+		</Toggle>
+		<Toggle
+			size="sm"
+			class={tool}
+			bind:pressed={() => active.checklist, () => run(checklist)}
+			aria-label={m.format_checklist()}
+			title={m.format_checklist()}
+		>
+			<ListTodoIcon class="size-3.5" />
+		</Toggle>
+		<Separator orientation="vertical" class={divider} />
+		<Button
+			variant="ghost"
+			size="icon-xs"
+			class={tool}
+			onclick={() => run(link)}
+			aria-label={m.format_link()}
+			title={m.format_link()}
+		>
+			<LinkIcon class="size-3.5" />
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon-xs"
+			class={tool}
+			onclick={attachFiles}
+			aria-label={m.attach_file()}
+			title={m.attach_file()}
+		>
+			<PaperclipIcon class="size-3.5" />
+		</Button>
+	</div>
+</div>

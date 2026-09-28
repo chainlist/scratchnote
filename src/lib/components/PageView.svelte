@@ -14,7 +14,6 @@
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
@@ -277,17 +276,6 @@
 			disabled={loading}
 			class="min-w-0 flex-1 bg-transparent text-2xl font-semibold tracking-tight text-neutral-100 outline-none placeholder:text-neutral-700"
 		/>
-		{#if !loading}
-			<button
-				type="button"
-				onclick={() => editor?.attachFiles()}
-				aria-label={m.attach_file()}
-				title={m.attach_file()}
-				class="mt-1.5 cursor-pointer rounded px-1 py-0.5 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200"
-			>
-				<PaperclipIcon class="size-4" />
-			</button>
-		{/if}
 		{#if page}
 			{@const current = page}
 			<DropdownMenu.Root>
@@ -341,6 +329,7 @@
 			label={m.pages_body_label()}
 			onerror={(message) => (error = message)}
 			class="min-h-[50vh] text-base leading-7 text-neutral-200"
+			toolbarClass="sticky top-0 z-10 bg-neutral-950"
 		/>
 	{/if}
 </div>

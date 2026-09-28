@@ -12,7 +12,6 @@
 	} from '$lib/api';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import { m } from '$lib/paraglide/messages';
 
@@ -119,15 +118,6 @@
 		<span class="flex items-center gap-2">
 			<span>{saved ? m.capture_saved() : saving ? m.capture_saving() : ''}</span>
 			{#if space}<span class="text-neutral-400" title={m.capture_space_title()}>{space}</span>{/if}
-			<button
-				type="button"
-				onclick={() => input?.attachFiles()}
-				aria-label={m.attach_file()}
-				title={m.attach_file()}
-				class="cursor-pointer rounded p-0.5 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200"
-			>
-				<PaperclipIcon class="size-3.5" />
-			</button>
 			<Button
 				size="icon-sm"
 				onclick={save}

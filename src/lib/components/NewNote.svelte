@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
-	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
@@ -83,15 +82,6 @@
 				/>
 				<div class="flex items-center justify-end gap-1">
 					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
-					<button
-						type="button"
-						onclick={() => editor?.attachFiles()}
-						aria-label={m.attach_file()}
-						title={m.attach_file()}
-						class={action}
-					>
-						<PaperclipIcon class="size-3" />
-					</button>
 					<button type="button" onclick={() => (writing = false)} class={action}
 						>{m.common_cancel()}</button
 					>

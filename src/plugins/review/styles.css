@@ -1,0 +1,152 @@
+/* The week in numbers, and the way to the weeks around it. */
+.review-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-bottom: 1.5rem;
+}
+.review-numbers {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem 1.25rem;
+	color: var(--color-neutral-500);
+	font-size: 0.875rem;
+}
+.review-value {
+	color: var(--color-neutral-100);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+.review-nav {
+	display: flex;
+	flex-shrink: 0;
+	gap: 0.25rem;
+}
+.review-arrow {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 0.375rem;
+	padding: 0.25rem;
+	color: var(--color-neutral-400);
+	cursor: pointer;
+	transition:
+		background-color 150ms,
+		color 150ms;
+}
+.review-arrow:hover:not(:disabled) {
+	background: var(--color-neutral-900);
+	color: var(--color-neutral-100);
+}
+.review-arrow:disabled {
+	opacity: 0.3;
+	cursor: default;
+}
+.review-arrow svg {
+	width: 1.25rem;
+	height: 1.25rem;
+}
+
+.review-empty {
+	color: var(--color-neutral-600);
+}
+
+/* A category, or the week's tasks: a heading with its count, then its lines. */
+.review-section + .review-section {
+	margin-top: 1.5rem;
+}
+.review-heading {
+	display: flex;
+	align-items: baseline;
+	gap: 0.5rem;
+	margin-bottom: 0.25rem;
+	color: var(--color-neutral-300);
+	font-size: 0.875rem;
+	font-weight: 500;
+}
+.review-category {
+	font-family: var(--font-mono);
+}
+.review-count {
+	color: var(--color-neutral-500);
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	font-weight: 400;
+}
+
+/* A note: its subject, then its day and time, which open it. */
+.review-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	margin: 0 -0.5rem;
+	border-radius: 0.375rem;
+	padding: 0 0.5rem;
+	box-sizing: content-box;
+	color: var(--color-neutral-200);
+	line-height: 1.75rem;
+	text-align: left;
+	cursor: pointer;
+	transition: background-color 150ms;
+}
+.review-row:hover {
+	background: var(--color-neutral-900);
+}
+.review-subject {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.review-unnamed {
+	color: var(--color-neutral-500);
+}
+/* Its first line, drawn as markdown, stays on the row. */
+.review-unnamed div {
+	display: inline;
+}
+.review-when {
+	flex-shrink: 0;
+	color: var(--color-neutral-500);
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+}
+.review-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	color: var(--color-neutral-500);
+}
+.review-icon svg {
+	width: 0.875rem;
+	height: 0.875rem;
+}
+
+/* A task, drawn as its card draws it, its box ticking here. */
+.review-task {
+	display: flex;
+	align-items: baseline;
+	gap: 0.5rem;
+}
+.review-task-text {
+	flex: 1;
+	min-width: 0;
+}
+.review-text {
+	color: var(--color-neutral-200);
+	font-size: 1rem;
+	line-height: 1.75rem;
+}
+.review-when-button {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 0.375rem;
+	cursor: pointer;
+}
+.review-when-button:hover .review-when,
+.review-when-button:hover .review-icon {
+	color: var(--color-neutral-200);
+}

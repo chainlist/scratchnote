@@ -339,7 +339,7 @@ Open tasks lists every task of the space not yet ticked, in notes and pages alik
 
 Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, commands in the command center, buttons on the editor's toolbar and down the left edge of the window (below the app's own and the core plugins', past a line), panels docked on the right, pages of their own, and settings tabs. They are trusted code, not sandboxed: a sandbox could not reach the editor, and Obsidian's model is the one users know.
 
-- **Core plugins** ship with the app. Each is a folder of `src/plugins/`, written against the same API a community plugin has, so what a core plugin does a community one can do too. Basics (3.8) is on unless switched off; Mentions (3.10), Stats (3.11) and Journal view (3.12) are off until switched on.
+- **Core plugins** ship with the app. Each is a folder of `src/plugins/`, written against the same API a community plugin has, so what a core plugin does a community one can do too. Basics (3.8) is on unless switched off; Mentions (3.10), Stats (3.11), Journal view (3.12) and Weekly review (3.13) are off until switched on.
 - **Community plugins** are written by other people and installed from the registry (4.10). They are off as a whole until the user turns them on in Settings > Community plugins, past a warning that a plugin runs with the app's own access: it can read and change the notes, reach the internet and run programs. While they are off the backend hands out no plugin code, whatever the webview asks.
 - The two have a settings tab each, Core plugins above Community plugins, so the app's own features and other people's code are never managed in one list. Core plugins lists each core plugin with its switch. Community plugins has the switch for community plugins, then, once on, Browse and Check for updates, and the installed plugins, each with its version, author, description, a switch, and Uninstall, which asks first. A plugin that failed to load says why under its description.
 - Browse lists the registry's plugins, searched by name, author and description; one of them shows its details and its README, drawn as a note is, with Install, or Update to a newer version, and its switch once installed. Installing leaves the plugin off. Check for updates asks the registry for the latest version of each installed plugin and offers Update where it is newer.
@@ -381,6 +381,16 @@ Journal view is a core plugin (3.9), built on the plugin API in `src/plugins/jou
 - The paper is old: a warm cream, grain, blotches of age, darker toward the edges and into the spine, and a page's own stains (now and then a cup's ring, a faded blot, foxing), which follow from its date. The pages' edges show under the spread, thicker on the side of the book already read. A red ribbon hangs out below it.
 - The arrows under the book, the lower corners of the pages, which lift under the pointer, and the left and right arrow keys turn a page: to the rest of a long day, or to the next day or the one before, landing on the last spread of a long day when going back. The page turns on its spine in 3D, shading as it goes; with reduced motion the spread changes at once. The date under the book opens the day.
 - The book is for reading: task boxes do not tick, links open. It redraws when the notes change.
+
+### 3.13 Weekly review
+
+Weekly review is a core plugin (3.9), built on the plugin API in `src/plugins/review/`, off until switched on in Settings > Core plugins.
+
+- A page, `/plugin/review/`, with one week, Monday to Sunday: its title is the week's number (ISO 8601), its dates after it. Its button on the left edge of the window opens it, as does Open the weekly review in the command center, on the week of the day the main window shows; `?date=2026-09-29` opens the week holding that day.
+- The week in numbers leads it: its notes, its pages, the words of both (counted as Stats counts them, 3.11), and the days written. Beside them, arrows go to the week before and the week after, from the first week written to this one.
+- Then the week's notes and pages by category, a section per category, the busiest first, headed `#category` in the interface language with its count; the notes without one, still waiting for the model or failed, go last. Each note is one line, in the order written: its subject (a page's title, with the page's icon), or its first line while it has none, then its weekday and time. A click shows the note on its day or opens the page. This is the one view that shows the subjects (3.2).
+- Then the week's tasks, from its notes and pages: those still open, then those ticked, each with its count, as its card draws it, with its weekday and time, which open its note. A box ticks here and saves at once, as on a card (3.4), and the task moves to the other list. A box keeps no date, so ticked means ticked in a note of the week, whenever it was ticked. The tasks come from Basics' task syntax: with Tasks off, the week shows none.
+- It redraws when the notes change.
 
 ## 4. Storage
 

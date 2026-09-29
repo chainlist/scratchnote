@@ -12,6 +12,7 @@ import {
 	type Note
 } from '$lib/api';
 import { attachmentUrl } from '$lib/attachments.svelte';
+import { categoryLabel } from '$lib/categories';
 import { fileName, parseMarkdown, preview } from '$lib/markdown';
 import { getLocale } from '$lib/paraglide/runtime';
 import type { App } from './api';
@@ -105,7 +106,8 @@ export const app: App = {
 			const note = await saveNote(body, date);
 			await host?.refresh();
 			return note;
-		}
+		},
+		categoryLabel
 	},
 	workspace: {
 		get day() {

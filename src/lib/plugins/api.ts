@@ -76,6 +76,11 @@ export interface Notes {
 	setBody(note: Note, body: string): Promise<void>;
 	/** Add a note to a day, today by default. Null for an empty body. */
 	create(body: string, date?: string): Promise<Note | null>;
+	/**
+	 * A note's `category` in the interface language, as the cards show it:
+	 * categories are stored in English.
+	 */
+	categoryLabel(category: string): string;
 }
 
 /** The main window's views. In the capture window these do nothing. */

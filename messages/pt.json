@@ -571,5 +571,75 @@
 	"journal_next": "Próxima página",
 	"journal_open_day": "Abrir este dia",
 	"journal_empty": "Nada escrito ainda. Suas notas vão preencher estas páginas.",
-	"journal_continued": "{date} (continuação)"
+	"journal_continued": "{date} (continuação)",
+	"review_plugin_name": "Resumo semanal",
+	"review_plugin_description": "Uma semana em uma página: as notas por categoria, as tarefas marcadas e pendentes, e a semana em números.",
+	"review_open": "Abrir o resumo semanal",
+	"review_week": "Semana {week}",
+	"review_previous": "Semana anterior",
+	"review_next": "Próxima semana",
+	"review_empty": "Nada escrito nesta semana.",
+	"review_no_category": "Sem categoria",
+	"review_tasks_open": "Pendentes",
+	"review_tasks_done": "Marcadas",
+	"review_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "nota",
+				"countPlural=other": "notas"
+			}
+		}
+	],
+	"review_pages": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "página",
+				"countPlural=other": "páginas"
+			}
+		}
+	],
+	"review_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "palavra",
+				"countPlural=other": "palavras"
+			}
+		}
+	],
+	"review_days": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "dia escrito",
+				"countPlural=other": "dias escritos"
+			}
+		}
+	]
 }

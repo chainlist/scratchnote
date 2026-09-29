@@ -571,5 +571,75 @@
 	"journal_next": "Nächste Seite",
 	"journal_open_day": "Diesen Tag öffnen",
 	"journal_empty": "Noch nichts geschrieben. Deine Notizen werden diese Seiten füllen.",
-	"journal_continued": "{date}, Fortsetzung"
+	"journal_continued": "{date}, Fortsetzung",
+	"review_plugin_name": "Wochenrückblick",
+	"review_plugin_description": "Eine Woche auf einer Seite: ihre Notizen nach Kategorie, die abgehakten und noch offenen Aufgaben und die Woche in Zahlen.",
+	"review_open": "Wochenrückblick öffnen",
+	"review_week": "Woche {week}",
+	"review_previous": "Vorherige Woche",
+	"review_next": "Nächste Woche",
+	"review_empty": "Diese Woche wurde nichts geschrieben.",
+	"review_no_category": "Ohne Kategorie",
+	"review_tasks_open": "Noch offen",
+	"review_tasks_done": "Abgehakt",
+	"review_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Notiz",
+				"countPlural=other": "Notizen"
+			}
+		}
+	],
+	"review_pages": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Seite",
+				"countPlural=other": "Seiten"
+			}
+		}
+	],
+	"review_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Wort",
+				"countPlural=other": "Wörter"
+			}
+		}
+	],
+	"review_days": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Tag geschrieben",
+				"countPlural=other": "Tage geschrieben"
+			}
+		}
+	]
 }

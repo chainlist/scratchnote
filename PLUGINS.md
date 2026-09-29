@@ -412,6 +412,7 @@ new Setting(section.contentEl).setName('Colour').addDropdown(/* ... */);
 | `notes.containing(needles)`                                               | every note and page whose text holds any of `needles`          |
 | `notes.setBody(note, body)`                                               | save a note's or a page's new text                             |
 | `notes.create(body, date?)`                                               | add a note to a day                                            |
+| `notes.categoryLabel(category)`                                           | a category in the interface language, as the cards show it     |
 | `workspace.day`, `openDay(date)`, `openNote(note)`                        | the day shown, and the way to a day or a note                  |
 | `workspace.openPage(type, params?)`, `openView(type)`, `closeView(type?)` | a plugin's page or panel                                       |
 | `markdown.parse(text)`                                                    | the syntax tree, every plugin's syntax included                |
@@ -473,4 +474,4 @@ plugin can do. Its data goes in `core-plugins/<id>.json`.
 
 A core plugin is on unless the user switches it off. One with
 `offByDefault: true` in its entry starts off instead, until the user switches
-it on, as Mentions, Stats and Journal view do.
+it on, as Mentions, Stats, Journal view and Weekly review do.

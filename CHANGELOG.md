@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/chainlist/scratchnote/compare/v0.2.0...v0.3.0) (2026-09-29)
+
+
+### Features
+
+* add a formatting toolbar to the editor ([d2da8b3](https://github.com/chainlist/scratchnote/commit/d2da8b342c4d5d12f26607b93da7ec8f36d4fcf7))
+* add plugins, core and community ([6af1593](https://github.com/chainlist/scratchnote/commit/6af15932b000fc411c73b024c561da83c2ed02f1))
+* check for updates in Settings &gt; About ([234d2f5](https://github.com/chainlist/scratchnote/commit/234d2f57bbc140e29b9f9747fd308ec64e15549d))
+* journal view, mentions and stats core plugins, ribbon on the left ([f1b8760](https://github.com/chainlist/scratchnote/commit/f1b876026a403672d36714ed52d28403d438cd10))
+* list the open tasks of a space ([f645c90](https://github.com/chainlist/scratchnote/commit/f645c90bb276050e46fc80a9b827643093df597e))
+* save a note with the send button, as the capture window does ([9e56cc2](https://github.com/chainlist/scratchnote/commit/9e56cc2067699c430f9df2ac870e747cd461111f))
+* tick tasks in notes and pages ([dba1e8f](https://github.com/chainlist/scratchnote/commit/dba1e8f4ebc794f87acd0e19de2e0362938ed3d9))
+
+
+### Bug Fixes
+
+* open a light window light ([296acd2](https://github.com/chainlist/scratchnote/commit/296acd2d9c7befe181439df03af08140f32c9201))
+* stop the main window flashing "No model installed" as it opens ([a31b96b](https://github.com/chainlist/scratchnote/commit/a31b96bba29c374ebdb43d36f7a731cf1b3bb283))
+* what's new in Settings &gt; About shows only the current version ([01377ca](https://github.com/chainlist/scratchnote/commit/01377cae6b2cf1f76665a3d12c6c9b073bd1f861))
+
 ## [0.2.0](https://github.com/chainlist/scratchnote/compare/v0.1.0...v0.2.0) (2026-09-28)
 
 

@@ -13,6 +13,9 @@
 	color: var(--color-neutral-500);
 	font-size: 0.75rem;
 }
+.stats-figure:last-child:nth-child(odd) {
+	grid-column: 1 / -1;
+}
 .stats-value {
 	color: var(--color-neutral-100);
 	font-size: 1.5rem;

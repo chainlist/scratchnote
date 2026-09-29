@@ -286,7 +286,7 @@ A page is a note for longer writing, such as meeting notes. It has a title and a
 - Start one with New page, under the day's notes or from the command center; with Turn into page in a note's menu; or with `Ctrl+Shift+Enter` (`Cmd+Shift+Enter` on macOS) in the capture window, which hides it and hands its draft to a new page in the main window.
 - A page is saved once it has a title. Turn into page offers the note's subject as a start. Until then the draft stays in memory, as the capture window's does, and New page brings it back.
 - The day view shows a page at its time as a card: its title, the first two lines of its text, its word count and its category. The card glows while the model works on it, as a note does. A click opens the page.
-- All pages lists every page of the space, newest first, as the same cards, each with its date. The button beside the calendar's above the day opens it, as does the command center. Its cards open and dock a page as a day's do.
+- All pages lists every page of the space, newest first, as the same cards, each with its date. Its button, under the calendar's on the left edge of the window, opens it from any view, as does the command center. Its cards open and dock a page as a day's do.
 - A button on the card docks the page on the right instead, so it can be written while the timeline beside it goes through days, search and similar notes. The dock holds the page view, which works there as it does in the timeline, and its close button closes the view. The narrower timeline shows only the neighbouring days its width holds, and the chat floats clear of the dock. Opening the docked page in the timeline takes it out of the dock, so a page is never open twice.
 - The page view takes the timeline's place, with a way back. The title is edited in place and saved on Enter or when focus moves elsewhere in the window, not when another app takes it; an empty title goes back to the last one. The text saves itself a second after typing stops, and when the view closes. Saves leave the models alone: a page open in the view is held, and when the view closes it goes to the model, and to the embedding model, once, if its text changed. A page still pending when the app quits is queued at the next launch.
 - The page view's menu offers similar notes, re-run and delete, as a note's does. Deleting asks first.
@@ -326,8 +326,8 @@ Basics is a core plugin (3.9), built on the plugin API in `src/plugins/basics/`:
 
 Open tasks lists every task of the space not yet ticked, in notes and pages alike, so a `- [ ]` jotted in the capture window does not sink out of sight with its day.
 
-- The button beside All pages above the day opens it, as does the command center. It is the plugin's page, `/plugin/tasks/`.
-- Its section in the settings takes the button above the day away, and orders the list newest or oldest first.
+- Its button on the left edge of the window opens it from any view, as does the command center. It is the plugin's page, `/plugin/tasks/`.
+- Its section in the settings takes the button away, and orders the list newest or oldest first.
 - One item per note or page, on a timeline drawn as the day's, a page with its icon on the rail: its date and time on the left, which show the note on its day or open the page, and its open tasks on the right, each as the first line of its list item. A page's title shows above its tasks.
 - A click on a box ticks the task and saves the note or page at once, as on a card (3.4): only the box changes, so it keeps its subject and category. A task ticked here stays in the list, ticked, until the view closes, so a box ticked by mistake can be cleared again.
 - The title counts the open tasks. With none, the view says how to write one.
@@ -337,9 +337,9 @@ Open tasks lists every task of the space not yet ticked, in notes and pages alik
 
 ### 3.9 Plugins
 
-Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, commands in the command center, buttons on the editor's toolbar and above the day, panels docked on the right, pages of their own, and settings tabs. They are trusted code, not sandboxed: a sandbox could not reach the editor, and Obsidian's model is the one users know.
+Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, commands in the command center, buttons on the editor's toolbar and down the left edge of the window (below the app's own and the core plugins', past a line), panels docked on the right, pages of their own, and settings tabs. They are trusted code, not sandboxed: a sandbox could not reach the editor, and Obsidian's model is the one users know.
 
-- **Core plugins** ship with the app and are on unless switched off. Each is a folder of `src/plugins/`, written against the same API a community plugin has, so what a core plugin does a community one can do too. Basics (3.8) is the first.
+- **Core plugins** ship with the app. Each is a folder of `src/plugins/`, written against the same API a community plugin has, so what a core plugin does a community one can do too. Basics (3.8) is on unless switched off; Mentions (3.10), Stats (3.11) and Journal view (3.12) are off until switched on.
 - **Community plugins** are written by other people and installed from the registry (4.10). They are off as a whole until the user turns them on in Settings > Community plugins, past a warning that a plugin runs with the app's own access: it can read and change the notes, reach the internet and run programs. While they are off the backend hands out no plugin code, whatever the webview asks.
 - The two have a settings tab each, Core plugins above Community plugins, so the app's own features and other people's code are never managed in one list. Core plugins lists each core plugin with its switch. Community plugins has the switch for community plugins, then, once on, Browse and Check for updates, and the installed plugins, each with its version, author, description, a switch, and Uninstall, which asks first. A plugin that failed to load says why under its description.
 - Browse lists the registry's plugins, searched by name, author and description; one of them shows its details and its README, drawn as a note is, with Install, or Update to a newer version, and its switch once installed. Installing leaves the plugin off. Check for updates asks the registry for the latest version of each installed plugin and offers Update where it is newer.
@@ -347,11 +347,40 @@ Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, c
 - Switching a plugin on or off, installing, updating and uninstalling apply at once in both windows, without a reload: what it added comes or goes, and every card and editor redraws with the syntax in use. The capture window loads the plugins too, for the editor's syntax and toolbar.
 - A plugin's commands show in the command center, under Plugins while the query is empty and with the app's own commands while it matches their names, after the notes, so Enter still lists the notes. A command on the text shows only when the command center was opened from an editor. A command's hotkey works in the main window; one on the text works in any editor.
 - A plugin draws a list of notes, or of anything else at a time, on the day's own timeline: the app draws the time, the rail and its mark with the day's component, and the plugin the body, in any framework. So every timeline looks the same, and follows the day's when it changes.
-- A plugin's view docks on the right where a page docks, one at a time: docking a page closes the view, and the other way round. A plugin's page takes the timeline's place, at `/plugin/<type>/` with its query string, with its title and a way back, as the app's own views have.
+- A plugin's view docks on the right where a page docks, one at a time: docking a page closes the view, and the other way round. A plugin's page takes the timeline's place, at `/plugin/<type>/` with its query string, with its title and a way back, as the app's own views have. It is drawn in the reading column, or, when it asks, fills the main area: its whole width and the height under its title.
 - The plugins load before the first view, so the first card is drawn with their syntax. The app waits two seconds at most on a plugin that loads asynchronously.
 - Each window times its startup: loading the app, the wait on the plugins (reading the plugin list, each plugin's load, listening for changes), and the first view, from when the window began loading until its first view is up. It logs them to its console, and Settings > General shows the main window's total under the version, with Details for every step.
 - A plugin that throws, while loading, drawing a widget, or running a command, is reported and the rest of the app carries on: a widget that fails leaves its text as typed.
 - PLUGINS.md is the guide for authors: the files, the API, and how to publish.
+
+### 3.10 Mentions
+
+Mentions is a core plugin (3.9), built on the plugin API in `src/plugins/mentions/`, off until switched on in Settings > Core plugins.
+
+- `@name` mentions a person, a project or anything else. A name is letters and digits of any script, with `_` and `-` inside it but not at its end: `@marie`, `@Zoë`, `@build-team`. An `@` right after a letter or digit is no mention, so an email address stays one.
+- A mention shows as a chip. On a card, a click on it opens the plugin's page, `/plugin/mentions/?name=<name>`: every note and page of the space that mentions the name, newest first, on a timeline drawn as the day's, with their count after the title. Case does not count: `@Marie` and `@marie` are one name.
+- Show every mention, in the command center, opens the page without a name: every name used, most mentioned first, each with how many notes and pages mention it. A click on a name opens its notes.
+- The page redraws when the notes change. The notes come from the backend's `notes_containing`, as Open tasks' do (3.8), and the plugin reads the mentions from their markdown. Switched off, `@name` shows as typed.
+
+### 3.11 Stats
+
+Stats is a core plugin (3.9), built on the plugin API in `src/plugins/stats/`, off until switched on in Settings > Core plugins.
+
+- A panel docked on the right, where a page docks (3.9), with how many notes and pages the space holds, how many of them are pages, how many days have notes, the streak (the days in a row with notes up to today, or up to yesterday while today has none), and the average words per note, pages left out. A word is a run of text between spaces with a letter or a digit in it, so a list's `-` or a task's box is not one.
+- Under them, a heatmap of the last weeks, a column a week with Monday on top, ending with this week: a square a day, stronger in the accent the more notes it has beside the busiest day. A click on a square opens its day. The days after today are left out.
+- Its button on the left edge of the window opens it, as does Show stats in the command center. It redraws when the notes change, and closes when Stats is switched off.
+- Its settings tab picks how many weeks the heatmap shows: 12, 20 (the default) or 26. Its data is `core-plugins/stats.json` (4.9).
+
+### 3.12 Journal view
+
+Journal view is a core plugin (3.9), built on the plugin API in `src/plugins/journal/`, off until switched on in Settings > Core plugins.
+
+- A page, `/plugin/journal/`, that shows the space as an open journal book in a stitched leather cover: the days with notes, oldest first, one day to a spread. It fills the main area, as big as a two-page spread fits. Its button on the left edge of the window opens it, as does Open the journal in the command center, on the day the main window shows or the last day written before it; `?date=2026-09-28` opens it on a day.
+- A spread starts with the day written by hand, then each note under its time, which opens the note on its day, a pen's wave between two notes. A page's title leads its text. The text is written in a handwriting font and runs from the left page onto the right one; a day too long for one spread carries on to the next, whose left page heads with the date, continued. Pages are numbered within the day.
+- The pictures of a note, its attached images, are taken out of its text and stuck on the page instead: prints with a white border, tilted two to seven degrees either way, held by tape across two corners or a strip on top, masking tape mostly and washi tape now and then. The first often goes beside the text, which wraps round it, on either side; the others go under it, alone or in a row. An image with a name of its own has it written under it; one named after its file does not. A photo's tilt, size and tape follow from the picture's file name, so a picture always sits the same way wherever it is; whether a note's first photo goes beside its text, and on which side, follows from the note. Both are the same every time the day is drawn.
+- The paper is old: a warm cream, grain, blotches of age, darker toward the edges and into the spine, and a page's own stains (now and then a cup's ring, a faded blot, foxing), which follow from its date. The pages' edges show under the spread, thicker on the side of the book already read. A red ribbon hangs out below it.
+- The arrows under the book, the lower corners of the pages, which lift under the pointer, and the left and right arrow keys turn a page: to the rest of a long day, or to the next day or the one before, landing on the last spread of a long day when going back. The page turns on its spine in 3D, shading as it goes; with reduced motion the spread changes at once. The date under the book opens the day.
+- The book is for reading: task boxes do not tick, links open. It redraws when the notes change.
 
 ## 4. Storage
 
@@ -537,9 +566,9 @@ Plugins (3.9) live in the notes root's `.scratchnote/`, as Obsidian keeps them i
 
 ```
 .scratchnote/
-  plugins.json            # {"community": false, "enabled": ["mentions"], "coreDisabled": []}
+  plugins.json            # {"community": false, "enabled": ["word-count"], "coreDisabled": [], "coreEnabled": ["stats"]}
   plugins/
-    mentions/
+    word-count/
       manifest.json       # {"id", "name", "version", "minAppVersion", "description", "author", "authorUrl"}
       main.js             # a CommonJS module exporting the plugin's class
       styles.css          # optional, added while the plugin is on
@@ -550,7 +579,7 @@ Plugins (3.9) live in the notes root's `.scratchnote/`, as Obsidian keeps them i
 
 Rules:
 
-- `plugins.json` holds whether community plugins are on (off by default and when the file is missing), the ids of the community plugins enabled, and the core plugins switched off. Core plugins are on unless listed. It and the data files are written through the single writer (4.3).
+- `plugins.json` holds whether community plugins are on (off by default and when the file is missing), the ids of the community plugins enabled, the core plugins switched off, and the core plugins that start off (3.9) switched on. A core plugin is as it ships unless listed. It and the data files are written through the single writer (4.3).
 - An id is lowercase letters, digits and dashes, at most 64 characters, not starting with a dash: a folder name everywhere. A community plugin with a core plugin's id does not load.
 - A folder of `plugins/` is an installed plugin when its name is a valid id, it has a `main.js`, and its `manifest.json` carries that id. Folders starting with a dot are installs under way.
 - A plugin is installed whole or not at all: its release is written to `.<id>.new`, the installed one, if any, is moved to `.<id>.old` with its `data.json` copied over first, and the new folder takes its place. Plugin files are replaced as a folder, so they do not go through the single writer, as attachments do not (4.8). Uninstalling removes the folder, data included, and the id from `enabled`.
@@ -698,7 +727,7 @@ update_note_meta(id, subject?, category?) -> NoteMeta  // sets status=manual
 delete_note(id)
 retry_enrichment(id)
 get_day(date: String) -> Vec<Note>
-list_days() -> Vec<DaySummary>                // date + note count
+list_days() -> Vec<DaySummary>                // date + note and page count + words in its notes
 list_categories() -> Vec<(String, u32)>      // in use, most used first
 category_names() -> Vec<String>               // every listed category
 search(query: String) -> Vec<Note>
@@ -766,8 +795,8 @@ src/
     (app)/plugin/[type]/+page.svelte  # a plugin's page
   hooks.client.ts     # loads the plugins before the first view
   lib/plugins/        # the plugin API (api.ts), its registry of contributions, the loader
-  plugins/            # the core plugins, one folder each (basics/)
-plugin-registry/      # a local stand-in for the GitHub registry, with example plugins (4.10)
+  plugins/            # the core plugins, one folder each (basics/, mentions/, stats/)
+plugin-registry/      # a local stand-in for the GitHub registry (4.10)
   lib/components/ (NoteCard, DayCalendar, CategoryList, SearchBar, SpaceSwitcher, Onboarding)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy

@@ -18,6 +18,8 @@ use crate::storage::{check_date, day_path, relative_day_path};
 pub struct DaySummary {
     pub date: String,
     pub count: usize,
+    /// How many words the day's notes hold, its pages left out.
+    pub words: usize,
 }
 
 /// Append a note to a day's file, today's unless another date is given, and
@@ -152,14 +154,18 @@ fn missing_page(date: &str, stub: daily_file::Stub) -> Note {
 #[tauri::command]
 pub async fn list_days(state: State<'_, AppState>) -> Result<Vec<DaySummary>, String> {
     let space = state.space()?;
-    let days = space
+    let index = space
         .index
         .read()
-        .map_err(|_| "index lock poisoned".to_string())?
-        .days();
-    Ok(days
+        .map_err(|_| "index lock poisoned".to_string())?;
+    Ok(index
+        .days()
         .into_iter()
-        .map(|(date, count)| DaySummary { date, count })
+        .map(|(date, count)| DaySummary {
+            words: index.words_on(&date),
+            date,
+            count,
+        })
         .collect())
 }
 

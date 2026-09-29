@@ -28,7 +28,6 @@ To publish for real, make `chainlist/scratchnote-plugins` hold
 and `README.md` at its root, and attach the files to a GitHub release tagged
 with the version. Nothing in the app changes.
 
-The two plugins here are examples of the API (PLUGINS.md): Mentions adds a
-widget and a page; Space stats adds a docked panel, a button above the day and
-settings. Inline syntax, a command with a hotkey and a toolbar button are in
-the Basics core plugin's Highlights, in `src/plugins/basics/highlights/`.
+The list is empty for now: its two example plugins became the Mentions and
+Stats core plugins, in `src/plugins/`, which show the API as well
+(PLUGINS.md). To try installing, add a plugin here laid out as above.

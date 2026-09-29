@@ -420,7 +420,7 @@
 	"tasks_none": "Keine offenen Aufgaben. Beginne eine Zeile in einer Notiz oder Seite mit - [ ], um eine hinzuzufügen.",
 	"tasks_show_in_day": "Am Tag anzeigen",
 	"command_group_plugins": "Plugins",
-	"settings_core_plugins_description": "Funktionen, die mit der App kommen. Schalte aus, was du nicht brauchst.",
+	"settings_core_plugins_description": "Funktionen, die mit der App kommen. Schalte ein, was du willst, und aus, was du nicht brauchst.",
 	"settings_community_plugins_description": "Funktionen, die andere geschrieben haben, aus der Community-Liste hinzugefügt.",
 	"plugins_group_core": "Kern-Plugins",
 	"plugins_group_community": "Community-Plugins",
@@ -458,8 +458,8 @@
 	"plugins_error_core_id": "Hat die ID eines Kern-Plugins",
 	"tasks_name": "Aufgaben",
 	"tasks_description": "Kästchen zum Abhaken in Notizen und Seiten, die Checklisten-Schaltfläche und alle offenen Aufgaben auf einer Seite.",
-	"tasks_setting_ribbon": "Schaltfläche über dem Tag",
-	"tasks_setting_ribbon_hint": "Öffnet die offenen Aufgaben, neben Alle Seiten.",
+	"tasks_setting_ribbon": "Schaltfläche links",
+	"tasks_setting_ribbon_hint": "Öffnet die offenen Aufgaben, aus jeder Ansicht.",
 	"tasks_setting_order": "Reihenfolge",
 	"tasks_setting_order_hint": "Mit welchen Aufgaben die Liste beginnt.",
 	"tasks_order_newest": "Neueste zuerst",
@@ -474,5 +474,102 @@
 	"highlights_color_yellow": "Gelb",
 	"highlights_color_green": "Grün",
 	"highlights_color_blue": "Blau",
-	"highlights_color_pink": "Rosa"
+	"highlights_color_pink": "Rosa",
+	"mentions_plugin_name": "Erwähnungen",
+	"mentions_plugin_description": "Schreibe @Name, um jemanden zu erwähnen. Ein Klick auf eine Erwähnung listet alle Notizen, die den Namen nennen.",
+	"mentions_chip_title": "Notizen, die {name} erwähnen",
+	"mentions_show_all": "Alle Erwähnungen anzeigen",
+	"mentions_none": "Noch keine Erwähnungen. Schreibe @Name in eine Notiz.",
+	"mentions_nothing": "Nichts erwähnt {name}.",
+	"stats_plugin_name": "Statistik",
+	"stats_plugin_description": "Ein Panel neben dem Tag: wie viel der Space enthält, deine Schreibserie und eine Heatmap der Tage, an denen du geschrieben hast.",
+	"stats_show": "Statistik anzeigen",
+	"stats_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Notiz oder Seite",
+				"countPlural=other": "Notizen und Seiten"
+			}
+		}
+	],
+	"stats_pages": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Seite",
+				"countPlural=other": "Seiten"
+			}
+		}
+	],
+	"stats_days": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Tag geschrieben",
+				"countPlural=other": "Tage geschrieben"
+			}
+		}
+	],
+	"stats_streak": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Tag in Folge",
+				"countPlural=other": "Tage in Folge"
+			}
+		}
+	],
+	"stats_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "Wort pro Notiz",
+				"countPlural=other": "Wörter pro Notiz"
+			}
+		}
+	],
+	"stats_last_weeks": "Die letzten {weeks} Wochen",
+	"stats_setting_weeks": "Angezeigte Wochen",
+	"stats_setting_weeks_hint": "Wie weit die Heatmap zurückreicht.",
+	"stats_weeks": "{weeks} Wochen",
+	"journal_plugin_name": "Tagebuchansicht",
+	"journal_plugin_description": "Deine Tage als Tagebuch. Blättere von einem Tag zum nächsten, mit den Bildern deiner Notizen eingeklebt.",
+	"journal_title": "Tagebuch",
+	"journal_open": "Tagebuch öffnen",
+	"journal_previous": "Vorherige Seite",
+	"journal_next": "Nächste Seite",
+	"journal_open_day": "Diesen Tag öffnen",
+	"journal_empty": "Noch nichts geschrieben. Deine Notizen werden diese Seiten füllen.",
+	"journal_continued": "{date}, Fortsetzung"
 }

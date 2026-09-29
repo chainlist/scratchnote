@@ -6,7 +6,7 @@
 //! plugins in the vault, so a synced root carries them along:
 //!
 //! - `plugins.json`: community plugins on or off, which are enabled, and
-//!   which core plugins are switched off.
+//!   which core plugins are switched off, or on for those that start off.
 //! - `plugins/<id>/`: an installed community plugin, `manifest.json`,
 //!   `main.js`, `styles.css` if it has one, and its `data.json`.
 //! - `core-plugins/<id>.json`: a core plugin's data. Core plugins are built
@@ -36,6 +36,8 @@ pub struct PluginState {
     pub enabled: Vec<String>,
     /// Core plugins switched off, by id. They are on unless listed here.
     pub core_disabled: Vec<String>,
+    /// Core plugins that start off, switched on, by id.
+    pub core_enabled: Vec<String>,
 }
 
 /// A plugin's `manifest.json`, as Obsidian's.
@@ -218,6 +220,7 @@ pub async fn set_plugins(
         community: plugins.community,
         enabled: clean_ids(plugins.enabled)?,
         core_disabled: clean_ids(plugins.core_disabled)?,
+        core_enabled: clean_ids(plugins.core_enabled)?,
     };
     save_state(&app, &state, plugins).await
 }
@@ -457,6 +460,20 @@ mod tests {
         let root = temp("state");
         assert_eq!(load_state(&root), PluginState::default());
         assert!(!load_state(&root).community);
+    }
+
+    #[test]
+    fn a_state_file_without_core_enabled_still_reads() {
+        let root = temp("older-state");
+        std::fs::create_dir_all(meta_dir(&root)).unwrap();
+        std::fs::write(
+            meta_dir(&root).join(STATE_FILE),
+            r#"{"community":true,"enabled":["x"],"coreDisabled":["basics"]}"#,
+        )
+        .unwrap();
+        let state = load_state(&root);
+        assert_eq!(state.core_disabled, vec!["basics"]);
+        assert!(state.core_enabled.is_empty());
     }
 
     #[test]

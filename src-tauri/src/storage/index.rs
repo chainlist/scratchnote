@@ -176,6 +176,13 @@ impl Index {
             .collect()
     }
 
+    /// How many words the notes of `date` hold, its pages left out.
+    pub fn words_on(&self, date: &str) -> usize {
+        self.by_date.get(date).map_or(0, |entries| {
+            entries.iter().map(|entry| words(&entry.body)).sum()
+        })
+    }
+
     pub fn len(&self) -> usize {
         self.by_date.values().map(Vec::len).sum::<usize>() + self.pages.len()
     }
@@ -349,6 +356,15 @@ fn parse_pages(root: &Path) -> Vec<IndexEntry> {
         }
     }
     pages
+}
+
+/// The runs of text between spaces that hold a letter or a digit, so a
+/// list's `-` or a task's box is not a word.
+fn words(text: &str) -> usize {
+    text.split_whitespace()
+        .filter(|token| !matches!(*token, "[x]" | "[X]"))
+        .filter(|token| token.chars().any(char::is_alphanumeric))
+        .count()
 }
 
 /// Reparse every daily file and page file under the root.
@@ -605,6 +621,32 @@ mod tests {
             index.days(),
             vec![("2026-09-24".into(), 1), ("2026-09-22".into(), 2)]
         );
+    }
+
+    #[test]
+    fn words_leave_out_pages_and_markdown_marks() {
+        let mut index = Index::default();
+        index.push(IndexEntry::from(&note(
+            "01AAA",
+            "2026-09-22",
+            "08:00",
+            "# Groceries\n- [ ] buy milk\n- [x] call Anna, 2 times",
+        )));
+        index.push(IndexEntry::from(&note(
+            "01BBB",
+            "2026-09-22",
+            "09:00",
+            "> fine",
+        )));
+        index.push(IndexEntry::from(&page(
+            "01CCC",
+            "2026-09-22",
+            "Plan",
+            "long page text",
+        )));
+
+        assert_eq!(index.words_on("2026-09-22"), 8);
+        assert_eq!(index.words_on("2026-09-23"), 0);
     }
 
     #[test]

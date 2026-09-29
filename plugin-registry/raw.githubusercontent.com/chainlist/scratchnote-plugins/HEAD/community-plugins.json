@@ -1,16 +1,1 @@
-[
-	{
-		"id": "mentions",
-		"name": "Mentions",
-		"author": "Scratchnote",
-		"description": "Write @name to mention someone. A click on a mention lists every note that names them.",
-		"repo": "chainlist/scratchnote-mentions"
-	},
-	{
-		"id": "space-stats",
-		"name": "Space stats",
-		"author": "Scratchnote",
-		"description": "A panel beside the day with how much the space holds, your writing streak, and a heatmap of the days you wrote.",
-		"repo": "chainlist/scratchnote-space-stats"
-	}
-]
+[]

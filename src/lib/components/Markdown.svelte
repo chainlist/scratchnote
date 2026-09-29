@@ -1,21 +1,24 @@
 <script lang="ts">
+	import type { Attachment } from 'svelte/attachments';
 	import { openAttachment, openLink } from '$lib/api';
 	import { attachmentUrl } from '$lib/attachments.svelte';
-	import { cardName, fileName, fileType, renderLines, toggleTask } from '$lib/markdown';
-	import { m } from '$lib/paraglide/messages';
+	import { cardName, fileName, fileType, renderLines, type WidgetRender } from '$lib/markdown';
 
 	let {
 		text,
 		links = true,
-		ontoggle,
+		onchange,
 		class: className = ''
 	}: {
 		/** A note body, in markdown. */
 		text: string;
 		/** Off for a preview: its links are drawn but neither open nor take focus, and an attachment shows as its name. */
 		links?: boolean;
-		/** A task box was clicked: the text with it ticked or cleared. Left out, the boxes do not click. */
-		ontoggle?: (text: string) => void;
+		/**
+		 * A plugin's widget changed the text, such as a task's box clicked:
+		 * the new text. Left out, widgets cannot change it.
+		 */
+		onchange?: (text: string) => void;
 		class?: string;
 	} = $props();
 
@@ -32,6 +35,30 @@
 	function openFile(event: MouseEvent, path: string) {
 		if (event.detail < 2) void openAttachment(path);
 	}
+
+	/** What a plugin draws for the node `nodeText` at `from`, put in place. */
+	function widget(render: WidgetRender, nodeText: string, from: number): Attachment<HTMLElement> {
+		return (host) => {
+			const change = onchange;
+			let drawn: HTMLElement;
+			try {
+				drawn = render({
+					text: nodeText,
+					where: links ? 'note' : 'preview',
+					editable: links && change !== undefined,
+					update: (next) =>
+						change?.(text.slice(0, from) + next + text.slice(from + nodeText.length))
+				});
+			} catch (e) {
+				// A faulty plugin leaves the text as typed rather than the card blank.
+				console.error(e);
+				host.textContent = nodeText;
+				return;
+			}
+			host.append(drawn);
+			return () => drawn.remove();
+		};
+	}
 </script>
 
 <!-- One block per line of the note, laid out as the editor lays out its
@@ -40,15 +67,10 @@
 	{#each lines as line, i (i)}
 		<div class="md-line {line.class}" style={line.style}>
 			{#each line.parts as part, k (k)}{#if 'bullet' in part}<span class="md-bullet"
-					></span>{:else if 'task' in part}{@const at = part.task}<button
-						type="button"
-						role="checkbox"
-						aria-checked={part.done}
-						aria-label={m.note_task_done()}
-						class={['md-task', part.done && 'md-ticked']}
-						disabled={!ontoggle}
-						onclick={() => ontoggle?.(toggleTask(text, at))}
-					></button>{:else if 'attachment' in part}{@const path = part.attachment}{@const name =
+					></span>{:else if 'widget' in part}<span
+						class="md-widget"
+						{@attach widget(part.widget, part.text, part.from)}
+					></span>{:else if 'attachment' in part}{@const path = part.attachment}{@const name =
 						part.name || fileName(path)}{#if !links}<span class="md-chip">{name}</span
 						>{:else if part.image}<button
 							type="button"

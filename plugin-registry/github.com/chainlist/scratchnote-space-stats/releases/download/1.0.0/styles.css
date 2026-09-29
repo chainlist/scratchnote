@@ -1,0 +1,60 @@
+.stats-figures {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.5rem;
+}
+.stats-figure {
+	display: flex;
+	flex-direction: column;
+	gap: 0.125rem;
+	border: 1px solid var(--border);
+	border-radius: 0.5rem;
+	padding: 0.625rem 0.75rem;
+	color: var(--color-neutral-500);
+	font-size: 0.75rem;
+}
+.stats-value {
+	color: var(--color-neutral-100);
+	font-size: 1.5rem;
+	font-weight: 600;
+	line-height: 1.2;
+	font-variant-numeric: tabular-nums;
+}
+
+.stats-heading {
+	margin: 1.25rem 0 0.5rem;
+	color: var(--color-neutral-500);
+	font-size: 0.75rem;
+	font-weight: 500;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+/* One column a week, a row a weekday; the accent grows with the notes. */
+.stats-heatmap {
+	display: grid;
+	grid-auto-flow: column;
+	grid-template-rows: repeat(7, 1fr);
+	grid-template-columns: repeat(var(--weeks), 1fr);
+	gap: 3px;
+	max-width: calc(var(--weeks) * 1.1rem);
+}
+.stats-day {
+	aspect-ratio: 1;
+	border-radius: 3px;
+	background: color-mix(
+		in oklab,
+		var(--primary) calc(15% + var(--level) * 85%),
+		var(--color-neutral-800)
+	);
+	cursor: pointer;
+}
+.stats-day.stats-none {
+	background: var(--color-neutral-800);
+}
+.stats-day:hover:not(:disabled) {
+	outline: 1px solid var(--color-neutral-400);
+}
+.stats-day:disabled {
+	visibility: hidden;
+}

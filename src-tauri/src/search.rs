@@ -102,17 +102,14 @@ pub fn search(index: &Index, raw: &str) -> Vec<Note> {
     hits
 }
 
-/// Notes and pages with a task box, open or ticked, newest first. Anything
-/// that reads `[ ]` or `[x]` comes along: the tasks view parses the markdown
-/// as the cards do and keeps the real tasks (SPEC 3.8).
-pub fn with_tasks(index: &Index) -> Vec<Note> {
+/// Notes and pages whose body holds any of `needles` as typed, newest first.
+/// A plugin asks for the markup it reads, `[ ]` and `[x]` for the tasks
+/// view (SPEC 3.8), and parses the markdown itself to keep the real ones.
+/// An empty needle matches every note.
+pub fn containing(index: &Index, needles: &[String]) -> Vec<Note> {
     let mut hits: Vec<Note> = index
         .entries()
-        .filter(|entry| {
-            ["[ ]", "[x]", "[X]"]
-                .iter()
-                .any(|mark| entry.body.contains(mark))
-        })
+        .filter(|entry| needles.iter().any(|needle| entry.body.contains(needle.as_str())))
         .map(|entry| entry.to_note())
         .collect();
 
@@ -272,13 +269,16 @@ mod tests {
     }
 
     #[test]
-    fn with_tasks_keeps_notes_with_a_task_box_open_or_ticked() {
+    fn containing_keeps_notes_with_any_needle_newest_first() {
         let idx = index(&[
             note("01A", "2026-09-21", "08:00", "- [ ] call the bank", None),
             note("01B", "2026-09-22", "08:00", "no tasks here", None),
             note("01C", "2026-09-22", "09:00", "Shopping\n- [X] milk", None),
         ]);
-        assert_eq!(ids(&with_tasks(&idx)), vec!["01C", "01A"]);
+        let boxes = ["[ ]", "[x]", "[X]"].map(String::from);
+        assert_eq!(ids(&containing(&idx, &boxes)), vec!["01C", "01A"]);
+        assert_eq!(ids(&containing(&idx, &[String::new()])), vec!["01C", "01B", "01A"]);
+        assert!(containing(&idx, &[]).is_empty());
     }
 
     #[test]

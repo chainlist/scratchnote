@@ -1,4 +1,5 @@
 import { createContext, tick, type Snippet } from 'svelte';
+import { EditorView } from '@codemirror/view';
 import { goto, invalidate } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { navigating, page } from '$app/state';
@@ -17,6 +18,7 @@ import {
 } from '$lib/api';
 import { categoryLabel } from '$lib/categories';
 import { addToPageDraft } from '$lib/page-draft';
+import { notesChanged, type WorkspaceHost } from '$lib/plugins/app';
 import { toggleCategory } from '$lib/query';
 
 /** A view's title row, which the top bar shows a copy of once it scrolls away. */
@@ -33,9 +35,10 @@ export interface ViewTitle {
 /**
  * What the main window's views share: the day they go back to, the docked
  * page, the dialogs, and what every card can do. The app layout makes one and
- * each view reaches it with `getShell`.
+ * each view reaches it with `getShell`. The plugins reach the views through
+ * it too, as `app.workspace` (SPEC 3.9).
  */
-export class Shell {
+export class Shell implements WorkspaceHost {
 	/** The day last shown: the one the views go back to and a new page goes on. */
 	day = $state('');
 	error = $state<string | null>(null);
@@ -58,6 +61,10 @@ export class Shell {
 	turning = $state<Note | null>(null);
 	/** The page docked on the right, to write in while the day stays in reach. */
 	docked = $state<Note | null>(null);
+	/** A plugin's view docked on the right instead, by its type. */
+	panel = $state<string | null>(null);
+	/** The editor the command center was opened from, for commands on its text. */
+	paletteEditor = $state.raw<EditorView | null>(null);
 	/** The command center's query, kept between openings. */
 	query = $state('');
 	paletteOpen = $state(false);
@@ -88,6 +95,8 @@ export class Shell {
 		while (navigating.complete) await navigating.complete.catch(() => {});
 		await invalidate('app:notes');
 		this.error = null;
+		// The plugins' pages and panels load their notes themselves.
+		notesChanged();
 	};
 
 	showError = (message: string) => {
@@ -127,7 +136,40 @@ export class Shell {
 
 	showPages = () => goto(resolve('/pages/'));
 
-	showTasks = () => goto(resolve('/tasks/'));
+	/** A plugin's page, `/plugin/<type>/`, with its query string. */
+	openPluginPage = (type: string, params: Record<string, string> = {}) => {
+		const query = Object.entries(params)
+			.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+			.join('&');
+		// resolve() takes no query string, so the query follows the path it gives.
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		return goto(`${resolve(`/plugin/${type}/`)}${query ? `?${query}` : ''}`);
+	};
+
+	/** The dock holds one thing: a page, or a plugin's view. */
+	dock = (note: Note) => {
+		this.panel = null;
+		this.docked = note;
+	};
+
+	openPanel = (type: string) => {
+		this.docked = null;
+		this.panel = type;
+	};
+
+	closePanel = (type?: string) => {
+		if (type === undefined || this.panel === type) this.panel = null;
+	};
+
+	/** A page open in the page view or the dock, which releases it when it closes. */
+	isPageOpen = (id: string) => this.docked?.id === id || page.params.id === id;
+
+	/** The command center, told which editor it was opened from. */
+	openPalette = () => {
+		const text = document.activeElement?.closest('.cm-editor');
+		this.paletteEditor = text instanceof HTMLElement ? EditorView.findFromDOM(text) : null;
+		this.paletteOpen = true;
+	};
 
 	/** Every note a query matches, from the command center's "See all". */
 	showResults = async (q: string) => {
@@ -269,7 +311,7 @@ export class Shell {
 		oncategory: this.openCategory,
 		onsimilar: this.canSimilar ? this.showSimilar : undefined,
 		onopen: (note: Note) => void this.openPage(note),
-		ondock: (note: Note) => (this.docked = note),
+		ondock: this.dock,
 		onpage: (note: Note) => (this.turning = note),
 		onerror: this.showError
 	});

@@ -7,7 +7,7 @@ Scratchnote is a local-first desktop app for frictionless capture. The user hits
 ### Goals
 
 - Capture in under 2 seconds from hotkey to saved. The LLM never blocks saving.
-- 100% local: the only network calls are downloading a model and, when the user explicitly clicks it, checking whether a newer revision of the installed model exists. Nothing contacts the network on a timer or at launch.
+- 100% local: the only network calls are downloading a model and, when the user explicitly clicks it, checking whether a newer revision of the installed model exists. Nothing contacts the network on a timer or at launch. Once the user turns community plugins on (3.9), browsing, installing and updating them fetches from their registry, each time asked for.
 - Plain markdown files as the source of truth. The user can open, edit, sync (git, Syncthing, iCloud) or grep them without the app.
 - Categories stay few and consistent over time: the model picks from the user's list and never invents one.
 
@@ -270,10 +270,10 @@ Only one instance runs. Launching the app again brings the running one's main wi
 
 Note bodies are shown as markdown wherever they are read or written: the capture window, adding a note, inline edit, the edit dialog, the note cards and the previews in the delete dialog and above similar notes.
 
-- The minimum: bold, italic, strikethrough, inline code, links (`[text](url)`, `<url>` and bare `https://`, `www.` and email addresses), bullet and numbered lists, tasks (`- [ ]` and `- [x]`), `#` headings, quotes, fenced code and attachments (3.7). Anything else shows as typed.
+- The minimum: bold, italic, strikethrough, inline code, links (`[text](url)`, `<url>` and bare `https://`, `www.` and email addresses), bullet and numbered lists, tasks (`- [ ]` and `- [x]`), highlights (`==text==`), `#` headings, quotes, fenced code and attachments (3.7). Anything else shows as typed. Tasks and highlights come from the Basics core plugin (3.8), and plugins can add syntax of their own (3.9).
 - The editor is a live preview (CodeMirror): markup is hidden except on the lines the cursor or selection is on, where it shows dimmed so it can be edited. What is typed is saved byte for byte, so the markdown in the file never changes behind the user's back.
 - A line break is a line break, as it was in the plain text input, rather than markdown's joined paragraph lines.
-- A toolbar at the top of every editor writes the markup for those who do not know it: bold, italic, a bulleted list, a checklist, a link, and the paperclip (3.7). Bold and italic go on the selection, else on the word the cursor is in, else on what is typed next; the lists on every selected line. A button shows pressed where its format already is, and a press there takes it away, except at the end of bold or italic text, where the cursor steps out of it so typing goes on plain. A link wraps the selection or the word as `[text](url)` with `url` selected, for the address to be pasted over it. `Ctrl+B`, `Ctrl+I` and `Ctrl+K` (`Cmd` on macOS) do bold, italic and link. On a page the toolbar stays in view while the text scrolls.
+- A toolbar at the top of every editor writes the markup for those who do not know it: bold, italic, a highlight and a checklist (from Basics), a bulleted list, a link, and the paperclip (3.7), with the plugins' buttons in the group they name. Bold and italic go on the selection, else on the word the cursor is in, else on what is typed next; the lists on every selected line. A button shows pressed where its format already is, and a press there takes it away, except at the end of bold or italic text, where the cursor steps out of it so typing goes on plain. A link wraps the selection or the word as `[text](url)` with `url` selected, for the address to be pasted over it. `Ctrl+B`, `Ctrl+I` and `Ctrl+K` (`Cmd` on macOS) do bold, italic and link. On a page the toolbar stays in view while the text scrolls.
 - Enter carries a list or quote on to the next line; Enter on an empty item ends it.
 - A link opens in the system browser: a click on a card, Ctrl or Cmd and a click in the editor. Only `http`, `https` and `mailto` links open. Links in previews are drawn but do not open.
 - A task shows a checkbox in place of its bullet. A click on it in a card ticks or clears it and saves the note at once; in the editor it changes the text being edited. Only the `[ ]` or `[x]` changes, and a body that changed in nothing else keeps its subject and category: it does not go back to the model.
@@ -298,11 +298,11 @@ A page is a note for longer writing, such as meeting notes. It has a title and a
 The app updates itself from the project's GitHub Releases.
 
 - It checks at launch and once a day while it runs. When a newer release is out, the top bar offers Update to its version, with the installed one on hover. Nothing downloads until it is clicked; then the update downloads, installs as the same kind of package the app came in, and restarts the app. A failed install says why on hover and offers a retry. A failed check says nothing, because the app works offline. Dev builds do not check.
-- Check for updates in Settings > About looks at once. It says Up to date when nothing is newer, and says why when the check fails, since it was asked for. When a release is out, the button becomes Update to its version, which installs as the top bar's does; either one's find shows in both. Dev builds do not show it.
+- Check for updates in Settings > General looks at once. It says Up to date when nothing is newer, and says why when the check fails, since it was asked for. When a release is out, the button becomes Update to its version, which installs as the top bar's does; either one's find shows in both. Dev builds do not show it.
 - Every release is signed with the project's updater key, and the app installs only what that key signed. The signature must also name the version it was signed for (`requireSignedVersion`), so an altered `latest.json` cannot pass an older release off as a newer one.
 - The private key stays out of the repository: with the maintainer, and as the CI secret `TAURI_SIGNING_PRIVATE_KEY`, with `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` beside it if the key has a password. Losing the key leaves every installed copy unable to update.
 - Only the release build in CI signs, by turning on `bundle.createUpdaterArtifacts` for that build alone, so a local `pnpm tauri build` needs no key.
-- After an update, the first launch shows What's new: the CHANGELOG.md entries of every release since the version last opened, built into the app so it needs no network. A sidebar lists each kind of change (features, bug fixes and so on), and each kind shows its entries release by release, newest first. The kinds and dates follow the interface language; the entries stay in English, with the commit links taken out. Settings records that version as `lastSeenVersion`; finishing the onboarding sets it, so a new install is not shown notes, and a settings file without it is from 0.1.0. News in Settings > About shows every release's notes again.
+- After an update, the first launch shows What's new: the CHANGELOG.md entries of every release since the version last opened, built into the app so it needs no network. A sidebar lists each kind of change (features, bug fixes and so on), and each kind shows its entries release by release, newest first. The kinds and dates follow the interface language; the entries stay in English, with the commit links taken out. Settings records that version as `lastSeenVersion`; finishing the onboarding sets it, so a new install is not shown notes, and a settings file without it is from 0.1.0. News in Settings > General shows every release's notes again.
 
 ### 3.7 Attachments
 
@@ -315,15 +315,43 @@ A note or a page can carry files: screenshots, photos, PDFs, anything. Each is c
 - Deleting a note, a page or a link leaves the file where it is. Files nothing links to are removed by hand.
 - Search, chat, the models and the index see the link as part of the text. Nothing reads what is inside an attachment.
 
-### 3.8 Tasks
+### 3.8 Basics
+
+Basics is a core plugin (3.9), built on the plugin API in `src/plugins/basics/`: the markdown most notes want beyond the minimum, in parts the user switches on and off one by one. Each part is a child of the plugin, so switching one off takes away everything it added and leaves the other. Switching Basics off in Settings > Core plugins takes both away.
+
+- Its settings tab has a section per part: the part's name, what it does, its switch, and its settings, which show while it is on. Both parts are on by default.
+- Its data, `core-plugins/basics.json`, holds each part's switch and settings (4.9).
+
+**Tasks**: the task syntax and its boxes (3.4), the checklist button, and Open tasks. Switched off, `- [ ]` shows as typed, the Bulleted list button treats the box as text, and the button, the view and its command go. The backend still knows the syntax: a body that changed only in its boxes keeps its labels (3.4), and the embedding model reads a box as words (5.2).
 
 Open tasks lists every task of the space not yet ticked, in notes and pages alike, so a `- [ ]` jotted in the capture window does not sink out of sight with its day.
 
-- The button beside All pages above the day opens it, as does the command center.
-- Newest first, one row per note or page: its date and time on the left, which show the note on its day or open the page, and its open tasks on the right, each as the first line of its list item. A page's title shows above its tasks.
+- The button beside All pages above the day opens it, as does the command center. It is the plugin's page, `/plugin/tasks/`.
+- Its section in the settings takes the button above the day away, and orders the list newest or oldest first.
+- One item per note or page, on a timeline drawn as the day's, a page with its icon on the rail: its date and time on the left, which show the note on its day or open the page, and its open tasks on the right, each as the first line of its list item. A page's title shows above its tasks.
 - A click on a box ticks the task and saves the note or page at once, as on a card (3.4): only the box changes, so it keeps its subject and category. A task ticked here stays in the list, ticked, until the view closes, so a box ticked by mistake can be cleared again.
 - The title counts the open tasks. With none, the view says how to write one.
-- The tasks are read from the markdown, through the same code as the cards. Search by meaning cannot do this: an open task and a done one embed almost alike.
+- The tasks are read from the markdown, through the same code as the cards: the backend hands over the notes whose text holds a box (`notes_containing`), and the plugin parses them. Search by meaning cannot do this: an open task and a done one embed almost alike.
+
+**Highlights**: text between `==` is drawn on a band of color, its `==` hidden off the line being edited as bold's `**` are. `==` opens only before text and closes only after it, and `===` is not a highlight. The highlighter on the toolbar, beside bold and italic, and Highlight in the command center (from an editor) or `Ctrl+Shift+H` (`Cmd` on macOS) put the selection or the word in `==`, or take it out. Its section in the settings picks the color: yellow (the default), green, blue, pink, or the accent. Switched off, `==text==` shows as typed. The markdown is Obsidian's, so other editors read it as a highlight too.
+
+### 3.9 Plugins
+
+Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, commands in the command center, buttons on the editor's toolbar and above the day, panels docked on the right, pages of their own, and settings tabs. They are trusted code, not sandboxed: a sandbox could not reach the editor, and Obsidian's model is the one users know.
+
+- **Core plugins** ship with the app and are on unless switched off. Each is a folder of `src/plugins/`, written against the same API a community plugin has, so what a core plugin does a community one can do too. Basics (3.8) is the first.
+- **Community plugins** are written by other people and installed from the registry (4.10). They are off as a whole until the user turns them on in Settings > Community plugins, past a warning that a plugin runs with the app's own access: it can read and change the notes, reach the internet and run programs. While they are off the backend hands out no plugin code, whatever the webview asks.
+- The two have a settings tab each, Core plugins above Community plugins, so the app's own features and other people's code are never managed in one list. Core plugins lists each core plugin with its switch. Community plugins has the switch for community plugins, then, once on, Browse and Check for updates, and the installed plugins, each with its version, author, description, a switch, and Uninstall, which asks first. A plugin that failed to load says why under its description.
+- Browse lists the registry's plugins, searched by name, author and description; one of them shows its details and its README, drawn as a note is, with Install, or Update to a newer version, and its switch once installed. Installing leaves the plugin off. Check for updates asks the registry for the latest version of each installed plugin and offers Update where it is newer.
+- A plugin with settings has a tab of its own in the settings sidebar, under Core plugins or Community plugins, as in Obsidian. A gear on its row in Core plugins or Community plugins opens it. A tab is drawn when it shows, and when it goes, with its plugin switched off, the settings go back to that list.
+- Switching a plugin on or off, installing, updating and uninstalling apply at once in both windows, without a reload: what it added comes or goes, and every card and editor redraws with the syntax in use. The capture window loads the plugins too, for the editor's syntax and toolbar.
+- A plugin's commands show in the command center, under Plugins while the query is empty and with the app's own commands while it matches their names, after the notes, so Enter still lists the notes. A command on the text shows only when the command center was opened from an editor. A command's hotkey works in the main window; one on the text works in any editor.
+- A plugin draws a list of notes, or of anything else at a time, on the day's own timeline: the app draws the time, the rail and its mark with the day's component, and the plugin the body, in any framework. So every timeline looks the same, and follows the day's when it changes.
+- A plugin's view docks on the right where a page docks, one at a time: docking a page closes the view, and the other way round. A plugin's page takes the timeline's place, at `/plugin/<type>/` with its query string, with its title and a way back, as the app's own views have.
+- The plugins load before the first view, so the first card is drawn with their syntax. The app waits two seconds at most on a plugin that loads asynchronously.
+- Each window times its startup: loading the app, the wait on the plugins (reading the plugin list, each plugin's load, listening for changes), and the first view, from when the window began loading until its first view is up. It logs them to its console, and Settings > General shows the main window's total under the version, with Details for every step.
+- A plugin that throws, while loading, drawing a widget, or running a command, is reported and the rest of the app carries on: a widget that fails leaves its text as typed.
+- PLUGINS.md is the guide for authors: the files, the API, and how to publish.
 
 ## 4. Storage
 
@@ -336,6 +364,9 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
   .scratchnote/
     settings.json
     spaces.json      # open space
+    plugins.json     # community plugins on or off, which are enabled (4.9)
+    plugins/         # installed community plugins, one folder each (4.9)
+    core-plugins/    # the core plugins' data, one file each (4.9)
     trash/           # deleted spaces, recoverable
   spaces/
     Personal/        # one folder per space, named after it
@@ -454,6 +485,7 @@ A page (3.5) is a file of its own under the space's `pages/` folder:
 
 ```markdown
 <!-- sn:page id=01J9ABC0 day=2026-09-22 time=10:00 status=done hash=a1b2c3d4 lang=en -->
+
 # Weekly sync, platform team
 
 > #infrastructure
@@ -465,6 +497,7 @@ The day's file holds a stub where the page belongs, so the day reads whole in ot
 
 ```markdown
 <!-- sn:page id=01J9ABC0 time=10:00 -->
+
 [Weekly sync, platform team](<../../pages/2026/2026-09-22 Weekly sync, platform team.md>)
 <!-- sn:end -->
 ```
@@ -497,6 +530,42 @@ Rules:
 - An attachment is a new file that is never rewritten, so it does not go through the single writer (4.3): it is written in place and fsynced, and a copy that fails is removed. Files dropped or picked are all checked before any is copied, so a folder among them copies nothing. The watcher ignores the folder.
 - Nothing indexes attachments: the links in the text are all there is.
 - The webview reads attachments through the `attachment` protocol, `attachment://localhost/<space>/attachments/...` (`http://attachment.localhost/...` on Windows), which serves only files inside a space's `attachments/` folder. It is registered in code rather than with Tauri's asset protocol, whose scope is fixed in the config while the notes root is chosen at runtime. The space is in the path, so files of the same name in two spaces are never taken for one another's cached image. Its responses carry `Content-Security-Policy: sandbox`, so an SVG opened as a page runs no script.
+
+### 4.9 Plugins
+
+Plugins (3.9) live in the notes root's `.scratchnote/`, as Obsidian keeps them in the vault, so a root synced to another machine brings its plugins along.
+
+```
+.scratchnote/
+  plugins.json            # {"community": false, "enabled": ["mentions"], "coreDisabled": []}
+  plugins/
+    mentions/
+      manifest.json       # {"id", "name", "version", "minAppVersion", "description", "author", "authorUrl"}
+      main.js             # a CommonJS module exporting the plugin's class
+      styles.css          # optional, added while the plugin is on
+      data.json           # what the plugin saved (saveData), kept through updates
+  core-plugins/
+    basics.json           # a core plugin's data
+```
+
+Rules:
+
+- `plugins.json` holds whether community plugins are on (off by default and when the file is missing), the ids of the community plugins enabled, and the core plugins switched off. Core plugins are on unless listed. It and the data files are written through the single writer (4.3).
+- An id is lowercase letters, digits and dashes, at most 64 characters, not starting with a dash: a folder name everywhere. A community plugin with a core plugin's id does not load.
+- A folder of `plugins/` is an installed plugin when its name is a valid id, it has a `main.js`, and its `manifest.json` carries that id. Folders starting with a dot are installs under way.
+- A plugin is installed whole or not at all: its release is written to `.<id>.new`, the installed one, if any, is moved to `.<id>.old` with its `data.json` copied over first, and the new folder takes its place. Plugin files are replaced as a folder, so they do not go through the single writer, as attachments do not (4.8). Uninstalling removes the folder, data included, and the id from `enabled`.
+- A plugin whose `minAppVersion` is newer than the app is neither installed nor loaded.
+- The webview runs `main.js` as Obsidian does: as a CommonJS module, with a `require` that gives `scratchnote` (the plugin API) and the app's own copies of `@codemirror/state`, `@codemirror/view`, `@codemirror/language`, `@lezer/common` and `@lezer/markdown`, so a plugin's syntax and editor extensions are made of the same classes as the editor's.
+
+### 4.10 Plugin registry
+
+Community plugins come from GitHub, as Obsidian's do.
+
+- The repository `chainlist/scratchnote-plugins` holds `community-plugins.json`, the list of plugins: each one's `id`, `name`, `author`, `description` and `repo`, its GitHub repository as `owner/name`. Lines that are not well formed are left out.
+- A plugin's repository holds its `manifest.json` and `README.md` at the head of its default branch, read from `https://raw.githubusercontent.com/<repo>/HEAD/<file>`. The manifest's version is the latest release; the README shows in its details.
+- Installing reads that version's release, `https://github.com/<repo>/releases/download/<version>/<file>`: `manifest.json` and `main.js`, and `styles.css` when there is one. The released manifest must carry the id asked for and the same version. A file over 10 MB is refused.
+- A local folder can stand in for GitHub: `SCRATCHNOTE_PLUGIN_REGISTRY` names one, and a dev build reads the repository's own `plugin-registry/`. It mirrors the URLs host first, `<folder>/raw.githubusercontent.com/<repo>/HEAD/manifest.json`, so a folder that works is a GitHub layout that works. Repositories and versions are checked before any of them becomes a path, so none reaches outside the folder.
+- Nothing is fetched until the user asks: the list when Browse opens, a plugin's details when it is picked, its release when it is installed or updated, and every installed plugin's manifest on Check for updates.
 
 ## 5. Enrichment (LLM)
 
@@ -614,7 +683,10 @@ The grammar only lets the model write a listed category, so nothing it returns n
 - Hide immediately after save vs. show toast
 - Rebuild index
 - Launch at login
-- About: the app's icon, name and version, Check for updates, and News for the release notes of every version (3.6)
+- General also shows the app's icon, name and version, Check for updates, and News for the release notes of every version (3.6), and how long the window took to start, with Details for each step and plugin (3.9)
+- Core plugins: each core plugin's switch (3.9)
+- Community plugins: on or off, browsed, installed, updated and removed (3.9)
+- Each plugin's own tab, under Core plugins or Community plugins in the sidebar (3.9)
 - Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It also sets the language new subjects are written in and the language categories are shown in (the OS language under System, English when that is not one of the six); note bodies are untouched, and chat replies follow the language the user writes in.
 
 ## 8. Tauri Commands (backend API)
@@ -631,7 +703,7 @@ list_categories() -> Vec<(String, u32)>      // in use, most used first
 category_names() -> Vec<String>               // every listed category
 search(query: String) -> Vec<Note>
 similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
-task_notes() -> Vec<Note>                   // every note and page with a task box, newest first
+notes_containing(needles) -> Vec<Note>      // every note and page whose body holds any needle as typed, newest first
 get_settings() / set_settings(...)
 model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle | disabled
 download_model(variant)
@@ -655,13 +727,21 @@ capture_to_page(body)                         // hides the capture window, opens
 add_attachments(paths) -> Vec<Attachment>     // copies files into the open space's attachments/; every path checked first
 save_attachment(bytes) -> Attachment          // a pasted file as the raw body, its name in the `x-name` header
 open_attachment(path)                         // in its own app; path from the space's folder, inside attachments/
+plugins_view() -> PluginsView                 // plugins.json and every installed community plugin's manifest
+set_plugins(plugins) -> PluginsView           // community on or off, enabled, core switched off; every window follows
+plugin_code(id) -> { main, styles? }          // refused unless community plugins are on and this one is enabled
+plugin_data(id, core) / save_plugin_data(id, core, data)  // a plugin's data.json, or core-plugins/<id>.json
+browse_plugins() -> Vec<RegistryEntry>        // community-plugins.json; refused while community plugins are off
+plugin_details(repo) -> { manifest, readme? } // the latest manifest and the README at the repository's head
+install_plugin(repo, id) -> PluginsView       // its latest release, over an older one; data kept, left off
+uninstall_plugin(id) -> PluginsView           // its folder and data go, and it is switched off
 ```
 
 A page comes back as a `Note` with `kind: "page"` and its title as `subject`. `get_day` lists a day's notes and pages by time, and a stub whose page is gone as a `Note` with `missing: true` and the stub's link text as its subject.
 
 An `Attachment` is `{ name, path }`: the name the file came with, and where it was copied from the space's folder (`attachments/2026/2026-09-28 image.png`). The webview loads attachments through the `attachment` protocol (4.8).
 
-Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` (to the main window). The UI updates live when enrichment finishes.
+Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` (to the main window), `plugins-changed { ...PluginsView }`, `plugin-data-changed { id, window }`. The UI updates live when enrichment finishes.
 
 ## 9. Project Structure
 
@@ -676,12 +756,18 @@ src-tauri/src/
   search.rs
   settings.rs
   attachments.rs     # copying files in, the `attachment` protocol, opening them
+  plugins/ (mod.rs state, code, data, install; registry.rs GitHub or a folder)
 src/
   routes/
     +layout.ts        # ssr = false, prerender = true
     +page.svelte      # main window
     capture/+page.svelte   # quick capture window (Tauri window loads /capture)
     settings/+page.svelte
+    (app)/plugin/[type]/+page.svelte  # a plugin's page
+  hooks.client.ts     # loads the plugins before the first view
+  lib/plugins/        # the plugin API (api.ts), its registry of contributions, the loader
+  plugins/            # the core plugins, one folder each (basics/)
+plugin-registry/      # a local stand-in for the GitHub registry, with example plugins (4.10)
   lib/components/ (NoteCard, DayCalendar, CategoryList, SearchBar, SpaceSwitcher, Onboarding)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy
@@ -714,6 +800,6 @@ Build in this order; each milestone should be usable on its own.
 
 ## 12. Testing
 
-- Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), category name cleaning, hash change detection, queue retry logic, page file round-trip, stubs next to note blocks, page file names.
+- Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), category name cleaning, hash change detection, queue retry logic, page file round-trip, stubs next to note blocks, page file names, plugin ids, repositories and versions that cannot leave the registry folder, the registry's URLs mapped onto a folder, a plugin update that keeps its data, what counts as installed, version order.
 - Golden tests for enrichment: 20 sample notes (English and French) with a stub model returning fixed JSON, verifying write-back format.
 - An optional integration test that runs the real Light model on 5 notes and asserts schema validity (skipped in CI if no model present).

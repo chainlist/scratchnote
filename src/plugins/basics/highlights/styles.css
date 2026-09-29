@@ -1,0 +1,28 @@
+/* A highlight's color, chosen in the settings and set on the page. */
+:root {
+	--hl-color: #facc15;
+}
+:root[data-highlights='green'] {
+	--hl-color: #4ade80;
+}
+:root[data-highlights='blue'] {
+	--hl-color: #60a5fa;
+}
+:root[data-highlights='pink'] {
+	--hl-color: #f472b6;
+}
+:root[data-highlights='accent'] {
+	--hl-color: var(--primary);
+}
+
+.hl-mark {
+	border-radius: 0.2em;
+	padding: 0 0.1em;
+	background: color-mix(in oklab, var(--hl-color) 32%, transparent);
+	box-decoration-break: clone;
+}
+
+/* A waiting note's glowing copy draws letters only. */
+.note-glow-text .hl-mark {
+	background: none;
+}

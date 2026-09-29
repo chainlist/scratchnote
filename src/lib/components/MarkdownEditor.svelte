@@ -2,7 +2,14 @@
 	import { history, historyKeymap, standardKeymap } from '@codemirror/commands';
 	import { commonmarkLanguage, markdownKeymap } from '@codemirror/lang-markdown';
 	import { Language, syntaxTree } from '@codemirror/language';
-	import { EditorSelection, EditorState, Prec, type Range } from '@codemirror/state';
+	import {
+		Compartment,
+		EditorSelection,
+		EditorState,
+		Prec,
+		type Extension,
+		type Range
+	} from '@codemirror/state';
 	import {
 		Decoration,
 		EditorView,
@@ -13,7 +20,7 @@
 		type DecorationSet,
 		type ViewUpdate
 	} from '@codemirror/view';
-	import type { MarkdownParser } from '@lezer/markdown';
+	import type { MarkdownExtension, MarkdownParser } from '@lezer/markdown';
 	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import { open as pickFiles } from '@tauri-apps/plugin-dialog';
 	import {
@@ -24,17 +31,18 @@
 		type Attachment
 	} from '$lib/api';
 	import { attachmentUrl } from '$lib/attachments.svelte';
-	import { bold, bullets, checklist, formats, italic, link } from '$lib/format';
-	import { attachmentLink, cardName, fileName, fileType, preview, syntax } from '$lib/markdown';
-
-	// CommonMark's language data, so the list keys below recognise it, with
-	// the same syntax the read-only view parses.
-	const language = new Language(
-		commonmarkLanguage.data,
-		(commonmarkLanguage.parser as MarkdownParser).configure(syntax),
-		[],
-		'markdown'
-	);
+	import { bold, bullets, formats, italic, link } from '$lib/format';
+	import {
+		attachmentLink,
+		cardName,
+		fileName,
+		fileType,
+		markdownExtensions,
+		preview,
+		type WidgetRender
+	} from '$lib/markdown';
+	import { runCommand } from '$lib/plugins/commands';
+	import { registry } from '$lib/plugins/registry.svelte';
 
 	class Bullet extends WidgetType {
 		eq() {
@@ -48,28 +56,48 @@
 	}
 	const bullet = Decoration.replace({ widget: new Bullet() });
 
-	/** A task's box, drawn as the read-only view draws it. */
-	class TaskBox extends WidgetType {
-		readonly done: boolean;
-		constructor(done: boolean) {
+	/** What a plugin draws for one of its nodes, such as a task's box (SPEC 3.9). */
+	class PluginWidget extends WidgetType {
+		readonly render: WidgetRender;
+		readonly text: string;
+		readonly clicks: boolean;
+		constructor(render: WidgetRender, text: string, clicks: boolean) {
 			super();
-			this.done = done;
+			this.render = render;
+			this.text = text;
+			this.clicks = clicks;
 		}
-		eq(other: TaskBox) {
-			return other.done === this.done;
+		eq(other: PluginWidget) {
+			return other.render === this.render && other.text === this.text;
 		}
-		toDOM() {
-			const box = document.createElement('span');
-			box.className = this.done ? 'md-task md-ticked' : 'md-task';
-			return box;
+		toDOM(view: EditorView) {
+			const text = this.text;
+			let dom: HTMLElement | undefined;
+			try {
+				dom = this.render({
+					text,
+					where: 'editor',
+					editable: true,
+					// Where the node is now, which edits elsewhere may have moved.
+					update: (next) => {
+						if (!dom) return;
+						const from = view.posAtDOM(dom);
+						view.dispatch({ changes: { from, to: from + text.length, insert: next } });
+					}
+				});
+			} catch (e) {
+				// A faulty plugin leaves the text as typed.
+				console.error(e);
+				dom = element('span', '', text);
+			}
+			return dom;
 		}
-		// `taskBoxes`, below, handles its click.
+		// A widget that handles its own clicks keeps them from the editor; any
+		// other takes the cursor there, which brings its markup back to edit.
 		ignoreEvent() {
-			return false;
+			return this.clicks;
 		}
 	}
-	const openBox = Decoration.replace({ widget: new TaskBox(false) });
-	const tickedBox = Decoration.replace({ widget: new TaskBox(true) });
 	const hide = Decoration.replace({});
 	const markup = Decoration.mark({ class: 'md-markup' });
 
@@ -124,7 +152,7 @@
 		const { state } = view;
 		const { doc } = state;
 		const text = doc.toString();
-		const { marks, hidden, lines, attachments } = preview(syntaxTree(state), text);
+		const { marks, hidden, lines, attachments, widgets } = preview(syntaxTree(state), text);
 
 		// The lines the cursor or selection is on show their markup, to edit it.
 		const shown = (pos: number) => {
@@ -147,16 +175,17 @@
 		for (const range of hidden) {
 			// A plugin may not hide a line break; a link split over two lines keeps its markup.
 			if (range.from === range.to || text.slice(range.from, range.to).includes('\n')) continue;
-			const deco = shown(range.from)
-				? markup
-				: range.task
-					? range.task.done
-						? tickedBox
-						: openBox
-					: range.bullet
-						? bullet
-						: hide;
+			const deco = shown(range.from) ? markup : range.bullet ? bullet : hide;
 			ranges.push(deco.range(range.from, range.to));
+		}
+		// A plugin's widget stands in for its node off the line being edited;
+		// on that line the node shows as markup, to edit.
+		for (const { from, to, text: nodeText, render, clicks } of widgets) {
+			if (shown(from)) ranges.push(markup.range(from, to));
+			else
+				ranges.push(
+					Decoration.replace({ widget: new PluginWidget(render, nodeText, clicks) }).range(from, to)
+				);
 		}
 		// On the line being edited an attachment stays in view after its markup.
 		for (const attached of attachments) {
@@ -173,24 +202,63 @@
 		return Decoration.set(ranges, true);
 	}
 
-	const livePreview = ViewPlugin.fromClass(
-		class {
-			decorations: DecorationSet;
-			constructor(view: EditorView) {
-				this.decorations = decorate(view);
-			}
-			update(update: ViewUpdate) {
-				if (
-					update.docChanged ||
-					update.selectionSet ||
-					update.focusChanged ||
-					syntaxTree(update.startState) !== syntaxTree(update.state)
-				)
-					this.decorations = decorate(update.view);
-			}
-		},
-		{ decorations: (plugin) => plugin.decorations }
-	);
+	const livePreview = () =>
+		ViewPlugin.fromClass(
+			class {
+				decorations: DecorationSet;
+				constructor(view: EditorView) {
+					this.decorations = decorate(view);
+				}
+				update(update: ViewUpdate) {
+					if (
+						update.docChanged ||
+						update.selectionSet ||
+						update.focusChanged ||
+						syntaxTree(update.startState) !== syntaxTree(update.state)
+					)
+						this.decorations = decorate(update.view);
+				}
+			},
+			{ decorations: (plugin) => plugin.decorations }
+		);
+
+	/**
+	 * CommonMark's language data, so the list keys below recognise it, with
+	 * the syntax the read-only view parses: the core's and the plugins'.
+	 * Both are made again when a plugin's syntax comes or goes, and the live
+	 * preview with them, so it draws by the new rules at once.
+	 */
+	let support: { from: MarkdownExtension[]; extension: Extension } | undefined;
+	function markdownSupport(): Extension {
+		const from = markdownExtensions();
+		if (support?.from !== from) {
+			const parser = (commonmarkLanguage.parser as MarkdownParser).configure(from);
+			const language = new Language(commonmarkLanguage.data, parser, [], 'markdown');
+			support = { from, extension: [language, livePreview()] };
+		}
+		return support.extension;
+	}
+
+	/**
+	 * What the plugins bring to every editor: their syntax, the hotkeys of
+	 * their commands on the text, and their own CodeMirror extensions.
+	 */
+	function plugged(): Extension {
+		const keys = registry.commands
+			.filter((command) => command.hotkey && command.editorCallback)
+			.map((command) => ({
+				key: command.hotkey!,
+				run: (view: EditorView) => {
+					runCommand(command, view);
+					return true;
+				}
+			}));
+		return [
+			markdownSupport(),
+			keymap.of(keys),
+			registry.editorExtensions.map((entry) => entry.extension)
+		];
+	}
 
 	/** Ctrl or Cmd and a click opens a link or an attachment; a plain click edits it. */
 	const links = EditorView.domEventHandlers({
@@ -202,19 +270,6 @@
 			const href = target.getAttribute('data-href');
 			if (href) void openLink(href);
 			else void openAttachment(target.getAttribute('data-attachment')!);
-			return true;
-		}
-	});
-
-	/** A click on a task's box ticks or clears it, and leaves the cursor where it was. */
-	const taskBoxes = EditorView.domEventHandlers({
-		mousedown(event, view) {
-			const box = (event.target as Element).closest('.md-task');
-			if (!box) return false;
-			event.preventDefault();
-			const at = view.posAtDOM(box) + 1;
-			const done = view.state.sliceDoc(at, at + 1) !== ' ';
-			view.dispatch({ changes: { from: at, to: at + 1, insert: done ? ' ' : 'x' } });
 			return true;
 		}
 	});
@@ -271,12 +326,14 @@
 	import ItalicIcon from '@lucide/svelte/icons/italic';
 	import LinkIcon from '@lucide/svelte/icons/link';
 	import ListIcon from '@lucide/svelte/icons/list';
-	import ListTodoIcon from '@lucide/svelte/icons/list-todo';
 	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
+	import PluginIcon from '$lib/components/PluginIcon.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Toggle } from '$lib/components/ui/toggle';
 	import { m } from '$lib/paraglide/messages';
+	import { Editor } from '$lib/plugins/editor';
+	import { labelText, type ToolbarEntry } from '$lib/plugins/registry.svelte';
 
 	let {
 		value = $bindable(''),
@@ -302,7 +359,36 @@
 	let host: HTMLDivElement;
 	let view: EditorView | undefined;
 	/** The formats at the cursor, which the toolbar shows pressed. */
-	let active = $state({ bold: false, italic: false, bullets: false, checklist: false });
+	let active = $state({ bold: false, italic: false, bullets: false });
+	/** The plugins' buttons shown pressed, of those that can be. */
+	let pluginActive = $state.raw<ToolbarEntry[]>([]);
+	/** Where the plugins' syntax and keys go, so they change without a new editor. */
+	const plugins = new Compartment();
+
+	/** The formats at the cursor, the app's and the plugins'. */
+	function refreshActive(current: EditorView) {
+		active = formats(current.state);
+		const editor = new Editor(current);
+		pluginActive = registry.toolbar.filter((button) => {
+			try {
+				return button.active?.(editor) ?? false;
+			} catch (e) {
+				console.error(e);
+				return false;
+			}
+		});
+	}
+
+	/** A plugin's button, on the text, which keeps the focus as the app's buttons do. */
+	function runPlugin(button: ToolbarEntry) {
+		if (!view) return;
+		try {
+			button.run(new Editor(view));
+		} catch (e) {
+			onerror(`${button.plugin}: ${e instanceof Error ? e.message : String(e)}`);
+		}
+		view.focus();
+	}
 
 	// See-through greys, so the buttons show on every editor's background.
 	const tool =
@@ -370,10 +456,8 @@
 					Prec.high(keymap.of(markdownKeymap)),
 					formatKeys,
 					keymap.of([...standardKeymap, ...historyKeymap]),
-					language,
-					livePreview,
+					plugins.of(plugged()),
 					links,
-					taskBoxes,
 					pasteFiles,
 					EditorView.lineWrapping,
 					placeholderText(placeholder),
@@ -386,18 +470,28 @@
 							update.selectionSet ||
 							syntaxTree(update.startState) !== syntaxTree(update.state)
 						)
-							active = formats(update.state);
+							refreshActive(update.view);
 					})
 				]
 			})
 		});
-		active = formats(view.state);
+		refreshActive(view);
 		dropTargets.set(host, drop);
 		listenForDrops();
 		return () => {
 			dropTargets.delete(host);
 			view?.destroy();
 		};
+	});
+
+	// A plugin switched on or off in either window: its syntax, keys and
+	// buttons come or go in the text being written, which stays as it is.
+	$effect(() => {
+		const extension = plugged();
+		void registry.toolbar;
+		if (!view) return;
+		view.dispatch({ effects: plugins.reconfigure(extension) });
+		refreshActive(view);
 	});
 
 	// A value set from outside, such as a draft cleared after saving.
@@ -446,6 +540,7 @@
 		>
 			<ItalicIcon class="size-3.5" />
 		</Toggle>
+		{@render pluginTools('text')}
 		<Separator orientation="vertical" class={divider} />
 		<Toggle
 			size="sm"
@@ -456,15 +551,7 @@
 		>
 			<ListIcon class="size-3.5" />
 		</Toggle>
-		<Toggle
-			size="sm"
-			class={tool}
-			bind:pressed={() => active.checklist, () => run(checklist)}
-			aria-label={m.format_checklist()}
-			title={m.format_checklist()}
-		>
-			<ListTodoIcon class="size-3.5" />
-		</Toggle>
+		{@render pluginTools('lists')}
 		<Separator orientation="vertical" class={divider} />
 		<Button
 			variant="ghost"
@@ -486,5 +573,36 @@
 		>
 			<PaperclipIcon class="size-3.5" />
 		</Button>
+		{@render pluginTools('insert')}
 	</div>
 </div>
+
+<!-- The plugins' buttons in a group, such as the Tasks plugin's checklist
+     beside the bulleted list (SPEC 3.9). -->
+{#snippet pluginTools(group: 'text' | 'lists' | 'insert')}
+	{#each registry.toolbar.filter((button) => (button.group ?? 'insert') === group) as button (button)}
+		{@const title = labelText(button.title)}
+		{#if button.active}
+			<Toggle
+				size="sm"
+				class={tool}
+				bind:pressed={() => pluginActive.includes(button), () => runPlugin(button)}
+				aria-label={title}
+				{title}
+			>
+				<PluginIcon icon={button.icon} class="size-3.5" />
+			</Toggle>
+		{:else}
+			<Button
+				variant="ghost"
+				size="icon-xs"
+				class={tool}
+				onclick={() => runPlugin(button)}
+				aria-label={title}
+				{title}
+			>
+				<PluginIcon icon={button.icon} class="size-3.5" />
+			</Button>
+		{/if}
+	{/each}
+{/snippet}

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { getVersion } from '@tauri-apps/api/app';
 	import {
 		embeddingModelInfo,
@@ -26,6 +26,7 @@
 	import NoteEditor from '$lib/components/NoteEditor.svelte';
 	import NoteToPageDialog from '$lib/components/NoteToPageDialog.svelte';
 	import PageView from '$lib/components/PageView.svelte';
+	import PluginPanel from '$lib/components/PluginPanel.svelte';
 	import Settings from '$lib/components/settings/Settings.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
 	import WhatsNew from '$lib/components/WhatsNew.svelte';
@@ -34,6 +35,9 @@
 	import PanelRightCloseIcon from '@lucide/svelte/icons/panel-right-close';
 	import { m } from '$lib/paraglide/messages';
 	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '$lib/changelog';
+	import { bindWorkspace } from '$lib/plugins/app';
+	import { matchesHotkey, runCommand } from '$lib/plugins/commands';
+	import { registry } from '$lib/plugins/registry.svelte';
 	import { setShell, Shell } from '$lib/shell.svelte';
 
 	let { data, children } = $props();
@@ -47,6 +51,10 @@
 		)
 	);
 
+	// The plugins reach the views through it from the start, their pages
+	// included, which mount before this layout does.
+	onDestroy(bindWorkspace(shell));
+
 	/** Release notes waiting to be read after an update. */
 	let releaseNotes = $state<Release[] | null>(null);
 
@@ -55,7 +63,10 @@
 	function onWindowKeydown(event: KeyboardEvent) {
 		if (event.key === '/' && (event.ctrlKey || event.metaKey)) {
 			event.preventDefault();
-			shell.paletteOpen = !shell.paletteOpen;
+			if (shell.paletteOpen) shell.paletteOpen = false;
+			else shell.openPalette();
+		} else if (runPluginHotkey(event)) {
+			event.preventDefault();
 		} else if (!mac && event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
 			// Alt+arrows take the webview through its history, which holds the
 			// views. In text they would leave a note or a page half written.
@@ -63,6 +74,23 @@
 			const target = event.target as HTMLElement;
 			if (target.isContentEditable || target.closest('input, textarea')) event.preventDefault();
 		}
+	}
+
+	/**
+	 * A plugin's command with this hotkey, run. Those on the text are the
+	 * editor's own keys, and one the editor already took is left to it.
+	 */
+	function runPluginHotkey(event: KeyboardEvent) {
+		if (event.defaultPrevented) return false;
+		// A key without a modifier types, in text.
+		const target = event.target as HTMLElement;
+		const typing = target.isContentEditable || target.closest('input, textarea');
+		if (typing && !(event.ctrlKey || event.metaKey || event.altKey)) return false;
+		const command = registry.commands.find(
+			(entry) => entry.hotkey && entry.callback && matchesHotkey(event, entry.hotkey)
+		);
+		if (command) runCommand(command);
+		return command !== undefined;
 	}
 
 	/**
@@ -127,7 +155,7 @@
 >
 	<AppHeader
 		spaces={data.spaces}
-		onsearch={() => (shell.paletteOpen = true)}
+		onsearch={shell.openPalette}
 		onsettings={() => (shell.settingsOpen = true)}
 		titleShown={shell.titleCollapsed}
 	>
@@ -174,6 +202,9 @@
 					{/key}
 				</div>
 			</aside>
+		{:else if shell.panel}
+			{@const type = shell.panel}
+			<PluginPanel {type} onclose={() => shell.closePanel(type)} />
 		{/if}
 	</div>
 </div>
@@ -187,13 +218,14 @@
 	space={data.spaces.active}
 	canChat={shell.canChat}
 	modelOff={shell.model.state === 'disabled'}
-	docked={shell.docked !== null}
+	docked={shell.docked !== null || shell.panel !== null}
 	onopen={(entry) => void shell.openCited(entry)}
 />
 
 <CommandCenter
 	bind:open={shell.paletteOpen}
 	bind:query={shell.query}
+	editor={shell.paletteEditor}
 	categories={data.categories}
 	canChat={shell.canChat}
 	canMeaning={shell.canSimilar}
@@ -202,7 +234,6 @@
 	ontoday={async () => void shell.openDay(await today())}
 	onnewpage={shell.newPage}
 	onpages={() => void shell.showPages()}
-	ontasks={() => void shell.showTasks()}
 	onchat={() => (shell.chatOpen = true)}
 	onsettings={() => (shell.settingsOpen = true)}
 />
@@ -222,7 +253,7 @@
 
 <Dialog.Root bind:open={shell.settingsOpen}>
 	<Dialog.Content
-		class="h-[min(640px,85vh)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[min(48rem,calc(100%-2rem))]"
+		class="h-[min(1000px,85vh)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[min(1100px,calc(100%-2rem))]"
 	>
 		<Settings />
 	</Dialog.Content>

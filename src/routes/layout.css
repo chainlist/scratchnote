@@ -481,42 +481,6 @@ a.md-link:hover {
 .md-bullet::before {
 	content: '•';
 }
-/* A task's box. With the gap after it, it is as wide as a bullet, so a
-   task's wrapped lines line up the same way. */
-.md-task {
-	display: inline-block;
-	width: 0.875em;
-	height: 0.875em;
-	margin-right: 0.375em;
-	border: 1px solid var(--color-neutral-500);
-	border-radius: 0.25em;
-	vertical-align: -0.125em;
-	text-indent: 0;
-	cursor: pointer;
-	transition:
-		border-color 150ms,
-		background-color 150ms;
-}
-.md-task:hover:not(:disabled) {
-	border-color: var(--color-neutral-300);
-}
-.md-task:disabled {
-	cursor: default;
-}
-.md-ticked {
-	border-color: var(--primary);
-	background: var(--primary);
-	color: var(--primary-foreground);
-}
-.md-ticked::before {
-	content: '';
-	display: block;
-	width: 100%;
-	height: 100%;
-	background: currentColor;
-	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
-		center / 80% no-repeat;
-}
 /* Markup the editor shows on the line being edited. */
 .md-markup {
 	color: var(--color-neutral-500);
@@ -618,10 +582,10 @@ button.md-file:hover .md-file-type {
 	outline-offset: 2px;
 }
 /* The glowing copy draws letters only; the real text below keeps the boxes. */
-.note-glow-text :is(.md-code, .md-codeblock, .md-chip, .md-file, .md-file-type, .md-task) {
+.note-glow-text :is(.md-code, .md-codeblock, .md-chip, .md-file, .md-file-type) {
 	background: none;
 }
-.note-glow-text :is(.md-quote, .md-file, .md-task) {
+.note-glow-text :is(.md-quote, .md-file) {
 	border-color: transparent;
 }
 .note-glow-text .md-image {

@@ -3,6 +3,7 @@
 	import { fade } from 'svelte/transition';
 	import type { Note } from '$lib/api';
 	import Markdown from '$lib/components/Markdown.svelte';
+	import TimelineItem from '$lib/components/TimelineItem.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -56,7 +57,8 @@
 	let draft = $state('');
 	let editor = $state<MarkdownEditor | null>(null);
 	let menuOpen = $state(false);
-	/** The body with task boxes ticked but not saved yet, shown meanwhile. */
+	/** The body with task boxes ticked but not saved yet, shown meanwhile.
+	 *  A plugin's widget can change the text too; it saves the same way. */
 	let ticked = $state<string | null>(null);
 	let ticking = Promise.resolve();
 	const body = $derived(ticked ?? note.body);
@@ -122,12 +124,11 @@
 <!-- The double click is a mouse shortcut; Edit in the menu opens the same
      text from the keyboard. A pending note sits above its neighbours: its
      glow spills onto them, and their hover background would cover it. -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<article
+<TimelineItem
 	data-note-id={note.id}
-	class="group relative isolate -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-5 transition-colors duration-300 ease-out focus-within:bg-neutral-900 hover:bg-neutral-900 {menuOpen
-		? 'bg-neutral-900'
-		: ''} {blink ? 'note-blink' : ''} {pending ? 'z-10' : ''}"
+	time={note.time}
+	date={showDate ? note.date : undefined}
+	class={[menuOpen && 'bg-neutral-900', blink && 'note-blink', pending && 'z-10']}
 	ondblclick={onDoubleClick}
 	onmousedown={onMouseDown}
 >
@@ -138,24 +139,6 @@
 	{:else if note.status === 'failed'}
 		<span aria-hidden="true" class="note-error-ring" transition:fade={glowFade}></span>
 	{/if}
-	<!-- Timeline rail in the gutter between time and body. Each note draws
-	     its own dot and the segments above and below it; the first and last
-	     notes leave off the outer ends so the rail stops at their dots. -->
-	<span
-		aria-hidden="true"
-		class="absolute top-0 left-[6.25rem] h-[30px] w-px bg-neutral-800 [li:first-child_&]:hidden"
-	></span>
-	<span
-		aria-hidden="true"
-		class="absolute top-[30px] left-[6.25rem] size-2 -translate-x-[3.5px] rounded-full border border-neutral-700 bg-neutral-950 transition-colors duration-300 group-hover:border-neutral-400 group-hover:bg-neutral-400"
-	></span>
-	<span
-		aria-hidden="true"
-		class="absolute top-[38px] bottom-0 left-[6.25rem] w-px bg-neutral-800 [li:last-child_&]:hidden"
-	></span>
-	<time class="pt-1 text-right font-mono text-xs leading-5 text-neutral-600">
-		{#if showDate}<span class="block">{note.date}</span>{/if}{note.time}
-	</time>
 
 	<div class="relative min-w-0">
 		{#if editing}
@@ -191,7 +174,7 @@
 			     of its own as the glow behind its letters. -->
 			<Markdown
 				text={body}
-				ontoggle={saveTicks}
+				onchange={saveTicks}
 				class="text-base leading-7 transition-colors duration-500 {pending
 					? 'text-transparent'
 					: 'text-neutral-200'}"
@@ -260,4 +243,4 @@
 			>
 		{/if}
 	{/if}
-</article>
+</TimelineItem>

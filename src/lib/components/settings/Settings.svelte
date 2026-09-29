@@ -4,21 +4,27 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Tabs from '$lib/components/ui/tabs';
+	import BlocksIcon from '@lucide/svelte/icons/blocks';
 	import BrainIcon from '@lucide/svelte/icons/brain';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
-	import InfoIcon from '@lucide/svelte/icons/info';
+	import PackageIcon from '@lucide/svelte/icons/package';
 	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
+	import PluginIcon from '$lib/components/PluginIcon.svelte';
 	import { m } from '$lib/paraglide/messages';
-	import AboutTab from './AboutTab.svelte';
+	import { coreIds, pluginDescription, pluginName } from '$lib/plugins/loader';
+	import { registry } from '$lib/plugins/registry.svelte';
 	import AppearanceTab from './AppearanceTab.svelte';
+	import CommunityPluginsTab from './CommunityPluginsTab.svelte';
+	import CorePluginsTab from './CorePluginsTab.svelte';
 	import GeneralTab from './GeneralTab.svelte';
 	import IndexTab from './IndexTab.svelte';
 	import ModelTab from './ModelTab.svelte';
+	import PluginSettingsHost from './PluginSettingsHost.svelte';
 	import { SettingsState } from './state.svelte';
-	import { hint } from './styles';
+	import { hint, section } from './styles';
 
 	const settings = new SettingsState();
 	onMount(() => settings.start());
@@ -53,23 +59,64 @@
 			content: IndexTab
 		},
 		{
-			value: 'about',
-			label: m.settings_tab_about,
-			description: m.settings_about_description,
-			icon: InfoIcon,
-			content: AboutTab
+			value: 'core-plugins',
+			label: m.plugins_group_core,
+			description: m.settings_core_plugins_description,
+			icon: PackageIcon,
+			content: CorePluginsTab
+		},
+		{
+			value: 'community-plugins',
+			label: m.plugins_group_community,
+			description: m.settings_community_plugins_description,
+			icon: BlocksIcon,
+			content: CommunityPluginsTab
 		}
 	];
+
+	/** The plugins' own tabs, core ones and community ones apart, as in Obsidian. */
+	const coreTabs = $derived(registry.settingTabs.filter((entry) => coreIds.has(entry.plugin)));
+	const communityTabs = $derived(
+		registry.settingTabs.filter((entry) => !coreIds.has(entry.plugin))
+	);
+
+	// A plugin's tab goes with the plugin; the settings go back to its list.
+	$effect(() => {
+		const shown = settings.tab;
+		if (!shown.startsWith('plugin:')) return;
+		const id = shown.slice('plugin:'.length);
+		if (!registry.settingTabs.some((entry) => entry.plugin === id))
+			settings.tab = coreIds.has(id) ? 'core-plugins' : 'community-plugins';
+	});
 </script>
+
+{#snippet pluginTriggers(heading: string, entries: typeof registry.settingTabs)}
+	{#if entries.length > 0}
+		<div class="flex flex-col gap-1">
+			<p class="px-2 {section}">{heading}</p>
+			<Tabs.List class="w-full gap-0.5 bg-transparent p-0">
+				{#each entries as entry (entry)}
+					<Tabs.Trigger
+						value="plugin:{entry.plugin}"
+						class="h-8 w-full flex-none justify-start gap-2 px-2"
+					>
+						<PluginIcon icon={entry.tab.icon} />
+						<span class="truncate">{pluginName(entry.plugin)}</span>
+					</Tabs.Trigger>
+				{/each}
+			</Tabs.List>
+		</div>
+	{/if}
+{/snippet}
 
 <!-- A message belongs to the tab it came from. -->
 <Tabs.Root
-	value="general"
+	bind:value={settings.tab}
 	orientation="vertical"
 	class="h-full min-h-0 gap-0"
 	onValueChange={() => (settings.message = null)}
 >
-	<aside class="flex w-48 shrink-0 flex-col gap-4 border-r bg-muted/40 p-3">
+	<aside class="flex w-48 shrink-0 flex-col gap-4 overflow-y-auto border-r bg-muted/40 p-3">
 		<Dialog.Title class="px-2 pt-1">{m.common_settings()}</Dialog.Title>
 		<Tabs.List class="w-full gap-0.5 bg-transparent p-0">
 			{#each tabs as t (t.value)}
@@ -79,6 +126,11 @@
 				</Tabs.Trigger>
 			{/each}
 		</Tabs.List>
+		<!-- The plugins' own tabs stand a little apart from the app's. -->
+		<div class="mt-2 flex flex-col gap-4">
+			{@render pluginTriggers(m.plugins_group_core(), coreTabs)}
+			{@render pluginTriggers(m.plugins_group_community(), communityTabs)}
+		</div>
 	</aside>
 
 	<div class="flex min-w-0 flex-1 flex-col">
@@ -101,6 +153,23 @@
 					</Tabs.Content>
 				{/each}
 			{/if}
+			{#each registry.settingTabs as entry (entry)}
+				{@const value = `plugin:${entry.plugin}`}
+				<Tabs.Content {value}>
+					<div class="mb-5 flex flex-col gap-1">
+						<h3 class="text-base font-semibold">{pluginName(entry.plugin)}</h3>
+						<p class="text-sm text-muted-foreground">{pluginDescription(entry.plugin)}</p>
+					</div>
+					<!-- Drawn while it shows, as Obsidian draws a plugin's tab. -->
+					{#if settings.tab === value}
+						<PluginSettingsHost
+							tab={entry.tab}
+							plugin={entry.plugin}
+							onerror={(message) => settings.say(message, true)}
+						/>
+					{/if}
+				</Tabs.Content>
+			{/each}
 		</div>
 
 		{#if settings.dirty}

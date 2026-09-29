@@ -40,16 +40,20 @@ pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, St
     Ok(crate::search::search(&idx, &query))
 }
 
-/// Every note and page with a task box, newest first, for the tasks view to
-/// pick the open tasks out of (SPEC 3.8).
+/// Every note and page whose body holds any of `needles`, newest first, for
+/// a plugin to pick what it reads out of, as the tasks view picks the open
+/// tasks (SPEC 3.8).
 #[tauri::command]
-pub fn task_notes(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
+pub fn notes_containing(
+    state: State<'_, AppState>,
+    needles: Vec<String>,
+) -> Result<Vec<Note>, String> {
     let space = state.space()?;
     let idx = space
         .index
         .read()
         .map_err(|_| "index lock poisoned".to_string())?;
-    Ok(crate::search::with_tasks(&idx))
+    Ok(crate::search::containing(&idx, &needles))
 }
 
 /// How many notes search by meaning adds at most.

@@ -1,22 +1,87 @@
-import { Autolink, Strikethrough, TaskList, parser as commonmark } from '@lezer/markdown';
+import {
+	Autolink,
+	Strikethrough,
+	parser as commonmark,
+	type MarkdownExtension,
+	type MarkdownParser
+} from '@lezer/markdown';
 import type { SyntaxNode, Tree } from '@lezer/common';
+import type { NodeRender, WidgetContext } from '$lib/plugins/api';
+import { registry, type SyntaxEntry } from '$lib/plugins/registry.svelte';
 
 /**
- * The markdown notes are shown with: CommonMark, bare links,
- * ~~strikethrough~~ and `- [ ]` tasks. The editor and the read-only view both go through
- * `preview`, so a note looks the same written and read.
+ * The markdown notes are shown with: CommonMark, bare links and
+ * ~~strikethrough~~, and what the plugins' syntax adds, such as the Tasks
+ * core plugin's `- [ ]` boxes (SPEC 3.9). The editor and the read-only view
+ * both go through `preview`, so a note looks the same written and read.
  */
-export const syntax = [Strikethrough, Autolink, TaskList];
-export const parser = commonmark.configure(syntax);
+const CORE: MarkdownExtension[] = [Strikethrough, Autolink];
+
+interface Syntax {
+	from: SyntaxEntry[];
+	extensions: MarkdownExtension[];
+	parser: MarkdownParser;
+	/** How the plugins draw their nodes, by name. */
+	rules: Map<string, NodeRender>;
+	/** Nodes drawn in a list item's bullet's place, as a task's box is. */
+	bulletless: string[];
+	/** What a list item may carry after its bullet, for the list commands. */
+	itemMarks: RegExp[];
+}
+
+let built: Syntax | undefined;
+
+/**
+ * The syntax as the plugins have it now, rebuilt when one comes or goes.
+ * Read in an effect or a derived, it is followed: a card redraws when a
+ * plugin's syntax loads.
+ */
+function current(): Syntax {
+	const from = registry.syntax;
+	if (built?.from === from) return built;
+	const extensions = [...CORE];
+	const rules = new Map<string, NodeRender>();
+	const bulletless: string[] = [];
+	const itemMarks: RegExp[] = [];
+	for (const { syntax } of from) {
+		if (syntax.extension) extensions.push(syntax.extension);
+		for (const [name, rule] of Object.entries(syntax.render ?? {})) {
+			rules.set(name, rule);
+			if (rule.replacesBullet) bulletless.push(name);
+		}
+		itemMarks.push(...(syntax.itemMarks ?? []));
+	}
+	built = {
+		from,
+		extensions,
+		parser: commonmark.configure(extensions),
+		rules,
+		bulletless,
+		itemMarks
+	};
+	return built;
+}
+
+/** The syntax extensions in use, for the editor's language. */
+export const markdownExtensions = () => current().extensions;
+
+/** The tree the cards and the editor read `text` with. */
+export const parseMarkdown = (text: string) => current().parser.parse(text);
+
+/** What a list item may carry after its bullet, such as a task's box. */
+export const itemMarks = () => current().itemMarks;
+
+/** What a plugin's widget draws itself from. */
+export type WidgetRender = (node: WidgetContext) => HTMLElement;
 
 export type Preview = {
 	/** Styled stretches; a link carries where it opens. */
 	marks: { from: number; to: number; class: string; href?: string }[];
 	/**
 	 * Markup hidden while the cursor is off its line: `**`, `](url)`, `# `.
-	 * A bullet stands in for a list mark, and a checkbox for a task's `[ ]`.
+	 * A bullet stands in for a list mark.
 	 */
-	hidden: { from: number; to: number; bullet?: boolean; task?: { done: boolean } }[];
+	hidden: { from: number; to: number; bullet?: boolean }[];
 	/** Classes and styles for whole lines, by the offset each line starts at. */
 	lines: Map<number, { class: string; style?: string }>;
 	/**
@@ -24,6 +89,12 @@ export type Preview = {
 	 * for `![name](path)` to an image, a card for any other.
 	 */
 	attachments: { from: number; to: number; path: string; name: string; image: boolean }[];
+	/**
+	 * Nodes a plugin draws itself, such as a task's box, in place of the
+	 * stretch `from` to `to`: the node's `text`, and the spaces after it
+	 * when its rule takes them.
+	 */
+	widgets: { from: number; to: number; text: string; render: WidgetRender; clicks: boolean }[];
 };
 
 /** Width of a list bullet and the gap after it; nested lists step in by as much. */
@@ -82,10 +153,12 @@ export function cardName(name: string, path: string): string {
 }
 
 export function preview(tree: Tree, text: string): Preview {
+	const { rules, bulletless } = current();
 	const marks: Preview['marks'] = [];
 	const hidden: Preview['hidden'] = [];
 	const lines: Preview['lines'] = new Map();
 	const attachments: Preview['attachments'] = [];
+	const widgets: Preview['widgets'] = [];
 	/** Link text as it reads, its backslash escapes undone. */
 	const unescape = (from: number, to: number) => text.slice(from, to).replace(/\\(.)/g, '$1');
 
@@ -169,20 +242,15 @@ export function preview(tree: Tree, text: string): Preview {
 					while (start > 0 && (text[start - 1] === ' ' || text[start - 1] === '\t')) start--;
 					let end = to;
 					while (text[end] === ' ') end++;
-					// A task's checkbox takes the bullet's place.
-					const task = node.node.parent.getChild('Task') !== null;
-					hidden.push({ from: start, to: end, bullet: !task });
+					// What a plugin draws in the bullet's place, a task's box, takes it.
+					const item = node.node.parent;
+					const bullet = !bulletless.some((name) => item.getChild(name) !== null);
+					hidden.push({ from: start, to: end, bullet });
 					addLine(
 						lineStart(from),
 						'md-li',
 						`padding-left: calc(var(--md-indent, 0em) + ${depth * BULLET_EM}em); text-indent: -${BULLET_EM}em`
 					);
-					break;
-				}
-				case 'TaskMarker': {
-					let end = to;
-					while (text[end] === ' ') end++;
-					hidden.push({ from, to: end, task: { done: text[from + 1] !== ' ' } });
 					break;
 				}
 				case 'Link': {
@@ -221,23 +289,39 @@ export function preview(tree: Tree, text: string): Preview {
 					return false;
 				}
 			}
+
+			// What a plugin says about the node, on top of what the app does.
+			const rule = rules.get(node.name);
+			if (!rule) return;
+			let end = to;
+			if (rule.spaces) while (text[end] === ' ') end++;
+			if (rule.class) marks.push({ from, to, class: rule.class });
+			if (rule.line) addLines(from, to, rule.line);
+			// A widget stands in for one line's worth; a node over several shows as typed.
+			const nodeText = text.slice(from, to);
+			if (rule.widget && !nodeText.includes('\n')) {
+				const clicks = rule.handlesClicks ?? false;
+				widgets.push({ from, to: end, text: nodeText, render: rule.widget, clicks });
+				return false;
+			}
+			if (rule.hide) hidden.push({ from, to: end });
 		}
 	});
 
-	return { marks, hidden, lines, attachments };
+	return { marks, hidden, lines, attachments, widgets };
 }
 
 export type Part =
 	| { text: string; class: string; href?: string }
 	| { bullet: true }
-	/** A task's checkbox, by the offset of its `[`. */
-	| { task: number; done: boolean }
+	/** A plugin's widget for the node `text` at `from`. */
+	| { widget: WidgetRender; text: string; from: number }
 	| { attachment: string; name: string; image: boolean };
 export type Line = { class: string; style?: string; parts: Part[] };
 
 /** The note as lines of styled text with its markup hidden, for reading. */
 export function renderLines(text: string): Line[] {
-	const { marks, hidden, lines, attachments } = preview(parser.parse(text), text);
+	const { marks, hidden, lines, attachments, widgets } = preview(parseMarkdown(text), text);
 
 	const classes = new Array<string>(text.length).fill('');
 	const hrefs = new Array<string | undefined>(text.length);
@@ -248,17 +332,21 @@ export function renderLines(text: string): Line[] {
 		}
 	}
 	// 1 hides a character, 2 draws a bullet in its place, 3 an attachment,
-	// 4 a task's checkbox.
+	// 4 a plugin's widget.
 	const skip = new Uint8Array(text.length);
 	for (const range of hidden) {
 		skip.fill(1, range.from, range.to);
 		if (range.bullet) skip[range.from] = 2;
-		if (range.task) skip[range.from] = 4;
 	}
 	const attachmentAt = new Map(attachments.map((attached) => [attached.from, attached]));
 	for (const attached of attachments) {
 		skip.fill(1, attached.from, attached.to);
 		skip[attached.from] = 3;
+	}
+	const widgetAt = new Map(widgets.map((widget) => [widget.from, widget]));
+	for (const widget of widgets) {
+		skip.fill(1, widget.from, widget.to);
+		skip[widget.from] = 4;
 	}
 
 	const out: Line[] = [];
@@ -269,7 +357,10 @@ export function renderLines(text: string): Line[] {
 		for (let i = start; i < end;) {
 			if (skip[i]) {
 				if (skip[i] === 2) parts.push({ bullet: true });
-				if (skip[i] === 4) parts.push({ task: i, done: text[i + 1] !== ' ' });
+				if (skip[i] === 4) {
+					const { render, text: nodeText } = widgetAt.get(i)!;
+					parts.push({ widget: render, text: nodeText, from: i });
+				}
 				if (skip[i] === 3) {
 					const { path, name, image } = attachmentAt.get(i)!;
 					parts.push({ attachment: path, name, image });
@@ -288,30 +379,3 @@ export function renderLines(text: string): Line[] {
 	}
 	return out;
 }
-
-/** A task: its box by the offset of its `[`, and its first line from the list mark on. */
-export type Task = { at: number; done: boolean; from: number; to: number };
-
-/** The tasks in a text, read as the cards read them. */
-export function tasks(text: string): Task[] {
-	const found: Task[] = [];
-	parser.parse(text).iterate({
-		enter(node) {
-			if (node.name !== 'TaskMarker') return;
-			// TaskMarker sits in the Task, which sits in the list item.
-			const mark = node.node.parent?.parent?.getChild('ListMark');
-			const end = text.indexOf('\n', node.from);
-			found.push({
-				at: node.from,
-				done: text[node.from + 1] !== ' ',
-				from: mark?.from ?? node.from,
-				to: end < 0 ? text.length : end
-			});
-		}
-	});
-	return found;
-}
-
-/** The text with the task box whose `[` is at `at` ticked, or cleared if it was. */
-export const toggleTask = (text: string, at: number) =>
-	text.slice(0, at + 1) + (text[at + 1] === ' ' ? 'x' : ' ') + text.slice(at + 2);

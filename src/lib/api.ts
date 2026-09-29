@@ -27,6 +27,8 @@ export const isPage = (note: Pick<Note, 'kind'>) => note.kind === 'page';
 export interface DaySummary {
 	date: string;
 	count: number;
+	/** How many words the day's notes hold, its pages left out. */
+	words: number;
 }
 
 /**
@@ -519,6 +521,8 @@ export interface PluginState {
 	enabled: string[];
 	/** Core plugins switched off, by id; they are on unless listed. */
 	coreDisabled: string[];
+	/** Core plugins that start off, switched on, by id. */
+	coreEnabled: string[];
 }
 
 export interface PluginsView extends PluginState {

@@ -17,7 +17,7 @@ const SHAPES =
 interface BasicsSettings {
 	tasks: {
 		on: boolean;
-		/** The button above the day that opens the open tasks. */
+		/** The button on the left edge that opens the open tasks. */
 		ribbon: boolean;
 		/** Which tasks come first. */
 		order: 'newest' | 'oldest';

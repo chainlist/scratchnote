@@ -52,7 +52,7 @@ export class Tasks extends Component {
 		this.#ribbon = null;
 	}
 
-	/** The button beside All pages above the day, unless the settings take it away. */
+	/** The button on the left edge, unless the settings take it away. */
 	update() {
 		const wanted = this.#plugin.settings.tasks.ribbon;
 		if (wanted && !this.#ribbon) {

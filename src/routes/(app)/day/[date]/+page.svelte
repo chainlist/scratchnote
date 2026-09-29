@@ -7,13 +7,9 @@
 	import View from '$lib/components/View.svelte';
 	import { dayHeading } from '$lib/components/ViewHeader.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import FilesIcon from '@lucide/svelte/icons/files';
-	import PluginIcon from '$lib/components/PluginIcon.svelte';
 	import { m } from '$lib/paraglide/messages';
-	import { labelText, registry, type RibbonEntry } from '$lib/plugins/registry.svelte';
 	import { getShell } from '$lib/shell.svelte';
 	import type { Day } from './+page';
 
@@ -27,12 +23,14 @@
 		shell.day = data.date;
 	});
 
-	/** How many days fit side by side: the day alone, then with the day
-	 *  before it from Tailwind's lg (64rem), then between both neighbours
-	 *  from 2xl (96rem). */
+	/** How many days fit side by side, each at least 36rem wide: the day
+	 *  alone, then with the day before it from 77rem, then between both
+	 *  neighbours from 115rem. A day with none after it, as today, keeps
+	 *  to two rather than leave a column empty. */
 	const columns = $derived.by(() => {
 		const rems = shell.width / shell.textSize;
-		return rems >= 96 ? 3 : rems >= 64 ? 2 : 1;
+		const fit = rems >= 115 ? 3 : rems >= 77 ? 2 : 1;
+		return data.next ? fit : Math.min(fit, 2);
 	});
 
 	/** The day whose empty-day editor is open, which takes the place of its message. */
@@ -50,17 +48,6 @@
 		} catch (e) {
 			shell.error = String(e);
 			return false;
-		}
-	}
-
-	/** A plugin's button above the day; one that fails says so above the view. */
-	function runRibbon(item: RibbonEntry) {
-		const fail = (e: unknown) =>
-			shell.showError(`${item.plugin}: ${e instanceof Error ? e.message : String(e)}`);
-		try {
-			void Promise.resolve(item.callback()).catch(fail);
-		} catch (e) {
-			fail(e);
 		}
 	}
 
@@ -91,40 +78,6 @@
 	{#if columns > 1}{@render besideDay(data.previous)}{/if}
 	<View key={data.date}>
 		{#snippet heading(compact: boolean)}
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				href={resolve('/calendar/')}
-				aria-label={m.calendar_pick()}
-				title={m.calendar_pick()}
-				class="text-muted-foreground hover:text-foreground"
-			>
-				<CalendarIcon />
-			</Button>
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				href={resolve('/pages/')}
-				aria-label={m.pages_all()}
-				title={m.pages_all()}
-				class="text-muted-foreground hover:text-foreground"
-			>
-				<FilesIcon />
-			</Button>
-			<!-- The plugins' buttons, such as the Tasks plugin's open tasks. -->
-			{#each registry.ribbon as item (item)}
-				{@const title = labelText(item.title)}
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					onclick={() => runRibbon(item)}
-					aria-label={title}
-					{title}
-					class="text-muted-foreground hover:text-foreground"
-				>
-					<PluginIcon icon={item.icon} />
-				</Button>
-			{/each}
 			<!-- Side by side ahead of the title, so they stay put while its width
 			     changes from one day to the next. -->
 			<Button
@@ -189,7 +142,7 @@
 </div>
 
 <!-- A neighbour's column. Its date opens it; it has no new note of its own.
-     Left empty at either end, so the day keeps its place. -->
+     Left empty before the first day, so the day keeps its place. -->
 {#snippet besideDay(day: Day | undefined)}
 	<section>
 		{#if day}

@@ -12,6 +12,7 @@ import {
 	pluginsView,
 	setPlugins,
 	type PluginManifest,
+	type PluginState,
 	type PluginsView
 } from '$lib/api';
 import { m } from '$lib/paraglide/messages';
@@ -76,6 +77,12 @@ export { plugins };
 
 export { corePlugins };
 export const coreIds = new Set(corePlugins.map((core) => core.manifest.id));
+
+/** Whether a core plugin is on: as it ships, unless the user switched it. */
+export function coreOn(core: CorePlugin, view: PluginState = plugins.view): boolean {
+	const id = core.manifest.id;
+	return core.offByDefault ? view.coreEnabled.includes(id) : !view.coreDisabled.includes(id);
+}
 
 /** A plugin's name as the settings show it: a core one's in the interface language. */
 export function pluginName(id: string): string {
@@ -217,7 +224,7 @@ async function apply(times?: StartupStep[]) {
 	const view = plugins.view;
 	const wanted = new Map<string, { version: string; load: () => Promise<Loaded> }>();
 	for (const core of corePlugins) {
-		if (!view.coreDisabled.includes(core.manifest.id))
+		if (coreOn(core, view))
 			wanted.set(core.manifest.id, { version: core.manifest.version, load: () => loadCore(core) });
 	}
 	if (view.community) {
@@ -302,17 +309,19 @@ export async function startPlugins() {
 
 /** Save a change; the backend tells every window, which load and unload to match. */
 async function change(next: Partial<PluginsView>) {
-	const { community, enabled, coreDisabled } = { ...plugins.view, ...next };
-	plugins.view = await setPlugins({ community, enabled, coreDisabled });
+	const { community, enabled, coreDisabled, coreEnabled } = { ...plugins.view, ...next };
+	plugins.view = await setPlugins({ community, enabled, coreDisabled, coreEnabled });
 	await reconcile();
 }
 
-export const setCorePlugin = (id: string, on: boolean) =>
-	change({
-		coreDisabled: on
-			? plugins.view.coreDisabled.filter((other) => other !== id)
-			: [...plugins.view.coreDisabled, id]
-	});
+/** A core plugin that starts off is listed once on, any other once off. */
+export function setCorePlugin(core: CorePlugin, on: boolean) {
+	const id = core.manifest.id;
+	const list = core.offByDefault ? 'coreEnabled' : 'coreDisabled';
+	const listed = core.offByDefault ? on : !on;
+	const others = plugins.view[list].filter((other) => other !== id);
+	return change({ [list]: listed ? [...others, id] : others });
+}
 
 export const setCommunityPlugin = (id: string, on: boolean) =>
 	change({

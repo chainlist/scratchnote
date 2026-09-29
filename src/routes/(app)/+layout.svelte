@@ -27,6 +27,7 @@
 	import NoteToPageDialog from '$lib/components/NoteToPageDialog.svelte';
 	import PageView from '$lib/components/PageView.svelte';
 	import PluginPanel from '$lib/components/PluginPanel.svelte';
+	import Ribbon from '$lib/components/Ribbon.svelte';
 	import Settings from '$lib/components/settings/Settings.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
 	import WhatsNew from '$lib/components/WhatsNew.svelte';
@@ -165,6 +166,7 @@
 	</AppHeader>
 
 	<div class="flex min-h-0 flex-1">
+		<Ribbon />
 		<main bind:offsetWidth={shell.width} class="min-w-0 flex-1 overflow-y-auto px-6 pb-16">
 			{@render children()}
 		</main>

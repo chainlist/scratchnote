@@ -11,7 +11,8 @@ import {
 	updatePage,
 	type Note
 } from '$lib/api';
-import { parseMarkdown } from '$lib/markdown';
+import { attachmentUrl } from '$lib/attachments.svelte';
+import { fileName, parseMarkdown, preview } from '$lib/markdown';
 import { getLocale } from '$lib/paraglide/runtime';
 import type { App } from './api';
 import { render } from './render.svelte';
@@ -118,7 +119,16 @@ export const app: App = {
 	},
 	markdown: {
 		parse: parseMarkdown,
-		render
+		render,
+		images: (text) =>
+			preview(parseMarkdown(text), text)
+				.attachments.filter((attached) => attached.image)
+				.map(({ from, to, name, path }) => ({
+					from,
+					to,
+					name: name || fileName(path),
+					url: attachmentUrl(path)
+				}))
 	},
 	on(event, listener) {
 		if (event !== 'notes-changed') throw new Error(`there is no ${event} event`);

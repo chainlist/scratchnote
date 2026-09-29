@@ -116,13 +116,13 @@
 	class="h-full min-h-0 gap-0"
 	onValueChange={() => (settings.message = null)}
 >
-	<aside class="flex w-48 shrink-0 flex-col gap-4 overflow-y-auto border-r bg-muted/40 p-3">
+	<aside class="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r bg-muted/40 p-3">
 		<Dialog.Title class="px-2 pt-1">{m.common_settings()}</Dialog.Title>
 		<Tabs.List class="w-full gap-0.5 bg-transparent p-0">
 			{#each tabs as t (t.value)}
 				<Tabs.Trigger value={t.value} class="h-8 w-full flex-none justify-start gap-2 px-2">
 					<t.icon />
-					{t.label()}
+					<span class="truncate">{t.label()}</span>
 				</Tabs.Trigger>
 			{/each}
 		</Tabs.List>

@@ -28,11 +28,17 @@
 
 <!-- A plugin's page (SPEC 3.9): its title and a way back to the day, as the
      app's own pages have, and the rest is the plugin's. -->
-<View back={shell.back} title={entry ? header.title : undefined} detail={header.detail} key={type}>
+<View
+	back={shell.back}
+	title={entry ? header.title : undefined}
+	detail={header.detail}
+	key={type}
+	fill={entry?.fill}
+>
 	{#if entry}
 		{#key entry}
 			{#key search}
-				<div {@attach mountPage(entry, search)}></div>
+				<div class={entry.fill ? 'h-full' : undefined} {@attach mountPage(entry, search)}></div>
 			{/key}
 		{/key}
 	{:else}

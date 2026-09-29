@@ -2,15 +2,15 @@
 
 A plugin adds to Scratchnote the way an Obsidian plugin adds to Obsidian:
 markdown syntax for the editor and the cards, commands in the command center,
-buttons on the editor's toolbar and above the day, a panel docked beside the
-day, pages of its own, and a settings tab. The API follows Obsidian's, so an
-Obsidian plugin's author will find their way around.
+buttons on the editor's toolbar and down the left edge of the window, a panel
+docked beside the day, pages of its own, and a settings tab. The API follows
+Obsidian's, so an Obsidian plugin's author will find their way around.
 
 A plugin is trusted code. It runs in the app's webview with the app's own
 access, which is why community plugins stay off until the user turns them on
 (SPEC 3.9). The reference for the API is
-[`src/lib/plugins/api.ts`](src/lib/plugins/api.ts); the examples in
-[`plugin-registry/`](plugin-registry/) use most of it.
+[`src/lib/plugins/api.ts`](src/lib/plugins/api.ts); the core plugins in
+[`src/plugins/`](src/plugins/) use most of it.
 
 ## The files
 
@@ -110,10 +110,10 @@ marked external works.
 | ------------------------------------------ | ----------------------------------------------------------------- |
 | `addCommand(command)`                      | a command in the command center, with an optional hotkey          |
 | `addToolbarButton(button)`                 | a button on the editor's formatting toolbar                       |
-| `addRibbonIcon(icon, title, callback)`     | a button above the day, beside the calendar and All pages         |
+| `addRibbonIcon(icon, title, callback)`     | a button down the left edge of the window, below the app's own    |
 | `addSettingTab(tab)`                       | a tab in the settings, under Community plugins                    |
 | `registerView(type, create)`               | a panel docked on the right, opened with `app.workspace.openView` |
-| `registerPage(type, create)`               | a page at `/plugin/<type>/`, opened with `app.workspace.openPage` |
+| `registerPage(type, create, options?)`     | a page at `/plugin/<type>/`, opened with `app.workspace.openPage` |
 | `registerMarkdownSyntax(syntax)`           | syntax for the editor and the cards                               |
 | `registerEditorExtension(extension)`       | any CodeMirror extension, in every editor                         |
 | `loadData()`, `saveData(data)`             | the plugin's `data.json`                                          |
@@ -302,6 +302,13 @@ title and a way back to the day. A page gets its query string as
 `getDetail()` is dimmed after a page's title, as a count; call
 `refreshHeader()` when the title, icon or detail change.
 
+A page is drawn in the column the notes are read in. One that needs the room,
+such as a board or a book, fills the main area instead, its whole width and
+the height under its title: `registerPage(type, create, { fill: true })`. Its
+`containerEl` then has that size, so `height: 100%` inside it fills the window,
+and `container-type: size` lets its styles size things by it, as the Journal
+view core plugin sizes its book.
+
 ### Timelines
 
 A list of notes, or of anything that happened at a time, is drawn on the
@@ -409,6 +416,7 @@ new Setting(section.contentEl).setName('Colour').addDropdown(/* ... */);
 | `workspace.openPage(type, params?)`, `openView(type)`, `closeView(type?)` | a plugin's page or panel                                       |
 | `markdown.parse(text)`                                                    | the syntax tree, every plugin's syntax included                |
 | `markdown.render(el, text, options?)`                                     | draw markdown as a card does; `onchange` lets widgets save     |
+| `markdown.images(text)`                                                   | the attached images a text shows: where, name, and `url`       |
 | `on('notes-changed', listener)`                                           | a note was saved, labelled or deleted, or another space opened |
 
 ### Icons
@@ -462,3 +470,7 @@ loads the same way; it may be written in TypeScript and Svelte (mounting its
 components into the element it is given), use the app's messages and UI
 components, and nothing else of the app. What a core plugin does, a community
 plugin can do. Its data goes in `core-plugins/<id>.json`.
+
+A core plugin is on unless the user switches it off. One with
+`offByDefault: true` in its entry starts off instead, until the user switches
+it on, as Mentions, Stats and Journal view do.

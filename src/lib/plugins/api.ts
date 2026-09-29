@@ -58,8 +58,11 @@ export interface App {
 export interface Notes {
 	/** A day's notes and pages, by time. */
 	day(date: string): Promise<Note[]>;
-	/** Every day with notes and how many notes and pages it has, newest first. */
-	days(): Promise<{ date: string; count: number }[]>;
+	/**
+	 * Every day with notes, newest first: how many notes and pages it has,
+	 * and how many words its notes hold, its pages left out.
+	 */
+	days(): Promise<{ date: string; count: number; words: number }[]>;
 	/** Every page, newest first. */
 	pages(): Promise<Note[]>;
 	/** As the command center searches: words, and `#category` filters. Newest first. */
@@ -95,6 +98,19 @@ export interface MarkdownRenderer {
 	parse(text: string): Tree;
 	/** Draw `text` into `el` as a note's card draws it. */
 	render(el: HTMLElement, text: string, options?: RenderOptions): RenderedMarkdown;
+	/** The pictures `text` shows: its attached images, in the order they come. */
+	images(text: string): MarkdownImage[];
+}
+
+/** An attached image a text shows, `![name](path)`. */
+export interface MarkdownImage {
+	/** Where its markup starts and ends in the text. */
+	from: number;
+	to: number;
+	/** Between the brackets, or the file's name when they are empty. */
+	name: string;
+	/** Where the webview loads it from, for an `<img>`'s `src`. */
+	url: string;
 }
 
 export interface RenderOptions {
@@ -179,6 +195,16 @@ export interface NodeRender {
 	 * Otherwise a click on it puts the cursor there, to edit it.
 	 */
 	handlesClicks?: boolean;
+}
+
+/** How a page registered with `registerPage` is laid out. */
+export interface PageOptions {
+	/**
+	 * Fill the main area, its whole width and the height under the title,
+	 * rather than the column the notes are read in: for a board, a map or a
+	 * book. The view's `containerEl` then has that size, for `height: 100%`.
+	 */
+	fill?: boolean;
 }
 
 /** What a widget is drawn from. */
@@ -342,8 +368,9 @@ export class Component {
 	}
 
 	/**
-	 * A button with the day's own, above it: the calendar, all pages. Returns
-	 * what takes it away before it unloads.
+	 * A button down the left edge of the window, in every view: a core
+	 * plugin's with the calendar and All pages, a community plugin's below
+	 * them, past a line. Returns what takes it away before it unloads.
 	 */
 	addRibbonIcon(icon: string, title: Label, callback: () => unknown): { remove(): void } {
 		const plugin = pluginOf(this).manifest.id;
@@ -372,10 +399,11 @@ export class Component {
 	 * A page in the main area, at `/plugin/<type>/`, with a way back to the
 	 * day: `workspace.openPage(type)` opens it.
 	 */
-	registerPage(type: string, create: () => ItemView) {
+	registerPage(type: string, create: () => ItemView, options: PageOptions = {}) {
 		if (registry.pages.some((page) => page.type === type))
 			throw new Error(`a page named ${type} is registered already`);
-		this.register(contribute('pages', { plugin: pluginOf(this).manifest.id, type, create }));
+		const fill = options.fill ?? false;
+		this.register(contribute('pages', { plugin: pluginOf(this).manifest.id, type, create, fill }));
 	}
 
 	/** Syntax for the editor and the cards; they redraw with it at once. */

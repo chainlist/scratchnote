@@ -420,7 +420,7 @@
 	"tasks_none": "No open tasks. Start a line with - [ ] in a note or a page to add one.",
 	"tasks_show_in_day": "Show in its day",
 	"command_group_plugins": "Plugins",
-	"settings_core_plugins_description": "Features that ship with the app. Switch off the ones you do not use.",
+	"settings_core_plugins_description": "Features that ship with the app. Switch on the ones you want, off the ones you do not use.",
 	"settings_community_plugins_description": "Features written by other people, added from the community list.",
 	"plugins_group_core": "Core plugins",
 	"plugins_group_community": "Community plugins",
@@ -458,8 +458,8 @@
 	"plugins_error_core_id": "Has the id of a core plugin",
 	"tasks_name": "Tasks",
 	"tasks_description": "Boxes to tick in notes and pages, the checklist button, and every open task on one page.",
-	"tasks_setting_ribbon": "Button above the day",
-	"tasks_setting_ribbon_hint": "Opens the open tasks, beside All pages.",
+	"tasks_setting_ribbon": "Button on the left",
+	"tasks_setting_ribbon_hint": "Opens the open tasks, from any view.",
 	"tasks_setting_order": "Order",
 	"tasks_setting_order_hint": "Which tasks the list starts with.",
 	"tasks_order_newest": "Newest first",
@@ -474,5 +474,102 @@
 	"highlights_color_yellow": "Yellow",
 	"highlights_color_green": "Green",
 	"highlights_color_blue": "Blue",
-	"highlights_color_pink": "Pink"
+	"highlights_color_pink": "Pink",
+	"mentions_plugin_name": "Mentions",
+	"mentions_plugin_description": "Write @name to mention someone. A click on a mention lists every note that names them.",
+	"mentions_chip_title": "Notes that mention {name}",
+	"mentions_show_all": "Show every mention",
+	"mentions_none": "No mentions yet. Write @name in a note.",
+	"mentions_nothing": "Nothing mentions {name}.",
+	"stats_plugin_name": "Stats",
+	"stats_plugin_description": "A panel beside the day with how much the space holds, your writing streak, and a heatmap of the days you wrote.",
+	"stats_show": "Show stats",
+	"stats_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "note or page",
+				"countPlural=other": "notes and pages"
+			}
+		}
+	],
+	"stats_pages": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "page",
+				"countPlural=other": "pages"
+			}
+		}
+	],
+	"stats_days": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "day written",
+				"countPlural=other": "days written"
+			}
+		}
+	],
+	"stats_streak": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "day in a row",
+				"countPlural=other": "days in a row"
+			}
+		}
+	],
+	"stats_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "word per note",
+				"countPlural=other": "words per note"
+			}
+		}
+	],
+	"stats_last_weeks": "The last {weeks} weeks",
+	"stats_setting_weeks": "Weeks shown",
+	"stats_setting_weeks_hint": "How far back the heatmap goes.",
+	"stats_weeks": "{weeks} weeks",
+	"journal_plugin_name": "Journal view",
+	"journal_plugin_description": "Your days as a journal book. Turn the pages from one day to the next, with the pictures of your notes taped in.",
+	"journal_title": "Journal",
+	"journal_open": "Open the journal",
+	"journal_previous": "Previous page",
+	"journal_next": "Next page",
+	"journal_open_day": "Open this day",
+	"journal_empty": "Nothing written yet. Your notes will fill these pages.",
+	"journal_continued": "{date}, continued"
 }

@@ -1,9 +1,0 @@
-{
-	"id": "space-stats",
-	"name": "Space stats",
-	"version": "1.0.0",
-	"minAppVersion": "0.2.0",
-	"description": "A panel beside the day with how much the space holds, your writing streak, and a heatmap of the days you wrote.",
-	"author": "Scratchnote",
-	"authorUrl": "https://github.com/chainlist"
-}

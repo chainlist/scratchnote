@@ -420,7 +420,7 @@
 	"tasks_none": "Aucune tâche à faire. Commencez une ligne par - [ ] dans une note ou une page pour en ajouter une.",
 	"tasks_show_in_day": "Voir dans sa journée",
 	"command_group_plugins": "Plugins",
-	"settings_core_plugins_description": "Les fonctions livrées avec l'application. Désactivez celles dont vous ne vous servez pas.",
+	"settings_core_plugins_description": "Les fonctions livrées avec l'application. Activez celles qui vous servent, désactivez les autres.",
 	"settings_community_plugins_description": "Des fonctions écrites par d'autres personnes, ajoutées depuis la liste de la communauté.",
 	"plugins_group_core": "Plugins de base",
 	"plugins_group_community": "Plugins de la communauté",
@@ -458,8 +458,8 @@
 	"plugins_error_core_id": "Porte l'identifiant d'un plugin de base",
 	"tasks_name": "Tâches",
 	"tasks_description": "Des cases à cocher dans les notes et les pages, le bouton de liste de tâches, et toutes les tâches à faire sur une page.",
-	"tasks_setting_ribbon": "Bouton au-dessus du jour",
-	"tasks_setting_ribbon_hint": "Ouvre les tâches à faire, à côté de Toutes les pages.",
+	"tasks_setting_ribbon": "Bouton à gauche",
+	"tasks_setting_ribbon_hint": "Ouvre les tâches à faire, depuis n'importe quelle vue.",
 	"tasks_setting_order": "Ordre",
 	"tasks_setting_order_hint": "Les tâches par lesquelles la liste commence.",
 	"tasks_order_newest": "Les plus récentes d'abord",
@@ -474,5 +474,102 @@
 	"highlights_color_yellow": "Jaune",
 	"highlights_color_green": "Vert",
 	"highlights_color_blue": "Bleu",
-	"highlights_color_pink": "Rose"
+	"highlights_color_pink": "Rose",
+	"mentions_plugin_name": "Mentions",
+	"mentions_plugin_description": "Écrivez @nom pour mentionner quelqu'un. Un clic sur une mention liste toutes les notes qui le nomment.",
+	"mentions_chip_title": "Notes qui mentionnent {name}",
+	"mentions_show_all": "Afficher toutes les mentions",
+	"mentions_none": "Aucune mention pour l'instant. Écrivez @nom dans une note.",
+	"mentions_nothing": "Rien ne mentionne {name}.",
+	"stats_plugin_name": "Statistiques",
+	"stats_plugin_description": "Un panneau à côté du jour avec ce que contient l'espace, votre série de jours d'écriture et une carte de chaleur des jours où vous avez écrit.",
+	"stats_show": "Afficher les statistiques",
+	"stats_notes": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "note ou page",
+				"countPlural=other": "notes et pages"
+			}
+		}
+	],
+	"stats_pages": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "page",
+				"countPlural=other": "pages"
+			}
+		}
+	],
+	"stats_days": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "jour d'écriture",
+				"countPlural=other": "jours d'écriture"
+			}
+		}
+	],
+	"stats_streak": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "jour d'affilée",
+				"countPlural=other": "jours d'affilée"
+			}
+		}
+	],
+	"stats_words": [
+		{
+			"declarations": [
+				"input count",
+				"local countPlural = count: plural"
+			],
+			"selectors": [
+				"countPlural"
+			],
+			"match": {
+				"countPlural=one": "mot par note",
+				"countPlural=other": "mots par note"
+			}
+		}
+	],
+	"stats_last_weeks": "Les {weeks} dernières semaines",
+	"stats_setting_weeks": "Semaines affichées",
+	"stats_setting_weeks_hint": "Jusqu'où remonte la carte de chaleur.",
+	"stats_weeks": "{weeks} semaines",
+	"journal_plugin_name": "Vue journal",
+	"journal_plugin_description": "Vos journées comme un carnet. Tournez les pages d'un jour à l'autre, avec les photos de vos notes collées au ruban adhésif.",
+	"journal_title": "Journal",
+	"journal_open": "Ouvrir le journal",
+	"journal_previous": "Page précédente",
+	"journal_next": "Page suivante",
+	"journal_open_day": "Ouvrir ce jour",
+	"journal_empty": "Rien d'écrit pour l'instant. Vos notes rempliront ces pages.",
+	"journal_continued": "{date} (suite)"
 }

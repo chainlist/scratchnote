@@ -35,6 +35,8 @@ export interface ViewEntry {
 	plugin: string;
 	type: string;
 	create: () => ItemView;
+	/** A page that fills the main area rather than the reading column. */
+	fill?: boolean;
 }
 
 export interface SettingTabEntry {

@@ -6,12 +6,16 @@
 
 	let {
 		key,
+		fill = false,
 		children,
 		...header
 	}: ViewTitle & {
 		/** Changes when another of the same view opens, such as the next day,
 		 *  which then rises into place as a view of its own does. */
 		key?: unknown;
+		/** The whole main area under the title rather than the reading
+		 *  column, with a set height, as a plugin's page may ask. */
+		fill?: boolean;
 		children: Snippet;
 	} = $props();
 
@@ -24,7 +28,7 @@
 </script>
 
 <!-- A view's column: its title, what the app has to say, and the view. -->
-<div class="mx-auto w-full max-w-3xl">
+<div class={fill ? 'flex h-full w-full flex-col' : 'mx-auto w-full max-w-3xl'}>
 	<ViewHeader {...header} />
 
 	{#if shell.model.state === 'absent' || shell.model.state === 'downloading'}
@@ -40,7 +44,7 @@
 	{/if}
 
 	{#key key}
-		<div class="page-in" {@attach fromTop}>
+		<div class={['page-in', fill && 'min-h-0 flex-1']} {@attach fromTop}>
 			{@render children()}
 		</div>
 	{/key}

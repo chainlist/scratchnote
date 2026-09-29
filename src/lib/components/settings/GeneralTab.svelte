@@ -7,6 +7,7 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { clearResumeStep } from '$lib/onboarding';
 	import { m } from '$lib/paraglide/messages';
+	import About from './About.svelte';
 	import FolderPicker from './FolderPicker.svelte';
 	import HotkeyInput from './HotkeyInput.svelte';
 	import SettingRow from './SettingRow.svelte';
@@ -46,43 +47,46 @@
 	}
 </script>
 
-<div class={group}>
-	<div class="flex flex-col gap-2 px-4 py-3">
-		<div class="flex flex-col gap-0.5">
-			<span class="text-sm font-medium">{m.settings_root()}</span>
-			<p class={hint}>{m.settings_root_hint()}</p>
+<div class="flex flex-col gap-6">
+	<About {settings} />
+	<div class={group}>
+		<div class="flex flex-col gap-2 px-4 py-3">
+			<div class="flex flex-col gap-0.5">
+				<span class="text-sm font-medium">{m.settings_root()}</span>
+				<p class={hint}>{m.settings_root_hint()}</p>
+			</div>
+			<FolderPicker
+				value={settings.draft.root}
+				onchange={(root) => (settings.draft.root = root)}
+				onerror={(message) => settings.say(message, true)}
+			/>
+			{#if restartNeeded}
+				<p class="text-xs text-amber-500">
+					{m.settings_restart_needed({ path: view.activeRoot })}
+				</p>
+			{/if}
 		</div>
-		<FolderPicker
-			value={settings.draft.root}
-			onchange={(root) => (settings.draft.root = root)}
-			onerror={(message) => settings.say(message, true)}
-		/>
-		{#if restartNeeded}
-			<p class="text-xs text-amber-500">
-				{m.settings_restart_needed({ path: view.activeRoot })}
-			</p>
-		{/if}
+		<SettingRow id="hotkey" label={m.settings_hotkey()} hint={m.settings_hotkey_hint()}>
+			<HotkeyInput
+				id="hotkey"
+				value={settings.draft.captureHotkey}
+				onchange={(hotkey) => (settings.draft.captureHotkey = hotkey)}
+			/>
+		</SettingRow>
+		<SettingRow
+			id="hide"
+			label={m.settings_hide()}
+			hint={settings.draft.hideImmediately ? m.settings_hide_on() : m.settings_hide_off()}
+		>
+			<Switch id="hide" bind:checked={settings.draft.hideImmediately} />
+		</SettingRow>
+		<SettingRow id="login" label={m.settings_login()} hint={m.settings_login_hint()}>
+			<Switch id="login" checked={launchAtLogin} onCheckedChange={toggleLaunchAtLogin} />
+		</SettingRow>
+		<SettingRow label={m.settings_onboarding()} hint={m.settings_onboarding_hint()}>
+			<Button variant="secondary" size="sm" onclick={runOnboarding}>
+				{m.settings_onboarding_run()}
+			</Button>
+		</SettingRow>
 	</div>
-	<SettingRow id="hotkey" label={m.settings_hotkey()} hint={m.settings_hotkey_hint()}>
-		<HotkeyInput
-			id="hotkey"
-			value={settings.draft.captureHotkey}
-			onchange={(hotkey) => (settings.draft.captureHotkey = hotkey)}
-		/>
-	</SettingRow>
-	<SettingRow
-		id="hide"
-		label={m.settings_hide()}
-		hint={settings.draft.hideImmediately ? m.settings_hide_on() : m.settings_hide_off()}
-	>
-		<Switch id="hide" bind:checked={settings.draft.hideImmediately} />
-	</SettingRow>
-	<SettingRow id="login" label={m.settings_login()} hint={m.settings_login_hint()}>
-		<Switch id="login" checked={launchAtLogin} onCheckedChange={toggleLaunchAtLogin} />
-	</SettingRow>
-	<SettingRow label={m.settings_onboarding()} hint={m.settings_onboarding_hint()}>
-		<Button variant="secondary" size="sm" onclick={runOnboarding}>
-			{m.settings_onboarding_run()}
-		</Button>
-	</SettingRow>
 </div>

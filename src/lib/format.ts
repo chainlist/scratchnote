@@ -1,6 +1,7 @@
 import { syntaxTree } from '@codemirror/language';
 import type { ChangeSpec, EditorState, StateCommand } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
+import { itemMarks } from '$lib/markdown';
 
 /**
  * What the editor's toolbar and shortcuts do (SPEC 3.4): each writes the
@@ -10,15 +11,38 @@ import type { SyntaxNode } from '@lezer/common';
 
 /** Indentation and quote marks at the start of a line, which a list keeps. */
 const LEAD = /^(?:[ \t]*>)*[ \t]*/;
-/** A list mark or a heading's `#`s after the lead; a task's box comes second. */
-const BLOCK = /^(?:[-*+][ \t]+(\[[ xX]\](?:[ \t]+|$))?|\d+[.)][ \t]+|#{1,6}[ \t]+)/;
+/** A list mark or a heading's `#`s after the lead. */
+const BLOCK = /^(?:[-*+][ \t]+|\d+[.)][ \t]+|#{1,6}[ \t]+)/;
 
-/** Where a line's lead ends, where its text starts, and what kind of line it is. */
+/**
+ * What a list line is: a plain bullet, a bullet carrying one of the item
+ * marks the plugins' syntax adds (a task's box), or another list or heading.
+ */
+type Kind = 'bullet' | RegExp | 'other';
+
+/**
+ * Where a line's lead ends, where its text starts, and what kind of line it
+ * is. An item mark only counts while a plugin's syntax adds it, so with the
+ * Tasks plugin off `- [ ] milk` is a bullet whose text starts `[ ]`.
+ */
 function block(text: string) {
 	const lead = LEAD.exec(text)![0].length;
 	const match = BLOCK.exec(text.slice(lead));
-	const kind = !match ? null : match[1] ? 'task' : /^[-*+]/.test(match[0]) ? 'bullet' : 'other';
-	return { lead, start: lead + (match?.[0].length ?? 0), kind };
+	let start = lead + (match?.[0].length ?? 0);
+	let kind: Kind | null = !match ? null : /^[-*+]/.test(match[0]) ? 'bullet' : 'other';
+	if (kind === 'bullet') {
+		for (const mark of itemMarks()) {
+			const sticky = new RegExp(mark.source, 'y');
+			sticky.lastIndex = start;
+			const item = sticky.exec(text);
+			if (item) {
+				kind = mark;
+				start += item[0].length;
+				break;
+			}
+		}
+	}
+	return { lead, start, kind };
 }
 
 /**
@@ -37,14 +61,15 @@ function selectedLines(state: EditorState) {
 	return written.length ? written : lines;
 }
 
-const isList = (state: EditorState, kind: 'bullet' | 'task') =>
+export const isList = (state: EditorState, kind: 'bullet' | RegExp) =>
 	selectedLines(state).every((line) => block(line.text).kind === kind);
 
 /**
  * Makes the selected lines a list of this kind, or plain lines when they all
  * are one already. Lines that are one keep their mark, and a task its tick.
+ * A list whose lines carry an item mark, a checklist, is named by that mark.
  */
-function toggleList(kind: 'bullet' | 'task', mark: string): StateCommand {
+export function toggleList(kind: 'bullet' | RegExp, mark: string): StateCommand {
 	return ({ state, dispatch }) => {
 		const all = isList(state, kind);
 		const changes: ChangeSpec[] = [];
@@ -75,7 +100,10 @@ function enclosing(state: EditorState, name: string): SyntaxNode | null {
 	return null;
 }
 
-/** The cursor sits between an empty pair of the mark, `**|**`, and not in a longer run of `*`. */
+/**
+ * The cursor sits between an empty pair of the mark, `**|**`, and not in a
+ * longer run of its character.
+ */
 function inEmptyPair(state: EditorState, mark: string) {
 	const { head, empty } = state.selection.main;
 	const at = (from: number, to: number) => state.sliceDoc(from, to);
@@ -84,21 +112,24 @@ function inEmptyPair(state: EditorState, mark: string) {
 		empty &&
 		at(head - n, head) === mark &&
 		at(head, head + n) === mark &&
-		at(head - n - 1, head - n) !== '*' &&
-		at(head + n, head + n + 1) !== '*'
+		at(head - n - 1, head - n) !== mark[0] &&
+		at(head + n, head + n + 1) !== mark[0]
 	);
 }
 
-const isMarked = (state: EditorState, node: string, mark: string) =>
+/** Whether the selection has the format that parses to `node`, written with `mark`. */
+export const isMarked = (state: EditorState, node: string, mark: string) =>
 	enclosing(state, node) !== null || inEmptyPair(state, mark);
 
 /**
  * Bold or italic, as a word processor does them: on the selection, or on
  * the word the cursor is in, or on what is typed next. Again on text that
  * has it takes it away; at the end of it, the cursor steps out so typing
- * goes on plain.
+ * goes on plain. `node` is what the format parses to, opened and closed by
+ * its first and last child, so a plugin's inline syntax (`==highlight==`)
+ * toggles the same way.
  */
-function toggleMark(node: 'StrongEmphasis' | 'Emphasis', mark: string): StateCommand {
+export function toggleMark(node: string, mark: string): StateCommand {
 	return ({ state, dispatch }) => {
 		const range = state.selection.main;
 		const update = (changes: ChangeSpec[], cursor?: number) => {
@@ -115,10 +146,9 @@ function toggleMark(node: 'StrongEmphasis' | 'Emphasis', mark: string): StateCom
 		};
 
 		const marked = enclosing(state, node);
-		if (marked) {
-			const marks = marked.getChildren('EmphasisMark');
-			const open = marks[0];
-			const close = marks[marks.length - 1];
+		const open = marked?.firstChild;
+		const close = marked?.lastChild;
+		if (open && close && open.from !== close.from) {
 			if (range.empty && range.head === close.from) {
 				dispatch(state.update({ selection: { anchor: close.to }, userEvent: 'select' }));
 				return true;
@@ -161,7 +191,6 @@ function toggleMark(node: 'StrongEmphasis' | 'Emphasis', mark: string): StateCom
 export const bold = toggleMark('StrongEmphasis', '**');
 export const italic = toggleMark('Emphasis', '*');
 export const bullets = toggleList('bullet', '- ');
-export const checklist = toggleList('task', '- [ ] ');
 
 /**
  * Makes the selection, or the word at the cursor, a link, with `url`
@@ -195,6 +224,5 @@ export const link: StateCommand = ({ state, dispatch }) => {
 export const formats = (state: EditorState) => ({
 	bold: isMarked(state, 'StrongEmphasis', '**'),
 	italic: isMarked(state, 'Emphasis', '*'),
-	bullets: isList(state, 'bullet'),
-	checklist: isList(state, 'task')
+	bullets: isList(state, 'bullet')
 });

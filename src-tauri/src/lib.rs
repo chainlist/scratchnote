@@ -4,6 +4,7 @@ mod commands;
 mod embed;
 mod enrich;
 mod pages;
+mod plugins;
 mod search;
 mod settings;
 mod spaces;
@@ -77,7 +78,7 @@ pub fn run() {
             commands::search::search,
             commands::search::search_meaning,
             commands::search::similar_notes,
-            commands::search::task_notes,
+            commands::search::notes_containing,
             commands::chat::chat,
             commands::chat::stop_chat,
             commands::chat::warm_chat,
@@ -121,6 +122,15 @@ pub fn run() {
             attachments::add_attachments,
             attachments::save_attachment,
             attachments::open_attachment,
+            plugins::plugins_view,
+            plugins::set_plugins,
+            plugins::plugin_code,
+            plugins::plugin_data,
+            plugins::save_plugin_data,
+            plugins::browse_plugins,
+            plugins::plugin_details,
+            plugins::install_plugin,
+            plugins::uninstall_plugin,
             hide_capture,
             capture_to_page,
             set_tray_labels,

@@ -2,6 +2,7 @@
 	import { fade } from 'svelte/transition';
 	import type { Note } from '$lib/api';
 	import Markdown from '$lib/components/Markdown.svelte';
+	import TimelineItem from '$lib/components/TimelineItem.svelte';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FileXIcon from '@lucide/svelte/icons/file-x';
@@ -48,36 +49,25 @@
 <!-- Laid out as a note card, so the page sits on the same rail at its time.
      The card is one big click target; its title is the button, for the
      keyboard, and the category a button of its own. -->
-<article
+<TimelineItem
 	data-note-id={note.id}
-	class="group relative isolate -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-8 rounded-lg px-3 py-3 {blink
-		? 'note-blink'
-		: ''} {pending ? 'z-10' : ''}"
+	time={note.time}
+	date={showDate ? note.date : undefined}
+	hover={false}
+	class={[blink && 'note-blink', pending && 'z-10']}
 >
+	{#snippet icon()}
+		{#if note.missing}<FileXIcon class="size-3" />{:else}<FileTextIcon class="size-3" />{/if}
+	{/snippet}
 	{#if pending}
 		<span aria-hidden="true" class="note-aurora" transition:fade={glowFade}></span>
 	{:else if note.status === 'failed'}
 		<span aria-hidden="true" class="note-error-ring" transition:fade={glowFade}></span>
 	{/if}
-	<span
-		aria-hidden="true"
-		class="absolute top-0 left-25 h-6.5 w-px bg-neutral-800 [li:first-child_&]:hidden"
-	></span>
-	<span
-		aria-hidden="true"
-		class="absolute top-6.5 left-25 flex size-4.5 translate-x-[-8.5px] items-center justify-center rounded border border-neutral-700 bg-neutral-950 text-neutral-500 transition-colors duration-300 group-hover:border-neutral-500 group-hover:text-neutral-300"
-	>
-		{#if note.missing}<FileXIcon class="size-3" />{:else}<FileTextIcon class="size-3" />{/if}
-	</span>
-	<span
-		aria-hidden="true"
-		class="absolute top-[44px] bottom-0 left-[6.25rem] w-px bg-neutral-800 [li:last-child_&]:hidden"
-	></span>
-	<time class="pt-3 text-right font-mono text-xs leading-5 text-neutral-600">
-		{#if showDate}<span class="block">{note.date}</span>{/if}{note.time}
-	</time>
 
-	<div class="min-w-0">
+	<!-- The box rises into the item's padding, so its title, inside the box's
+	     own padding, comes about level with a note's first line. -->
+	<div class="-my-2 min-w-0">
 		{#if note.missing}
 			<div class="rounded-lg border border-dashed border-neutral-800 px-4 py-3">
 				<p class="truncate text-base text-neutral-400">{note.subject ?? m.pages_untitled()}</p>
@@ -154,4 +144,4 @@
 			</div>
 		{/if}
 	</div>
-</article>
+</TimelineItem>

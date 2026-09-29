@@ -10,7 +10,10 @@
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
+	import { duration, startupTimes } from '$lib/startup';
 	import type { SettingsState } from './state.svelte';
+	import StartupDetails from './StartupDetails.svelte';
 	import { group, hint } from './styles';
 
 	let { settings }: { settings: SettingsState } = $props();
@@ -22,6 +25,9 @@
 	let upToDate = $state(false);
 	/** The notes of the version running, not the whole changelog. */
 	const current = $derived(releases.filter((r) => r.version === version));
+	/** Recorded once the first view was up, well before the settings open. */
+	const startup = startupTimes();
+	let startupShown = $state(false);
 
 	onMount(async () => {
 		try {
@@ -53,6 +59,19 @@
 			<span class="text-base font-semibold">Scratchnote</span>
 			{#if version}
 				<span class={hint}>{m.settings_about_version({ version })}</span>
+			{/if}
+			{#if startup}
+				<span class="{hint} flex items-center gap-1.5">
+					{m.settings_startup_total({ time: duration(startup.total, getLocale()) })}
+					<Button
+						variant="link"
+						size="xs"
+						class="h-auto p-0 text-xs"
+						onclick={() => (startupShown = true)}
+					>
+						{m.settings_startup_details()}
+					</Button>
+				</span>
 			{/if}
 			{#if upToDate}
 				<span class={hint}>{m.settings_about_up_to_date()}</span>
@@ -95,3 +114,4 @@
 </div>
 
 <WhatsNew bind:releases={releaseNotes} />
+{#if startup}<StartupDetails bind:open={startupShown} times={startup} />{/if}

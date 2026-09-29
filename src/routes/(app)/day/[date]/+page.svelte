@@ -11,8 +11,9 @@
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import FilesIcon from '@lucide/svelte/icons/files';
-	import ListTodoIcon from '@lucide/svelte/icons/list-todo';
+	import PluginIcon from '$lib/components/PluginIcon.svelte';
 	import { m } from '$lib/paraglide/messages';
+	import { labelText, registry, type RibbonEntry } from '$lib/plugins/registry.svelte';
 	import { getShell } from '$lib/shell.svelte';
 	import type { Day } from './+page';
 
@@ -49,6 +50,17 @@
 		} catch (e) {
 			shell.error = String(e);
 			return false;
+		}
+	}
+
+	/** A plugin's button above the day; one that fails says so above the view. */
+	function runRibbon(item: RibbonEntry) {
+		const fail = (e: unknown) =>
+			shell.showError(`${item.plugin}: ${e instanceof Error ? e.message : String(e)}`);
+		try {
+			void Promise.resolve(item.callback()).catch(fail);
+		} catch (e) {
+			fail(e);
 		}
 	}
 
@@ -99,16 +111,20 @@
 			>
 				<FilesIcon />
 			</Button>
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				href={resolve('/tasks/')}
-				aria-label={m.tasks_open()}
-				title={m.tasks_open()}
-				class="text-muted-foreground hover:text-foreground"
-			>
-				<ListTodoIcon />
-			</Button>
+			<!-- The plugins' buttons, such as the Tasks plugin's open tasks. -->
+			{#each registry.ribbon as item (item)}
+				{@const title = labelText(item.title)}
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					onclick={() => runRibbon(item)}
+					aria-label={title}
+					{title}
+					class="text-muted-foreground hover:text-foreground"
+				>
+					<PluginIcon icon={item.icon} />
+				</Button>
+			{/each}
 			<!-- Side by side ahead of the title, so they stay put while its width
 			     changes from one day to the next. -->
 			<Button

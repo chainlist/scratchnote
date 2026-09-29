@@ -1,22 +1,26 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, type Component } from 'svelte';
+	import type { EditorView } from '@codemirror/view';
 	import { search, searchMeaning, type Note } from '$lib/api';
+	import PluginIcon from '$lib/components/PluginIcon.svelte';
 	import * as Command from '$lib/components/ui/command';
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import HashIcon from '@lucide/svelte/icons/hash';
 	import ListIcon from '@lucide/svelte/icons/list';
-	import ListTodoIcon from '@lucide/svelte/icons/list-todo';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import { categoryLabel } from '$lib/categories';
 	import { m } from '$lib/paraglide/messages';
+	import { formatHotkey, runCommand } from '$lib/plugins/commands';
+	import { labelText, registry, type CommandEntry } from '$lib/plugins/registry.svelte';
 	import { queryCategories } from '$lib/query';
 
 	let {
 		open = $bindable(),
 		query = $bindable(),
+		editor,
 		categories,
 		canChat,
 		canMeaning,
@@ -25,13 +29,14 @@
 		ontoday,
 		onnewpage,
 		onpages,
-		ontasks,
 		onchat,
 		onsettings
 	}: {
 		open: boolean;
 		/** Bound so a category clicked on a card can open the palette filtered on it. */
 		query: string;
+		/** The editor the palette was opened from, for the plugins' commands on text. */
+		editor: EditorView | null;
 		/**
 		 * Every category in use with its count, most used first. Offered as
 		 * filters while the query is empty, and as `#` completions.
@@ -49,8 +54,6 @@
 		onnewpage: () => void;
 		/** List every page of the space. */
 		onpages: () => void;
-		/** List the open tasks of the space (SPEC 3.8). */
-		ontasks: () => void;
 		onchat: () => void;
 		onsettings: () => void;
 	} = $props();
@@ -71,11 +74,61 @@
 
 	const trimmed = $derived(query.trim());
 
+	/** A command of the app's own, or a plugin's (SPEC 3.9). */
+	type Action = {
+		value: string;
+		name: string;
+		icon?: Component;
+		plugin?: CommandEntry;
+		run: () => void;
+	};
+
+	const builtIn = $derived<Action[]>([
+		{ value: 'today', name: m.command_today(), icon: CalendarCheckIcon, run: ontoday },
+		{ value: 'new-page', name: m.pages_new(), icon: FilePlusIcon, run: onnewpage },
+		{ value: 'all-pages', name: m.pages_all(), icon: FilesIcon, run: onpages },
+		...(canChat
+			? [{ value: 'chat', name: m.search_chat_label(), icon: SparklesIcon, run: onchat }]
+			: []),
+		{ value: 'settings', name: m.common_settings(), icon: SettingsIcon, run: onsettings }
+	]);
+
+	/** The plugins' commands; those on text only when opened from an editor still there. */
+	const pluginActions = $derived<Action[]>(
+		registry.commands
+			.filter((command) => command.callback || (command.editorCallback && editor?.dom.isConnected))
+			.map((command) => ({
+				value: `p:${command.id}`,
+				name: labelText(command.name),
+				plugin: command,
+				run: () => {
+					runCommand(command, editor);
+					editor?.focus();
+				}
+			}))
+	);
+
+	/** Folded for matching: `é` finds `e`, and case does not count. */
+	const fold = (text: string) =>
+		text
+			.normalize('NFD')
+			.replace(/\p{Diacritic}/gu, '')
+			.toLowerCase();
+
 	/** The `#` token being typed at the end of the query, without the `#`. */
 	const prefix = $derived.by(() => {
 		if (query.endsWith(' ')) return null;
 		const last = query.split(' ').pop() ?? '';
 		return last.startsWith('#') ? last.slice(1).toLowerCase() : null;
+	});
+
+	/** While typing, the commands whose name has every word typed. */
+	const matchingActions = $derived.by(() => {
+		const words = fold(trimmed).split(/\s+/).filter(Boolean);
+		if (words.length === 0 || prefix !== null) return [];
+		return [...builtIn, ...pluginActions].filter((action) =>
+			words.every((word) => fold(action.name).includes(word))
+		);
 	});
 
 	// Categories already in the query are not offered again. Names starting
@@ -171,6 +224,16 @@
 	}
 </script>
 
+{#snippet actionItem(action: Action)}
+	<Command.Item value={action.value} onSelect={() => run(action.run)}>
+		{#if action.icon}<action.icon />{:else}<PluginIcon icon={action.plugin?.icon} />{/if}
+		{action.name}
+		{#if action.plugin?.hotkey}
+			<Command.Shortcut>{formatHotkey(action.plugin.hotkey)}</Command.Shortcut>
+		{/if}
+	</Command.Item>
+{/snippet}
+
 {#snippet noteItem(note: Note)}
 	<Command.Item value="n:{note.id}" onSelect={() => run(() => onpick(note))}>
 		<span class="w-24 shrink-0 self-start font-mono text-xs text-muted-foreground">
@@ -199,27 +262,17 @@
 	<Command.List class="max-h-[min(28rem,60vh)]">
 		{#if trimmed === ''}
 			<Command.Group heading={m.command_group_commands()}>
-				<Command.Item value="today" onSelect={() => run(ontoday)}>
-					<CalendarCheckIcon />{m.command_today()}
-				</Command.Item>
-				<Command.Item value="new-page" onSelect={() => run(onnewpage)}>
-					<FilePlusIcon />{m.pages_new()}
-				</Command.Item>
-				<Command.Item value="all-pages" onSelect={() => run(onpages)}>
-					<FilesIcon />{m.pages_all()}
-				</Command.Item>
-				<Command.Item value="open-tasks" onSelect={() => run(ontasks)}>
-					<ListTodoIcon />{m.tasks_open()}
-				</Command.Item>
-				{#if canChat}
-					<Command.Item value="chat" onSelect={() => run(onchat)}>
-						<SparklesIcon />{m.search_chat_label()}
-					</Command.Item>
-				{/if}
-				<Command.Item value="settings" onSelect={() => run(onsettings)}>
-					<SettingsIcon />{m.common_settings()}
-				</Command.Item>
+				{#each builtIn as action (action.value)}
+					{@render actionItem(action)}
+				{/each}
 			</Command.Group>
+			{#if pluginActions.length > 0}
+				<Command.Group heading={m.command_group_plugins()}>
+					{#each pluginActions as action (action.value)}
+						{@render actionItem(action)}
+					{/each}
+				</Command.Group>
+			{/if}
 			{#if categories.length > 0}
 				<Command.Group heading={m.categories_heading()}>
 					{#each categories as [name, count] (name)}
@@ -249,6 +302,15 @@
 					</Command.Item>
 					{#each results as note (note.id)}
 						{@render noteItem(note)}
+					{/each}
+				</Command.Group>
+			{/if}
+			<!-- After the notes, so Enter still lists them when a word typed is
+			     also in a command's name. -->
+			{#if matchingActions.length > 0}
+				<Command.Group heading={m.command_group_commands()}>
+					{#each matchingActions as action (action.value)}
+						{@render actionItem(action)}
 					{/each}
 				</Command.Group>
 			{/if}

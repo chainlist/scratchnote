@@ -1,0 +1,9 @@
+{
+	"id": "mentions",
+	"name": "Mentions",
+	"version": "1.0.0",
+	"minAppVersion": "0.2.0",
+	"description": "Write @name to mention someone. A click on a mention lists every note that names them.",
+	"author": "Scratchnote",
+	"authorUrl": "https://github.com/chainlist"
+}

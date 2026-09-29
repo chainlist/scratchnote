@@ -56,6 +56,8 @@ export class SettingsState {
 	info = $state<ModelInfo | null>(null);
 	model = $state<ModelStatus>({ state: 'absent' });
 	message = $state<{ text: string; error: boolean } | null>(null);
+	/** The tab shown: one of the app's, or `plugin:<id>` for a plugin's own. */
+	tab = $state('general');
 
 	// Everything else applies as soon as it is picked, so only these wait on
 	// the Save button.

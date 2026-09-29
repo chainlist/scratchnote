@@ -7,6 +7,7 @@
 	import { followSpace } from '$lib/attachments.svelte';
 	import { applyLanguage } from '$lib/i18n.svelte';
 	import { getLocale } from '$lib/paraglide/runtime';
+	import { recordStartup } from '$lib/startup';
 
 	let { children } = $props();
 
@@ -18,6 +19,8 @@
 	// Both windows mount this layout, so an appearance or language change
 	// reaches the capture window too, and both know whose attachments they show.
 	onMount(() => {
+		// After the first view's own mount work too, such as its editor.
+		setTimeout(recordStartup);
 		void getSettings().then(apply);
 		const off = [onSettingsChanged(apply), followSpace()];
 		return () => off.forEach((p) => void p.then((stop) => stop()));

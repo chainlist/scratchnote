@@ -384,6 +384,8 @@
 	"pages_none": "In diesem Space gibt es noch keine Seiten.",
 	"pages_open": "Öffnen",
 	"pages_open_side": "Im Seitenbereich öffnen",
+	"dock_move_left": "Nach links verschieben",
+	"dock_move_right": "Nach rechts verschieben",
 	"pages_words": [
 		{
 			"declarations": [

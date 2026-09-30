@@ -11,11 +11,6 @@ body {
 	background: var(--color-neutral-950);
 }
 
-/* The width of a page docked beside the day, which the chat keeps clear of. */
-:root {
-	--page-dock: min(42rem, 50vw);
-}
-
 /* Thin, trackless scrollbars without arrow buttons. The standard scrollbar-width
    and scrollbar-color are left unset: in Chromium they override these rules. */
 ::-webkit-scrollbar {

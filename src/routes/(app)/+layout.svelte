@@ -22,6 +22,7 @@
 	import ChatPanel from '$lib/components/ChatPanel.svelte';
 	import CommandCenter from '$lib/components/CommandCenter.svelte';
 	import DeleteNoteDialog from '$lib/components/DeleteNoteDialog.svelte';
+	import Dock from '$lib/components/Dock.svelte';
 	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
 	import NoteEditor from '$lib/components/NoteEditor.svelte';
 	import NoteToPageDialog from '$lib/components/NoteToPageDialog.svelte';
@@ -31,11 +32,11 @@
 	import Settings from '$lib/components/settings/Settings.svelte';
 	import ViewHeader from '$lib/components/ViewHeader.svelte';
 	import WhatsNew from '$lib/components/WhatsNew.svelte';
-	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import PanelRightCloseIcon from '@lucide/svelte/icons/panel-right-close';
+	import * as Resizable from '$lib/components/ui/resizable';
 	import { m } from '$lib/paraglide/messages';
 	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '$lib/changelog';
+	import { DOCK_MAX, DOCK_MIN } from '$lib/dock';
 	import { bindWorkspace } from '$lib/plugins/app';
 	import { matchesHotkey, runCommand } from '$lib/plugins/commands';
 	import { registry } from '$lib/plugins/registry.svelte';
@@ -167,29 +168,48 @@
 
 	<div class="flex min-h-0 flex-1">
 		<Ribbon />
-		<main bind:offsetWidth={shell.width} class="min-w-0 flex-1 overflow-y-auto px-6 pb-16">
-			{@render children()}
-		</main>
+		<!-- The dock goes before or after the view, on the side it was moved
+		     to. The view's pane stays in place, so the view is never mounted
+		     again when the dock opens, closes or moves. -->
+		<Resizable.PaneGroup direction="horizontal" class="min-w-0 flex-1">
+			{#if shell.dockOpen && shell.dockSide === 'left'}
+				{@render dock(1)}
+				<Resizable.Handle class="z-10 after:w-2" />
+			{/if}
+			<Resizable.Pane id="view" order={2} class="relative">
+				<main bind:offsetWidth={shell.width} class="h-full overflow-y-auto px-6 pb-16">
+					{@render children()}
+				</main>
+				<ChatPanel
+					bind:open={shell.chatOpen}
+					space={data.spaces.active}
+					canChat={shell.canChat}
+					modelOff={shell.model.state === 'disabled'}
+					onopen={(entry) => void shell.openCited(entry)}
+				/>
+			</Resizable.Pane>
+			{#if shell.dockOpen && shell.dockSide === 'right'}
+				<Resizable.Handle class="z-10 after:w-2" />
+				{@render dock(3)}
+			{/if}
+		</Resizable.PaneGroup>
+	</div>
+</div>
+
+{#snippet dock(order: number)}
+	<Resizable.Pane
+		id="dock"
+		{order}
+		defaultSize={shell.dockSize}
+		minSize={DOCK_MIN}
+		maxSize={DOCK_MAX}
+		onResize={shell.resizeDock}
+	>
 		{#if shell.docked}
 			{@const docked = shell.docked}
 			<!-- The page docked beside the view, written in while the notes stay
 			     in reach. -->
-			<aside
-				aria-label={docked.subject ?? m.pages_untitled()}
-				class="flex w-(--page-dock) shrink-0 flex-col border-l border-neutral-800"
-			>
-				<div class="flex justify-end px-3 pt-3">
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						onclick={() => (shell.docked = null)}
-						aria-label={m.common_close()}
-						title={m.common_close()}
-						class="text-muted-foreground hover:text-foreground"
-					>
-						<PanelRightCloseIcon />
-					</Button>
-				</div>
+			<Dock label={docked.subject ?? m.pages_untitled()} onclose={() => (shell.docked = null)}>
 				<div class="min-h-0 flex-1 overflow-y-auto px-8">
 					{#key docked.id}
 						<PageView
@@ -203,26 +223,17 @@
 						/>
 					{/key}
 				</div>
-			</aside>
+			</Dock>
 		{:else if shell.panel}
 			{@const type = shell.panel}
 			<PluginPanel {type} onclose={() => shell.closePanel(type)} />
 		{/if}
-	</div>
-</div>
+	</Resizable.Pane>
+{/snippet}
 
 <div class="fixed bottom-3 left-3 z-30">
 	<ModelStatusBar status={shell.model} />
 </div>
-
-<ChatPanel
-	bind:open={shell.chatOpen}
-	space={data.spaces.active}
-	canChat={shell.canChat}
-	modelOff={shell.model.state === 'disabled'}
-	docked={shell.docked !== null || shell.panel !== null}
-	onopen={(entry) => void shell.openCited(entry)}
-/>
 
 <CommandCenter
 	bind:open={shell.paletteOpen}

@@ -87,7 +87,7 @@ export interface Workspace {
 	openNote(note: Pick<Note, 'id' | 'date' | 'kind'>): void;
 	/** A page registered with `registerPage`, with its query string. */
 	openPage(type: string, params?: Record<string, string>): void;
-	/** A view registered with `registerView`, docked on the right. */
+	/** A view registered with `registerView`, in the dock. */
 	openView(type: string): void;
 	/** Close the docked view, if it is `type` (or any when left out). */
 	closeView(type?: string): void;
@@ -388,7 +388,7 @@ export class Component {
 		this.register(contribute('settingTabs', { plugin: pluginOf(this).manifest.id, tab }));
 	}
 
-	/** A panel, docked on the right by `workspace.openView(type)`. */
+	/** A panel, docked beside the view by `workspace.openView(type)`. */
 	registerView(type: string, create: () => ItemView) {
 		if (registry.views.some((view) => view.type === type))
 			throw new Error(`a view named ${type} is registered already`);

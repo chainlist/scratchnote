@@ -384,6 +384,8 @@
 	"pages_none": "Ancora nessuna pagina in questo spazio.",
 	"pages_open": "Apri",
 	"pages_open_side": "Apri nel pannello laterale",
+	"dock_move_left": "Sposta a sinistra",
+	"dock_move_right": "Sposta a destra",
 	"pages_words": [
 		{
 			"declarations": [

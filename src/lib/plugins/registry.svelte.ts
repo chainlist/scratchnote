@@ -58,7 +58,7 @@ interface Lists {
 	commands: CommandEntry[];
 	ribbon: RibbonEntry[];
 	toolbar: ToolbarEntry[];
-	/** Panels, docked on the right. */
+	/** Panels, docked beside the view. */
 	views: ViewEntry[];
 	/** Full pages in the main area, each at `/plugin/<type>/`. */
 	pages: ViewEntry[];

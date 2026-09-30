@@ -411,6 +411,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
           2026-09-22 image.png
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
+        search.db        # the notes' text for search, SQLite, derived, rebuildable
         vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
         queue.json       # pending enrichment jobs
         categories.json  # the categories the model picks from, English names: ["development", ...]
@@ -424,7 +425,7 @@ Day boundaries use the **local timezone** at save time.
 
 ### 4.2 Daily file format (source of truth)
 
-The daily markdown file holds both the note body and its enrichment metadata. `index.jsonl` is purely a derived cache and must be fully rebuildable from the markdown files.
+The daily markdown file holds both the note body and its enrichment metadata. `index.jsonl` and `search.db` are purely derived caches and must be fully rebuildable from the markdown files.
 
 ```markdown
 # 2026-09-22
@@ -486,7 +487,7 @@ One JSON object per line, one line per note:
 - `words` counts the body's words once, so the day list and its stats never count every body again. A line without it, from before it was counted, gets its day reparsed.
 - A page (4.7) has a line too, with `"kind": "page"`, `file` pointing at the page file and `subject` holding its title. Notes have no `kind`.
 - New notes are appended. Updates and deletes rewrite the file (it is small; atomic rewrite is fine).
-- On startup: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written before notes had a category instead of tags is rebuilt whole.
+- On opening a space: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written before notes had a category instead of tags is rebuilt whole. `search.db` records each day file's mtime and length as it last read it, and a day read at another is read again; any other day is not read at all, so opening a space costs a look at each file's date, not a read of its notes.
 - Provide a "Rebuild index" button in settings that reparses everything.
 
 ### 4.5 categories.json
@@ -687,15 +688,18 @@ The grammar only lets the model write a listed category, so nothing it returns n
 
 ## 6. Search
 
-- v1: in-memory. On startup, load index + note bodies into memory. Case-insensitive, accent-insensitive substring match over body and subject. A `#category` token keeps the notes filed under that category.
+- The index in memory holds no text. The text of the open space's notes and pages is in `.scratchnote/search.db`, a SQLite file: each body, its subject and body folded (lowercase, accents stripped), and an FTS5 index over the folded text with the trigram tokenizer. Memory does not grow with what is written.
+- Case-insensitive, accent-insensitive substring match over body and subject: every word must be in the folded text. A word of three characters or more is found through the trigram index and then checked as a plain substring; a shorter one is looked for by scanning `search.db` on disk. A `#category` token keeps the notes filed under that category, which the index in memory answers, as it does the order.
+- `notes_containing` matches its needles as typed, case and all: a needle of three folded characters or more narrows through the index, and a shorter one (`@`) scans.
+- SQLite with trigrams rather than `tantivy`: tantivy matches whole words, and substring matching (`offe` finds `coffee`) would need an n-gram index several times larger.
 - Results sorted by date desc, then time desc.
 - The page asks for a stretch of the results and gets the total with it: the command center the first 50, the results view the first 100 and 100 more at each "Show more". Only that stretch leaves the backend, so a short query matching most of a space does not copy all of it to the page. A plugin's search still gets every match.
-- Must stay under 50ms for 10,000 notes. If it doesn't, switch to `tantivy` (out of scope unless needed).
+- Must stay under 50ms for 10,000 notes, for the 50 results the command center asks.
 
 ### 6.1 Chat
 
 - A chat talks with the model about the open space's notes. It reads `index.jsonl` and never the markdown: each note's number, date, weekday, subject and category, oldest first. Past a budget of about 20,000 characters only the most recent notes are shown, from a multiple of 10 on, so the start of the prompt, and the model's cache of it, holds while notes are added. Numbers stay those of the whole index.
-- With the embedding model, the last question is embedded and the 5 closest notes of the space are found in `vectors.bin`. Their text, cut to about 800 characters, goes with that question only, after the index, so it never breaks the cache.
+- With the embedding model, the last question is embedded and the 5 closest notes of the space are found in `vectors.bin`. Their text, read from `search.db` and cut to about 800 characters, goes with that question only, after the index, so it never breaks the cache.
 - The model cites notes by number, like `[12]`, and the page resolves a number against the whole index, shown or not.
 - The embedding model is optional. Without it, or when embedding fails, the chat answers from the index alone. When a prompt does not fit, the oldest turns go first, then the retrieved notes from the worst up.
 

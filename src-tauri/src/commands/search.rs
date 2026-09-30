@@ -40,17 +40,11 @@ pub fn search(
     offset: Option<usize>,
     limit: Option<usize>,
 ) -> Result<Found, String> {
-    let space = state.space()?;
-    let idx = space
-        .index
-        .read()
-        .map_err(|_| "index lock poisoned".to_string())?;
-    Ok(crate::search::search(
-        &idx,
-        &query,
-        offset.unwrap_or(0),
-        limit.unwrap_or(usize::MAX),
-    ))
+    let (offset, limit) = (offset.unwrap_or(0), limit.unwrap_or(usize::MAX));
+    let found = state
+        .space()?
+        .read(|idx, db| crate::search::search(idx, db, &query, offset, limit))?;
+    Ok(found.unwrap_or_default())
 }
 
 /// Every note and page whose body holds any of `needles`, newest first, for
@@ -61,12 +55,10 @@ pub fn notes_containing(
     state: State<'_, AppState>,
     needles: Vec<String>,
 ) -> Result<Vec<Note>, String> {
-    let space = state.space()?;
-    let idx = space
-        .index
-        .read()
-        .map_err(|_| "index lock poisoned".to_string())?;
-    Ok(crate::search::containing(&idx, &needles))
+    let found = state
+        .space()?
+        .read(|idx, db| crate::search::containing(idx, db, &needles))?;
+    Ok(found.unwrap_or_default())
 }
 
 /// How many notes search by meaning adds at most.
@@ -111,16 +103,9 @@ pub async fn search_meaning(
     state.mark_used();
 
     let hits = space.related(&vector, usize::MAX, MIN_LEAD);
-    let idx = space
-        .index
-        .read()
-        .map_err(|_| "index lock poisoned".to_string())?;
-    Ok(crate::search::by_meaning(
-        &idx,
-        &query,
-        &hits,
-        MEANING_NOTES,
-    ))
+    let found =
+        space.read(|idx, db| crate::search::by_meaning(idx, db, &query, &hits, MEANING_NOTES))?;
+    Ok(found.unwrap_or_default())
 }
 
 /// How many notes "Similar notes" lists at most.
@@ -138,13 +123,12 @@ const MIN_SIMILARITY: f32 = 0.28;
 pub fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec<Note>, String> {
     let space = state.space()?;
     let hits = space.similar(&id, SIMILAR_NOTES, MIN_SIMILARITY);
-    let idx = space
-        .index
-        .read()
-        .map_err(|_| "index lock poisoned".to_string())?;
-    let notes: HashMap<&str, &IndexEntry> = idx.entries().map(|e| (e.id.as_str(), e)).collect();
-    Ok(hits
-        .iter()
-        .filter_map(|(hit, _)| notes.get(hit.as_str()).map(|e| e.to_note()))
-        .collect())
+    let found = space.read(|idx, db| {
+        let notes: HashMap<&str, &IndexEntry> = idx.entries().map(|e| (e.id.as_str(), e)).collect();
+        let similar = hits
+            .iter()
+            .filter_map(|(hit, _)| notes.get(hit.as_str()).copied());
+        crate::search::with_bodies(db, similar)
+    })?;
+    Ok(found.unwrap_or_default())
 }

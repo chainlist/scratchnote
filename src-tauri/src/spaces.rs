@@ -5,7 +5,7 @@
 //! made there by hand is a space too. `.scratchnote/spaces.json` at the root
 //! records only what the folders cannot: which space is open.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, RwLock, RwLockWriteGuard};
@@ -16,7 +16,9 @@ use crate::embed::vectors::Vectors;
 use crate::enrich::queue::{queue_path, Job, Queue};
 use crate::enrich::worker::Wake;
 use crate::storage::day_path;
+use crate::storage::daily_file::Note;
 use crate::storage::index::{self, Index, IndexEntry};
+use crate::storage::search_db::{SearchDb, Stamp};
 use crate::storage::writer::Writer;
 use crate::storage::categories;
 
@@ -205,6 +207,10 @@ pub struct Space {
     /// is not open. Guards are held only for the length of a read or a swap,
     /// never across an await.
     pub index: RwLock<Index>,
+    /// The notes' text (SPEC 6), `None` while the space is not open. Taken
+    /// after `index` when both are needed, never the other way round, so a
+    /// read holding both cannot meet a write holding them the other way.
+    pub search: Mutex<Option<SearchDb>>,
     /// Pending enrichment jobs (SPEC 5.6).
     pub queue: Mutex<Queue>,
     /// The note embeddings the chat searches. `None` until the embed task
@@ -229,6 +235,7 @@ impl Space {
         Self {
             name: name.to_string(),
             index: RwLock::new(Index::closed()),
+            search: Mutex::new(None),
             queue: Mutex::new(Queue::load(&root)),
             vectors: Mutex::new(None),
             watcher: Mutex::new(None),
@@ -251,7 +258,14 @@ impl Space {
     /// Read the space's notes into memory, as opening it does. The flag says
     /// the index on disk is out of date and should be written back.
     pub fn load(&self) -> bool {
-        let (loaded, stale) = index::load(&self.root);
+        let mut db = SearchDb::open(&self.root).unwrap_or_else(|e| {
+            log::error!(
+                "could not open the search.db of {}, holding the text in memory: {e}",
+                self.name
+            );
+            SearchDb::in_memory().expect("an in-memory database")
+        });
+        let (loaded, stale) = index::load(&self.root, &mut db);
         categories::ensure(&self.root);
         log::info!("space {} holds {} notes", self.name, loaded.len());
 
@@ -264,6 +278,9 @@ impl Space {
         }
         if let Ok(mut index) = self.index.write() {
             *index = loaded;
+        }
+        if let Ok(mut search) = self.search.lock() {
+            *search = Some(db);
         }
         // Its notes may have been written with no model, or by another one.
         self.embed_wake.notify_one();
@@ -279,6 +296,9 @@ impl Space {
             let held = std::mem::replace(&mut *index, Index::closed());
             (!held.is_closed()).then(|| held.len())
         });
+        if let Ok(mut search) = self.search.lock() {
+            *search = None;
+        }
         if let Ok(mut vectors) = self.vectors.lock() {
             *vectors = None;
         }
@@ -298,6 +318,11 @@ impl Space {
         self.retired.store(true, Ordering::SeqCst);
         if let Ok(mut watcher) = self.watcher.lock() {
             *watcher = None;
+        }
+        // search.db is held open too, which would keep Windows from moving
+        // the folder.
+        if let Ok(mut search) = self.search.lock() {
+            *search = None;
         }
     }
 
@@ -387,11 +412,12 @@ impl Space {
         self.embed_wake.notify_one();
     }
 
-    // The index is changed through the methods below only, so whatever has
-    // to follow it does so from one place. Each takes the lock for its own
-    // change; `persist_index` then writes the lot back once. A space that is
-    // not open drops the change: its files are then newer than its cache, so
-    // `index::load` reads them again when it opens.
+    // The index is changed through the methods below only, so search.db
+    // follows it from one place. Each writes the text first, then takes the
+    // index lock for its own change; `persist_index` then writes the lot
+    // back once. A space that is not open drops the change: its files are
+    // then newer than both caches, so `index::load` reads them again when it
+    // opens.
 
     /// The index to change, or `None` while the space is not open.
     fn index_to_change(&self) -> Result<Option<RwLockWriteGuard<'_, Index>>, String> {
@@ -402,11 +428,28 @@ impl Space {
         Ok((!idx.is_closed()).then_some(idx))
     }
 
-    /// A note just captured: pushed rather than its day reparsed, and its
+    /// Change the text in search.db, if the space is open. A write that fails
+    /// is only logged: its day stays marked as read before it, so it is read
+    /// again at the next open.
+    fn write_text(&self, change: impl FnOnce(&mut SearchDb) -> Result<(), String>) {
+        let Ok(mut search) = self.search.lock() else {
+            return;
+        };
+        if let Some(db) = search.as_mut() {
+            if let Err(e) = change(db) {
+                log::warn!("could not update the search.db of {}: {e}", self.name);
+            }
+        }
+    }
+
+    /// A note just captured: added rather than its day reparsed, and its
     /// line appended to `index.jsonl` rather than the file rewritten, since
     /// capture has a latency budget.
-    pub async fn note_added(&self, writer: &Writer, entry: IndexEntry) -> Result<(), String> {
+    pub async fn note_added(&self, writer: &Writer, note: &Note) -> Result<(), String> {
+        let entry = IndexEntry::from(note);
         let line = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
+        let stamp = Stamp::of(&day_path(&self.root, &note.date));
+        self.write_text(|db| db.add_note(note, stamp));
         match self.index_to_change()? {
             Some(mut idx) => idx.push(entry),
             None => return Ok(()),
@@ -424,26 +467,34 @@ impl Space {
         if !self.is_open() {
             return Ok(());
         }
-        self.set_day(date, index::parse_day(&day_path(&self.root, date), date))
+        let path = day_path(&self.root, date);
+        // Taken before the file is read, so a write in between leaves the day
+        // looking older than it is, and read again, never the other way.
+        let stamp = Stamp::of(&path);
+        self.set_day(date, &index::parse_day(&path, date), stamp)
     }
 
-    /// Put `entries`, parsed from a day's file, in place of that day's notes.
-    pub fn set_day(&self, date: &str, entries: Vec<IndexEntry>) -> Result<(), String> {
+    /// Put `notes`, parsed from a day's file as it was at `stamp`, in place
+    /// of that day's.
+    pub fn set_day(&self, date: &str, notes: &[Note], stamp: Option<Stamp>) -> Result<(), String> {
+        self.write_text(|db| db.replace_day(date, notes, stamp));
         if let Some(mut idx) = self.index_to_change()? {
-            idx.replace_day(date, entries);
+            idx.replace_day(date, index::entries(notes));
         }
         Ok(())
     }
 
     /// A page added or changed. Returns what the index had for it before.
-    pub fn page_changed(&self, entry: IndexEntry) -> Result<Option<IndexEntry>, String> {
+    pub fn page_changed(&self, page: &Note) -> Result<Option<IndexEntry>, String> {
+        self.write_text(|db| db.replace_page(page));
         Ok(self
             .index_to_change()?
-            .and_then(|mut idx| idx.replace_page(entry)))
+            .and_then(|mut idx| idx.replace_page(IndexEntry::from(page))))
     }
 
     /// A page deleted. Returns what the index had for it.
     pub fn page_removed(&self, id: &str) -> Result<Option<IndexEntry>, String> {
+        self.write_text(|db| db.remove(id));
         Ok(self
             .index_to_change()?
             .and_then(|mut idx| idx.remove_page(id)))
@@ -452,21 +503,81 @@ impl Space {
     /// Whatever page the index had at `file`, a path relative to the root,
     /// is gone from there. Returns its entry.
     pub fn page_file_gone(&self, file: &str) -> Result<Option<IndexEntry>, String> {
-        let Some(mut idx) = self.index_to_change()? else {
-            return Ok(None);
+        let gone = {
+            let Some(mut idx) = self.index_to_change()? else {
+                return Ok(None);
+            };
+            let id = idx.page_at(file).map(|page| page.id.clone());
+            id.and_then(|id| idx.remove_page(&id))
         };
-        let id = idx.page_at(file).map(|page| page.id.clone());
-        Ok(id.and_then(|id| idx.remove_page(&id)))
+        if let Some(page) = &gone {
+            self.write_text(|db| db.remove(&page.id));
+        }
+        Ok(gone)
     }
 
-    /// The whole index, rebuilt from the markdown. Returns how many notes and
-    /// pages it holds.
-    pub fn index_rebuilt(&self, rebuilt: Index) -> Result<usize, String> {
+    /// Reparse every file of the space, into the index and search.db alike.
+    /// Blocks for as long as that takes. Returns how many notes and pages it
+    /// holds.
+    pub fn rebuild(&self) -> Result<usize, String> {
+        let rebuilt = {
+            let mut search = self
+                .search
+                .lock()
+                .map_err(|_| "search.db lock poisoned".to_string())?;
+            let Some(db) = search.as_mut() else {
+                return Ok(0);
+            };
+            index::rebuild(&self.root, db)
+        };
         let count = rebuilt.len();
         if let Some(mut idx) = self.index_to_change()? {
             *idx = rebuilt;
         }
         Ok(count)
+    }
+
+    /// Run `read` on the index and the text together, index first as the
+    /// locks go. `None` while the space is not open.
+    pub fn read<T>(
+        &self,
+        read: impl FnOnce(&Index, &SearchDb) -> Result<T, String>,
+    ) -> Result<Option<T>, String> {
+        let idx = self
+            .index
+            .read()
+            .map_err(|_| "index lock poisoned".to_string())?;
+        let search = self
+            .search
+            .lock()
+            .map_err(|_| "search.db lock poisoned".to_string())?;
+        match (idx.is_closed(), search.as_ref()) {
+            (false, Some(db)) => read(&idx, db).map(Some),
+            _ => Ok(None),
+        }
+    }
+
+    /// Fill in the text of `notes`, taken from the index without it.
+    pub fn fill_bodies(&self, notes: &mut [Note]) {
+        let ids: Vec<String> = notes.iter().map(|note| note.id.clone()).collect();
+        let mut bodies = self.bodies(&ids);
+        for note in notes {
+            if let Some(body) = bodies.remove(&note.id) {
+                note.body = body;
+            }
+        }
+    }
+
+    /// The text of `ids`, those search.db holds. Empty while the space is not
+    /// open.
+    pub fn bodies(&self, ids: &[String]) -> HashMap<String, String> {
+        let Ok(search) = self.search.lock() else {
+            return HashMap::new();
+        };
+        search
+            .as_ref()
+            .and_then(|db| db.bodies(ids.iter().map(String::as_str)).ok())
+            .unwrap_or_default()
     }
 
     /// Write `index.jsonl` from what is in memory. A space that is not open
@@ -518,8 +629,8 @@ mod tests {
     }
 
     /// A day of one note, written as the writer would.
-    fn write_note(root: &Path, id: &str, date: &str) -> IndexEntry {
-        use crate::storage::daily_file::{append_note, body_hash, Kind, Note, Status};
+    fn write_note(root: &Path, id: &str, date: &str) -> Note {
+        use crate::storage::daily_file::{append_note, body_hash, Kind, Status};
         let note = Note {
             id: id.to_string(),
             date: date.to_string(),
@@ -537,7 +648,7 @@ mod tests {
         let path = day_path(root, date);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, append_note("", &note, date)).unwrap();
-        IndexEntry::from(&note)
+        note
     }
 
     fn wake() -> Wake {
@@ -581,7 +692,7 @@ mod tests {
         write_note(&root, "01BBB", "2026-09-23");
         space.day_changed("2026-09-23").unwrap();
         let late = write_note(&root, "01CCC", "2026-09-24");
-        space.note_added(&writer, late).await.unwrap();
+        space.note_added(&writer, &late).await.unwrap();
         space.persist_index(&writer).await.unwrap();
         assert_eq!(std::fs::read_to_string(&cache).unwrap(), before);
 

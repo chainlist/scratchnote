@@ -55,10 +55,8 @@ fn retrieve(
         }
     };
     let hits = space.nearest(&query, crate::chat::MAX_RETRIEVED);
-    match space.index.read() {
-        Ok(index) => crate::chat::retrieved(notes, &hits, &index),
-        Err(_) => Vec::new(),
-    }
+    let ids: Vec<String> = hits.iter().map(|(id, _)| id.clone()).collect();
+    crate::chat::retrieved(notes, &hits, &space.bodies(&ids))
 }
 
 /// Reply to the last message of a conversation about the open space's

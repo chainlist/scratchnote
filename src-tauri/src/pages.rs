@@ -59,7 +59,7 @@ fn reindex(space: &Space, file: &str) -> Result<Option<Note>, String> {
         .ok()
         .and_then(|contents| page_file::parse_page(&contents, file));
     if let Some(page) = &page {
-        space.page_changed(IndexEntry::from(page))?;
+        space.page_changed(page)?;
     }
     Ok(page)
 }
@@ -217,7 +217,7 @@ pub async fn create_page(
 
     space.hold(&page.id);
     write_new(&state.writer, &space, &page).await?;
-    space.page_changed(IndexEntry::from(&page))?;
+    space.page_changed(&page)?;
     space.persist_index(&state.writer).await?;
     sync_stub(&state.writer, &space, &page).await?;
 
@@ -236,8 +236,12 @@ fn newest_first(index: &Index) -> Vec<Note> {
 #[tauri::command]
 pub fn list_pages(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
     let space = state.space()?;
-    let index = space.index.read().map_err(lock_poisoned)?;
-    Ok(newest_first(&index))
+    let mut pages = {
+        let index = space.index.read().map_err(lock_poisoned)?;
+        newest_first(&index)
+    };
+    space.fill_bodies(&mut pages);
+    Ok(pages)
 }
 
 #[tauri::command]
@@ -432,7 +436,7 @@ pub async fn note_to_page(
         sync_stub(&state.writer, &space, &page).await?;
     }
     space.day_changed(&date)?;
-    space.page_changed(IndexEntry::from(&page))?;
+    space.page_changed(&page)?;
     space.persist_index(&state.writer).await?;
     if let Ok(mut queue) = space.queue.lock() {
         queue.remove(&id);

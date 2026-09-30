@@ -331,10 +331,10 @@ async fn write_back(
                 log::warn!("could not write enrichment for {}: {e}", job.id);
                 return;
             }
-            let Some(entry) = index::parse_page(&space.root, path) else {
+            let Some(page) = index::parse_page(&space.root, path) else {
                 return;
             };
-            if space.page_changed(entry).is_err() {
+            if space.page_changed(&page).is_err() {
                 return;
             }
         }

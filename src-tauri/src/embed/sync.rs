@@ -17,6 +17,7 @@ use crate::enrich::worker::Wake;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::index::Index;
+use crate::storage::search_db::SearchDb;
 
 /// One task for every space, so only one ever saves a space's `vectors.bin`.
 pub fn spawn(app: AppHandle, wake: Wake) {
@@ -59,6 +60,7 @@ fn sync_space(state: &AppState, space: &Space, embedder: &dyn Embedder) {
     let held = space.held();
     match reconcile(
         &space.index,
+        &space.search,
         &space.vectors,
         &path,
         embedder,
@@ -87,14 +89,16 @@ fn sync_space(state: &AppState, space: &Space, embedder: &dyn Embedder) {
 /// Each save rewrites the whole file, hence not after every note.
 const SAVE_EVERY: usize = 500;
 
-/// Embed every note the vectors lack or hold for an older body, and forget
-/// notes the index no longer has. Pages open in the editor, `held`, keep the
-/// vector they had until their view closes. The store is loaded from `path` first if
+/// Embed every note the vectors lack or hold for an older body, its text read
+/// from `texts`, and forget notes the index no longer has. An empty body has
+/// nothing to embed. Pages open in the editor, `held`, keep the vector they
+/// had until their view closes. The store is loaded from `path` first if
 /// it is not in memory yet or holds another model's vectors, and saved there
 /// every `SAVE_EVERY` notes. Stops before the next note once `keep_going`
 /// says so. True when the vectors hold changes not saved yet.
 pub fn reconcile(
     index: &RwLock<Index>,
+    texts: &Mutex<Option<SearchDb>>,
     vectors: &Mutex<Option<Vectors>>,
     path: &Path,
     embedder: &dyn Embedder,
@@ -124,11 +128,27 @@ pub fn reconcile(
         }
         let present = index.entries().map(|e| e.id.clone()).collect();
         let dropped = store.retain(&present);
-        let todo: Vec<(String, String, String)> = store
+        let stale: Vec<(String, String)> = store
             .stale(index.entries())
             .into_iter()
             .filter(|e| !held.contains(&e.id))
-            .map(|e| (e.id.clone(), e.hash.clone(), e.body.clone()))
+            .map(|e| (e.id.clone(), e.hash.clone()))
+            .collect();
+        drop(index);
+
+        let mut bodies = match texts.lock() {
+            Ok(texts) => match texts.as_ref() {
+                Some(db) => db.bodies(stale.iter().map(|(id, _)| id.as_str()))?,
+                None => return Ok(false),
+            },
+            Err(_) => return Err("search.db lock poisoned".to_string()),
+        };
+        let todo: Vec<(String, String, String)> = stale
+            .into_iter()
+            .filter_map(|(id, hash)| {
+                let body = bodies.remove(&id)?;
+                (!body.trim().is_empty()).then_some((id, hash, body))
+            })
             .collect();
         (dropped, todo)
     };
@@ -216,7 +236,11 @@ mod tests {
     }
 
     fn entry(id: &str, body: &str) -> IndexEntry {
-        IndexEntry::from(&Note {
+        IndexEntry::from(&note(id, body))
+    }
+
+    fn note(id: &str, body: &str) -> Note {
+        Note {
             id: id.to_string(),
             date: "2026-09-22".to_string(),
             time: "08:00".to_string(),
@@ -229,15 +253,18 @@ mod tests {
             body: body.to_string(),
             kind: Kind::Note,
             missing: false,
-        })
+        }
     }
 
-    fn index_of(notes: &[(&str, &str)]) -> RwLock<Index> {
+    /// The index of an open space holding `notes`, and their text.
+    fn index_of(notes: &[(&str, &str)]) -> (RwLock<Index>, Mutex<Option<SearchDb>>) {
         let mut index = Index::default();
+        let mut db = SearchDb::in_memory().unwrap();
         for (id, body) in notes {
             index.push(entry(id, body));
+            db.add_note(&note(id, body), None).unwrap();
         }
-        RwLock::new(index)
+        (RwLock::new(index), Mutex::new(Some(db)))
     }
 
     fn scratch_root(name: &str) -> PathBuf {
@@ -266,11 +293,11 @@ mod tests {
         let vectors = Mutex::new(None);
 
         let index = index_of(&[("01A", "coffee beans"), ("01B", "deploy on friday")]);
-        assert!(reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 2);
 
         // Nothing changed, so nothing is embedded and nothing is reported.
-        assert!(!reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(!reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 2);
 
         // 01B edited, 01C new: only those two go through the model.
@@ -279,7 +306,7 @@ mod tests {
             ("01B", "deploy on monday"),
             ("01C", "grandma's birthday"),
         ]);
-        assert!(reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 4);
         assert_eq!(ids(&vectors), vec!["01A", "01B", "01C"]);
     }
@@ -291,10 +318,10 @@ mod tests {
         let embedder = Counting::new("stub-64");
         let vectors = Mutex::new(None);
         let index = index_of(&[("01A", "coffee beans")]);
-        reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
 
         let closed = RwLock::new(Index::closed());
-        assert!(!reconcile(&closed, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(!reconcile(&closed, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(ids(&vectors), vec!["01A"], "no note of it counts as deleted");
     }
 
@@ -305,19 +332,19 @@ mod tests {
         let embedder = Counting::new("stub-64");
         let vectors = Mutex::new(None);
         let index = index_of(&[("01P", "first draft")]);
-        reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
 
         // Every autosave changes the text; none of them reaches the model.
         let held: HashSet<String> = ["01P".to_string()].into();
         for text in ["first draft, more", "first draft, more and more"] {
             let index = index_of(&[("01P", text)]);
-            assert!(!reconcile(&index, &vectors, &path, &embedder, &held, || true).unwrap());
+            assert!(!reconcile(&index.0, &index.1, &vectors, &path, &embedder, &held, || true).unwrap());
         }
         assert_eq!(embedder.calls(), 1);
         assert_eq!(ids(&vectors), vec!["01P"], "the old vector stays meanwhile");
 
         let index = index_of(&[("01P", "first draft, more and more")]);
-        assert!(reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 2);
     }
 
@@ -328,7 +355,7 @@ mod tests {
         let vectors = Mutex::new(None);
 
         let index = index_of(&[("01A", "  \n")]);
-        let changed = reconcile(&index, &vectors, &vectors_path(&root), &embedder, &HashSet::new(), || true);
+        let changed = reconcile(&index.0, &index.1, &vectors, &vectors_path(&root), &embedder, &HashSet::new(), || true);
         assert!(!changed.unwrap());
         assert_eq!(embedder.calls(), 0);
     }
@@ -341,10 +368,10 @@ mod tests {
         let vectors = Mutex::new(None);
 
         let index = index_of(&[("01A", "coffee beans"), ("01B", "deploy on friday")]);
-        reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
 
         let index = index_of(&[("01A", "coffee beans")]);
-        assert!(reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 2);
         assert_eq!(ids(&vectors), vec!["01A"]);
     }
@@ -357,12 +384,12 @@ mod tests {
         let vectors = Mutex::new(None);
         let index = index_of(&[("01A", "one"), ("01B", "two"), ("01C", "three")]);
 
-        let changed = reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || embedder.calls() < 1);
+        let changed = reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || embedder.calls() < 1);
         assert!(changed.unwrap());
         assert_eq!(embedder.calls(), 1);
 
         // The next pass carries on where that one stopped.
-        reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
         assert_eq!(embedder.calls(), 3);
     }
 
@@ -373,12 +400,12 @@ mod tests {
         let index = index_of(&[("01A", "coffee beans"), ("01B", "deploy on friday")]);
 
         let first = Mutex::new(None);
-        reconcile(&index, &first, &path, &Counting::new("stub-64"), &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &first, &path, &Counting::new("stub-64"), &HashSet::new(), || true).unwrap();
         first.lock().unwrap().as_ref().unwrap().save(&path).unwrap();
 
         let embedder = Counting::new("stub-64");
         let loaded = Mutex::new(None);
-        assert!(!reconcile(&index, &loaded, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(!reconcile(&index.0, &index.1, &loaded, &path, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 0);
         assert_eq!(*loaded.lock().unwrap(), *first.lock().unwrap());
 
@@ -401,7 +428,7 @@ mod tests {
         // Quit after one save's worth and a bit more, without the final save.
         let first = Counting::new("stub-64");
         let vectors = Mutex::new(None);
-        let unsaved = reconcile(&index, &vectors, &path, &first, &HashSet::new(), || {
+        let unsaved = reconcile(&index.0, &index.1, &vectors, &path, &first, &HashSet::new(), || {
             first.calls() < SAVE_EVERY + 10
         });
         assert!(unsaved.unwrap());
@@ -409,7 +436,7 @@ mod tests {
         // The next launch reads the file and embeds only what it lacks.
         let next = Counting::new("stub-64");
         let reloaded = Mutex::new(None);
-        reconcile(&index, &reloaded, &path, &next, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &reloaded, &path, &next, &HashSet::new(), || true).unwrap();
         assert_eq!(next.calls(), 100);
 
         let _ = std::fs::remove_dir_all(&root);
@@ -422,13 +449,13 @@ mod tests {
         let index = index_of(&[("01A", "coffee beans"), ("01B", "deploy on friday")]);
 
         let vectors = Mutex::new(None);
-        reconcile(&index, &vectors, &path, &Counting::new("stub-64"), &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &path, &Counting::new("stub-64"), &HashSet::new(), || true).unwrap();
         vectors.lock().unwrap().as_ref().unwrap().save(&path).unwrap();
 
         // Once from disk, once from what is already in memory.
         for slot in [Mutex::new(None), vectors] {
             let other = Counting::new("other-64");
-            assert!(reconcile(&index, &slot, &path, &other, &HashSet::new(), || true).unwrap());
+            assert!(reconcile(&index.0, &index.1, &slot, &path, &other, &HashSet::new(), || true).unwrap());
             assert_eq!(other.calls(), 2);
             assert!(slot.lock().unwrap().as_ref().unwrap().is_from("other-64", 64));
         }

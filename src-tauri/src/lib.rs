@@ -184,8 +184,9 @@ pub fn run() {
                 embedding_download: std::sync::Mutex::new(None),
             });
 
-            // Every space is loaded, not just the open one, so notes captured
-            // in any of them are enriched and their external edits noticed.
+            // Every space is listed, so the notes left in any space's queue
+            // are still enriched, but only the open one is read and watched
+            // (SPEC 4.6). The others are read when they are opened.
             let state = app.state::<AppState>();
             let mut found = spaces::discover(&root);
             if found.is_empty() {
@@ -195,17 +196,20 @@ pub fn run() {
                 }
                 found.push((spaces::FIRST_NAME.to_string(), path));
             }
-            let mut loaded: Vec<_> = found
+            let mut listed: Vec<_> = found
                 .into_iter()
-                .map(|(name, path)| commands::spaces::open_space(app.handle(), &name, path))
+                .map(|(name, path)| commands::spaces::add_space(app.handle(), &name, path))
                 .collect();
-            commands::spaces::sort_spaces(&mut loaded);
+            commands::spaces::sort_spaces(&mut listed);
             if let Ok(mut spaces) = state.spaces.write() {
-                *spaces = loaded;
+                *spaces = listed;
+            }
+            if let Ok(open) = state.space() {
+                commands::spaces::load_space(app.handle(), &open);
             }
 
             worker::spawn(app.handle().clone(), wake.clone());
-            // Opening the spaces above already woke it, so their notes are
+            // Opening the space above already woke it, so its notes are
             // backfilled.
             embed::sync::spawn(app.handle().clone(), embed_wake);
             idle::spawn(app.handle().clone());

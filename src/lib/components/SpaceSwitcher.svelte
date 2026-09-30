@@ -154,7 +154,7 @@
 						<button type="button" onclick={() => void pick(space)} class="{sidebarItem(on)} pr-20">
 							<span class="truncate">{space.name}</span>
 							<span class="ml-auto font-mono text-xs text-muted-foreground group-hover:invisible">
-								{space.notes}
+								{space.notes ?? ''}
 							</span>
 						</button>
 						<div

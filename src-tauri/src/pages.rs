@@ -59,11 +59,7 @@ fn reindex(space: &Space, file: &str) -> Result<Option<Note>, String> {
         .ok()
         .and_then(|contents| page_file::parse_page(&contents, file));
     if let Some(page) = &page {
-        space
-            .index
-            .write()
-            .map_err(lock_poisoned)?
-            .replace_page(IndexEntry::from(page));
+        space.page_changed(IndexEntry::from(page))?;
     }
     Ok(page)
 }
@@ -221,11 +217,7 @@ pub async fn create_page(
 
     space.hold(&page.id);
     write_new(&state.writer, &space, &page).await?;
-    space
-        .index
-        .write()
-        .map_err(lock_poisoned)?
-        .replace_page(IndexEntry::from(&page));
+    space.page_changed(IndexEntry::from(&page))?;
     space.persist_index(&state.writer).await?;
     sync_stub(&state.writer, &space, &page).await?;
 
@@ -380,7 +372,7 @@ pub async fn delete_page(
             drop_stub(&state.writer, &space, &page.date, &id).await?;
         }
         state.writer.remove(space.root.join(&page.file)).await?;
-        space.index.write().map_err(lock_poisoned)?.remove_page(&id);
+        space.page_removed(&id)?;
         space.persist_index(&state.writer).await?;
         if let Ok(mut queue) = space.queue.lock() {
             queue.remove(&id);
@@ -439,14 +431,8 @@ pub async fn note_to_page(
         // The note went meanwhile. The page stays, with a stub of its own.
         sync_stub(&state.writer, &space, &page).await?;
     }
-    {
-        let mut idx = space.index.write().map_err(lock_poisoned)?;
-        idx.replace_day(
-            &date,
-            index::parse_day(&day_path(&space.root, &date), &date),
-        );
-        idx.replace_page(IndexEntry::from(&page));
-    }
+    space.day_changed(&date)?;
+    space.page_changed(IndexEntry::from(&page))?;
     space.persist_index(&state.writer).await?;
     if let Ok(mut queue) = space.queue.lock() {
         queue.remove(&id);

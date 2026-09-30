@@ -63,20 +63,9 @@ pub async fn save_note(
         .append_note(day_path(&space.root, &date), date, note.clone())
         .await?;
 
-    // A new note only ever adds a line, so the index is appended rather than
-    // rewritten. This is the capture path and it has a latency budget.
-    let entry = IndexEntry::from(&note);
-    let line = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
     space
-        .index
-        .write()
-        .map_err(|_| "index lock poisoned".to_string())?
-        .push(entry);
-    state
-        .writer
-        .append_index_line(index::index_path(&space.root), line)
+        .note_added(&state.writer, IndexEntry::from(&note))
         .await?;
-    space.index_changed();
 
     enqueue(&state, &space, note.id.clone(), note.date.clone()).await;
 
@@ -190,12 +179,7 @@ pub async fn delete_note(
 
     // A delete rewrites the day file, so the day's entries are reparsed and
     // the whole index written back (SPEC 4.4).
-    let entries = index::parse_day(&path, &date);
-    space
-        .index
-        .write()
-        .map_err(|_| "index lock poisoned".to_string())?
-        .replace_day(&date, entries);
+    space.day_changed(&date)?;
     space.persist_index(&state.writer).await?;
 
     if let Ok(mut queue) = space.queue.lock() {
@@ -346,12 +330,7 @@ async fn mark_pending(
 
 /// After rewriting a day file: reparse the day and write the index back.
 async fn reindex_day(state: &State<'_, AppState>, space: &Space, date: &str) -> Result<(), String> {
-    let entries = index::parse_day(&day_path(&space.root, date), date);
-    space
-        .index
-        .write()
-        .map_err(|_| "index lock poisoned".to_string())?
-        .replace_day(date, entries);
+    space.day_changed(date)?;
     space.persist_index(&state.writer).await
 }
 
@@ -365,11 +344,7 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
         .await
         .map_err(|e| e.to_string())?;
 
-    let count = rebuilt.len();
-    *space
-        .index
-        .write()
-        .map_err(|_| "index lock poisoned".to_string())? = rebuilt;
+    let count = space.index_rebuilt(rebuilt)?;
     space.persist_index(&state.writer).await?;
 
     let _ = app.emit("index-rebuilt", ());
@@ -427,18 +402,12 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
             .await?;
     }
     // One index write for the lot, not one per day.
-    {
-        let mut idx = space
-            .index
-            .write()
-            .map_err(|_| "index lock poisoned".to_string())?;
-        for date in &touched_days {
-            idx.replace_day(date, index::parse_day(&day_path(&space.root, date), date));
-        }
-        for page in &pages {
-            if let Some(entry) = index::parse_page(&space.root, &space.root.join(&page.file)) {
-                idx.replace_page(entry);
-            }
+    for date in &touched_days {
+        space.day_changed(date)?;
+    }
+    for page in &pages {
+        if let Some(entry) = index::parse_page(&space.root, &space.root.join(&page.file)) {
+            space.page_changed(entry)?;
         }
     }
     let notes: Vec<(String, String)> = notes

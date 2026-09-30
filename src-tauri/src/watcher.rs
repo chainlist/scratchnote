@@ -115,22 +115,16 @@ fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     };
 
     let parsed = index::parse_page(&space.root, path);
-    let before = {
-        let Ok(mut idx) = space.index.write() else {
-            return false;
-        };
-        match parsed.clone() {
-            Some(entry) => {
-                let before = idx.page(&entry.id).cloned();
-                idx.replace_page(entry);
-                before
-            }
-            // Gone, or no longer a page: whatever page this file held goes.
-            None => match idx.page_at(&file).map(|page| page.id.clone()) {
-                Some(id) => idx.remove_page(&id),
-                None => return false,
-            },
-        }
+    let before = match parsed.clone() {
+        Some(entry) => match space.page_changed(entry) {
+            Ok(before) => before,
+            Err(_) => return false,
+        },
+        // Gone, or no longer a page: whatever page this file held goes.
+        None => match space.page_file_gone(&file) {
+            Ok(Some(gone)) => Some(gone),
+            _ => return false,
+        },
     };
     // Edited text parses as pending, as in a daily file.
     let queued = parsed.as_ref().is_some_and(|entry| {
@@ -208,11 +202,8 @@ fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
         .filter(|entry| entry.status == Status::Pending)
         .map(|entry| entry.id.clone())
         .collect();
-    {
-        let Ok(mut idx) = space.index.write() else {
-            return false;
-        };
-        idx.replace_day(&date, entries);
+    if space.set_day(&date, entries).is_err() {
+        return false;
     }
     let queued = match space.queue.lock() {
         Ok(mut queue) => pending.into_iter().fold(false, |any, id| {

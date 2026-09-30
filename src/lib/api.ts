@@ -51,8 +51,18 @@ export const listCategories = () => invoke<[string, number][]>('list_categories'
 /** Every category on the list, used or not, in the list's order. */
 export const categoryNames = () => invoke<string[]>('category_names');
 
-/** Words must all appear; a `#category` token filters on the category. Newest first. */
-export const search = (query: string) => invoke<Note[]>('search', { query: storedQuery(query) });
+/** A stretch of the notes a search found, and how many it found in all. */
+export interface Found {
+	notes: Note[];
+	total: number;
+}
+
+/**
+ * Words must all appear; a `#category` token filters on the category. Newest
+ * first. The `limit` notes from `offset` on, or every one without a limit.
+ */
+export const search = (query: string, limit?: number, offset = 0) =>
+	invoke<Found>('search', { query: storedQuery(query), offset, limit });
 
 /** Notes close in meaning that the words miss. Empty without the embedding model. */
 export const searchMeaning = (query: string) =>

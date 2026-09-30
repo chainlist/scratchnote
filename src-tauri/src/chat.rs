@@ -392,6 +392,7 @@ mod tests {
             hash: "00000000".to_string(),
             lang: None,
             kind: Default::default(),
+            words: None,
             body: "SECRET BODY".to_string(),
             folded: String::new(),
         }

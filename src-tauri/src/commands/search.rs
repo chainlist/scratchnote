@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use tauri::{AppHandle, State};
 
+use crate::search::Found;
 use crate::state::AppState;
 use crate::storage::categories;
 use crate::storage::daily_file::Note;
@@ -29,15 +30,27 @@ pub fn category_names(state: State<'_, AppState>) -> Result<Vec<String>, String>
     Ok(categories::load(&state.space()?.root))
 }
 
-/// Words and a `#category` filter across every day (SPEC 6).
+/// Words and a `#category` filter across every day (SPEC 6): the `limit`
+/// matches from `offset` on, and how many there are in all. Without a limit
+/// every match comes back, as a plugin's search asks for them.
 #[tauri::command]
-pub fn search(state: State<'_, AppState>, query: String) -> Result<Vec<Note>, String> {
+pub fn search(
+    state: State<'_, AppState>,
+    query: String,
+    offset: Option<usize>,
+    limit: Option<usize>,
+) -> Result<Found, String> {
     let space = state.space()?;
     let idx = space
         .index
         .read()
         .map_err(|_| "index lock poisoned".to_string())?;
-    Ok(crate::search::search(&idx, &query))
+    Ok(crate::search::search(
+        &idx,
+        &query,
+        offset.unwrap_or(0),
+        limit.unwrap_or(usize::MAX),
+    ))
 }
 
 /// Every note and page whose body holds any of `needles`, newest first, for

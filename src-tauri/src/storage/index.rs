@@ -31,6 +31,11 @@ pub struct IndexEntry {
     /// A page's `file` is its own and its `subject` its title (SPEC 4.7).
     #[serde(default, skip_serializing_if = "Kind::is_note")]
     pub kind: Kind,
+    /// How many words the body holds, counted once here so the day list
+    /// does not count every body again. `None` only on a line from a cache
+    /// written before words were counted, whose day `load` reparses.
+    #[serde(default)]
+    pub words: Option<usize>,
     #[serde(skip)]
     pub body: String,
     /// Subject and body folded for matching, computed once here so a
@@ -58,6 +63,7 @@ impl From<&Note> for IndexEntry {
             hash: note.hash.clone(),
             lang: note.lang.clone(),
             kind: note.kind,
+            words: Some(words(&note.body)),
             body: note.body.clone(),
             folded,
         }
@@ -179,8 +185,15 @@ impl Index {
     /// How many words the notes of `date` hold, its pages left out.
     pub fn words_on(&self, date: &str) -> usize {
         self.by_date.get(date).map_or(0, |entries| {
-            entries.iter().map(|entry| words(&entry.body)).sum()
+            entries.iter().filter_map(|entry| entry.words).sum()
         })
+    }
+
+    /// Whether a note of `date` came from a cache that did not count words.
+    fn uncounted(&self, date: &str) -> bool {
+        self.by_date
+            .get(date)
+            .is_some_and(|entries| entries.iter().any(|entry| entry.words.is_none()))
     }
 
     pub fn len(&self) -> usize {
@@ -400,9 +413,10 @@ pub fn load(root: &Path) -> (Index, bool) {
     let mut changed = false;
 
     // Every file is read either way, because search needs the bodies in
-    // memory (SPEC 6). The mtime only decides whose metadata to trust.
+    // memory (SPEC 6). The mtime only decides whose metadata to trust, and a
+    // day cached before words were counted is not trusted either.
     for (date, file) in &files {
-        if modified_at(file) > cached_at {
+        if modified_at(file) > cached_at || index.uncounted(date) {
             index.replace_day(date, parse_day(file, date));
             changed = true;
         } else {
@@ -647,6 +661,96 @@ mod tests {
 
         assert_eq!(index.words_on("2026-09-22"), 8);
         assert_eq!(index.words_on("2026-09-23"), 0);
+    }
+
+    #[test]
+    fn words_are_counted_once_and_kept_without_the_body() {
+        let mut index = Index::default();
+        let mut entry =
+            IndexEntry::from(&note("01AAA", "2026-09-22", "08:00", "three small words"));
+        entry.body.clear();
+        entry.folded.clear();
+        index.push(entry);
+        assert_eq!(index.words_on("2026-09-22"), 3);
+
+        let back = Index::from_jsonl(&index.to_jsonl());
+        assert_eq!(back.words_on("2026-09-22"), 3);
+    }
+
+    #[test]
+    fn a_cache_from_before_words_were_counted_has_its_days_counted() {
+        let root = scratch_root("uncounted-cache");
+        write_day(
+            &root,
+            "2026-09-22",
+            &[note("01AAA", "2026-09-22", "08:00", "four words in here")],
+        );
+        // Written after the day file, so only the missing count makes it stale.
+        let old: String = rebuild(&root)
+            .to_jsonl()
+            .lines()
+            .map(|line| {
+                let mut value: serde_json::Value = serde_json::from_str(line).unwrap();
+                value.as_object_mut().unwrap().remove("words");
+                format!("{value}\n")
+            })
+            .collect();
+        let cache = index_path(&root);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, old).unwrap();
+
+        let (index, changed) = load(&root);
+        assert!(changed, "the counts have to be written back");
+        assert_eq!(index.words_on("2026-09-22"), 4);
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// What a heavy writer's space costs to load, for the memory plan: five
+    /// years at 40 notes a day. Not a gate, a measure:
+    /// `cargo test --release heavy_writer -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn a_heavy_writers_space_loads() {
+        const DAYS: usize = 5 * 365;
+        const NOTES_A_DAY: usize = 40;
+        let root = scratch_root("heavy-writer");
+        let start = chrono::NaiveDate::from_ymd_opt(2021, 1, 1).unwrap();
+        let sentence = "Talked with the team about the deployment pipeline and the \
+                        staging cluster, then wrote down what to try next week. ";
+        for day in 0..DAYS {
+            let date = (start + chrono::Days::new(day as u64))
+                .format("%Y-%m-%d")
+                .to_string();
+            let notes: Vec<Note> = (0..NOTES_A_DAY)
+                .map(|n| {
+                    let body = format!("Note {n} of {date}. {}", sentence.repeat(1 + n % 8));
+                    let time = format!("{:02}:{:02}", 8 + n / 4, (n % 4) * 15);
+                    note(&format!("{day:05}{n:02}"), &date, &time, &body)
+                })
+                .collect();
+            write_day(&root, &date, &notes);
+        }
+        let cache = index_path(&root);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, rebuild(&root).to_jsonl()).unwrap();
+
+        let started = std::time::Instant::now();
+        let (index, changed) = load(&root);
+        let took = started.elapsed();
+        assert!(!changed);
+
+        let held: usize = index
+            .entries()
+            .map(|entry| entry.body.len() + entry.folded.len())
+            .sum();
+        eprintln!(
+            "{} notes, fresh cache loaded in {took:?}, {:.1} MB of note text held",
+            index.len(),
+            held as f64 / 1_000_000.0
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

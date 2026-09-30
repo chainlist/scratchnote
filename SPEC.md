@@ -478,10 +478,12 @@ One JSON object per line, one line per note:
 	"subject": "Rollback plan for ArgoCD sync issue",
 	"category": "infrastructure",
 	"status": "done",
-	"hash": "a1b2c3d4"
+	"hash": "a1b2c3d4",
+	"words": 42
 }
 ```
 
+- `words` counts the body's words once, so the day list and its stats never count every body again. A line without it, from before it was counted, gets its day reparsed.
 - A page (4.7) has a line too, with `"kind": "page"`, `file` pointing at the page file and `subject` holding its title. Notes have no `kind`.
 - New notes are appended. Updates and deletes rewrite the file (it is small; atomic rewrite is fine).
 - On startup: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written before notes had a category instead of tags is rebuilt whole.
@@ -684,6 +686,7 @@ The grammar only lets the model write a listed category, so nothing it returns n
 
 - v1: in-memory. On startup, load index + note bodies into memory. Case-insensitive, accent-insensitive substring match over body and subject. A `#category` token keeps the notes filed under that category.
 - Results sorted by date desc, then time desc.
+- The page asks for a stretch of the results and gets the total with it: the command center the first 50, the results view the first 100 and 100 more at each "Show more". Only that stretch leaves the backend, so a short query matching most of a space does not copy all of it to the page. A plugin's search still gets every match.
 - Must stay under 50ms for 10,000 notes. If it doesn't, switch to `tantivy` (out of scope unless needed).
 
 ### 6.1 Chat
@@ -730,7 +733,7 @@ get_day(date: String) -> Vec<Note>
 list_days() -> Vec<DaySummary>                // date + note and page count + words in its notes
 list_categories() -> Vec<(String, u32)>      // in use, most used first
 category_names() -> Vec<String>               // every listed category
-search(query: String) -> Vec<Note>
+search(query, offset?, limit?) -> Found       // { notes, total }: the limit matches from offset, every one without a limit
 similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
 notes_containing(needles) -> Vec<Note>      // every note and page whose body holds any needle as typed, newest first
 get_settings() / set_settings(...)

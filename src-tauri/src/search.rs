@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use serde::Serialize;
 use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
 
@@ -85,21 +86,37 @@ pub fn by_meaning(index: &Index, raw: &str, hits: &[(String, f32)], k: usize) ->
         .collect()
 }
 
-/// Newest first: by date, then by time within the day.
-pub fn search(index: &Index, raw: &str) -> Vec<Note> {
+/// One stretch of what a search found, and how many notes it found in all.
+#[derive(Debug, Default, Serialize)]
+pub struct Found {
+    pub notes: Vec<Note>,
+    pub total: usize,
+}
+
+/// Newest first: by date, then by time within the day. Only the `limit`
+/// notes from `offset` on are copied out, bodies and all, so a short query
+/// matching most of the space does not hand all of it to the page.
+pub fn search(index: &Index, raw: &str, offset: usize, limit: usize) -> Found {
     let query = Query::parse(raw);
     if query.is_empty() {
-        return Vec::new();
+        return Found::default();
     }
 
-    let mut hits: Vec<Note> = index
+    let mut hits: Vec<&IndexEntry> = index
         .entries()
         .filter(|entry| query.has_category(entry) && query.has_words(entry))
-        .map(|entry| entry.to_note())
         .collect();
 
     hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
-    hits
+    Found {
+        total: hits.len(),
+        notes: hits
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .map(IndexEntry::to_note)
+            .collect(),
+    }
 }
 
 /// Notes and pages whose body holds any of `needles` as typed, newest first.
@@ -152,6 +169,26 @@ mod tests {
         hits.iter().map(|n| n.id.as_str()).collect()
     }
 
+    /// Every match, as a plugin's search asks for them.
+    fn all(index: &Index, raw: &str) -> Vec<Note> {
+        search(index, raw, 0, usize::MAX).notes
+    }
+
+    #[test]
+    fn a_stretch_of_the_matches_comes_with_their_total() {
+        let idx = index(&[
+            note("01A", "2026-09-21", "08:00", "x", None),
+            note("01B", "2026-09-22", "08:00", "x", None),
+            note("01C", "2026-09-22", "17:00", "x", None),
+            note("01D", "2026-09-23", "08:00", "y", None),
+        ]);
+        let first = search(&idx, "x", 0, 2);
+        assert_eq!((ids(&first.notes), first.total), (vec!["01C", "01B"], 3));
+        let rest = search(&idx, "x", 2, 2);
+        assert_eq!((ids(&rest.notes), rest.total), (vec!["01A"], 3));
+        assert!(search(&idx, "x", 5, 2).notes.is_empty());
+    }
+
     #[test]
     fn folds_case_and_accents() {
         assert_eq!(fold("Réunion ÉQUIPE"), "reunion equipe");
@@ -167,8 +204,8 @@ mod tests {
     #[test]
     fn an_empty_query_finds_nothing() {
         let idx = index(&[note("01A", "2026-09-22", "08:00", "anything", None)]);
-        assert!(search(&idx, "   ").is_empty());
-        assert!(search(&idx, "#").is_empty());
+        assert!(all(&idx, "   ").is_empty());
+        assert!(all(&idx, "#").is_empty());
     }
 
     #[test]
@@ -177,8 +214,8 @@ mod tests {
             note("01A", "2026-09-22", "08:00", "Réunion demain", None),
             note("01B", "2026-09-22", "09:00", "Buy coffee", None),
         ]);
-        assert_eq!(ids(&search(&idx, "REUNION")), vec!["01A"]);
-        assert_eq!(ids(&search(&idx, "offe")), vec!["01B"]);
+        assert_eq!(ids(&all(&idx, "REUNION")), vec!["01A"]);
+        assert_eq!(ids(&all(&idx, "offe")), vec!["01B"]);
     }
 
     #[test]
@@ -186,7 +223,7 @@ mod tests {
         let mut n = note("01A", "2026-09-22", "08:00", "body text", None);
         n.subject = Some("Rollback plan".into());
         let idx = index(&[n]);
-        assert_eq!(ids(&search(&idx, "rollback")), vec!["01A"]);
+        assert_eq!(ids(&all(&idx, "rollback")), vec!["01A"]);
     }
 
     #[test]
@@ -195,7 +232,7 @@ mod tests {
             note("01A", "2026-09-22", "08:00", "staging broke again", None),
             note("01B", "2026-09-22", "09:00", "staging is fine", None),
         ]);
-        assert_eq!(ids(&search(&idx, "staging broke")), vec!["01A"]);
+        assert_eq!(ids(&all(&idx, "staging broke")), vec!["01A"]);
     }
 
     #[test]
@@ -206,15 +243,15 @@ mod tests {
             note("01C", "2026-09-22", "10:00", "c", Some("movie")),
             note("01D", "2026-09-22", "11:00", "d", None),
         ]);
-        assert_eq!(ids(&search(&idx, "#infra")), vec!["01B", "01A"]);
+        assert_eq!(ids(&all(&idx, "#infra")), vec!["01B", "01A"]);
         // A note has one category, so two never match together.
-        assert!(search(&idx, "#infra #movie").is_empty());
+        assert!(all(&idx, "#infra #movie").is_empty());
     }
 
     #[test]
     fn a_category_must_match_whole_not_as_a_substring() {
         let idx = index(&[note("01A", "2026-09-22", "08:00", "a", Some("infrastructure"))]);
-        assert!(search(&idx, "#infra").is_empty());
+        assert!(all(&idx, "#infra").is_empty());
     }
 
     #[test]
@@ -245,7 +282,7 @@ mod tests {
             note("01A", "2026-09-22", "08:00", "kubernetes upgrade", Some("infra")),
             note("01B", "2026-09-22", "09:00", "kubernetes talk", Some("meetup")),
         ]);
-        assert_eq!(ids(&search(&idx, "#infra kubernetes")), vec!["01A"]);
+        assert_eq!(ids(&all(&idx, "#infra kubernetes")), vec!["01A"]);
     }
 
     #[test]
@@ -254,8 +291,8 @@ mod tests {
             note("01A", "2026-09-22", "08:00", "a", Some("home-lab")),
             note("01B", "2026-09-22", "09:00", "b", Some("série")),
         ]);
-        assert_eq!(ids(&search(&idx, "#Home_Lab")), vec!["01A"]);
-        assert_eq!(ids(&search(&idx, "#serie")), vec!["01B"]);
+        assert_eq!(ids(&all(&idx, "#Home_Lab")), vec!["01A"]);
+        assert_eq!(ids(&all(&idx, "#serie")), vec!["01B"]);
     }
 
     #[test]
@@ -265,7 +302,7 @@ mod tests {
             note("01B", "2026-09-22", "08:00", "x", None),
             note("01C", "2026-09-22", "17:00", "x", None),
         ]);
-        assert_eq!(ids(&search(&idx, "x")), vec!["01C", "01B", "01A"]);
+        assert_eq!(ids(&all(&idx, "x")), vec!["01C", "01B", "01A"]);
     }
 
     #[test]
@@ -284,7 +321,7 @@ mod tests {
     #[test]
     fn results_carry_the_body_for_the_note_card() {
         let idx = index(&[note("01A", "2026-09-22", "08:00", "the body", None)]);
-        assert_eq!(search(&idx, "body")[0].body, "the body");
+        assert_eq!(all(&idx, "body")[0].body, "the body");
     }
 
     /// SPEC 6: under 50ms for 10,000 notes. Debug builds are several times
@@ -306,7 +343,7 @@ mod tests {
         let idx = index(&notes);
 
         let started = std::time::Instant::now();
-        let hits = search(&idx, "#infra deploiement friday");
+        let hits = all(&idx, "#infra deploiement friday");
         let took = started.elapsed();
 
         assert_eq!(hits.len(), 10_000);

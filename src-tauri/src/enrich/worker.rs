@@ -288,11 +288,9 @@ async fn write_back(
                 log::warn!("could not write enrichment for {}: {e}", job.id);
                 return;
             }
-            let entries = index::parse_day(path, &job.date);
-            let Ok(mut idx) = space.index.write() else {
+            if space.day_changed(&job.date).is_err() {
                 return;
-            };
-            idx.replace_day(&job.date, entries);
+            }
         }
         // Only the category is the model's to write; the title is the user's.
         Place::Page(path, file) => {
@@ -316,10 +314,9 @@ async fn write_back(
             let Some(entry) = index::parse_page(&space.root, path) else {
                 return;
             };
-            let Ok(mut idx) = space.index.write() else {
+            if space.page_changed(entry).is_err() {
                 return;
-            };
-            idx.replace_page(entry);
+            }
         }
     }
     if let Err(e) = space.persist_index(&state.writer).await {

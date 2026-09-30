@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use crate::embed::vectors::Vectors;
 use crate::enrich::queue::{queue_path, Job, Queue};
 use crate::enrich::worker::Wake;
-use crate::storage::index::{self, Index};
+use crate::storage::day_path;
+use crate::storage::index::{self, Index, IndexEntry};
 use crate::storage::writer::Writer;
 use crate::storage::categories;
 
@@ -325,10 +326,85 @@ impl Space {
             .unwrap_or_default()
     }
 
-    /// Tell the embed task the index changed. `persist_index` does it; the
-    /// capture path, which appends to the index instead, calls this itself.
+    /// Tell the embed task the index changed. `persist_index` does it, and
+    /// so does `note_added`, which appends to the index instead.
     pub fn index_changed(&self) {
         self.embed_wake.notify_one();
+    }
+
+    // The index is changed through the methods below only, so whatever has
+    // to follow it does so from one place. Each takes the lock for its own
+    // change; `persist_index` then writes the lot back once.
+
+    /// A note just captured: pushed rather than its day reparsed, and its
+    /// line appended to `index.jsonl` rather than the file rewritten, since
+    /// capture has a latency budget.
+    pub async fn note_added(&self, writer: &Writer, entry: IndexEntry) -> Result<(), String> {
+        let line = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
+        self.index
+            .write()
+            .map_err(|_| "index lock poisoned".to_string())?
+            .push(entry);
+        writer
+            .append_index_line(index::index_path(&self.root), line)
+            .await?;
+        self.index_changed();
+        Ok(())
+    }
+
+    /// Read a day's file again after it was written, in place of what the
+    /// index had for that day.
+    pub fn day_changed(&self, date: &str) -> Result<(), String> {
+        self.set_day(date, index::parse_day(&day_path(&self.root, date), date))
+    }
+
+    /// Put `entries`, parsed from a day's file, in place of that day's notes.
+    pub fn set_day(&self, date: &str, entries: Vec<IndexEntry>) -> Result<(), String> {
+        self.index
+            .write()
+            .map_err(|_| "index lock poisoned".to_string())?
+            .replace_day(date, entries);
+        Ok(())
+    }
+
+    /// A page added or changed. Returns what the index had for it before.
+    pub fn page_changed(&self, entry: IndexEntry) -> Result<Option<IndexEntry>, String> {
+        Ok(self
+            .index
+            .write()
+            .map_err(|_| "index lock poisoned".to_string())?
+            .replace_page(entry))
+    }
+
+    /// A page deleted. Returns what the index had for it.
+    pub fn page_removed(&self, id: &str) -> Result<Option<IndexEntry>, String> {
+        Ok(self
+            .index
+            .write()
+            .map_err(|_| "index lock poisoned".to_string())?
+            .remove_page(id))
+    }
+
+    /// Whatever page the index had at `file`, a path relative to the root,
+    /// is gone from there. Returns its entry.
+    pub fn page_file_gone(&self, file: &str) -> Result<Option<IndexEntry>, String> {
+        let mut idx = self
+            .index
+            .write()
+            .map_err(|_| "index lock poisoned".to_string())?;
+        let id = idx.page_at(file).map(|page| page.id.clone());
+        Ok(id.and_then(|id| idx.remove_page(&id)))
+    }
+
+    /// The whole index, rebuilt from the markdown. Returns how many notes and
+    /// pages it holds.
+    pub fn index_rebuilt(&self, rebuilt: Index) -> Result<usize, String> {
+        let count = rebuilt.len();
+        *self
+            .index
+            .write()
+            .map_err(|_| "index lock poisoned".to_string())? = rebuilt;
+        Ok(count)
     }
 
     /// Write `index.jsonl` from what is in memory.

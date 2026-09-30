@@ -131,9 +131,10 @@ impl Index {
             .push(entry);
     }
 
-    /// Add a page, or replace it when its id is already there.
-    pub fn replace_page(&mut self, entry: IndexEntry) {
-        self.pages.insert(entry.id.clone(), entry);
+    /// Add a page, or replace it when its id is already there. Returns the
+    /// entry it replaced.
+    pub fn replace_page(&mut self, entry: IndexEntry) -> Option<IndexEntry> {
+        self.pages.insert(entry.id.clone(), entry)
     }
 
     pub fn remove_page(&mut self, id: &str) -> Option<IndexEntry> {

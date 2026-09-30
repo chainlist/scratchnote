@@ -112,7 +112,7 @@ marked external works.
 | `addToolbarButton(button)`                 | a button on the editor's formatting toolbar                       |
 | `addRibbonIcon(icon, title, callback)`     | a button down the left edge of the window, below the app's own    |
 | `addSettingTab(tab)`                       | a tab in the settings, under Community plugins                    |
-| `registerView(type, create)`               | a panel docked on the right, opened with `app.workspace.openView` |
+| `registerView(type, create)`               | a panel in the dock, opened with `app.workspace.openView`         |
 | `registerPage(type, create, options?)`     | a page at `/plugin/<type>/`, opened with `app.workspace.openPage` |
 | `registerMarkdownSyntax(syntax)`           | syntax for the editor and the cards                               |
 | `registerEditorExtension(extension)`       | any CodeMirror extension, in every editor                         |
@@ -294,7 +294,7 @@ this.registerView('space-stats', () => new StatsView());
 this.app.workspace.openView('space-stats');
 ```
 
-`registerView` makes it a panel docked on the right, where a page docks;
+`registerView` makes it a panel in the dock, where a page docks;
 `registerPage` makes it a page in the main area at `/plugin/<type>/`, with its
 title and a way back to the day. A page gets its query string as
 `this.params`: `app.workspace.openPage('mentions', { name: 'marie' })` opens

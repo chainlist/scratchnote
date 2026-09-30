@@ -17,6 +17,7 @@ import {
 	type NoteEdit
 } from '$lib/api';
 import { categoryLabel } from '$lib/categories';
+import { loadDock, saveDock, type DockSide } from '$lib/dock';
 import { addToPageDraft } from '$lib/page-draft';
 import { notesChanged, type WorkspaceHost } from '$lib/plugins/app';
 import { toggleCategory } from '$lib/query';
@@ -59,10 +60,17 @@ export class Shell implements WorkspaceHost {
 	deleting = $state<Note | null>(null);
 	/** The note waiting on a title to become a page. */
 	turning = $state<Note | null>(null);
-	/** The page docked on the right, to write in while the day stays in reach. */
+	/** The page docked beside the view, to write in while the day stays in reach. */
 	docked = $state<Note | null>(null);
-	/** A plugin's view docked on the right instead, by its type. */
+	/** A plugin's view docked beside the view instead, by its type. */
 	panel = $state<string | null>(null);
+	dockOpen = $derived(this.docked !== null || this.panel !== null);
+	#dockLayout = loadDock();
+	/** The side of the view the dock sits on. */
+	dockSide = $state<DockSide>(this.#dockLayout.side);
+	/** The dock's width, as a percentage. Not reactive: the dock takes it as
+	 *  it opens, and from there its pane keeps its own. */
+	dockSize = this.#dockLayout.size;
 	/** The editor the command center was opened from, for commands on its text. */
 	paletteEditor = $state.raw<EditorView | null>(null);
 	/** The command center's query, kept between openings. */
@@ -159,6 +167,17 @@ export class Shell implements WorkspaceHost {
 
 	closePanel = (type?: string) => {
 		if (type === undefined || this.panel === type) this.panel = null;
+	};
+
+	/** The dock goes to the view's other side, as wide as it was. */
+	flipDock = () => {
+		this.dockSide = this.dockSide === 'left' ? 'right' : 'left';
+		saveDock({ side: this.dockSide, size: this.dockSize });
+	};
+
+	resizeDock = (size: number) => {
+		this.dockSize = size;
+		saveDock({ side: this.dockSide, size });
 	};
 
 	/** A page open in the page view or the dock, which releases it when it closes. */

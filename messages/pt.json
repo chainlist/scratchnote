@@ -384,6 +384,8 @@
 	"pages_none": "Ainda não há páginas neste espaço.",
 	"pages_open": "Abrir",
 	"pages_open_side": "Abrir no painel lateral",
+	"dock_move_left": "Mover para a esquerda",
+	"dock_move_right": "Mover para a direita",
 	"pages_words": [
 		{
 			"declarations": [

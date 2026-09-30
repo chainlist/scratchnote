@@ -88,7 +88,8 @@ export const app: App = {
 		day: getDay,
 		days: listDays,
 		pages: listPages,
-		search,
+		// Every match, as the plugin API has always given them.
+		search: async (query) => (await search(query)).notes,
 		containing: notesContaining,
 		async setBody(note, body) {
 			if (isPage(note)) {

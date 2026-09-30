@@ -175,6 +175,7 @@
 	"command_group_commands": "Commands",
 	"command_today": "Go to today",
 	"command_see_all": "See all",
+	"search_show_more": "Show more",
 	"chat_title": "Chat",
 	"chat_about": "about {space}",
 	"chat_new": "New chat",

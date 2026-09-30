@@ -66,6 +66,8 @@
 
 	let input = $state<HTMLInputElement | null>(null);
 	let results = $state<Note[]>([]);
+	/** How many notes the words match, of which `results` holds the first. */
+	let total = $state(0);
 	/** Notes close in meaning that the words miss, shown under the matches. */
 	let related = $state<Note[]>([]);
 	/** From a keystroke until the search by meaning for it has answered. */
@@ -158,18 +160,21 @@
 		const run = ++searchRun;
 		if (q === '') {
 			results = [];
+			total = 0;
 			error = null;
 			return;
 		}
-		search(q)
+		search(q, RESULT_LIMIT)
 			.then((found) => {
 				if (run !== searchRun) return;
-				results = found.slice(0, RESULT_LIMIT);
+				results = found.notes;
+				total = found.total;
 				error = null;
 			})
 			.catch((e) => {
 				if (run !== searchRun) return;
 				results = [];
+				total = 0;
 				error = String(e);
 			});
 	});
@@ -295,7 +300,7 @@
 				</Command.Group>
 			{/if}
 			{#if results.length > 0}
-				<Command.Group heading={m.page_results({ count: results.length })}>
+				<Command.Group heading={m.page_results({ count: total })}>
 					<!-- First, so Enter right after typing lists the matches as the old search did. -->
 					<Command.Item value="see-all" onSelect={() => run(() => onseeall(trimmed))}>
 						<ListIcon />{m.command_see_all()}

@@ -48,12 +48,14 @@ pub fn spawn(app: AppHandle, wake: Wake) {
     });
 }
 
+/// Only the open space is embedded: the vectors serve its chat and similar
+/// notes, and another space catches up when it opens (SPEC 4.6).
 fn sync_space(state: &AppState, space: &Space, embedder: &dyn Embedder) {
-    if space.is_retired() {
+    if space.is_retired() || !space.is_open() {
         return;
     }
     let path = vectors_path(&space.root);
-    let keep_going = || !space.is_retired() && state.model_enabled();
+    let keep_going = || !space.is_retired() && space.is_open() && state.model_enabled();
     let held = space.held();
     match reconcile(
         &space.index,
@@ -115,6 +117,11 @@ pub fn reconcile(
         let index = index
             .read()
             .map_err(|_| "index lock poisoned".to_string())?;
+        // A space closed meanwhile holds no notes, which must not read as
+        // every note deleted and cost the vectors on disk.
+        if index.is_closed() {
+            return Ok(false);
+        }
         let present = index.entries().map(|e| e.id.clone()).collect();
         let dropped = store.retain(&present);
         let todo: Vec<(String, String, String)> = store
@@ -275,6 +282,20 @@ mod tests {
         assert!(reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 4);
         assert_eq!(ids(&vectors), vec!["01A", "01B", "01C"]);
+    }
+
+    #[test]
+    fn a_closed_space_keeps_its_vectors() {
+        let root = scratch_root("closed");
+        let path = vectors_path(&root);
+        let embedder = Counting::new("stub-64");
+        let vectors = Mutex::new(None);
+        let index = index_of(&[("01A", "coffee beans")]);
+        reconcile(&index, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+
+        let closed = RwLock::new(Index::closed());
+        assert!(!reconcile(&closed, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert_eq!(ids(&vectors), vec!["01A"], "no note of it counts as deleted");
     }
 
     #[test]

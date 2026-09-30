@@ -504,11 +504,14 @@ The interface shows each category in its own language through `src/lib/category-
 A space is a separate set of notes with its own categories, index and queue. Nothing is shared between spaces except settings and models.
 
 - Every space is a folder under `spaces/`, named after the space, holding its own `notes/` and `.scratchnote/`. Any folder there whose name is a valid space name is a space, including one made by hand. No space is special: the list is in name order, and any space can be deleted except the last one.
-- A first launch with no space makes `spaces/Personal/`. `spaces.json` records only which space is open; if that space is gone, the first one opens.
+- A first launch with no space makes `spaces/Personal/`. `spaces.json` records which space is open, and how many notes each space held when it was last left; if the open space is gone, the first one opens.
 - Data from before this layout, with `notes/` and the per-space files at the root, is moved once at startup into `spaces/<its old name>/` (with a number added if a folder already has that name).
 - Space names are folder names, so they must be valid on every platform: no `<>:"/\|?*`, no leading or trailing dot, no Windows reserved names, at most 40 characters, and unique ignoring case. Renaming a space renames its folder.
 - Deleting a space moves its folder to `.scratchnote/trash/<name> <timestamp>`; moving it back under `spaces/` restores it.
-- All spaces are loaded at startup and watched. Note commands act on the open space. The single enrichment worker drains every space's queue, the open space first.
+- Only the open space is read into memory and watched. The others are listed with their queue alone, and are read when they are opened; the space left is let go of, index, vectors and watcher. Note commands act on the open space.
+- The single enrichment worker drains every space's queue, the open space first. It needs no index for that: a job's note is read from its day's file, and for a space not open, from its page files when the day does not hold it. What it writes reaches that space's index when the space next opens, its files being newer than the cache.
+- An edit made outside the app to a space not open (a folder synced from elsewhere, say) is picked up when the space opens: its days are newer than the cache, and what they left pending is queued then.
+- The switcher shows each space's note count: counted while it is open, and as it was when last left otherwise. A space never opened, such as a folder made by hand, shows none.
 
 ### 4.7 Pages
 
@@ -615,7 +618,7 @@ Community plugins come from GitHub, as Obsidian's do.
 - A "Use the model" switch turns the model off entirely, for machines too small to run it. Off, it is never loaded, notes stay `pending` in the queue until it is back on, chat is unavailable, and the status bar says the model is turned off. It defaults to off on Android and iOS. The onboarding screen offers the same choice as "Continue without a model".
 - Record the resolved Hugging Face revision (commit SHA) alongside the downloaded file, so "which build of this model do I have" has an exact answer. Quant repos are re-uploaded in place, so a filename is not an identity.
 - Settings allow switching model or pointing to any local GGUF file.
-- An optional embedding model, EmbeddingGemma-300M (Q8_0, ~330 MB, from `ggml-org/embeddinggemma-300M-GGUF`; Google's own repo is gated), has its own download row in settings, fetched, verified and recorded like the others. It is not a chat model: downloading it changes no model setting. It follows the "Use the model" switch, the GPU setting and the idle unload, and loads lazily. Once it is there, a background task embeds each space's note bodies into `vectors.bin`, again whenever a body's hash changes. A task's box is embedded as words, `- [ ]` as `To do:` and `- [x]` as `Done:`, so a question about what is left to do finds the notes with tasks. An install that still has the earlier Qwen3-Embedding-0.6B fetches EmbeddingGemma on launch and deletes the old file once the new one is verified; `vectors.bin` records the model and how it embeds a note, and a change to either embeds every note again.
+- An optional embedding model, EmbeddingGemma-300M (Q8_0, ~330 MB, from `ggml-org/embeddinggemma-300M-GGUF`; Google's own repo is gated), has its own download row in settings, fetched, verified and recorded like the others. It is not a chat model: downloading it changes no model setting. It follows the "Use the model" switch, the GPU setting and the idle unload, and loads lazily. Once it is there, a background task embeds the open space's note bodies into `vectors.bin`, again whenever a body's hash changes; a space not open catches up when it opens. A task's box is embedded as words, `- [ ]` as `To do:` and `- [x]` as `Done:`, so a question about what is left to do finds the notes with tasks. An install that still has the earlier Qwen3-Embedding-0.6B fetches EmbeddingGemma on launch and deletes the old file once the new one is verified; `vectors.bin` records the model and how it embeds a note, and a change to either embeds every note again.
 - Settings has a "Check for updates" button. It is the only thing that triggers this check: never on launch, never on a timer. It compares the recorded revision against the current one on Hugging Face and, if they differ, offers to download the new one. The existing model file stays in place and in use until the replacement has finished downloading and passed SHA-256 verification.
 - A model pointed at by a custom GGUF path is not checked; the app did not fetch it and has no revision to compare against.
 - If the check fails (offline, rate limited), say so and carry on. It is never blocking, and a failed check must not affect enrichment.
@@ -745,7 +748,7 @@ chat(messages, on_event) / stop_chat() / warm_chat()  // replies stream through 
 check_model_update() -> UpdateCheck           // user-initiated only; up-to-date | newer(revision) | failed(reason)
 rebuild_index()
 set_tray_labels(labels)                      // the tray menu's wording, sent by the main window in its language
-list_spaces() -> SpacesView                   // open space + every space with its note count
+list_spaces() -> SpacesView                   // open space + every space with its note count, the last one known for a space not open
 create_space(name) / rename_space(name, new_name) / delete_space(name) / set_active_space(name)
 create_page(title, body, date?) -> Note       // file, then stub; held until finish_page
 list_pages() -> Vec<Note>                     // every page of the open space, newest first

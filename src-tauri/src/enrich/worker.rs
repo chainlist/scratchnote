@@ -131,9 +131,7 @@ fn put_back_unchanged(space: &Space, job: Job) {
 
 async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>) {
     let state = app.state::<AppState>();
-    let place = place(space, &job);
-
-    let Some(note) = read_note(&place, &job) else {
+    let Some((place, note)) = locate(space, &job) else {
         // The note is gone; so is the job.
         space.persist_queue(&state.writer).await;
         return;
@@ -243,6 +241,28 @@ fn place(space: &Space, job: &Job) -> Place {
     }
 }
 
+/// Where a job's note is, and the note as its file holds it now. A space
+/// that is not open has no index to tell its pages' jobs apart, so its page
+/// files are looked through when the day's file does not hold the note.
+fn locate(space: &Space, job: &Job) -> Option<(Place, daily_file::Note)> {
+    let place = place(space, job);
+    if let Some(note) = read_note(&place, job) {
+        return Some((place, note));
+    }
+    if space.is_open() {
+        return None;
+    }
+    let (path, file) = index::page_files(&space.root)
+        .into_iter()
+        .find_map(|path| {
+            let page = index::parse_page(&space.root, &path)?;
+            (page.id == job.id).then_some((path, page.file))
+        })?;
+    let place = Place::Page(path, file);
+    let note = read_note(&place, job)?;
+    Some((place, note))
+}
+
 fn read_note(place: &Place, job: &Job) -> Option<daily_file::Note> {
     match place {
         Place::Day(path) => {
@@ -321,5 +341,44 @@ async fn write_back(
     }
     if let Err(e) = space.persist_index(&state.writer).await {
         log::warn!("could not persist the index after enriching: {e}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::daily_file::{body_hash, Note};
+
+    #[test]
+    fn a_space_not_open_finds_the_page_a_job_is_for_among_its_files() {
+        let root = std::env::temp_dir().join("scratchnote-worker-closed-page");
+        let _ = std::fs::remove_dir_all(&root);
+        let date = "2026-09-22";
+        let page = Note {
+            id: "01PPP".to_string(),
+            date: date.to_string(),
+            time: "10:00".to_string(),
+            file: page_file::relative_path(date, &page_file::file_name(date, "Weekly sync", 1)),
+            subject: Some("Weekly sync".to_string()),
+            category: None,
+            status: Status::Pending,
+            hash: body_hash("the meeting"),
+            lang: None,
+            body: "the meeting".to_string(),
+            kind: Kind::Page,
+            missing: false,
+        };
+        let path = root.join(&page.file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, page_file::render_page(&page)).unwrap();
+
+        let space = Space::new("Test", root.clone(), Arc::new(Notify::new()));
+        let (place, note) = locate(&space, &Job::new("01PPP", date)).expect("the page is found");
+        assert!(matches!(place, Place::Page(_, file) if file == page.file));
+        assert_eq!(note.body, "the meeting");
+
+        // A note that is nowhere still costs its job.
+        assert!(locate(&space, &Job::new("01ZZZ", date)).is_none());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

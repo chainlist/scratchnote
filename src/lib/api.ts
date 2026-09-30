@@ -457,7 +457,11 @@ export const onOpenSettings = (handler: () => void): Promise<UnlistenFn> =>
 export interface SpaceSummary {
 	/** Also the space's folder name under `spaces/`. */
 	name: string;
-	notes: number;
+	/**
+	 * How many notes it holds, counted when it was last open. Null for a space
+	 * never open since, such as a folder made by hand.
+	 */
+	notes: number | null;
 }
 
 export interface SpacesView {

@@ -15,7 +15,9 @@ use crate::state::AppState;
 #[serde(rename_all = "camelCase")]
 pub struct SpaceSummary {
     pub name: String,
-    pub notes: usize,
+    /// `None` for a space not open since before its count was recorded,
+    /// such as a folder made by hand.
+    pub notes: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -26,6 +28,10 @@ pub struct SpacesView {
 
 fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
     let active = state.space()?.name.clone();
+    let registry = state
+        .registry
+        .read()
+        .map_err(|_| "spaces lock poisoned".to_string())?;
     let spaces = state
         .spaces
         .read()
@@ -33,20 +39,26 @@ fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
         .iter()
         .map(|s| SpaceSummary {
             name: s.name.clone(),
-            notes: s.note_count(),
+            notes: s
+                .note_count()
+                .or_else(|| registry.notes.get(&s.name).copied()),
         })
         .collect();
     Ok(SpacesView { active, spaces })
 }
 
-/// Load a space and start watching it. Used at startup and whenever a space
-/// is made or renamed.
-pub fn open_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
+/// A space as listed, not open yet: only its queue is read (SPEC 4.6).
+pub fn add_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
     let embed_wake = app.state::<AppState>().embed_wake.clone();
-    let (space, refresh) = Space::open(name, root, embed_wake);
-    let space = Arc::new(space);
-    if let Err(e) = crate::watcher::start(app.clone(), &space) {
-        log::error!("could not watch the notes of {name}: {e}");
+    Arc::new(Space::new(name, root, embed_wake))
+}
+
+/// Open a space: read its notes and start watching it. At startup for the
+/// open space, and whenever another one is opened.
+pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
+    let refresh = space.load();
+    if let Err(e) = crate::watcher::start(app.clone(), space) {
+        log::error!("could not watch the notes of {}: {e}", space.name);
     }
     let app = app.clone();
     let opened = space.clone();
@@ -59,7 +71,29 @@ pub fn open_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
         }
         crate::pages::repair_stubs(&state.writer, &opened).await;
     });
-    space
+}
+
+/// `load_space` off the async runtime, since it reads every file the cache
+/// does not cover.
+async fn load_space_off_thread(app: &AppHandle, space: &Arc<Space>) -> Result<(), String> {
+    let (app, space) = (app.clone(), space.clone());
+    tauri::async_runtime::spawn_blocking(move || load_space(&app, &space))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Close the space being left, and note how many notes it held for the
+/// switcher to show meanwhile.
+fn close_space(state: &AppState, space: &Space) -> Result<(), String> {
+    if let Some(count) = space.unload() {
+        state
+            .registry
+            .write()
+            .map_err(|_| "spaces lock poisoned".to_string())?
+            .notes
+            .insert(space.name.clone(), count);
+    }
+    Ok(())
 }
 
 /// Record the registry and tell both windows the spaces changed.
@@ -131,7 +165,9 @@ pub async fn create_space(
         .await
         .map_err(|e| format!("could not create {}: {e}", root.display()))?;
 
-    let space = open_space(&app, &name, root);
+    let space = add_space(&app, &name, root);
+    load_space_off_thread(&app, &space).await?;
+    let left = state.space()?;
     {
         let mut spaces = state
             .spaces
@@ -145,25 +181,35 @@ pub async fn create_space(
         .write()
         .map_err(|_| "spaces lock poisoned".to_string())?
         .active = name;
+    close_space(&state, &left)?;
     spaces_changed(&app, &state).await
 }
 
 /// Open another space. Every note command acts on it from then on, and the
-/// capture window saves into it.
+/// capture window saves into it. The space left is closed: its notes leave
+/// memory, and its queue stays with the worker.
 #[tauri::command]
 pub async fn set_active_space(
     app: AppHandle,
     state: State<'_, AppState>,
     name: String,
 ) -> Result<SpacesView, String> {
-    if state.find_space(&name).is_none() {
-        return Err(format!("no space {name}"));
+    let space = state
+        .find_space(&name)
+        .ok_or_else(|| format!("no space {name}"))?;
+    let left = state.space()?;
+    if Arc::ptr_eq(&space, &left) {
+        return spaces_view(&state);
+    }
+    if !space.is_open() {
+        load_space_off_thread(&app, &space).await?;
     }
     state
         .registry
         .write()
         .map_err(|_| "spaces lock poisoned".to_string())?
         .active = name;
+    close_space(&state, &left)?;
     // Its notes are now first in line for the model.
     state.wake.notify_one();
     spaces_changed(&app, &state).await
@@ -187,14 +233,21 @@ pub async fn rename_space(
 
     // The watcher holds the folder open, and Windows will not move an open
     // folder, so the old space lets go of it first.
+    let was_open = old.is_open();
     old.retire();
     let to = spaces::spaces_dir(&state.root).join(&new_name);
     if let Err(e) = tokio::fs::rename(&old.root, &to).await {
-        let back = open_space(&app, &name, old.root.clone());
+        let back = add_space(&app, &name, old.root.clone());
+        if was_open {
+            load_space_off_thread(&app, &back).await?;
+        }
         replace_space(&state, &old, back)?;
         return Err(format!("could not rename {}: {e}", old.root.display()));
     }
-    let renamed = open_space(&app, &new_name, to);
+    let renamed = add_space(&app, &new_name, to);
+    if was_open {
+        load_space_off_thread(&app, &renamed).await?;
+    }
     replace_space(&state, &old, renamed)?;
 
     {
@@ -203,11 +256,14 @@ pub async fn rename_space(
             .write()
             .map_err(|_| "spaces lock poisoned".to_string())?;
         if registry.active == name {
-            registry.active = new_name;
+            registry.active = new_name.clone();
+        }
+        if let Some(count) = registry.notes.remove(&name) {
+            registry.notes.insert(new_name, count);
         }
     }
     // A job the old space had in hand was dropped; its note is still pending
-    // and was queued again by the reopened space.
+    // and is queued again when the space is next opened.
     state.wake.notify_one();
     spaces_changed(&app, &state).await
 }
@@ -234,6 +290,7 @@ pub async fn delete_space(
         return Err("the last space cannot be deleted".to_string());
     }
 
+    let was_open = space.is_open();
     space.retire();
     let trash = state.root.join(".scratchnote").join("trash");
     let to = trash.join(format!("{name} {}", Local::now().format("%Y-%m-%d %H%M%S")));
@@ -242,7 +299,10 @@ pub async fn delete_space(
         Err(e) => Err(e),
     };
     if let Err(e) = moved {
-        let back = open_space(&app, &name, space.root.clone());
+        let back = add_space(&app, &name, space.root.clone());
+        if was_open {
+            load_space_off_thread(&app, &back).await?;
+        }
         replace_space(&state, &space, back)?;
         return Err(format!(
             "could not move {} to the trash: {e}",
@@ -260,15 +320,24 @@ pub async fn delete_space(
         .read()
         .map_err(|_| "spaces lock poisoned".to_string())?
         .first()
-        .map(|s| s.name.clone());
-    {
+        .cloned();
+    // The open space went: the first one opens in its place.
+    let reopen = {
         let mut registry = state
             .registry
             .write()
             .map_err(|_| "spaces lock poisoned".to_string())?;
-        if let (true, Some(first)) = (registry.active == name, first) {
-            registry.active = first;
+        registry.notes.remove(&name);
+        match first {
+            Some(first) if registry.active == name => {
+                registry.active = first.name.clone();
+                Some(first)
+            }
+            _ => None,
         }
+    };
+    if let Some(first) = reopen.filter(|first| !first.is_open()) {
+        load_space_off_thread(&app, &first).await?;
     }
     spaces_changed(&app, &state).await
 }

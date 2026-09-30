@@ -108,9 +108,25 @@ impl IndexEntry {
 pub struct Index {
     by_date: BTreeMap<String, Vec<IndexEntry>>,
     pages: BTreeMap<String, IndexEntry>,
+    /// Set on what a space holds while it is not open (SPEC 4.6). Kept with
+    /// the notes, under their lock, so a write that races the space closing
+    /// is dropped rather than saving an empty cache over the real one.
+    closed: bool,
 }
 
 impl Index {
+    /// What a space holds while it is not open: no notes, and marked so.
+    pub fn closed() -> Self {
+        Self {
+            closed: true,
+            ..Self::default()
+        }
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.closed
+    }
+
     /// A day's notes. Its pages come from their own files, so they stay.
     pub fn replace_day(&mut self, date: &str, entries: Vec<IndexEntry>) {
         if entries.is_empty() {

@@ -18,6 +18,7 @@ use crate::enrich::queue::Job;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Status;
+use crate::storage::search_db::Stamp;
 use crate::storage::{check_date, fingerprint, index};
 
 /// An editor writing a file emits several events; wait for quiet before
@@ -115,8 +116,8 @@ fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     };
 
     let parsed = index::parse_page(&space.root, path);
-    let before = match parsed.clone() {
-        Some(entry) => match space.page_changed(entry) {
+    let before = match &parsed {
+        Some(page) => match space.page_changed(page) {
             Ok(before) => before,
             Err(_) => return false,
         },
@@ -151,7 +152,7 @@ fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     let owned = space.clone();
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
-        if let (true, Some(page)) = (moved, parsed.as_ref().map(|e| e.to_note())) {
+        if let (true, Some(page)) = (moved, parsed) {
             if let Some(before) = before.filter(|b| b.date != page.date) {
                 if let Err(e) =
                     crate::pages::drop_stub(&state.writer, &owned, &before.date, &page.id).await
@@ -194,15 +195,18 @@ fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
         return false;
     }
 
-    let entries = index::parse_day(path, &date);
+    // Taken before the file is read, so a write in between makes the day
+    // look older than it is, and read again.
+    let stamp = Stamp::of(path);
+    let notes = index::parse_day(path, &date);
     // A labelled note whose body was edited parses as pending, and so does a
     // block typed in by hand: both go to the model.
-    let pending: Vec<String> = entries
+    let pending: Vec<String> = notes
         .iter()
         .filter(|entry| entry.status == Status::Pending)
         .map(|entry| entry.id.clone())
         .collect();
-    if space.set_day(&date, entries).is_err() {
+    if space.set_day(&date, &notes, stamp).is_err() {
         return false;
     }
     let queued = match space.queue.lock() {

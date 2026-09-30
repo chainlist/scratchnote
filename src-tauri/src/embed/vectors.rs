@@ -72,14 +72,13 @@ impl Vectors {
     }
 
     /// Notes with no vector yet or one made from an older body, in the order
-    /// given. An empty body has nothing to embed.
+    /// given.
     pub fn stale<'a>(
         &self,
         entries: impl IntoIterator<Item = &'a IndexEntry>,
     ) -> Vec<&'a IndexEntry> {
         entries
             .into_iter()
-            .filter(|entry| !entry.body.trim().is_empty())
             .filter(|entry| {
                 !matches!(self.notes.get(&entry.id), Some((hash, _)) if *hash == entry.hash)
             })
@@ -437,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn stale_lists_new_and_edited_notes_but_not_unchanged_or_empty_ones() {
+    fn stale_lists_new_and_edited_notes_but_not_unchanged_ones() {
         let mut vectors = Vectors::new("m", 3);
         vectors
             .insert("01A".into(), body_hash("unchanged"), vec![1.0, 0.0, 0.0])
@@ -450,7 +449,6 @@ mod tests {
             entry("01A", "unchanged"),
             entry("01B", "after"),
             entry("01C", "brand new"),
-            entry("01D", "  \n"),
         ];
         let stale: Vec<&str> = vectors
             .stale(&entries)

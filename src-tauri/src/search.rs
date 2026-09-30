@@ -1,10 +1,12 @@
-//! In-memory search, SPEC 6.
+//! Search, SPEC 6.
 //!
 //! A query is words and `#category` tokens. Every word must appear somewhere
 //! in the subject or body, and the note must be filed under the category.
-//! Matching ignores case and accents, so `reunion` finds `Réunion`.
+//! Matching ignores case and accents, so `reunion` finds `Réunion`. The words
+//! are looked for in `search.db`, which holds the text; the categories, the
+//! order and the stretch asked for come from the index in memory.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 use unicode_normalization::char::is_combining_mark;
@@ -13,6 +15,7 @@ use unicode_normalization::UnicodeNormalization;
 use crate::enrich::normalize;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{Index, IndexEntry};
+use crate::storage::search_db::SearchDb;
 
 /// Lowercase with accents stripped: decompose, then drop the combining marks.
 pub fn fold(text: &str) -> String {
@@ -55,9 +58,39 @@ impl Query {
             .all(|wanted| entry.category.as_deref().map(fold).as_ref() == Some(wanted))
     }
 
-    fn has_words(&self, entry: &IndexEntry) -> bool {
-        self.words.iter().all(|word| entry.folded.contains(word))
+    /// The notes whose text holds every word, or `None` for a query without
+    /// words, which every note passes.
+    fn matched(&self, db: &SearchDb) -> Result<Option<HashSet<String>>, String> {
+        if self.words.is_empty() {
+            return Ok(None);
+        }
+        db.matching(&self.words).map(Some)
     }
+}
+
+/// Whether `matched`, from `Query::matched`, lets `entry` through.
+fn passes(matched: &Option<HashSet<String>>, entry: &IndexEntry) -> bool {
+    matched.as_ref().map_or(true, |ids| ids.contains(&entry.id))
+}
+
+/// `entries` as notes, their text read from `db`.
+pub fn with_bodies<'a>(
+    db: &SearchDb,
+    entries: impl IntoIterator<Item = &'a IndexEntry>,
+) -> Result<Vec<Note>, String> {
+    let entries: Vec<&IndexEntry> = entries.into_iter().collect();
+    let mut bodies = db.bodies(entries.iter().map(|entry| entry.id.as_str()))?;
+    Ok(entries
+        .into_iter()
+        .map(|entry| Note {
+            body: bodies.remove(&entry.id).unwrap_or_default(),
+            ..entry.to_note()
+        })
+        .collect())
+}
+
+fn newest_first(hits: &mut [&IndexEntry]) {
+    hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
 }
 
 /// A query's words as typed, without its `#category` filter: what search by
@@ -72,18 +105,26 @@ pub fn words(raw: &str) -> String {
 /// Up to `k` notes of `hits`, best first, that pass the query's `#category`
 /// filter without matching its words: what search by meaning adds under the
 /// word matches.
-pub fn by_meaning(index: &Index, raw: &str, hits: &[(String, f32)], k: usize) -> Vec<Note> {
+pub fn by_meaning(
+    index: &Index,
+    db: &SearchDb,
+    raw: &str,
+    hits: &[(String, f32)],
+    k: usize,
+) -> Result<Vec<Note>, String> {
     let query = Query::parse(raw);
+    let matched = query.matched(db)?;
     let entries: HashMap<&str, &IndexEntry> = index
         .entries()
         .map(|entry| (entry.id.as_str(), entry))
         .collect();
-    hits.iter()
-        .filter_map(|(id, _)| entries.get(id.as_str()))
-        .filter(|entry| query.has_category(entry) && !query.has_words(entry))
+    let found: Vec<&IndexEntry> = hits
+        .iter()
+        .filter_map(|(id, _)| entries.get(id.as_str()).copied())
+        .filter(|entry| query.has_category(entry) && !passes(&matched, entry))
         .take(k)
-        .map(|entry| entry.to_note())
-        .collect()
+        .collect();
+    with_bodies(db, found)
 }
 
 /// One stretch of what a search found, and how many notes it found in all.
@@ -94,44 +135,44 @@ pub struct Found {
 }
 
 /// Newest first: by date, then by time within the day. Only the `limit`
-/// notes from `offset` on are copied out, bodies and all, so a short query
+/// notes from `offset` on are read out, bodies and all, so a short query
 /// matching most of the space does not hand all of it to the page.
-pub fn search(index: &Index, raw: &str, offset: usize, limit: usize) -> Found {
+pub fn search(
+    index: &Index,
+    db: &SearchDb,
+    raw: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<Found, String> {
     let query = Query::parse(raw);
     if query.is_empty() {
-        return Found::default();
+        return Ok(Found::default());
     }
 
+    let matched = query.matched(db)?;
     let mut hits: Vec<&IndexEntry> = index
         .entries()
-        .filter(|entry| query.has_category(entry) && query.has_words(entry))
+        .filter(|entry| query.has_category(entry) && passes(&matched, entry))
         .collect();
-
-    hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
-    Found {
+    newest_first(&mut hits);
+    Ok(Found {
         total: hits.len(),
-        notes: hits
-            .into_iter()
-            .skip(offset)
-            .take(limit)
-            .map(IndexEntry::to_note)
-            .collect(),
-    }
+        notes: with_bodies(db, hits.into_iter().skip(offset).take(limit))?,
+    })
 }
 
 /// Notes and pages whose body holds any of `needles` as typed, newest first.
 /// A plugin asks for the markup it reads, `[ ]` and `[x]` for the tasks
 /// view (SPEC 3.8), and parses the markdown itself to keep the real ones.
 /// An empty needle matches every note.
-pub fn containing(index: &Index, needles: &[String]) -> Vec<Note> {
-    let mut hits: Vec<Note> = index
+pub fn containing(index: &Index, db: &SearchDb, needles: &[String]) -> Result<Vec<Note>, String> {
+    let ids = db.containing(needles)?;
+    let mut hits: Vec<&IndexEntry> = index
         .entries()
-        .filter(|entry| needles.iter().any(|needle| entry.body.contains(needle.as_str())))
-        .map(|entry| entry.to_note())
+        .filter(|entry| ids.contains(&entry.id))
         .collect();
-
-    hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
-    hits
+    newest_first(&mut hits);
+    with_bodies(db, hits)
 }
 
 #[cfg(test)]
@@ -157,21 +198,42 @@ mod tests {
         }
     }
 
-    fn index(notes: &[Note]) -> Index {
+    /// Notes as an open space holds them: the index, and their text in
+    /// search.db.
+    struct Notes {
+        index: Index,
+        db: SearchDb,
+    }
+
+    fn index(notes: &[Note]) -> Notes {
         let mut index = Index::default();
-        for note in notes {
-            index.push(IndexEntry::from(note));
-        }
-        index
+        let mut db = SearchDb::in_memory().unwrap();
+        db.at_once(|db| {
+            for note in notes {
+                index.push(IndexEntry::from(note));
+                db.add_note(note, None).unwrap();
+            }
+        });
+        Notes { index, db }
     }
 
     fn ids(hits: &[Note]) -> Vec<&str> {
         hits.iter().map(|n| n.id.as_str()).collect()
     }
 
+    fn by_meaning_of(notes: &Notes, raw: &str, hits: &[(String, f32)], k: usize) -> Vec<Note> {
+        by_meaning(&notes.index, &notes.db, raw, hits, k).unwrap()
+    }
+
+    fn containing_of(notes: &Notes, needles: &[String]) -> Vec<Note> {
+        containing(&notes.index, &notes.db, needles).unwrap()
+    }
+
     /// Every match, as a plugin's search asks for them.
-    fn all(index: &Index, raw: &str) -> Vec<Note> {
-        search(index, raw, 0, usize::MAX).notes
+    fn all(notes: &Notes, raw: &str) -> Vec<Note> {
+        search(&notes.index, &notes.db, raw, 0, usize::MAX)
+            .unwrap()
+            .notes
     }
 
     #[test]
@@ -182,11 +244,11 @@ mod tests {
             note("01C", "2026-09-22", "17:00", "x", None),
             note("01D", "2026-09-23", "08:00", "y", None),
         ]);
-        let first = search(&idx, "x", 0, 2);
+        let first = search(&idx.index, &idx.db, "x", 0, 2).unwrap();
         assert_eq!((ids(&first.notes), first.total), (vec!["01C", "01B"], 3));
-        let rest = search(&idx, "x", 2, 2);
+        let rest = search(&idx.index, &idx.db, "x", 2, 2).unwrap();
         assert_eq!((ids(&rest.notes), rest.total), (vec!["01A"], 3));
-        assert!(search(&idx, "x", 5, 2).notes.is_empty());
+        assert!(search(&idx.index, &idx.db, "x", 5, 2).unwrap().notes.is_empty());
     }
 
     #[test]
@@ -272,8 +334,8 @@ mod tests {
             .map(|(id, score)| (id.to_string(), score))
             .collect();
         // 01A already matches the words, 01C is filed elsewhere, 01Z is not a note.
-        assert_eq!(ids(&by_meaning(&idx, "postgres #db", &hits, 5)), vec!["01B"]);
-        assert_eq!(ids(&by_meaning(&idx, "postgres", &hits, 1)), vec!["01C"]);
+        assert_eq!(ids(&by_meaning_of(&idx, "postgres #db", &hits, 5)), vec!["01B"]);
+        assert_eq!(ids(&by_meaning_of(&idx, "postgres", &hits, 1)), vec!["01C"]);
     }
 
     #[test]
@@ -313,9 +375,9 @@ mod tests {
             note("01C", "2026-09-22", "09:00", "Shopping\n- [X] milk", None),
         ]);
         let boxes = ["[ ]", "[x]", "[X]"].map(String::from);
-        assert_eq!(ids(&containing(&idx, &boxes)), vec!["01C", "01A"]);
-        assert_eq!(ids(&containing(&idx, &[String::new()])), vec!["01C", "01B", "01A"]);
-        assert!(containing(&idx, &[]).is_empty());
+        assert_eq!(ids(&containing_of(&idx, &boxes)), vec!["01C", "01A"]);
+        assert_eq!(ids(&containing_of(&idx, &[String::new()])), vec!["01C", "01B", "01A"]);
+        assert!(containing_of(&idx, &[]).is_empty());
     }
 
     #[test]
@@ -342,11 +404,12 @@ mod tests {
             .collect();
         let idx = index(&notes);
 
+        // As the command center asks, keystroke after keystroke.
         let started = std::time::Instant::now();
-        let hits = all(&idx, "#infra deploiement friday");
+        let found = search(&idx.index, &idx.db, "#infra deploiement friday", 0, 50).unwrap();
         let took = started.elapsed();
 
-        assert_eq!(hits.len(), 10_000);
+        assert_eq!((found.total, found.notes.len()), (10_000, 50));
         eprintln!("searched 10,000 notes in {took:?}");
         if !cfg!(debug_assertions) {
             assert!(took.as_millis() < 50, "took {took:?}");

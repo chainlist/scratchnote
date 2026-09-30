@@ -63,9 +63,7 @@ pub async fn save_note(
         .append_note(day_path(&space.root, &date), date, note.clone())
         .await?;
 
-    space
-        .note_added(&state.writer, IndexEntry::from(&note))
-        .await?;
+    space.note_added(&state.writer, &note).await?;
 
     enqueue(&state, &space, note.id.clone(), note.date.clone()).await;
 
@@ -93,7 +91,7 @@ pub(crate) async fn persist_queue(state: &State<'_, AppState>, space: &Space) {
 
 /// Read straight from the markdown, because the index deliberately carries no
 /// bodies and the day view shows them. The day's pages come from the index,
-/// which holds their files' text, and a stub whose page is gone comes back
+/// with their text from search.db, and a stub whose page is gone comes back
 /// as a missing page (SPEC 3.5).
 #[tauri::command]
 pub async fn get_day(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
@@ -106,18 +104,20 @@ pub async fn get_day(state: State<'_, AppState>, date: String) -> Result<Vec<Not
         Err(e) => return Err(e.to_string()),
     };
     let mut notes = daily_file::parse_notes(&contents, &date, &relative_day_path(&date));
-    {
+    let mut pages: Vec<Note> = {
         let idx = space
             .index
             .read()
             .map_err(|_| "index lock poisoned".to_string())?;
-        notes.extend(idx.pages_on(&date).map(IndexEntry::to_note));
         for stub in daily_file::parse_stubs(&contents) {
             if idx.page(&stub.id).is_none() {
                 notes.push(missing_page(&date, stub));
             }
         }
-    }
+        idx.pages_on(&date).map(IndexEntry::to_note).collect()
+    };
+    space.fill_bodies(&mut pages);
+    notes.extend(pages);
     notes.sort_by(|a, b| a.time.cmp(&b.time));
     Ok(notes)
 }
@@ -339,12 +339,10 @@ async fn reindex_day(state: &State<'_, AppState>, space: &Space, date: &str) -> 
 #[tauri::command]
 pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
     let space = state.space()?;
-    let root = space.root.clone();
-    let rebuilt = tauri::async_runtime::spawn_blocking(move || index::rebuild(&root))
+    let rebuilding = space.clone();
+    let count = tauri::async_runtime::spawn_blocking(move || rebuilding.rebuild())
         .await
-        .map_err(|e| e.to_string())?;
-
-    let count = space.index_rebuilt(rebuilt)?;
+        .map_err(|e| e.to_string())??;
     space.persist_index(&state.writer).await?;
 
     let _ = app.emit("index-rebuilt", ());
@@ -406,8 +404,8 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
         space.day_changed(date)?;
     }
     for page in &pages {
-        if let Some(entry) = index::parse_page(&space.root, &space.root.join(&page.file)) {
-            space.page_changed(entry)?;
+        if let Some(parsed) = index::parse_page(&space.root, &space.root.join(&page.file)) {
+            space.page_changed(&parsed)?;
         }
     }
     let notes: Vec<(String, String)> = notes

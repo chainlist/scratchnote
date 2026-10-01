@@ -47,7 +47,10 @@ export class Shell implements WorkspaceHost {
 	day = $state('');
 	error = $state<string | null>(null);
 	model = $state<ModelStatus>({ state: 'absent' });
-	canChat = $derived(this.model.state === 'loaded' || this.model.state === 'idle');
+	/** On and on disk, loaded or loaded again when needed: the model labels
+	 *  pending notes and answers the chat. Off, missing or downloading, it
+	 *  does neither. */
+	modelAvailable = $derived(this.model.state === 'loaded' || this.model.state === 'idle');
 	/** Similar notes come from the embedding model's vectors. */
 	embeddingInstalled = $state(false);
 	canSimilar = $derived(this.embeddingInstalled && this.model.state !== 'disabled');

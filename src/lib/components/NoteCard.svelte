@@ -17,6 +17,7 @@
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
 	import { categoryLabel } from '$lib/categories';
 	import { m } from '$lib/paraglide/messages';
+	import { getShell } from '$lib/shell.svelte';
 
 	let {
 		note,
@@ -71,7 +72,10 @@
 	// already in the queue.
 	let canRetry = $derived(note.status === 'done' || note.status === 'failed');
 
-	let pending = $derived(note.status === 'pending');
+	const shell = getShell();
+	// A pending note glows only while the model is there to label it. With
+	// the model off, missing or still downloading, it waits like any other.
+	let glowing = $derived(note.status === 'pending' && shell.modelAvailable);
 	/** How long the glow takes to come and go, text and edge alike. */
 	const glowFade = { duration: 500 };
 
@@ -126,19 +130,19 @@
 </script>
 
 <!-- The double click is a mouse shortcut; Edit in the menu opens the same
-     text from the keyboard. A pending note sits above its neighbours: its
+     text from the keyboard. A glowing note sits above its neighbours: its
      glow spills onto them, and their hover background would cover it. -->
 <TimelineItem
 	data-note-id={note.id}
 	time={note.time}
 	date={showDate ? note.date : undefined}
-	class={[menuOpen && 'bg-neutral-900', blink && 'note-blink', pending && 'z-10']}
+	class={[menuOpen && 'bg-neutral-900', blink && 'note-blink', glowing && 'z-10']}
 	ondblclick={onDoubleClick}
 	onmousedown={onMouseDown}
 >
 	<!-- Enrichment shows only while it matters: a glowing rainbow edge while
 	     the note waits for the model, a faint red ring when it failed. -->
-	{#if pending}
+	{#if glowing}
 		<span aria-hidden="true" class="note-aurora" transition:fade={glowFade}></span>
 	{:else if note.status === 'failed'}
 		<span aria-hidden="true" class="note-error-ring" transition:fade={glowFade}></span>
@@ -172,18 +176,18 @@
 				</div>
 			</div>
 		{:else}
-			<!-- While pending, the text turns transparent and a glowing copy fades
+			<!-- While glowing, the text turns transparent and a glowing copy fades
 			     in over it, so the two cross-fade both ways. The copy lets clicks
 			     and selection through to the real text, and holds a blurred copy
 			     of its own as the glow behind its letters. -->
 			<Markdown
 				text={body}
 				onchange={saveTicks}
-				class="text-base leading-7 transition-colors duration-500 {pending
+				class="text-base leading-7 transition-colors duration-500 {glowing
 					? 'text-transparent'
 					: 'text-neutral-200'}"
 			/>
-			{#if pending}
+			{#if glowing}
 				<div
 					aria-hidden="true"
 					transition:fade={glowFade}

@@ -164,10 +164,7 @@
 
 <svelte:window onkeydown={onWindowKeydown} />
 
-<div
-	class="flex h-screen flex-col bg-neutral-950 text-neutral-100"
-	data-model-off={shell.model.state === 'disabled' || undefined}
->
+<div class="flex h-screen flex-col bg-neutral-950 text-neutral-100">
 	<AppHeader
 		spaces={data.spaces}
 		onsearch={shell.openPalette}
@@ -198,7 +195,7 @@
 					<ChatPanel
 						bind:open={shell.chatOpen}
 						space={data.spaces.active}
-						canChat={shell.canChat}
+						canChat={shell.modelAvailable}
 						onopen={(entry) => void shell.openCited(entry)}
 					/>
 				{/if}
@@ -256,7 +253,7 @@
 	bind:query={shell.query}
 	editor={shell.paletteEditor}
 	categories={data.categories}
-	canChat={shell.canChat}
+	canChat={shell.modelAvailable}
 	canMeaning={shell.canSimilar}
 	onpick={(note) => void shell.openCited(note)}
 	onseeall={(q) => void shell.showResults(q)}

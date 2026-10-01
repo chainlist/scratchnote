@@ -9,6 +9,7 @@
 	import PanelRightOpenIcon from '@lucide/svelte/icons/panel-right-open';
 	import { categoryLabel } from '$lib/categories';
 	import { m } from '$lib/paraglide/messages';
+	import { getShell } from '$lib/shell.svelte';
 
 	let {
 		note,
@@ -42,7 +43,9 @@
 			.slice(0, 2)
 			.join('\n')
 	);
-	const pending = $derived(note.status === 'pending');
+	const shell = getShell();
+	/** As a note's: only while the model is there to label it. */
+	const glowing = $derived(note.status === 'pending' && shell.modelAvailable);
 	const glowFade = { duration: 500 };
 </script>
 
@@ -54,12 +57,12 @@
 	time={note.time}
 	date={showDate ? note.date : undefined}
 	hover={false}
-	class={[blink && 'note-blink', pending && 'z-10']}
+	class={[blink && 'note-blink', glowing && 'z-10']}
 >
 	{#snippet icon()}
 		{#if note.missing}<FileXIcon class="size-3" />{:else}<FileTextIcon class="size-3" />{/if}
 	{/snippet}
-	{#if pending}
+	{#if glowing}
 		<span aria-hidden="true" class="note-aurora" transition:fade={glowFade}></span>
 	{:else if note.status === 'failed'}
 		<span aria-hidden="true" class="note-error-ring" transition:fade={glowFade}></span>

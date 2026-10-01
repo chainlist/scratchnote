@@ -73,8 +73,7 @@ const MIN_LEAD: f32 = 0.15;
 
 /// Notes close in meaning to a query's words that the words themselves do
 /// not find, best first, within its `#category` filter. Empty without the
-/// embedding model, with the model switched off, or for a query of `#` tokens
-/// only.
+/// embedding model, or for a query of `#` tokens only.
 #[tauri::command]
 pub async fn search_meaning(
     app: AppHandle,
@@ -150,8 +149,7 @@ const MIN_RECALL_CHARS: usize = 12;
 /// The old note a draft is about, when one stands out (SPEC 6.3): the
 /// closest to it in meaning, if it is close enough. `exclude` is the note the
 /// draft is an edit of. None for a draft written into a space that is not
-/// open, whose vectors are not in memory, without the embedding model, or
-/// with the model switched off.
+/// open, whose vectors are not in memory, or without the embedding model.
 #[tauri::command]
 pub async fn recall(
     app: AppHandle,

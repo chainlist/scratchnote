@@ -306,7 +306,7 @@
 	"settings_checking": "Checking",
 	"settings_check_updates": "Check for updates",
 	"settings_embedding": "Embedding model",
-	"settings_embedding_hint": "Lets the chat find the notes that matter in a large space and read their text.",
+	"settings_embedding_hint": "Finds notes by meaning: similar notes, threads, search by meaning and the notes the chat reads. It runs even with the model turned off.",
 	"settings_embedding_downloading": "Downloading the embedding model: {percent}%",
 	"settings_embedding_installed": "Installed",
 	"settings_embedding_downloaded": "Embedding model downloaded.",

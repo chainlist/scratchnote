@@ -61,9 +61,10 @@ export class Shell implements WorkspaceHost {
 	 *  pending notes and answers the chat. Off, missing or downloading, it
 	 *  does neither. */
 	modelAvailable = $derived(this.model.state === 'loaded' || this.model.state === 'idle');
-	/** Similar notes come from the embedding model's vectors. */
+	/** Similar notes come from the embedding model's vectors, which the model
+	 *  switch leaves alone. */
 	embeddingInstalled = $state(false);
-	canSimilar = $derived(this.embeddingInstalled && this.model.state !== 'disabled');
+	canSimilar = $derived(this.embeddingInstalled);
 	/** The thread each note of the open space is in, by note (SPEC 6.4). */
 	threads = $state.raw<Record<string, ThreadPlace>>({});
 	/** The notes taken out of threads. */

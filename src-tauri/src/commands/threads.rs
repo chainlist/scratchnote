@@ -30,7 +30,7 @@ pub struct ThreadNotes {
 }
 
 /// The open space's threads, empty until the embed task has placed its
-/// notes: without the embedding model, or with the model switched off.
+/// notes, which it never does without the embedding model.
 #[tauri::command]
 pub fn list_threads(state: State<'_, AppState>) -> Result<ThreadsView, String> {
     let space = state.space()?;

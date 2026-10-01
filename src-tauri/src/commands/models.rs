@@ -315,10 +315,17 @@ pub fn replace_legacy_embedding_model(app: &AppHandle) {
     });
 }
 
-/// Drop the loaded model. The next job loads whatever the settings now point
-/// at, so this is also how a model switch takes effect.
+/// Drop the loaded model, and the embedding model with it. The next job
+/// loads whatever the settings now point at.
 pub(super) fn unload_model(app: &AppHandle, state: &State<'_, AppState>) {
     let status = state.unload_model();
+    let _ = app.emit("model-status", &status);
+}
+
+/// `unload_model` for the chat model alone, which is how a model switch
+/// takes effect. The embedding model stays loaded.
+pub(super) fn unload_chat_model(app: &AppHandle, state: &State<'_, AppState>) {
+    let status = state.unload_chat_model();
     let _ = app.emit("model-status", &status);
 }
 
@@ -389,7 +396,7 @@ pub async fn update_model(app: AppHandle, state: State<'_, AppState>) -> Result<
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.swapping.store(true, Ordering::SeqCst);
-        unload_model(&app, &state);
+        unload_chat_model(&app, &state);
     }
     let mut result = Err(String::new());
     for _ in 0..30 {

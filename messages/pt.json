@@ -306,7 +306,7 @@
 	"settings_checking": "Verificando",
 	"settings_check_updates": "Verificar atualizações",
 	"settings_embedding": "Modelo de embeddings",
-	"settings_embedding_hint": "Permite que a conversa encontre as notas relevantes em um espaço grande e leia o texto delas.",
+	"settings_embedding_hint": "Encontra notas pelo sentido: notas semelhantes, fios, busca por significado e as notas que a conversa lê. Funciona mesmo com o modelo desativado.",
 	"settings_embedding_downloading": "Baixando o modelo de embeddings: {percent}%",
 	"settings_embedding_installed": "Instalado",
 	"settings_embedding_downloaded": "Modelo de embeddings baixado.",

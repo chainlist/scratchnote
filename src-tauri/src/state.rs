@@ -47,7 +47,7 @@ pub struct AppState {
     /// Nudges the worker when a job is queued or a model becomes available.
     pub wake: Wake,
     /// `None` until an embedding model is loaded. Read through
-    /// `embed::embedder`, which also honours the model switch.
+    /// `embed::embedder`, which the model switch does not reach.
     pub embedder: RwLock<Option<Arc<dyn Embedder>>>,
     /// Held while the embedding model loads (`load_once`).
     pub embedder_loading: Mutex<()>,
@@ -121,10 +121,16 @@ impl AppState {
     /// state that leaves. A job still holding one finishes first, since it
     /// owns its own reference. Both load again lazily when next needed.
     pub fn unload_model(&self) -> ModelStatus {
-        if let Ok(mut slot) = self.backend.write() {
+        if let Ok(mut slot) = self.embedder.write() {
             *slot = None;
         }
-        if let Ok(mut slot) = self.embedder.write() {
+        self.unload_chat_model()
+    }
+
+    /// `unload_model` for the chat model alone, when the switch, the model
+    /// choice or its file changes: none of them is the embedding model's.
+    pub fn unload_chat_model(&self) -> ModelStatus {
+        if let Ok(mut slot) = self.backend.write() {
             *slot = None;
         }
         let status = resting_status(self.model_enabled(), self.active_model().is_some());

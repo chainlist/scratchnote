@@ -306,7 +306,7 @@
 	"settings_checking": "Vérification",
 	"settings_check_updates": "Rechercher des mises à jour",
 	"settings_embedding": "Modèle d'embeddings",
-	"settings_embedding_hint": "Permet à la discussion de trouver les notes utiles dans un grand espace et d'en lire le texte.",
+	"settings_embedding_hint": "Trouve les notes par le sens : notes similaires, fils, recherche par le sens et notes que lit la discussion. Il fonctionne même quand le modèle est désactivé.",
 	"settings_embedding_downloading": "Téléchargement du modèle d'embeddings : {percent}%",
 	"settings_embedding_installed": "Installé",
 	"settings_embedding_downloaded": "Modèle d'embeddings téléchargé.",

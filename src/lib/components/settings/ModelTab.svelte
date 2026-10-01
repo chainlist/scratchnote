@@ -111,10 +111,11 @@
 				</SettingRow>
 			</div>
 		</section>
-
-		<section class="flex flex-col gap-3">
-			<h4 class={section}>{m.settings_model_section_search()}</h4>
-			<EmbeddingModel {settings} />
-		</section>
 	{/if}
+
+	<!-- The embedding model runs whether or not the model is on. -->
+	<section class="flex flex-col gap-3">
+		<h4 class={section}>{m.settings_model_section_search()}</h4>
+		<EmbeddingModel {settings} />
+	</section>
 </div>

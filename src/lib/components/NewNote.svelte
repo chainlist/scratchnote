@@ -4,6 +4,7 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import Recall from '$lib/components/Recall.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { m } from '$lib/paraglide/messages';
 
@@ -81,7 +82,11 @@
 					class="-mx-2 max-h-[calc(16lh+0.5rem)] min-h-[calc(3lh+0.5rem)] w-[calc(100%+1rem)] rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus-within:border-neutral-600"
 				/>
 				<div class="flex items-center justify-end gap-1">
-					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
+					<!-- Opening the old note would leave this one unsaved, so it is
+					     only read here (SPEC 6.3). -->
+					<Recall text={draft} class="mr-auto min-w-0 text-xs text-neutral-500">
+						<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
+					</Recall>
 					<button type="button" onclick={() => (writing = false)} class={action}
 						>{m.common_cancel()}</button
 					>

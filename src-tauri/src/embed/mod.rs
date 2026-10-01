@@ -5,6 +5,8 @@
 //! note's text embeds it again, editing its subject or category does not.
 
 pub mod llama;
+#[cfg(test)]
+pub mod samples;
 pub mod sync;
 pub mod vectors;
 
@@ -73,6 +75,30 @@ pub fn normalize(vector: &mut [f32]) {
             *x /= norm;
         }
     }
+}
+
+/// The embedding model for the tests that need real weights: the file
+/// `SCRATCHNOTE_EMBEDDING_MODEL` names, else the one the app downloads into
+/// `~/Scratchnote/models`. `None`, and the test skips, without either.
+#[cfg(test)]
+pub fn installed_embedder() -> Option<llama::LlamaEmbedder> {
+    use crate::enrich::model::{model_file, EmbeddingModel};
+
+    let path = match std::env::var_os("SCRATCHNOTE_EMBEDDING_MODEL") {
+        Some(path) => std::path::PathBuf::from(path),
+        None => {
+            let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
+            model_file(
+                &std::path::PathBuf::from(home).join("Scratchnote"),
+                EmbeddingModel,
+            )
+        }
+    };
+    if !path.is_file() {
+        eprintln!("no embedding model at {}, skipping", path.display());
+        return None;
+    }
+    Some(llama::LlamaEmbedder::load_with(&path, true).expect("the embedding model should load"))
 }
 
 /// A bag of words for tests: each folded word lands in one of a few buckets,

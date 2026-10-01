@@ -163,6 +163,8 @@
 	"note_edit": "Bearbeiten",
 	"note_rerun": "Modell erneut ausführen",
 	"note_similar": "Ähnliche Notizen",
+	"recall_title": "Darüber hast du am {date} geschrieben",
+	"recall_open": "Öffnen",
 	"note_show_tag": "Notizen mit #{tag} anzeigen",
 	"search_placeholder": "Notizen durchsuchen, # für Kategorien",
 	"search_label": "Notizen durchsuchen",

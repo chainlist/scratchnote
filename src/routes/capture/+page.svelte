@@ -9,11 +9,13 @@
 		onCaptureShown,
 		onSettingsChanged,
 		onSpacesChanged,
+		revealNote,
 		saveNote,
 		type Attachment,
 		type SpacesView
 	} from '$lib/api';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import Recall from '$lib/components/Recall.svelte';
 	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
@@ -197,7 +199,16 @@
 		{#if error}
 			<span class="min-w-0 truncate text-red-400" title={error}>{error}</span>
 		{:else}
-			<span class="min-w-0 truncate">{m.capture_hint()}</span>
+			<!-- An old note on the same thing, once one stands out, in place of
+			     the hint (SPEC 6.3). Reading it keeps the draft. -->
+			<Recall
+				text={draft}
+				space={target || undefined}
+				onopen={(note) => void revealNote(note)}
+				returnFocus={() => input?.focus()}
+			>
+				<span class="min-w-0 truncate">{m.capture_hint()}</span>
+			</Recall>
 		{/if}
 		<span class="flex shrink-0 items-center gap-2">
 			<span>{saved ? m.capture_saved() : saving ? m.capture_saving() : ''}</span>

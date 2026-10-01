@@ -10,6 +10,17 @@
 				: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
 		);
 	}
+
+	/** A day in a few characters, as a line names it: the year only when it is not this one. */
+	export function shortDay(date: string) {
+		const day = new Date(`${date}T00:00:00`);
+		const thisYear = day.getFullYear() === new Date().getFullYear();
+		return day.toLocaleDateString(getLocale(), {
+			day: 'numeric',
+			month: 'short',
+			...(thisYear ? {} : { year: 'numeric' })
+		});
+	}
 </script>
 
 <script lang="ts">

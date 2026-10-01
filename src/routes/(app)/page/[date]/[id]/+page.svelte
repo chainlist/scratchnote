@@ -77,5 +77,6 @@
 		oncategory={shell.openCategory}
 		onsimilar={shell.canSimilar ? shell.showSimilar : undefined}
 		onmove={shell.canMove ? shell.askMove : undefined}
+		onopennote={(note) => void shell.openCited(note)}
 	/>
 </View>

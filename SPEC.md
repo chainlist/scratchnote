@@ -249,6 +249,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 - With more than one space, the footer names the one the note goes into, with the space switcher's list (4.6) to pick another: the same rows, without making, renaming or deleting spaces, each showing the shortcut that picks it in place of its note count. `Ctrl+1` to `Ctrl+9` (`Cmd` on macOS) pick the first nine spaces in the list's order from the text, by the key's place, so without Shift on AZERTY too. Picking opens nothing: the main window stays in its space, and a space picked other than the open one stands out in the footer. The text takes the focus back once one is picked.
 - The pick lasts as long as the draft: a save or a handoff to a page (3.5) goes back to the open space, as does opening the window on an empty draft, and a space renamed or deleted from the main window is forgotten.
 - Files attached in the window (3.7) go into the space picked. Should the draft then go elsewhere, they move with it into that space's `attachments/` folder as it is saved, under the same name unless one there has it, and the draft's links follow them.
+- Once the draft is about an old note of the open space, the footer names it in place of the hint (6.3).
 - `Cmd/Ctrl+Enter`: save and hide window. `Esc`: hide without saving (draft is kept in memory and restored next open). Empty input + save = no-op.
 - After save, a subtle toast "Saved" appears for 1s before hiding (or hide immediately; make it a setting, default immediate).
 - The capture window must open in under 150ms; keep it a pre-created hidden window, never create on demand.
@@ -717,6 +718,14 @@ The grammar only lets the model write a listed category, so nothing it returns n
 - The score is a cosine taken after removing the mean of the space's vectors. Plain cosines between notes bunch up (two unrelated work notes score about as high as two notes on the same show), and a bland note comes up for everything. Notes under 0.28 are left out, so a note on its own subject lists none. The cutoff was set on 75 real notes and may need tuning as spaces grow.
 - Similar notes and search by meaning do what tags used to: find the few notes on the same thing. Categories stay for broad browsing that is exact, editable, lives in the markdown and works without the embedding model.
 
+### 6.3 Recall
+
+- While a note is written, recall names the old note it is about, once one stands out: one quiet line with that note's day and subject, or its first line when it has none. In the capture window it takes the hint's place in the footer; in New note and an inline edit, the hint's place under the editor; in the page view, the end of the line under the title.
+- It looks once typing has stopped for 0.7 seconds, at a draft of 12 characters or more. An edit looks only once its text differs from what it opened with, and leaves the note itself out.
+- A click shows the old note in a popover: its day and time, its subject and its text. Open shows it where it is, from the capture window, which hides and keeps its draft as Esc does, and from the page view, which saves as it closes. New note and an inline edit have no Open, since leaving them would lose the note being written.
+- The draft is embedded as a note is (5.2) and scored against the open space's vectors as Similar notes scores (6.2), the note being edited left out of the mean too. The best note shows when it scores 0.35 or more, stricter than Similar notes because recall speaks up unasked. On 45 made-up notes about a dozen things, no draft's best note about another thing scored over 0.33, while the first half of a note found one on the same thing 34 times in 37.
+- Nothing is looked for without the embedding model, with the model switched off, or for a draft going into a space that is not open, whose vectors are not in memory.
+
 ## 7. Settings
 
 - Notes root directory
@@ -750,6 +759,7 @@ list_categories() -> Vec<(String, u32)>      // in use, most used first
 category_names() -> Vec<String>               // every listed category
 search(query, offset?, limit?) -> Found       // { notes, total }: the limit matches from offset, every one without a limit
 similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
+recall(text, exclude?, space?) -> Note?     // the old note a draft is about, if one stands out (6.3)
 notes_containing(needles) -> Vec<Note>      // every note and page whose body holds any needle as typed, newest first
 get_settings() / set_settings(...)
 model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle | disabled
@@ -772,6 +782,7 @@ delete_page(id)                               // stub, then file
 note_to_page(date, id, title) -> Note         // page with a new id, then the note's block becomes its stub; held
 move_page(date, id, space)                    // file and stub into another space, then stub and file out of this one; released
 capture_to_page(body, space?)                 // opens the space named if another, hides the capture window, opens a new page in the main window
+reveal_note(id, date, kind?)                  // hides the capture window, keeping its draft, and shows the note in the main window
 add_attachments(paths, space?) -> Vec<Attachment>  // copies files into attachments/ of the open space or the one named; every path checked first
 save_attachment(bytes) -> Attachment          // a pasted file as the raw body, its name in the `x-name` header, its space if not the open one in `x-space`
 move_attachments(from, to, paths) -> Vec<String>  // moves a draft's files into another space, same name unless taken; where each went
@@ -790,14 +801,14 @@ A page comes back as a `Note` with `kind: "page"` and its title as `subject`. `g
 
 An `Attachment` is `{ name, path }`: the name the file came with, and where it was copied from the space's folder (`attachments/2026/2026-09-28 image.png`). The webview loads attachments through the `attachment` protocol (4.8).
 
-Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` (to the main window), `plugins-changed { ...PluginsView }`, `plugin-data-changed { id, window }`. The UI updates live when enrichment finishes.
+Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` and `reveal-note { id, date, kind }` (to the main window), `plugins-changed { ...PluginsView }`, `plugin-data-changed { id, window }`. The UI updates live when enrichment finishes.
 
 ## 9. Project Structure
 
 ```
 src-tauri/src/
   main.rs
-  lib.rs             # setup, windows, tray; their three commands (hide_capture, capture_to_page, set_tray_labels)
+  lib.rs             # setup, windows, tray; their four commands (hide_capture, capture_to_page, reveal_note, set_tray_labels)
   commands/ (notes.rs, pages.rs, search.rs, chat.rs, settings.rs, models.rs, spaces.rs,
              attachments.rs, plugins.rs)   # every other Tauri command
   storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, categories.rs, writer.rs)

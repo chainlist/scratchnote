@@ -5,6 +5,7 @@
 	import Markdown from '$lib/components/Markdown.svelte';
 	import TimelineItem from '$lib/components/TimelineItem.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import Recall from '$lib/components/Recall.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
@@ -160,7 +161,14 @@
 					class="-mx-2 max-h-[calc(16lh+0.5rem)] min-h-[calc(3lh+0.5rem)] w-[calc(100%+1rem)] rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus-within:border-neutral-600"
 				/>
 				<div class="flex items-center justify-end gap-1">
-					<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
+					<Recall
+						text={draft}
+						initial={note.body}
+						exclude={note.id}
+						class="mr-auto min-w-0 text-xs text-neutral-500"
+					>
+						<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
+					</Recall>
 					<button type="button" onclick={() => (editing = false)} class={action}
 						>{m.common_cancel()}</button
 					>

@@ -406,6 +406,23 @@ impl Space {
             .unwrap_or_default()
     }
 
+    /// Notes close to a vector that need not be stored, such as a draft's,
+    /// best first, per `Vectors::closest`. Empty until the embed task has
+    /// loaded the vectors.
+    pub fn closest(
+        &self,
+        query: &[f32],
+        exclude: Option<&str>,
+        k: usize,
+        min_score: f32,
+    ) -> Vec<(String, f32)> {
+        self.vectors
+            .lock()
+            .ok()
+            .and_then(|vectors| Some(vectors.as_ref()?.closest(query, exclude, k, min_score)))
+            .unwrap_or_default()
+    }
+
     /// Tell the embed task the index changed. `persist_index` does it, and
     /// so does `note_added`, which appends to the index instead.
     pub fn index_changed(&self) {

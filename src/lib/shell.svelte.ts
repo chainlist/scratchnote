@@ -131,8 +131,11 @@ export class Shell implements WorkspaceHost {
 	draft: ((text: string) => void) | null = null;
 
 	/** The capture window handed over its draft. It joins an open new page,
-	 *  or starts one with whatever the page draft holds. */
-	takeCaptureDraft = (body: string) => {
+	 *  or starts one with whatever the page draft holds. A draft for another
+	 *  space comes after that space opens, so it waits for the views to leave
+	 *  the last one, a new page open there included. */
+	takeCaptureDraft = async (body: string) => {
+		await this.switching.catch(() => {});
 		if (this.draft) return this.draft(body);
 		addToPageDraft(body);
 		this.newPage();
@@ -308,7 +311,15 @@ export class Shell implements WorkspaceHost {
 	 * a page from the last one would mean nothing there. Its categories and
 	 * days are listed afresh.
 	 */
-	switchSpace = async () => {
+	switchSpace = () => {
+		this.switching = this.leaveSpace();
+		return this.switching;
+	};
+
+	/** The views catching up with the space opened last. */
+	private switching: Promise<void> = Promise.resolve();
+
+	private leaveSpace = async () => {
 		this.query = '';
 		this.docked = null;
 		const route = page.route.id;

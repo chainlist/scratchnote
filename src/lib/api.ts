@@ -32,11 +32,12 @@ export interface DaySummary {
 }
 
 /**
- * Saves to today unless a date is given. Returns null when the body was
- * empty, which is a no-op rather than an error.
+ * Saves to today unless a date is given, and into the open space unless
+ * another is named. Returns null when the body was empty, which is a no-op
+ * rather than an error.
  */
-export const saveNote = (body: string, date?: string) =>
-	invoke<Note | null>('save_note', { body, date });
+export const saveNote = (body: string, date?: string, space?: string) =>
+	invoke<Note | null>('save_note', { body, date, space });
 
 export const getDay = (date: string) => invoke<Note[]>('get_day', { date });
 
@@ -370,8 +371,12 @@ export const deletePage = (date: string, id: string) => invoke<void>('delete_pag
 export const noteToPage = (date: string, id: string, title: string) =>
 	invoke<Note>('note_to_page', { date, id, title });
 
-/** From the capture window: hide it and open a new page with this text in the main window. */
-export const captureToPage = (body: string) => invoke<void>('capture_to_page', { body });
+/**
+ * From the capture window: hide it and open a new page with this text in the
+ * main window, which opens `space` first when it is another.
+ */
+export const captureToPage = (body: string, space?: string) =>
+	invoke<void>('capture_to_page', { body, space });
 
 /** Fired in the main window when the capture window hands it a draft. */
 export const onNewPage = (handler: (body: string) => void): Promise<UnlistenFn> =>
@@ -499,15 +504,28 @@ export interface Attachment {
 	path: string;
 }
 
-/** Copies files from disk into the open space, in order. */
-export const addAttachments = (paths: string[]) =>
-	invoke<Attachment[]>('add_attachments', { paths });
+/** Copies files from disk into the open space, or the one named, in order. */
+export const addAttachments = (paths: string[], space?: string) =>
+	invoke<Attachment[]>('add_attachments', { paths, space });
 
-/** A pasted file has no path, so its bytes go over as they are and its name in a header. */
-export const saveAttachment = async (file: File) =>
+/**
+ * A pasted file has no path, so its bytes go over as they are, and its name
+ * and the space it goes into, when not the open one, in headers.
+ */
+export const saveAttachment = async (file: File, space?: string) =>
 	invoke<Attachment>('save_attachment', new Uint8Array(await file.arrayBuffer()), {
-		headers: { 'x-name': encodeURIComponent(file.name || 'image.png') }
+		headers: {
+			'x-name': encodeURIComponent(file.name || 'image.png'),
+			...(space === undefined ? {} : { 'x-space': encodeURIComponent(space) })
+		}
 	});
+
+/**
+ * Moves attachments from one space into another, for a draft that goes
+ * there instead. Resolves to where each one went, in order.
+ */
+export const moveAttachments = (from: string, to: string, paths: string[]) =>
+	invoke<string[]>('move_attachments', { from, to, paths });
 
 /** Opens an attachment of the open space in its own app. */
 export const openAttachment = (path: string) => invoke<void>('open_attachment', { path });

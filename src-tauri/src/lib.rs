@@ -15,7 +15,8 @@ mod watcher;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{
-    AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
 };
 use tauri_plugin_global_shortcut::ShortcutState;
 
@@ -121,6 +122,7 @@ pub fn run() {
             commands::pages::note_to_page,
             commands::attachments::add_attachments,
             commands::attachments::save_attachment,
+            commands::attachments::move_attachments,
             commands::attachments::open_attachment,
             commands::plugins::plugins_view,
             commands::plugins::set_plugins,
@@ -259,12 +261,23 @@ fn hide_capture(app: AppHandle) {
 
 /// Hand the capture window's draft to a new page in the main window (SPEC
 /// 3.5): the capture window goes, the main window comes up and opens a page
-/// with the draft as its text.
+/// with the draft as its text. A draft meant for a space not open opens
+/// that space first, since the main window writes pages into the open one;
+/// its `spaces-changed` reaches the main window ahead of `new-page`.
 #[tauri::command]
-fn capture_to_page(app: AppHandle, body: String) {
+async fn capture_to_page(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    body: String,
+    space: Option<String>,
+) -> Result<(), String> {
+    if let Some(space) = space {
+        commands::spaces::set_active_space(app.clone(), state, space).await?;
+    }
     hide_capture(app.clone());
     show_main(&app);
     let _ = app.emit_to(MAIN, "new-page", serde_json::json!({ "body": body }));
+    Ok(())
 }
 
 /// The capture window is built once at startup and only ever shown and

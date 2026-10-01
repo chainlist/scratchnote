@@ -60,11 +60,10 @@ fn clean(part: &str, max: usize) -> String {
         .to_string()
 }
 
-/// The file name for `original` attached on `date`: `<date> <name>.<ext>`,
-/// with ` 2`, ` 3` and so on before the extension for `n` above 1, when the
-/// plain name is taken.
-pub fn file_name(date: &str, original: &str, n: usize) -> String {
-    let (stem, extension) = match original.rsplit_once('.') {
+/// A file name split before its extension, when it has one: a short run of
+/// letters and digits after the last dot, with a name before it.
+fn split_extension(name: &str) -> (&str, Option<&str>) {
+    match name.rsplit_once('.') {
         Some((stem, ext))
             if !stem.trim().is_empty()
                 && !ext.is_empty()
@@ -73,28 +72,42 @@ pub fn file_name(date: &str, original: &str, n: usize) -> String {
         {
             (stem, Some(ext))
         }
-        _ => (original, None),
-    };
-    let stem = clean(stem, MAX_STEM);
-    let stem = if stem.is_empty() { "attachment" } else { &stem };
+        _ => (name, None),
+    }
+}
+
+/// `stem` and `extension` put back together, with ` 2`, ` 3` and so on
+/// before the extension for `n` above 1.
+fn numbered(stem: &str, extension: Option<&str>, n: usize) -> String {
     let suffix = if n > 1 {
         format!(" {n}")
     } else {
         String::new()
     };
     match extension {
-        Some(ext) => format!("{date} {stem}{suffix}.{ext}"),
-        None => format!("{date} {stem}{suffix}"),
+        Some(ext) => format!("{stem}{suffix}.{ext}"),
+        None => format!("{stem}{suffix}"),
     }
 }
 
-/// A new file in `dir` for `original`, under the first free name.
-/// `create_new` claims the name, so two attachments never share a file.
-fn create(dir: &Path, date: &str, original: &str) -> io::Result<(File, String)> {
+/// The file name for `original` attached on `date`: `<date> <name>.<ext>`,
+/// with ` 2`, ` 3` and so on before the extension for `n` above 1, when the
+/// plain name is taken.
+pub fn file_name(date: &str, original: &str, n: usize) -> String {
+    let (stem, extension) = split_extension(original);
+    let stem = clean(stem, MAX_STEM);
+    let stem = if stem.is_empty() { "attachment" } else { &stem };
+    numbered(&format!("{date} {stem}"), extension, n)
+}
+
+/// A new file in `dir` under the first free name of `name_for(1)`,
+/// `name_for(2)` and so on. `create_new` claims the name, so two
+/// attachments never share a file.
+fn create(dir: &Path, name_for: impl Fn(usize) -> String) -> io::Result<(File, String)> {
     fs::create_dir_all(dir)?;
     let mut n = 1;
     loop {
-        let name = file_name(date, original, n);
+        let name = name_for(n);
         match OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -117,7 +130,7 @@ pub fn store(
 ) -> io::Result<Attachment> {
     let year = &date[..4];
     let dir = root.join(DIR).join(year);
-    let (mut file, name) = create(&dir, date, original)?;
+    let (mut file, name) = create(&dir, |n| file_name(date, original, n))?;
     if let Err(e) = write(&mut file).and_then(|()| file.sync_all()) {
         drop(file);
         let _ = fs::remove_file(dir.join(&name));
@@ -152,6 +165,44 @@ pub fn resolve(root: &Path, path: &str) -> Option<PathBuf> {
         named = true;
     }
     named.then_some(file)
+}
+
+/// Move the attachment at `path` from the space at `from` to the same folder
+/// of the space at `to`, under its name unless that is taken there, and say
+/// where it went. With no file there to move, as when it was moved or
+/// deleted by hand, the path comes back as it was.
+pub fn relocate(from: &Path, to: &Path, path: &str) -> io::Result<String> {
+    let invalid = || {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("not an attachment: {path}"),
+        )
+    };
+    let source = resolve(from, path).ok_or_else(invalid)?;
+    if !source.is_file() {
+        return Ok(path.to_string());
+    }
+    let wanted = resolve(to, path).ok_or_else(invalid)?;
+    let (Some(dir), Some(name)) = (wanted.parent(), wanted.file_name().and_then(|n| n.to_str()))
+    else {
+        return Err(invalid());
+    };
+    let (stem, extension) = split_extension(name);
+    let (claimed, name) = create(dir, |n| numbered(stem, extension, n))?;
+    drop(claimed);
+    let target = dir.join(&name);
+    // The move takes the place of the empty file that claimed the name.
+    if fs::rename(&source, &target).is_err() {
+        // Across drives, as with a space folder linked from another one.
+        let copied = fs::copy(&source, &target).and_then(|_| File::open(&target)?.sync_all());
+        if let Err(e) = copied {
+            let _ = fs::remove_file(&target);
+            return Err(e);
+        }
+        let _ = fs::remove_file(&source);
+    }
+    let folder = path.rsplit_once('/').map_or(DIR, |(folder, _)| folder);
+    Ok(format!("{folder}/{name}"))
 }
 
 /// What the webview is told an attached file is, so it draws the images.
@@ -285,6 +336,37 @@ mod tests {
         assert!(result.is_err());
         let dir = root.join("attachments").join("2026");
         assert_eq!(fs::read_dir(dir).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn a_move_to_another_space_keeps_the_name_unless_it_is_taken() {
+        let root = scratch("relocate");
+        let (work, home) = (root.join("Work"), root.join("Home"));
+        let shot = store(&work, "2026-09-28", "shot.png", |f| f.write_all(b"one")).unwrap();
+        let moved = relocate(&work, &home, &shot.path).unwrap();
+        assert_eq!(moved, shot.path);
+        assert_eq!(fs::read(home.join(&moved)).unwrap(), b"one");
+        assert!(!work.join(&shot.path).exists());
+
+        // Home already has a file of that name, which stays as it is.
+        let again = store(&work, "2026-09-28", "shot.png", |f| f.write_all(b"two")).unwrap();
+        assert_eq!(again.path, shot.path, "free again in Work");
+        let renamed = relocate(&work, &home, &again.path).unwrap();
+        assert_eq!(renamed, "attachments/2026/2026-09-28 shot 2.png");
+        assert_eq!(fs::read(home.join(&moved)).unwrap(), b"one");
+        assert_eq!(fs::read(home.join(&renamed)).unwrap(), b"two");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_move_with_nothing_to_move_leaves_the_path_and_refuses_others() {
+        let root = scratch("relocate-missing");
+        let (work, home) = (root.join("Work"), root.join("Home"));
+        let gone = "attachments/2026/2026-09-28 gone.png";
+        assert_eq!(relocate(&work, &home, gone).unwrap(), gone);
+        assert!(!home.join("attachments").exists());
+        assert!(relocate(&work, &home, "notes/2026/2026-09-28.md").is_err());
+        assert!(relocate(&work, &home, "attachments/../x.png").is_err());
     }
 
     #[test]

@@ -49,7 +49,7 @@
 	"capture_hint": "Strg+Enter zum Speichern, Strg+Umschalt+Enter für eine Seite, Esc zum Verwerfen",
 	"capture_saved": "Gespeichert",
 	"capture_saving": "Speichern…",
-	"capture_space_title": "Wird in diesem Space gespeichert",
+	"capture_space_title": "Der Space, in den die Notiz kommt. {first} bis {last} wählen einen aus.",
 	"categories_heading": "Kategorien",
 	"calendar_pick": "Tag auswählen",
 	"calendar_title": "Kalender",

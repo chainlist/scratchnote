@@ -245,7 +245,10 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 
 - Global hotkey (default `Ctrl+Shift+Space`, `Cmd+Shift+Space` on macOS, configurable) toggles a small, borderless, always-on-top window centered on the active screen. Its frame and footer move it and its edges resize it; it keeps that place and size until the app quits.
 - Running the app with `--capture` toggles the window too, whether the app is running or not. It is for Linux under Wayland, where apps cannot register a global hotkey: the user binds the command to a key in the desktop's own shortcut settings.
-- Contains a single multiline markdown input (3.4), auto-focused. The note goes into the open space, which the footer names when there is more than one.
+- Contains a single multiline markdown input (3.4), auto-focused. The note goes into the open space unless another is picked.
+- With more than one space, the footer names the one the note goes into, with the space switcher's list (4.6) to pick another: the same rows, without making, renaming or deleting spaces, each showing the shortcut that picks it in place of its note count. `Ctrl+1` to `Ctrl+9` (`Cmd` on macOS) pick the first nine spaces in the list's order from the text, by the key's place, so without Shift on AZERTY too. Picking opens nothing: the main window stays in its space, and a space picked other than the open one stands out in the footer. The text takes the focus back once one is picked.
+- The pick lasts as long as the draft: a save or a handoff to a page (3.5) goes back to the open space, as does opening the window on an empty draft, and a space renamed or deleted from the main window is forgotten.
+- Files attached in the window (3.7) go into the space picked. Should the draft then go elsewhere, they move with it into that space's `attachments/` folder as it is saved, under the same name unless one there has it, and the draft's links follow them.
 - `Cmd/Ctrl+Enter`: save and hide window. `Esc`: hide without saving (draft is kept in memory and restored next open). Empty input + save = no-op.
 - After save, a subtle toast "Saved" appears for 1s before hiding (or hide immediately; make it a setting, default immediate).
 - The capture window must open in under 150ms; keep it a pre-created hidden window, never create on demand.
@@ -283,7 +286,7 @@ Note bodies are shown as markdown wherever they are read or written: the capture
 
 A page is a note for longer writing, such as meeting notes. It has a title and a markdown file of its own (4.7), and the day it was created shows it as a card.
 
-- Start one with New page, under the day's notes or from the command center; with Turn into page in a note's menu; or with `Ctrl+Shift+Enter` (`Cmd+Shift+Enter` on macOS) in the capture window, which hides it and hands its draft to a new page in the main window.
+- Start one with New page, under the day's notes or from the command center; with Turn into page in a note's menu; or with `Ctrl+Shift+Enter` (`Cmd+Shift+Enter` on macOS) in the capture window, which hides it and hands its draft to a new page in the main window. A draft for another space than the open one opens that space first, since a page is written into the open space.
 - A page is saved once it has a title. Turn into page offers the note's subject as a start. Until then the draft stays in memory, as the capture window's does, and New page brings it back.
 - The day view shows a page at its time as a card: its title, the first two lines of its text, its word count and its category. The card glows while the model works on it, as a note does. A click opens the page.
 - All pages lists every page of the space, newest first, as the same cards, each with its date. Its button, under the calendar's on the left edge of the window, opens it from any view, as does the command center. Its cards open and dock a page as a day's do.
@@ -509,7 +512,7 @@ A space is a separate set of notes with its own categories, index and queue. Not
 - Data from before this layout, with `notes/` and the per-space files at the root, is moved once at startup into `spaces/<its old name>/` (with a number added if a folder already has that name).
 - Space names are folder names, so they must be valid on every platform: no `<>:"/\|?*`, no leading or trailing dot, no Windows reserved names, at most 40 characters, and unique ignoring case. Renaming a space renames its folder.
 - Deleting a space moves its folder to `.scratchnote/trash/<name> <timestamp>`; moving it back under `spaces/` restores it.
-- Only the open space is read into memory and watched. The others are listed with their queue alone, and are read when they are opened; the space left is let go of, index, vectors and watcher. Note commands act on the open space.
+- Only the open space is read into memory and watched. The others are listed with their queue alone, and are read when they are opened; the space left is let go of, index, vectors and watcher. Note commands act on the open space, except that the capture window's note and its attachments go into the space it picked (3.1). A note saved into a space not open is an edit from outside to it: queued there, and read into its index when it opens.
 - The single enrichment worker drains every space's queue, the open space first. It needs no index for that: a job's note is read from its day's file, and for a space not open, from its page files when the day does not hold it. What it writes reaches that space's index when the space next opens, its files being newer than the cache.
 - An edit made outside the app to a space not open (a folder synced from elsewhere, say) is picked up when the space opens: its days are newer than the cache, and what they left pending is queued then.
 - The switcher shows each space's note count: counted while it is open, and as it was when last left otherwise. A space never opened, such as a folder made by hand, shows none.
@@ -731,7 +734,7 @@ The grammar only lets the model write a listed category, so nothing it returns n
 ## 8. Tauri Commands (backend API)
 
 ```
-save_note(body: String) -> NoteMeta           // appends to today's file, enqueues job
+save_note(body: String, date?, space?) -> NoteMeta  // appends to the day's file of the open space or the one named, enqueues job
 update_note(id, body) -> NoteMeta             // re-enqueues if hash changed
 update_note_meta(id, subject?, category?) -> NoteMeta  // sets status=manual
 delete_note(id)
@@ -762,9 +765,10 @@ finish_page(id)                               // the page view closed: releases 
 rename_page(id, title) -> Note                // renames the file, rewrites the stub
 delete_page(id)                               // stub, then file
 note_to_page(date, id, title) -> Note         // page with a new id, then the note's block becomes its stub; held
-capture_to_page(body)                         // hides the capture window, opens a new page in the main window
-add_attachments(paths) -> Vec<Attachment>     // copies files into the open space's attachments/; every path checked first
-save_attachment(bytes) -> Attachment          // a pasted file as the raw body, its name in the `x-name` header
+capture_to_page(body, space?)                 // opens the space named if another, hides the capture window, opens a new page in the main window
+add_attachments(paths, space?) -> Vec<Attachment>  // copies files into attachments/ of the open space or the one named; every path checked first
+save_attachment(bytes) -> Attachment          // a pasted file as the raw body, its name in the `x-name` header, its space if not the open one in `x-space`
+move_attachments(from, to, paths) -> Vec<String>  // moves a draft's files into another space, same name unless taken; where each went
 open_attachment(path)                         // in its own app; path from the space's folder, inside attachments/
 plugins_view() -> PluginsView                 // plugins.json and every installed community plugin's manifest
 set_plugins(plugins) -> PluginsView           // community on or off, enabled, core switched off; every window follows

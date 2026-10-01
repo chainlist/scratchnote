@@ -20,8 +20,41 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { parts, slot } from '$lib/i18n.svelte';
 	import { m } from '$lib/paraglide/messages';
+	import { cn } from '$lib/utils';
 
-	let { view }: { view: SpacesView | null } = $props();
+	let {
+		view,
+		chosen,
+		onpick,
+		hotkey,
+		title,
+		align = 'start',
+		returnFocus,
+		class: className
+	}: {
+		view: SpacesView | null;
+		/** The space shown as the one in use: the open one unless another is given. */
+		chosen?: string;
+		/**
+		 * Pick a space without opening it, as the capture window does for the
+		 * one its note goes into. The list then only picks: no space is made,
+		 * renamed or deleted from it.
+		 */
+		onpick?: (name: string) => void;
+		/** The shortcut that picks the nth space, from 1, shown in its row in place of its count. */
+		hotkey?: (n: number) => string;
+		/** The button's tooltip, Switch space unless another is given. */
+		title?: string;
+		align?: 'start' | 'end';
+		/** Where the focus goes as the list closes, rather than back to its button. */
+		returnFocus?: () => void;
+		/** The button's, merged over its own. */
+		class?: string;
+	} = $props();
+
+	const current = $derived(chosen ?? view?.active);
+	/** Making, renaming and deleting spaces, which a list that only picks leaves out. */
+	const manage = $derived(onpick === undefined);
 
 	let open = $state(false);
 	let error = $state<string | null>(null);
@@ -55,6 +88,11 @@
 	}
 
 	async function pick(space: SpaceSummary) {
+		if (onpick) {
+			onpick(space.name);
+			open = false;
+			return;
+		}
 		if (renaming || space.name === view?.active) {
 			open = false;
 			return;
@@ -101,23 +139,34 @@
 			<button
 				{...props}
 				type="button"
-				title={m.spaces_switch()}
-				class="-ml-2 flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-base leading-none font-medium hover:bg-input/30"
+				title={title ?? m.spaces_switch()}
+				class={cn(
+					'-ml-2 flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-base leading-none font-medium hover:bg-input/30',
+					className
+				)}
 			>
-				<span class="truncate">{view?.active ?? 'Scratchnote'}</span>
+				<span class="truncate">{current ?? 'Scratchnote'}</span>
 				<ChevronsUpDownIcon class="size-3.5 shrink-0 text-muted-foreground" />
 			</button>
 		{/snippet}
 	</Popover.Trigger>
-	<Popover.Content class="w-64 bg-background p-1.5" align="start">
+	<Popover.Content
+		class="max-h-(--bits-floating-available-height) w-64 overflow-y-auto bg-background p-1.5"
+		{align}
+		onCloseAutoFocus={returnFocus &&
+			((event) => {
+				event.preventDefault();
+				returnFocus();
+			})}
+	>
 		<p
 			class="px-2 pt-1 pb-1.5 text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase"
 		>
 			{m.spaces_heading()}
 		</p>
 		<ul class="flex flex-col gap-0.5">
-			{#each view?.spaces ?? [] as space (space.name)}
-				{@const on = space.name === view?.active}
+			{#each view?.spaces ?? [] as space, i (space.name)}
+				{@const on = space.name === current}
 				<li class="group relative">
 					{#if renaming === space.name}
 						<form
@@ -150,6 +199,13 @@
 								<CheckIcon />
 							</Button>
 						</form>
+					{:else if !manage}
+						<button type="button" onclick={() => void pick(space)} class={sidebarItem(on)}>
+							<span class="truncate">{space.name}</span>
+							<kbd class="ml-auto font-mono text-xs text-muted-foreground">
+								{hotkey && i < 9 ? hotkey(i + 1) : (space.notes ?? '')}
+							</kbd>
+						</button>
 					{:else}
 						<button type="button" onclick={() => void pick(space)} class="{sidebarItem(on)} pr-20">
 							<span class="truncate">{space.name}</span>
@@ -219,29 +275,31 @@
 			</p>
 		{/if}
 
-		<form
-			class="mt-1.5 flex items-center gap-1 border-t pt-1.5"
-			onsubmit={(event) => {
-				event.preventDefault();
-				void create();
-			}}
-		>
-			<Input
-				bind:value={newName}
-				placeholder={m.spaces_new_placeholder()}
-				spellcheck="false"
-				class="h-8"
-			/>
-			<Button
-				type="submit"
-				variant="ghost"
-				size="icon-sm"
-				aria-label={m.spaces_create()}
-				disabled={newName.trim() === ''}
+		{#if manage}
+			<form
+				class="mt-1.5 flex items-center gap-1 border-t pt-1.5"
+				onsubmit={(event) => {
+					event.preventDefault();
+					void create();
+				}}
 			>
-				<PlusIcon />
-			</Button>
-		</form>
+				<Input
+					bind:value={newName}
+					placeholder={m.spaces_new_placeholder()}
+					spellcheck="false"
+					class="h-8"
+				/>
+				<Button
+					type="submit"
+					variant="ghost"
+					size="icon-sm"
+					aria-label={m.spaces_create()}
+					disabled={newName.trim() === ''}
+				>
+					<PlusIcon />
+				</Button>
+			</form>
+		{/if}
 
 		{#if error}
 			<p class="px-2 pt-1.5 text-xs text-red-400">{error}</p>

@@ -670,6 +670,7 @@ mod tests {
             lang: None,
             body: "a note".to_string(),
             kind: Kind::Note,
+            on: None,
             missing: false,
         };
         let path = day_path(root, date);

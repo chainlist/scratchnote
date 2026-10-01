@@ -2,6 +2,7 @@
 	import { fade } from 'svelte/transition';
 	import type { Note } from '$lib/api';
 	import Markdown from '$lib/components/Markdown.svelte';
+	import DayAhead from '$lib/components/DayAhead.svelte';
 	import ThreadLine from '$lib/components/ThreadLine.svelte';
 	import TimelineItem from '$lib/components/TimelineItem.svelte';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
@@ -148,7 +149,12 @@
 						>
 					{/if}
 				</div>
-				{#if threadLine}<ThreadLine id={note.id} class="mt-1.5" />{/if}
+				{#if note.on || (threadLine && shell.threadOf(note.id))}
+					<div class="mt-1.5 flex min-w-0 items-center gap-3">
+						{#if note.on}<DayAhead on={note.on} />{/if}
+						{#if threadLine}<ThreadLine id={note.id} />{/if}
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>

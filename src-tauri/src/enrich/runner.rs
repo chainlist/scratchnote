@@ -31,13 +31,15 @@ pub fn enrich(
 }
 
 /// What to write into the note block, recording the language it was
-/// labelled in. The body and hash are untouched.
-pub fn patch(enrichment: &Enrichment, language: Language) -> NotePatch {
+/// labelled in, and `on`, the day ahead it names (SPEC 5.7). The body and
+/// hash are untouched.
+pub fn patch(enrichment: &Enrichment, language: Language, on: Option<String>) -> NotePatch {
     NotePatch {
         subject: Some(enrichment.subject.clone()),
         category: Some(enrichment.category.clone()).filter(|c| !c.is_empty()),
         status: Status::Done,
         lang: Some(language.code.to_string()),
+        on,
     }
 }
 
@@ -49,6 +51,7 @@ pub fn failed_patch(current: &crate::storage::daily_file::Note) -> NotePatch {
         category: current.category.clone(),
         status: Status::Failed,
         lang: current.lang.clone(),
+        on: current.on.clone(),
     }
 }
 
@@ -98,6 +101,7 @@ mod tests {
             lang: None,
             body: body.to_string(),
             kind: Kind::Note,
+            on: None,
             missing: false,
         }
     }
@@ -146,8 +150,8 @@ mod tests {
             let doc = append_note("", &note, DATE);
 
             let enrichment = enrich(body, ENGLISH, &list, &backend).expect("stub always succeeds");
-            let out =
-                update_note(&doc, &id, &patch(&enrichment, ENGLISH)).expect("id is present");
+            let out = update_note(&doc, &id, &patch(&enrichment, ENGLISH, None))
+                .expect("id is present");
 
             // The block must read back as an enriched note with the body intact.
             let parsed = parse_notes(&out, DATE, FILE);
@@ -179,7 +183,7 @@ mod tests {
         let backend = StubBackend::new(r#"{"subject":"Hello","category":""}"#);
         let out = enrich("hello", ENGLISH, &categories(&["movie"]), &backend).unwrap();
         let doc = append_note("", &pending("01AAA", "hello"), DATE);
-        let written = update_note(&doc, "01AAA", &patch(&out, ENGLISH)).unwrap();
+        let written = update_note(&doc, "01AAA", &patch(&out, ENGLISH, None)).unwrap();
         assert!(written.contains("### Hello\nhello\n"), "{written}");
         assert_eq!(parse_notes(&written, DATE, FILE)[0].category, None);
     }

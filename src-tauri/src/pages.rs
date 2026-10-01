@@ -138,6 +138,33 @@ pub fn newest_first(index: &Index) -> Vec<Note> {
     pages
 }
 
+/// Forget the day ahead the model read in a page (SPEC 5.7), which leaves
+/// its labels as they are.
+pub async fn clear_day_ahead(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    space: &Space,
+    id: &str,
+) -> Result<(), String> {
+    let page = read_page(space, id).await?;
+    let (file, category, status, lang) = (
+        page.file.clone(),
+        page.category.clone(),
+        page.status,
+        page.lang.clone(),
+    );
+    state
+        .writer
+        .rewrite(space.root.join(&page.file), move |existing| {
+            page_file::update_meta(existing?, &file, category, status, lang, None)
+        })
+        .await?;
+    reindex(space, &page.file)?;
+    space.persist_index(&state.writer).await?;
+    emit_updated(app, id);
+    Ok(())
+}
+
 /// Put a page back in the queue by hand (SPEC 5.6). One whose category the
 /// user set is left alone, as a manual note is. Asked for from the page view
 /// too, so the page is released: the model runs now. Typing again holds it
@@ -153,11 +180,16 @@ pub async fn retry(
         return Ok(());
     }
     {
-        let (file, category, lang) = (page.file.clone(), page.category.clone(), page.lang.clone());
+        let (file, category, lang, on) = (
+            page.file.clone(),
+            page.category.clone(),
+            page.lang.clone(),
+            page.on.clone(),
+        );
         state
             .writer
             .rewrite(space.root.join(&page.file), move |existing| {
-                page_file::update_meta(existing?, &file, category, Status::Pending, lang)
+                page_file::update_meta(existing?, &file, category, Status::Pending, lang, on)
             })
             .await?;
     }
@@ -199,6 +231,7 @@ mod tests {
             lang: None,
             body: body.to_string(),
             kind: Kind::Page,
+            on: None,
             missing: false,
         }
     }

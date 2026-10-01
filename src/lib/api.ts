@@ -20,6 +20,8 @@ export interface Note {
 	kind?: 'page';
 	/** A page whose stub is in the day's file but whose file is gone. */
 	missing?: boolean;
+	/** The later day it looks forward to, as the model read it (SPEC 5.7). */
+	on?: string;
 }
 
 export const isPage = (note: Pick<Note, 'kind'>) => note.kind === 'page';
@@ -42,6 +44,13 @@ export const saveNote = (body: string, date?: string, space?: string) =>
 export const getDay = (date: string) => invoke<Note[]>('get_day', { date });
 
 export const listDays = () => invoke<DaySummary[]>('list_days');
+
+/** The notes and pages that look forward to a day, oldest first (SPEC 5.7). */
+export const notesAbout = (date: string) => invoke<Note[]>('notes_about', { date });
+
+/** Forget the day ahead the model read in a note or page; `date` is its own day. */
+export const clearDayAhead = (date: string, id: string) =>
+	invoke<void>('clear_day_ahead', { date, id });
 
 /**
  * The categories notes are filed under, with how many carry each, most used

@@ -4,6 +4,7 @@ import { goto, invalidate } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { navigating, page } from '$app/state';
 import {
+	clearDayAhead,
 	deleteNote,
 	deletePage,
 	isPage,
@@ -194,6 +195,16 @@ export class Shell implements WorkspaceHost {
 	};
 
 	showThread = (id: string) => goto(resolve(`/thread/${id}/`));
+
+	/** Forget the day ahead the model read in a note, for one it read wrong. */
+	clearDayAhead = async (note: Pick<Note, 'id' | 'date'>) => {
+		try {
+			await clearDayAhead(note.date, note.id);
+			await this.refresh();
+		} catch (e) {
+			this.error = String(e);
+		}
+	};
 
 	/** Take a note out of threads, where it stays, or let it back in. */
 	keepOut = async (note: Pick<Note, 'id'>, out: boolean) => {

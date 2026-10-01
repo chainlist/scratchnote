@@ -62,6 +62,7 @@ pub async fn save_note(
         body,
         date: date.clone(),
         kind: Kind::Note,
+        on: None,
         missing: false,
     };
 
@@ -143,6 +144,7 @@ fn missing_page(date: &str, stub: daily_file::Stub) -> Note {
         lang: None,
         body: String::new(),
         kind: Kind::Page,
+        on: None,
         missing: true,
     }
 }
@@ -275,6 +277,7 @@ pub async fn update_note_meta(
         category,
         status: Status::Manual,
         lang: current.lang.clone(),
+        on: current.on.clone(),
     };
     let path = day_path(&space.root, &date);
     if !state.writer.update_note(path, id.clone(), patch).await? {
@@ -419,6 +422,7 @@ async fn mark_pending(
         category: note.category.clone(),
         status: Status::Pending,
         lang: note.lang.clone(),
+        on: note.on.clone(),
     };
     let path = day_path(&space.root, &note.date);
     state
@@ -470,6 +474,7 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
         category: None,
         status: Status::Pending,
         lang: None,
+        on: None,
     };
     let mut touched_days = std::collections::BTreeSet::new();
     for note in &notes {
@@ -494,6 +499,7 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
                     &file,
                     None,
                     Status::Pending,
+                    None,
                     None,
                 )
             })
@@ -530,6 +536,55 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
 #[tauri::command]
 pub fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
+}
+
+/// The notes and pages of the open space that look forward to `date`, oldest
+/// first, for its day to show what was written ahead of it (SPEC 5.7).
+#[tauri::command]
+pub fn notes_about(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
+    check_date(&date)?;
+    let space = state.space()?;
+    let found = space.read(|idx, db| {
+        let mut about: Vec<&IndexEntry> = idx
+            .entries()
+            .filter(|entry| entry.on.as_deref() == Some(date.as_str()))
+            .collect();
+        about.sort_by(|a, b| (&a.date, &a.time).cmp(&(&b.date, &b.time)));
+        crate::search::with_bodies(db, about)
+    })?;
+    Ok(found.unwrap_or_default())
+}
+
+/// Forget the day ahead the model read in a note (SPEC 5.7), for one it read
+/// wrong. Its labels stay as they are, and so does its status: the day comes
+/// back only if the note is labelled again.
+#[tauri::command]
+pub async fn clear_day_ahead(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    date: String,
+    id: String,
+) -> Result<(), String> {
+    check_date(&date)?;
+    let space = state.space()?;
+    if is_page(&space, &id) {
+        return crate::pages::clear_day_ahead(&app, &state, &space, &id).await;
+    }
+    let note = read_note(&space, &date, &id).await?;
+    let patch = NotePatch {
+        subject: note.subject,
+        category: note.category,
+        status: note.status,
+        lang: note.lang,
+        on: None,
+    };
+    let path = day_path(&space.root, &date);
+    if !state.writer.update_note(path, id.clone(), patch).await? {
+        return Err(format!("no note {id} in {date}"));
+    }
+    reindex_day(&state, &space, &date).await?;
+    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    Ok(())
 }
 
 /// Put a note back in the queue by hand, for the ones that ended up `failed`

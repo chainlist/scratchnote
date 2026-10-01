@@ -75,6 +75,10 @@ pub struct Note {
     /// note it has not labelled, or labelled before this was recorded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
+    /// The later day the note looks forward to, as the model read it (SPEC
+    /// 5.7), such as "2026-10-06". `None` when it names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on: Option<String>,
     pub body: String,
     /// A page's subject is its title, and `file` its own file.
     #[serde(default, skip_serializing_if = "Kind::is_note")]
@@ -113,8 +117,13 @@ pub fn render_note(note: &Note) -> String {
         .as_deref()
         .map(|lang| format!(" lang={lang}"))
         .unwrap_or_default();
+    let on = note
+        .on
+        .as_deref()
+        .map(|on| format!(" on={on}"))
+        .unwrap_or_default();
     let mut out = format!(
-        "{}id={} time={} status={} hash={}{lang} -->\n",
+        "{}id={} time={} status={} hash={}{lang}{on} -->\n",
         NOTE_OPEN,
         note.id,
         note.time,
@@ -238,6 +247,7 @@ pub struct NotePatch {
     pub category: Option<String>,
     pub status: Status,
     pub lang: Option<String>,
+    pub on: Option<String>,
 }
 
 /// Rewrite one note's block in place, keeping its body and every byte of the
@@ -248,6 +258,7 @@ pub fn update_note(content: &str, id: &str, patch: &NotePatch) -> Option<String>
         note.category = patch.category.clone();
         note.status = patch.status;
         note.lang = patch.lang.clone();
+        note.on = patch.on.clone();
     })
 }
 
@@ -461,7 +472,8 @@ pub fn note_to_stub(content: &str, note_id: &str, stub: &Stub) -> Option<String>
 fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<Note> {
     let attrs = header.strip_prefix(NOTE_OPEN)?.strip_suffix("-->")?.trim();
 
-    let (mut id, mut time, mut status, mut hash, mut lang) = (None, None, None, None, None);
+    let (mut id, mut time, mut status, mut hash, mut lang, mut on) =
+        (None, None, None, None, None, None);
     for pair in attrs.split_whitespace() {
         match pair.split_once('=') {
             Some(("id", v)) => id = Some(v.to_string()),
@@ -469,6 +481,8 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
             Some(("status", v)) => status = Status::parse(v),
             Some(("hash", v)) => hash = Some(v.to_string()),
             Some(("lang", v)) => lang = Some(v.to_string()),
+            // A day edited out of shape is no day.
+            Some(("on", v)) => on = super::check_date(v).ok().map(|_| v.to_string()),
             _ => {}
         }
     }
@@ -495,6 +509,7 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
         status,
         hash: actual,
         lang,
+        on,
         body,
         kind: Kind::Note,
         missing: false,
@@ -575,6 +590,7 @@ mod tests {
             lang: None,
             body: body.to_string(),
             kind: Kind::Note,
+            on: None,
             missing: false,
         }
     }
@@ -836,6 +852,7 @@ mod tests {
             category: Some("infrastructure".to_string()),
             status: Status::Done,
             lang: Some("fr".to_string()),
+            on: None,
         }
     }
 
@@ -849,6 +866,27 @@ mod tests {
         assert_eq!(parse_one(&out).lang.as_deref(), Some("fr"));
         // Notes labelled before the language was recorded have none.
         assert_eq!(parse_one(&doc).lang, None);
+    }
+
+    #[test]
+    fn the_day_ahead_is_written_in_the_marker_and_read_back() {
+        let doc = append_note("", &pending("01AAA", "08:00", "dentist friday"), DATE);
+        assert!(!doc.contains("on="), "no day yet");
+
+        let patch = NotePatch {
+            on: Some("2026-09-25".to_string()),
+            ..enrich_patch()
+        };
+        let out = update_note(&doc, "01AAA", &patch).unwrap();
+        assert!(out.contains(" lang=fr on=2026-09-25 -->"), "{out}");
+        assert_eq!(parse_one(&out).on.as_deref(), Some("2026-09-25"));
+
+        // A day edited out of shape by hand is no day.
+        let broken = out.replace("on=2026-09-25", "on=friday");
+        assert_eq!(parse_one(&broken).on, None);
+        // Forgotten, it leaves the marker.
+        let cleared = update_note(&out, "01AAA", &enrich_patch()).unwrap();
+        assert!(!cleared.contains("on="), "{cleared}");
     }
 
     #[test]

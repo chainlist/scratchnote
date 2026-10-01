@@ -60,6 +60,7 @@ pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
     if let Err(e) = crate::watcher::start(app.clone(), space) {
         log::error!("could not watch the notes of {}: {e}", space.name);
     }
+    look_back(app, space);
     if !refresh {
         return;
     }
@@ -70,6 +71,41 @@ pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
         if let Err(e) = opened.persist_index(&state.writer).await {
             log::warn!("could not write the index of {} back: {e}", opened.name);
         }
+    });
+}
+
+/// Notes labelled before days ahead were looked for are looked at once, those
+/// of the last weeks (SPEC 5.7). The queue is saved with their jobs before
+/// the space is marked as looked at, so a crash between loses none. Only
+/// with the model on, so they go through at once: an older build would take
+/// a job for the day alone left in the queue for one to label.
+pub(crate) fn look_back(app: &AppHandle, space: &Arc<Space>) {
+    let state = app.state::<AppState>();
+    if !state.model_enabled() || crate::enrich::dates::looked(&space.root) {
+        return;
+    }
+    let today = chrono::Local::now().date_naive();
+    let jobs = space
+        .read(|idx, db| Ok(crate::enrich::dates::look_back(idx, db, today)))
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    if let Ok(mut queue) = space.queue.lock() {
+        for job in jobs {
+            queue.push(job);
+        }
+    }
+    let (app, opened) = (app.clone(), space.clone());
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        opened.persist_queue(&state.writer).await;
+        if let Err(e) = crate::enrich::dates::mark_looked(&opened.root) {
+            log::warn!(
+                "could not mark {} as looked at for days ahead: {e}",
+                opened.name
+            );
+        }
+        state.wake.notify_one();
     });
 }
 

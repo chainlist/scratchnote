@@ -74,6 +74,8 @@ pub fn run() {
             commands::notes::save_note,
             commands::notes::get_day,
             commands::notes::list_days,
+            commands::notes::notes_about,
+            commands::notes::clear_day_ahead,
             commands::search::list_categories,
             commands::search::category_names,
             commands::search::search,

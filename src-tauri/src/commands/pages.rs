@@ -48,6 +48,7 @@ pub async fn create_page(
         lang: None,
         body,
         kind: Kind::Page,
+        on: None,
         missing: false,
     };
 

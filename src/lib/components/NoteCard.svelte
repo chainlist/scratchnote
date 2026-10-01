@@ -5,10 +5,12 @@
 	import Markdown from '$lib/components/Markdown.svelte';
 	import TimelineItem from '$lib/components/TimelineItem.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import DayAhead, { aheadLabel } from '$lib/components/DayAhead.svelte';
 	import Recall from '$lib/components/Recall.svelte';
 	import ThreadLine from '$lib/components/ThreadLine.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
@@ -213,7 +215,13 @@
 					<Markdown text={body} class="note-glow-blur" />
 				</div>
 			{/if}
-			{#if threadLine}<ThreadLine id={note.id} class="mt-1.5" />{/if}
+			<!-- The day the note looks forward to, and the thread it is in. -->
+			{#if note.on || (threadLine && inThread)}
+				<div class="mt-1.5 flex min-w-0 items-center gap-3">
+					{#if note.on}<DayAhead on={note.on} />{/if}
+					{#if threadLine}<ThreadLine id={note.id} />{/if}
+				</div>
+			{/if}
 		{/if}
 	</div>
 
@@ -247,6 +255,12 @@
 					{#if onmove}
 						<DropdownMenu.Item onSelect={() => onmove(note)}>
 							<FolderInputIcon />{m.move_to()}
+						</DropdownMenu.Item>
+					{/if}
+					{#if note.on}
+						{@const on = note.on}
+						<DropdownMenu.Item onSelect={() => void shell.clearDayAhead(note)}>
+							<CalendarXIcon />{m.day_ahead_clear({ date: aheadLabel(on) })}
 						</DropdownMenu.Item>
 					{/if}
 					{#if inThread}

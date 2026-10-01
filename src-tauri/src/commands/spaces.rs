@@ -60,16 +60,16 @@ pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
     if let Err(e) = crate::watcher::start(app.clone(), space) {
         log::error!("could not watch the notes of {}: {e}", space.name);
     }
+    if !refresh {
+        return;
+    }
     let app = app.clone();
     let opened = space.clone();
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
-        if refresh {
-            if let Err(e) = opened.persist_index(&state.writer).await {
-                log::warn!("could not write the index of {} back: {e}", opened.name);
-            }
+        if let Err(e) = opened.persist_index(&state.writer).await {
+            log::warn!("could not write the index of {} back: {e}", opened.name);
         }
-        crate::pages::repair_stubs(&state.writer, &opened).await;
     });
 }
 

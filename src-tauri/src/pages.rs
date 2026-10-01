@@ -2,14 +2,12 @@
 //! own, shown on their day through a stub in the day's file.
 //!
 //! The page file is the source of truth. The stub is written from it, and
-//! rewritten from it whenever it goes stale; nothing is ever read back from
-//! a stub but its id and time.
+//! rewritten from it whenever the app sees it go stale, never at launch;
+//! nothing is ever read back from a stub but its id and time.
 //!
 //! A page open in the editor is held: the page view saves it every pause in
 //! typing, and neither model runs on it until `finish_page` says the view
 //! closed (SPEC 3.5).
-
-use std::collections::HashMap;
 
 use chrono::Local;
 use tauri::{AppHandle, Emitter, State};
@@ -19,7 +17,7 @@ use crate::commands::notes::{enqueue, persist_queue, read_note};
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::{self, body_hash, Kind, Note, Status, Stub};
-use crate::storage::index::{self, Index, IndexEntry};
+use crate::storage::index::{Index, IndexEntry};
 use crate::storage::page_file;
 use crate::storage::writer::Writer;
 use crate::storage::{check_date, day_path};
@@ -117,50 +115,6 @@ pub async fn drop_stub(
             daily_file::remove_stub(existing?, &id)
         })
         .await
-}
-
-/// SPEC 4.7, at startup: every page gets its stub, a stale one is rewritten
-/// and one on another day goes. A stub whose page is gone is kept, since a
-/// sync tool may not have brought the file yet.
-pub async fn repair_stubs(writer: &Writer, space: &Space) {
-    let pages: Vec<Note> = match space.index.read() {
-        Ok(idx) => idx.pages().map(IndexEntry::to_note).collect(),
-        Err(_) => return,
-    };
-    if pages.is_empty() {
-        return;
-    }
-    let root = space.root.clone();
-    let stubs = tauri::async_runtime::spawn_blocking(move || {
-        let mut days: HashMap<String, Vec<String>> = HashMap::new();
-        for (date, path) in index::daily_files(&root) {
-            let Ok(contents) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            for stub in daily_file::parse_stubs(&contents) {
-                days.entry(stub.id).or_default().push(date.clone());
-            }
-        }
-        days
-    })
-    .await
-    .unwrap_or_default();
-
-    for page in &pages {
-        if space.is_retired() {
-            return;
-        }
-        for date in stubs.get(&page.id).into_iter().flatten() {
-            if *date != page.date {
-                if let Err(e) = drop_stub(writer, space, date, &page.id).await {
-                    log::warn!("could not take page {} off {date}: {e}", page.id);
-                }
-            }
-        }
-        if let Err(e) = sync_stub(writer, space, page).await {
-            log::warn!("could not write the stub of page {}: {e}", page.id);
-        }
-    }
 }
 
 /// Write a new page's file, refusing to replace one that appeared meanwhile.
@@ -527,12 +481,6 @@ mod tests {
         .0
     }
 
-    fn stubs(root: &Path, date: &str) -> Vec<Stub> {
-        std::fs::read_to_string(day_path(root, date))
-            .map(|c| daily_file::parse_stubs(&c))
-            .unwrap_or_default()
-    }
-
     #[test]
     fn lists_every_page_newest_first_without_the_notes() {
         let at = |id: &str, date: &str, time: &str| Note {
@@ -551,63 +499,6 @@ mod tests {
 
         let ids: Vec<String> = newest_first(&index).into_iter().map(|p| p.id).collect();
         assert_eq!(ids, ["01EVENING", "01MORNING", "01OLD"]);
-    }
-
-    #[tokio::test]
-    async fn repair_gives_each_page_its_stub_and_nothing_else() {
-        let root = scratch("repair");
-        let sync = page("01PPP", "Weekly sync");
-        write(&root, &sync.file, &page_file::render_page(&sync));
-        let retro = page("01QQQ", "Retro");
-        write(&root, &retro.file, &page_file::render_page(&retro));
-        // Retro's stub is stale, a stub for Sync sits on another day, and
-        // one stub has lost its page.
-        let stale = Stub {
-            title: "Old title".into(),
-            ..Stub::for_page(&retro)
-        };
-        let lost = Stub {
-            id: "01GONE".into(),
-            ..Stub::for_page(&retro)
-        };
-        let day = daily_file::append_stub(&daily_file::append_stub("", &stale, DATE), &lost, DATE);
-        write(&root, &crate::storage::relative_day_path(DATE), &day);
-        let elsewhere = daily_file::append_stub("", &Stub::for_page(&sync), "2026-09-21");
-        write(
-            &root,
-            &crate::storage::relative_day_path("2026-09-21"),
-            &elsewhere,
-        );
-
-        let space = open(&root);
-        let writer = Writer::spawn();
-        repair_stubs(&writer, &space).await;
-
-        let mut here = stubs(&root, DATE);
-        here.sort_by(|a, b| a.id.cmp(&b.id));
-        assert_eq!(
-            here,
-            vec![lost.clone(), Stub::for_page(&sync), Stub::for_page(&retro)],
-            "the lost stub stays, Sync gets one, Retro's is rewritten"
-        );
-        assert!(stubs(&root, "2026-09-21").is_empty());
-        assert_eq!(
-            stubs(&root, DATE)
-                .iter()
-                .find(|s| s.id == "01PPP")
-                .map(|s| s.target.as_str()),
-            Some("../../pages/2026/2026-09-22 Weekly sync.md")
-        );
-
-        // Nothing left to do: a second pass writes nothing.
-        let before = std::fs::read_to_string(day_path(&root, DATE)).unwrap();
-        repair_stubs(&writer, &space).await;
-        assert_eq!(
-            std::fs::read_to_string(day_path(&root, DATE)).unwrap(),
-            before
-        );
-
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

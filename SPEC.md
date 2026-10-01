@@ -544,9 +544,9 @@ Rules:
 - Then come the `# Title` line, the category line and blank line as in a note, and the text. When the first line after the marker is not a `# ` heading, the title is the file name without its date.
 - A markdown file under `pages/` without a marker is not a page and is left alone.
 - The file is named after the day and the title, `pages/<year>/<date> <title>.md`. Characters Windows forbids in a file name become spaces, whitespace is collapsed, trailing dots and spaces go, and the title part is cut to 80 characters. A name already taken gets ` 2`, ` 3` and so on. Renaming the title in the app renames the file and rewrites the stub.
-- Stub and page carry the same id, so a page renamed or moved outside the app is found again by its id and its stub rewritten to point at it.
-- At startup every page gets a stub in its day's file if it has none, a stale stub is rewritten, and a stub for it in another day's file is removed. A stub whose page cannot be found is never removed. A stub deleted by hand comes back at the next launch: deleting the page file is how a page is deleted outside the app.
-- Creating a page writes the file, then the stub. Deleting removes the stub, then the file. Turning a note into a page writes the page with a new id, then replaces the note's block with the stub. A crash in between leaves at worst a page without a stub, which the next launch repairs, or the text twice, never a stub whose text is lost.
+- Stub and page carry the same id, so a page renamed or moved outside the app is found again by its id, and while the app runs its stub is rewritten to point at it.
+- Stubs are not checked at launch, which would read every day file. A stub that went stale while the app was closed, or one deleted by hand, stays so until the page's title, file, day or time next changes; the app lists a day's pages from the index, so only other editors see it. A stub whose page cannot be found is never removed. Deleting the page file is how a page is deleted outside the app.
+- Creating a page writes the file, then the stub. Deleting removes the stub, then the file. Turning a note into a page writes the page with a new id, then replaces the note's block with the stub. A crash in between leaves at worst a page without a stub, which still shows on its day in the app, or the text twice, never a stub whose text is lost.
 
 ### 4.8 Attachments
 

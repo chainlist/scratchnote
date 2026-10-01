@@ -29,6 +29,10 @@ pub struct IndexEntry {
     pub hash: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
+    /// The later day the note looks forward to (SPEC 5.7), which brings it
+    /// back on that day's view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on: Option<String>,
     /// A page's `file` is its own and its `subject` its title (SPEC 4.7).
     #[serde(default, skip_serializing_if = "Kind::is_note")]
     pub kind: Kind,
@@ -55,6 +59,7 @@ impl From<&Note> for IndexEntry {
             status: note.status,
             hash: note.hash.clone(),
             lang: note.lang.clone(),
+            on: note.on.clone(),
             kind: note.kind,
             words: Some(words(&note.body)),
             body: String::new(),
@@ -74,6 +79,7 @@ impl IndexEntry {
             status: self.status,
             hash: self.hash.clone(),
             lang: self.lang.clone(),
+            on: self.on.clone(),
             body: self.body.clone(),
             kind: self.kind,
             missing: false,
@@ -556,6 +562,7 @@ mod tests {
             lang: None,
             body: body.to_string(),
             kind: Kind::Note,
+            on: None,
             missing: false,
         }
     }
@@ -579,6 +586,26 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("scratchnote-index-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn the_day_ahead_survives_the_cache() {
+        let mut note = note("01A", "2026-09-22", "09:00", "dentist friday");
+        note.on = Some("2026-09-25".to_string());
+        let mut index = Index::default();
+        index.push(IndexEntry::from(&note));
+        let jsonl = index.to_jsonl();
+        assert!(jsonl.contains(r#""on":"2026-09-25""#), "{jsonl}");
+        let back = Index::from_jsonl(&jsonl);
+        let entry = back.entries().next().unwrap();
+        assert_eq!(entry.on.as_deref(), Some("2026-09-25"));
+        assert_eq!(entry.to_note().on.as_deref(), Some("2026-09-25"));
+
+        // An entry without a day writes none, as before.
+        note.on = None;
+        assert!(!serde_json::to_string(&IndexEntry::from(&note))
+            .unwrap()
+            .contains("\"on\""));
     }
 
     /// Writes a day file the same way the writer would.

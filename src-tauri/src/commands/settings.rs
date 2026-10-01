@@ -53,11 +53,18 @@ pub async fn set_settings(
         || settings.model_variant != old.model_variant
         || settings.model_path != old.model_path
         || settings.use_gpu != old.use_gpu;
+    let switched_on = settings.model_enabled && !old.model_enabled;
     save_settings(&app, &state, settings.clone()).await?;
     if model_changed {
         unload_model(&app, &state);
         state.wake.notify_one();
         state.embed_wake.notify_one();
+    }
+    // What was put off while the model was off (SPEC 5.7).
+    if switched_on {
+        if let Ok(space) = state.space() {
+            super::spaces::look_back(&app, &space);
+        }
     }
 
     Ok(SettingsView {

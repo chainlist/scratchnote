@@ -13,6 +13,23 @@ use serde::{Deserialize, Serialize};
 /// SPEC 5.6: three attempts, then the note is marked failed.
 pub const MAX_ATTEMPTS: u32 = 3;
 
+/// What a job asks of the model.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Work {
+    /// A subject and a category, and the day ahead with them (SPEC 5.7).
+    #[default]
+    Label,
+    /// The day ahead alone, for a note labelled before it was looked for.
+    Day,
+}
+
+impl Work {
+    fn is_label(&self) -> bool {
+        *self == Work::Label
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Job {
     pub id: String,
@@ -20,6 +37,8 @@ pub struct Job {
     pub date: String,
     #[serde(default)]
     pub attempts: u32,
+    #[serde(default, skip_serializing_if = "Work::is_label")]
+    pub work: Work,
 }
 
 impl Job {
@@ -28,6 +47,15 @@ impl Job {
             id: id.into(),
             date: date.into(),
             attempts: 0,
+            work: Work::Label,
+        }
+    }
+
+    /// A job for the day ahead alone.
+    pub fn day(id: impl Into<String>, date: impl Into<String>) -> Self {
+        Self {
+            work: Work::Day,
+            ..Self::new(id, date)
         }
     }
 
@@ -48,9 +76,14 @@ pub struct Queue {
 
 impl Queue {
     /// Adding a note already queued is a no-op, so a file saved twice in quick
-    /// succession does not enrich twice.
+    /// succession does not enrich twice. A label job looks for the day ahead
+    /// too, so it takes over a job for the day alone.
     pub fn push(&mut self, job: Job) -> bool {
-        if self.jobs.iter().any(|queued| queued.id == job.id) {
+        if let Some(queued) = self.jobs.iter_mut().find(|queued| queued.id == job.id) {
+            if queued.work == Work::Day && job.work == Work::Label {
+                queued.work = Work::Label;
+                return true;
+            }
             return false;
         }
         self.jobs.push_back(job);
@@ -125,6 +158,29 @@ mod tests {
         assert_eq!(queue.pop().unwrap().id, "01AAA");
         assert_eq!(queue.pop().unwrap().id, "01BBB");
         assert!(queue.pop().is_none());
+    }
+
+    #[test]
+    fn a_label_job_takes_over_one_for_the_day_alone() {
+        let mut queue = Queue::default();
+        assert!(queue.push(Job::day("01AAA", "2026-09-22")));
+        assert!(!queue.push(Job::day("01AAA", "2026-09-22")));
+        assert!(queue.push(Job::new("01AAA", "2026-09-22")));
+        assert!(
+            !queue.push(Job::day("01AAA", "2026-09-22")),
+            "the label job does it"
+        );
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue.pop().unwrap().work, Work::Label);
+
+        // Written as before for a label job, which an older file holds.
+        let mut queue = Queue::default();
+        queue.push(Job::new("01BBB", "2026-09-22"));
+        queue.push(Job::day("01CCC", "2026-09-22"));
+        let json = queue.to_json();
+        assert_eq!(json.matches("\"work\"").count(), 1, "{json}");
+        let back = Queue::from_json(&json);
+        assert_eq!(back.jobs, queue.jobs);
     }
 
     #[test]

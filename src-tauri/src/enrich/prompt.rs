@@ -50,7 +50,7 @@ pub fn build(body: &str, language: &str, categories: &[String]) -> String {
 
 /// Keep the head and the tail: the opening says what a note is about and the
 /// end usually carries the decision.
-fn truncate(body: &str) -> String {
+pub(crate) fn truncate(body: &str) -> String {
     if body.chars().count() <= MAX_NOTE_CHARS {
         return body.to_string();
     }

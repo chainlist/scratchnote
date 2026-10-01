@@ -12,6 +12,7 @@ pub fn excerpt(raw: &str) -> String {
 #[cfg(test)]
 mod bench;
 pub mod benchmark;
+pub mod dates;
 pub mod download;
 pub mod grammar;
 pub mod hardware;

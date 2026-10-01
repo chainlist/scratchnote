@@ -12,8 +12,10 @@
 		type Note
 	} from '$lib/api';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import DayAhead, { aheadLabel } from '$lib/components/DayAhead.svelte';
 	import Recall from '$lib/components/Recall.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
@@ -327,6 +329,12 @@
 							<FolderInputIcon />{m.move_to()}
 						</DropdownMenu.Item>
 					{/if}
+					{#if current.on}
+						{@const on = current.on}
+						<DropdownMenu.Item onSelect={() => void shell.clearDayAhead(current)}>
+							<CalendarXIcon />{m.day_ahead_clear({ date: aheadLabel(on) })}
+						</DropdownMenu.Item>
+					{/if}
 					{#if shell.threadOf(current.id)}
 						<DropdownMenu.Item onSelect={() => void shell.keepOut(current, true)}>
 							<RouteOffIcon />{m.thread_leave()}
@@ -348,6 +356,7 @@
 	<div class="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-600">
 		{#if page}<span class="font-mono">{page.date} {page.time}</span>{/if}
 		<span>{m.pages_words({ count: words })}</span>
+		{#if page?.on}<DayAhead on={page.on} />{/if}
 		{#if page?.category}
 			{@const category = page.category}
 			<button

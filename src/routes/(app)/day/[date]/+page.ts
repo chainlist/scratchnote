@@ -1,4 +1,4 @@
-import { getDay, type Note } from '$lib/api';
+import { getDay, notesAbout, type Note } from '$lib/api';
 import type { PageLoad } from './$types';
 
 // Any day, so none is known ahead to prerender; the fallback page serves it.
@@ -21,10 +21,11 @@ export const load: PageLoad = async ({ params, parent, depends }) => {
 	const stops = [...new Set([...days.map((day) => day.date), today])].sort();
 	const day = async (date: string | undefined): Promise<Day | undefined> =>
 		date === undefined ? undefined : { date, notes: await getDay(date) };
-	const [notes, previous, next] = await Promise.all([
+	const [notes, about, previous, next] = await Promise.all([
 		getDay(params.date),
+		notesAbout(params.date),
 		day(stops.findLast((date) => date < params.date)),
 		day(stops.find((date) => date > params.date))
 	]);
-	return { date: params.date, notes, previous, next };
+	return { date: params.date, notes, about, previous, next };
 };

@@ -69,8 +69,13 @@ pub fn render_page(page: &Note) -> String {
         .as_deref()
         .map(|lang| format!(" lang={lang}"))
         .unwrap_or_default();
+    let on = page
+        .on
+        .as_deref()
+        .map(|on| format!(" on={on}"))
+        .unwrap_or_default();
     let mut out = format!(
-        "{PAGE_OPEN}id={} day={} time={} status={} hash={}{lang} -->\n",
+        "{PAGE_OPEN}id={} day={} time={} status={} hash={}{lang}{on} -->\n",
         page.id,
         page.date,
         page.time,
@@ -104,8 +109,8 @@ pub fn parse_page(content: &str, file: &str) -> Option<Note> {
     let header = lines.next()?.trim();
     let attrs = header.strip_prefix(PAGE_OPEN)?.strip_suffix("-->")?.trim();
 
-    let (mut id, mut day, mut time, mut status, mut hash, mut lang) =
-        (None, None, None, None, None, None);
+    let (mut id, mut day, mut time, mut status, mut hash, mut lang, mut on) =
+        (None, None, None, None, None, None, None);
     for pair in attrs.split_whitespace() {
         match pair.split_once('=') {
             Some(("id", v)) => id = Some(v.to_string()),
@@ -114,6 +119,7 @@ pub fn parse_page(content: &str, file: &str) -> Option<Note> {
             Some(("status", v)) => status = Status::parse(v),
             Some(("hash", v)) => hash = Some(v.to_string()),
             Some(("lang", v)) => lang = Some(v.to_string()),
+            Some(("on", v)) => on = check_date(v).ok().map(|_| v.to_string()),
             _ => {}
         }
     }
@@ -149,6 +155,7 @@ pub fn parse_page(content: &str, file: &str) -> Option<Note> {
         status,
         hash: actual,
         lang,
+        on,
         body,
         kind: Kind::Page,
         missing: false,
@@ -176,19 +183,21 @@ fn rewrite(content: &str, file: &str, edit: impl FnOnce(&mut Note)) -> Option<St
     })
 }
 
-/// Set what enrichment, or a retry, changes: the category, the status and
-/// the language labelled in. The title and text stay.
+/// Set what enrichment, or a retry, changes: the category, the status, the
+/// language labelled in and the day ahead. The title and text stay.
 pub fn update_meta(
     content: &str,
     file: &str,
     category: Option<String>,
     status: Status,
     lang: Option<String>,
+    on: Option<String>,
 ) -> Option<String> {
     rewrite(content, file, |page| {
         page.category = category;
         page.status = status;
         page.lang = lang;
+        page.on = on;
     })
 }
 
@@ -231,6 +240,7 @@ mod tests {
             lang: None,
             body: body.to_string(),
             kind: Kind::Page,
+            on: None,
             missing: false,
         }
     }
@@ -277,6 +287,10 @@ mod tests {
             },
             page("> #1 priority\n> ship it"),
             page("# a heading inside the text"),
+            Note {
+                on: Some("2026-10-06".into()),
+                ..labelled()
+            },
         ] {
             assert_eq!(parse_page(&render_page(&note), FILE), Some(note));
         }
@@ -329,7 +343,7 @@ mod tests {
         assert_eq!(after.subject.as_deref(), Some("Renamed"));
         assert_eq!(after.body, "new text");
 
-        let out = update_meta(&out, FILE, None, Status::Done, Some("fr".into())).unwrap();
+        let out = update_meta(&out, FILE, None, Status::Done, Some("fr".into()), None).unwrap();
         let after = parse_page(&out, FILE).unwrap();
         assert_eq!(
             (after.category, after.status, after.lang.as_deref()),

@@ -4,11 +4,13 @@
 	import { saveNote } from '$lib/api';
 	import NewNote from '$lib/components/NewNote.svelte';
 	import NoteList from '$lib/components/NoteList.svelte';
+	import { noteTitle } from '$lib/components/Recall.svelte';
 	import View from '$lib/components/View.svelte';
-	import { dayHeading } from '$lib/components/ViewHeader.svelte';
+	import { dayHeading, shortDay } from '$lib/components/ViewHeader.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
 	import { m } from '$lib/paraglide/messages';
 	import { getShell } from '$lib/shell.svelte';
 	import type { Day } from './+page';
@@ -113,6 +115,32 @@
 				{dayHeading(data.date, compact)}
 			</svelte:element>
 		{/snippet}
+
+		<!-- What earlier notes said about this day (SPEC 5.7). -->
+		{#if data.about.length}
+			<section class="mb-6 rounded-lg border border-neutral-800 px-3 py-2.5">
+				<h2 class="mb-1.5 flex items-center gap-1.5 px-1.5 text-xs font-medium text-neutral-500">
+					<CalendarClockIcon class="size-3.5" />{m.day_from_earlier()}
+				</h2>
+				<ul>
+					{#each data.about as note (note.id)}
+						<li>
+							<button
+								type="button"
+								onclick={() => void shell.openCited(note)}
+								title={m.day_written_on({ date: dayHeading(note.date) })}
+								class="flex w-full min-w-0 cursor-pointer items-baseline gap-3 rounded px-1.5 py-1 text-left text-sm hover:bg-neutral-900"
+							>
+								<span class="w-14 shrink-0 font-mono text-xs text-neutral-600">
+									{shortDay(note.date)}
+								</span>
+								<span class="truncate text-neutral-300">{noteTitle(note)}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		{/if}
 
 		{#if data.notes.length === 0}
 			<div class="flex flex-col items-center gap-4 py-16 text-center">

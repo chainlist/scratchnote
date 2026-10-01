@@ -630,6 +630,7 @@ mod tests {
             lang: None,
             body,
             kind: Kind::Note,
+            on: None,
             missing: false,
         };
         let day = crate::storage::day_path(&root, "2026-09-28");

@@ -396,6 +396,7 @@ mod tests {
             status: Status::Done,
             hash: "00000000".to_string(),
             lang: None,
+            on: None,
             kind: Default::default(),
             words: None,
             body: "SECRET BODY".to_string(),

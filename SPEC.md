@@ -259,7 +259,7 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 Opened from tray icon or app launch. Three areas:
 
 1. **Sidebar**: the space switcher (see 4.6), a day picker, and the categories in use with counts, sorted by count. In search, `#` completes category names, and a note's category filters on click.
-2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. Pages show as cards among them (3.5). A note or page in a thread has a line under its text naming the thread, which opens it (6.4). The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page while the model is there to label it (on and installed, loaded or not), a `failed` one has a faint turning red border, and the others look alike.
+2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. Pages show as cards among them (3.5). A note or page in a thread has a line under its text naming the thread, which opens it (6.4), and one that looks forward to a later day names that day, which opens it (5.7). A day that earlier notes looked forward to lists them at its top. The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page while the model is there to label it (on and installed, loaded or not), a `failed` one has a faint turning red border, and the others look alike.
 3. **Search bar** at the top: full-text over body and subject; supports a `#category` token as a filter (e.g. `#infrastructure kubernetes`). Results are note cards across all days.
 
 Note actions (on hover): edit body inline, edit subject and category manually, similar notes (with the embedding model, see 6.2), move to another space (4.6), take out of its thread (6.4), re-run enrichment, delete.
@@ -421,6 +421,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
         threads.json     # the thread each note was placed in, derived, rebuildable
         thread-edits.json  # thread titles and notes kept out of threads, the user's
         queue.json       # pending enrichment jobs
+        days-ahead.json  # notes labelled before days ahead were looked for were looked at
         categories.json  # the categories the model picks from, English names: ["development", ...]
     Work/
       notes/...
@@ -464,6 +465,7 @@ Rules:
 - Notes labelled before tags were dropped carry a summary line and then a line of tags, the category first. That first tag is read as the category; the summary and the other tags are dropped the next time the note is written.
 - `status` is one of `pending`, `done`, `failed`, `manual` (`manual` = user edited subject/category; never overwrite automatically). A note sent back to the model (body edited, re-run) returns to `pending`, keeping its subject and category until the model replaces them.
 - `lang` is the locale the model labelled the note in (`en`, `fr`, ...), written with its labels. A note without one was labelled before it was recorded and counts as English.
+- `on` is the later day the note looks forward to (5.7), such as `on=2026-10-06`, written with its labels. A value that is not a day reads as none.
 - Anything outside note blocks (user's own text) must be preserved untouched on rewrite.
 
 ### 4.3 Write safety
@@ -549,7 +551,7 @@ The day's file holds a stub where the page belongs, so the day reads whole in ot
 Rules:
 
 - The page file is the source of truth for everything about the page, its day and time included. The stub carries the id and time, and a link for other editors; the app writes it and rewrites it when it goes stale. The note parser skips stubs, since they are not `sn:note` blocks.
-- The marker is the file's first line. Its attributes are a note's (4.2) plus `day`, and `status` and `hash` mean what they do for a note, except that `manual` covers only the category: the title is always the user's.
+- The marker is the file's first line. Its attributes are a note's (4.2), `on` included, plus `day`, and `status` and `hash` mean what they do for a note, except that `manual` covers only the category: the title is always the user's.
 - Then come the `# Title` line, the category line and blank line as in a note, and the text. When the first line after the marker is not a `# ` heading, the title is the file name without its date.
 - A markdown file under `pages/` without a marker is not a page and is left alone.
 - The file is named after the day and the title, `pages/<year>/<date> <title>.md`. Characters Windows forbids in a file name become spaces, whitespace is collapsed, trailing dots and spaces go, and the title part is cut to 80 characters. A name already taken gets ` 2`, ` 3` and so on. Renaming the title in the app renames the file and rewrites the stub.
@@ -695,6 +697,15 @@ The grammar only lets the model write a listed category, so nothing it returns n
 - Never overwrite notes with status `manual`.
 - A page (4.7) is labelled from its `# Title` line and its text, and only its category is written back. Its title stays the user's.
 - A job for a page held in the page view (3.5) is dropped, as is one whose page changed while the model ran: closing the view, or the watcher for an edit made elsewhere, queues it again. Re-run, asked for by hand, releases the page and runs now.
+- A job asks for labels, which look for the day ahead too, or for the day ahead alone (5.7), written `"work": "day"`. A job for labels takes over one for the day alone of the same note.
+
+### 5.7 The day ahead
+
+- A note that looks forward to a later day, an appointment, a deadline, a plan, comes back on that day: "Dentist Tuesday 3pm", "rappeler le comptable dans 15 jours", "Abgabe am Freitag". Its card names the day, which opens it, and that day lists the notes that looked forward to it at its top, under Earlier notes about this day, each by the day it was written and its subject. Not about that day, in a note's menu and the page view's, forgets a day read wrong, until the note is labelled again.
+- Each note the model labels is looked at for a day ahead, after its labels and under a timeout of its own, so a failure keeps the day it had and costs no labels. A note that names no day is not put to the model at all: none of the words for a day, a week or a month in the six languages, no count of days, no date in figures such as `12/03` or `2026-10-06`.
+- The model does no arithmetic and looks nothing up. Under a grammar it copies the words of the note that name the day, then picks what they name: tomorrow, a count of days, weeks or months, a weekday, next week or next month, a day of a month, or today, a past day or none, which bring nothing back. The code checks that the words are the note's own, folded, and must back the kind picked: tomorrow needs a word for tomorrow, a count or next week a word for its unit. It reads off the words, in the six languages, the weekday they name, whether it is in the week after, the day after tomorrow, the month and the day of the month, over what the model picked, and works the date out from the day the note was written, which a job run later still knows. A weekday is the first to come after that day, unless the words put it in the next week; next week is its Monday and next month its 1st; a day of the month without a month is the next one to come. A day not after the note's, or more than two years on, is none.
+- On 37 notes in English, French, German, Spanish and Italian with Qwen3-4B, 11 of them written after the rules above were set, to check them, it found 28 of the 29 days there were and named no wrong one; the one missed came back as none.
+- A space's notes labelled before days ahead were looked for are looked at once, those of the last 60 days that name a day, as jobs for the day ahead alone, `days-ahead.json` recording it. Only with the model on, so the jobs run at once, and again when it is turned on: an older build would take one left in the queue for a job to label.
 
 ## 6. Search
 
@@ -767,6 +778,8 @@ delete_note(id)
 move_note(date, id, space)                    // into another space, same day: written there, then removed here, with its attachments
 retry_enrichment(id)
 get_day(date: String) -> Vec<Note>
+notes_about(date) -> Vec<Note>                // the notes that look forward to the day, oldest first (5.7)
+clear_day_ahead(date, id)                     // forgets the day ahead the model read in a note or page
 list_days() -> Vec<DaySummary>                // date + note and page count + words in its notes
 list_categories() -> Vec<(String, u32)>      // in use, most used first
 category_names() -> Vec<String>               // every listed category
@@ -882,4 +895,5 @@ Build in this order; each milestone should be usable on its own.
 
 - Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), category name cleaning, hash change detection, queue retry logic, page file round-trip, stubs next to note blocks, page file names, plugin ids, repositories and versions that cannot leave the registry folder, the registry's URLs mapped onto a folder, a plugin update that keeps its data, what counts as installed, version order.
 - Golden tests for enrichment: 20 sample notes (English and French) with a stub model returning fixed JSON, verifying write-back format.
+- Optional tests with the real models, skipped without them: recall and threads on 45 made-up notes about a dozen things (`embed/samples.rs`), the embedding model taken from `SCRATCHNOTE_EMBEDDING_MODEL` when set; the day ahead on notes in five languages.
 - An optional integration test that runs the real Light model on 5 notes and asserts schema validity (skipped in CI if no model present).

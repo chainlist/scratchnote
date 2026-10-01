@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::NaiveDate;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Notify;
 
@@ -16,8 +17,8 @@ use crate::storage::daily_file::{self, Kind, Status};
 use crate::storage::{day_path, index, page_file, relative_day_path};
 
 use super::model::{Backend, TIMEOUT_SECS};
-use super::queue::Job;
-use super::runner;
+use super::queue::{Job, Work};
+use super::{dates, runner};
 
 /// Woken when a job is added or a model becomes available.
 pub type Wake = Arc<Notify>;
@@ -137,13 +138,6 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
         return;
     };
 
-    // SPEC 5.6: never overwrite a note the user has taken over.
-    if note.status == Status::Manual {
-        log::info!("skipping {}: the user edited it", job.id);
-        space.persist_queue(&state.writer).await;
-        return;
-    }
-
     // A page open in the editor is queued again when its view closes.
     if space.is_held(&job.id) {
         log::info!("skipping {}: the page is being edited", job.id);
@@ -151,8 +145,6 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
         return;
     }
 
-    let language = state.note_language();
-    let categories = space.categories();
     // A page is labelled from its title too (SPEC 5.6).
     let body = match &place {
         Place::Day(_) => note.body.clone(),
@@ -162,7 +154,41 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
             note.body
         ),
     };
+
+    // The day ahead is not a label the user took over, so a manual note
+    // gets one too.
+    if job.work == Work::Day {
+        let on = day_ahead(body, &note, backend).await;
+        match read_note(&place, &job) {
+            Some(current) if current.hash == note.hash && current.on != on => {
+                let patch = daily_file::NotePatch {
+                    subject: current.subject,
+                    category: current.category,
+                    status: current.status,
+                    lang: current.lang,
+                    on,
+                };
+                write_back(&state, space, &job, &place, &patch).await;
+                emit_enriched(app, space, &job);
+            }
+            // Unchanged, or changed meanwhile, which queues it to be labelled.
+            _ => {}
+        }
+        space.persist_queue(&state.writer).await;
+        return;
+    }
+
+    // SPEC 5.6: never overwrite a note the user has taken over.
+    if note.status == Status::Manual {
+        log::info!("skipping {}: the user edited it", job.id);
+        space.persist_queue(&state.writer).await;
+        return;
+    }
+
+    let language = state.note_language();
+    let categories = space.categories();
     let started_with = note.hash.clone();
+    let (text, dating) = (body.clone(), backend.clone());
 
     // Inference is blocking and must never run on the async runtime's
     // reactor, nor outlive the timeout in SPEC 5.6.
@@ -177,6 +203,7 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
 
     match outcome {
         Ok(enrichment) => {
+            let on = day_ahead(text, &note, dating).await;
             // SPEC 5.6: if the note changed while we were thinking, the answer
             // describes text that no longer exists. Throw it away.
             match read_note(&place, &job) {
@@ -194,7 +221,7 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
                     log::info!("{} was edited by hand while enriching, dropping", job.id);
                 }
                 Some(_) => {
-                    let patch = runner::patch(&enrichment, language);
+                    let patch = runner::patch(&enrichment, language, on);
                     write_back(&state, space, &job, &place, &patch).await;
                     emit_enriched(app, space, &job);
                 }
@@ -219,6 +246,44 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
     }
 
     space.persist_queue(&state.writer).await;
+}
+
+/// The later day the note looks forward to (SPEC 5.7), from `text`, what
+/// the model labels it from, under a timeout of its own. A note that names
+/// no day is not put to the model. A failure keeps the day the note had: its
+/// labels matter more, and its next change looks again.
+async fn day_ahead(
+    text: String,
+    note: &daily_file::Note,
+    backend: Arc<dyn Backend>,
+) -> Option<String> {
+    let Ok(written) = NaiveDate::parse_from_str(&note.date, "%Y-%m-%d") else {
+        return note.on.clone();
+    };
+    if !dates::mentions_a_day(&text) {
+        return None;
+    }
+    let work = tauri::async_runtime::spawn_blocking(move || {
+        dates::day_ahead(&text, written, backend.as_ref())
+    });
+    match tokio::time::timeout(Duration::from_secs(TIMEOUT_SECS), work).await {
+        Ok(Ok(Ok(day))) => day.map(|day| day.format("%Y-%m-%d").to_string()),
+        Ok(Ok(Err(e))) => {
+            log::warn!("finding the day ahead of {} failed: {e}", note.id);
+            note.on.clone()
+        }
+        Ok(Err(e)) => {
+            log::warn!("finding the day ahead of {} failed: {e}", note.id);
+            note.on.clone()
+        }
+        Err(_) => {
+            log::warn!(
+                "finding the day ahead of {} timed out after {TIMEOUT_SECS}s",
+                note.id
+            );
+            note.on.clone()
+        }
+    }
 }
 
 /// Where a job's note lives: a block in its day's file, or a page's own
@@ -324,6 +389,7 @@ async fn write_back(
                         patch.category,
                         patch.status,
                         patch.lang,
+                        patch.on,
                     )
                 })
                 .await
@@ -366,6 +432,7 @@ mod tests {
             lang: None,
             body: "the meeting".to_string(),
             kind: Kind::Page,
+            on: None,
             missing: false,
         };
         let path = root.join(&page.file);

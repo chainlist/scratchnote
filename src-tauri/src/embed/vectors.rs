@@ -387,6 +387,7 @@ mod tests {
             lang: None,
             body: body.to_string(),
             kind: Kind::Note,
+            on: None,
             missing: false,
         })
     }

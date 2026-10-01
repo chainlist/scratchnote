@@ -37,13 +37,13 @@ pub trait Embedder: Send + Sync {
 /// switch leaves it alone: it is light enough to run where the chat model
 /// cannot, so similar notes, search by meaning, recall and threads stay with
 /// the model off. Loaded on first use, as `enrich::worker::backend` loads
-/// the chat model, then kept: the idle unload leaves it, since it is small
-/// and every new note and search by meaning needs it, and only a GPU change
-/// drops it, through `AppState::unload_model`. A load that fails is tried
-/// again on the next call, which comes with the next change to a note or
-/// the next chat message, never in a loop. One load runs at a time: a
-/// search that comes while the embed task loads the model waits for that
-/// one.
+/// the chat model, then kept until the app quits: the idle unload leaves
+/// it, since it is small and every new note and search by meaning needs it,
+/// and it runs on the CPU, so the GPU setting does not reach it either. A
+/// load that fails is tried again on the next call, which comes with the
+/// next change to a note or the next chat message, never in a loop. One
+/// load runs at a time: a search that comes while the embed task loads the
+/// model waits for that one.
 pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
     let state = app.state::<AppState>();
     crate::state::load_once(&state.embedder, &state.embedder_loading, || {
@@ -53,7 +53,7 @@ pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
         let path = model_file(&state.root, EmbeddingModel);
         log::info!("loading {}", path.display());
 
-        match llama::LlamaEmbedder::load_with(&path, state.use_gpu()) {
+        match llama::LlamaEmbedder::load(&path) {
             Ok(loaded) => {
                 let loaded: Arc<dyn Embedder> = Arc::new(loaded);
                 Some(loaded)
@@ -98,7 +98,7 @@ pub fn installed_embedder() -> Option<llama::LlamaEmbedder> {
         eprintln!("no embedding model at {}, skipping", path.display());
         return None;
     }
-    Some(llama::LlamaEmbedder::load_with(&path, true).expect("the embedding model should load"))
+    Some(llama::LlamaEmbedder::load(&path).expect("the embedding model should load"))
 }
 
 /// A bag of words for tests: each folded word lands in one of a few buckets,

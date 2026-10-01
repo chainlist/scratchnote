@@ -47,9 +47,9 @@ pub struct AppState {
     pub batch_done: AtomicUsize,
     /// Nudges the worker when a job is queued or a model becomes available.
     pub wake: Wake,
-    /// `None` until an embedding model is loaded, and then until the GPU
-    /// setting changes. Read through `embed::embedder`, which neither the
-    /// model switch nor the idle unload reaches.
+    /// `None` until an embedding model is loaded, and then kept until the
+    /// app quits. Read through `embed::embedder`, which neither the model
+    /// switch, the GPU setting nor the idle unload reaches.
     pub embedder: RwLock<Option<Arc<dyn Embedder>>>,
     /// Held while the embedding model loads (`load_once`).
     pub embedder_loading: Mutex<()>,
@@ -119,20 +119,11 @@ impl AppState {
         })
     }
 
-    /// Drop the loaded model, and the embedding model with it, and say what
-    /// state that leaves: for a GPU change, the one setting both follow. A
-    /// job still holding one finishes first, since it owns its own
-    /// reference. Both load again lazily when next needed.
-    pub fn unload_model(&self) -> ModelStatus {
-        if let Ok(mut slot) = self.embedder.write() {
-            *slot = None;
-        }
-        self.unload_chat_model()
-    }
-
-    /// `unload_model` for the chat model alone, when the switch, the model
-    /// choice or its file changes, or it sits idle: none of them is the
-    /// embedding model's.
+    /// Drop the chat model and say what state that leaves, when the switch,
+    /// the model choice, its file or the GPU setting changes, or it sits
+    /// idle. A job still holding it finishes first, since it owns its own
+    /// reference, and the next one loads it again lazily. None of these is
+    /// the embedding model's, which stays loaded.
     pub fn unload_chat_model(&self) -> ModelStatus {
         if let Ok(mut slot) = self.backend.write() {
             *slot = None;

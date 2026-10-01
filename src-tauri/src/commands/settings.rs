@@ -3,7 +3,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use super::models::{unload_chat_model, unload_model};
+use super::models::unload_chat_model;
 use crate::settings::Settings;
 use crate::state::AppState;
 
@@ -48,20 +48,16 @@ pub async fn set_settings(
     }
 
     // A different model, or the same one on different hardware, takes a
-    // reload either way. Only the hardware is the embedding model's too.
-    let gpu_changed = settings.use_gpu != old.use_gpu;
-    let model_changed = settings.model_enabled != old.model_enabled
+    // reload either way. The embedding model runs on the CPU, so neither
+    // reaches it.
+    let reload = settings.use_gpu != old.use_gpu
+        || settings.model_enabled != old.model_enabled
         || settings.model_variant != old.model_variant
         || settings.model_path != old.model_path;
     let switched_on = settings.model_enabled && !old.model_enabled;
     save_settings(&app, &state, settings.clone()).await?;
-    if gpu_changed {
-        unload_model(&app, &state);
-        state.embed_wake.notify_one();
-    } else if model_changed {
+    if reload {
         unload_chat_model(&app, &state);
-    }
-    if gpu_changed || model_changed {
         state.wake.notify_one();
     }
     // What was put off while the model was off (SPEC 5.7).

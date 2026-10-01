@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.4.0](https://github.com/chainlist/scratchnote/compare/v0.3.0...v0.4.0) (2026-10-01)
+
+
+### Features
+
+* bring a note back on the day it looks forward to ([f6c2250](https://github.com/chainlist/scratchnote/commit/f6c2250595823927f37aee1869cf243693f6a593))
+* gather the notes about one thing into threads ([6ecf342](https://github.com/chainlist/scratchnote/commit/6ecf34279eaa1a89b2995c5ade98c41622c6c208))
+* hide the chat button while the model is off ([6570be4](https://github.com/chainlist/scratchnote/commit/6570be49085a8839b882832ffc90cc019776fc53))
+* keep the embedding model loaded while the chat model idles ([d127f3a](https://github.com/chainlist/scratchnote/commit/d127f3ab6b92ea6ee73fcb4b14648d3d2cc12a9f))
+* keep the embedding model on while the model is off ([d8330f7](https://github.com/chainlist/scratchnote/commit/d8330f72be62eb9c7d1d6152f040ddc1ba2b531a))
+* move a note or a page to another space ([35ef237](https://github.com/chainlist/scratchnote/commit/35ef237ffbffcdb8a3a9bc555439bf4960ef1ae6))
+* name the old note a draft is about while it is written ([e260b7e](https://github.com/chainlist/scratchnote/commit/e260b7e8bae0a5b0def97620d599a54823357208))
+* pick the space a quick capture goes into ([a87f569](https://github.com/chainlist/scratchnote/commit/a87f569f619ec95a621793fb89a56717cea2db0e))
+* resizable dock, on the left or the right of the view ([33a2d7a](https://github.com/chainlist/scratchnote/commit/33a2d7a8170407b48dabead3c6a862cf7103d0a2))
+* run the embedding model on the CPU ([c8a0f12](https://github.com/chainlist/scratchnote/commit/c8a0f122085450c66ccf4bddb7045b0859445f07))
+
+
+### Bug Fixes
+
+* stop a pending note glowing while the model cannot label it ([495a369](https://github.com/chainlist/scratchnote/commit/495a369d70a925ca7a3e56823eb60033901ad493))
+* stop clipping the space name in the switcher ([120ccff](https://github.com/chainlist/scratchnote/commit/120ccff2ead85656d9f931a94c434dc45344db54))
+
+
+### Performance Improvements
+
+* count words once and cap search results ([fd9c7ab](https://github.com/chainlist/scratchnote/commit/fd9c7abba5107e18cf502ce08aa88c5c4ba32cf1))
+* keep note text in search.db, not in memory ([ef30442](https://github.com/chainlist/scratchnote/commit/ef30442ea15bcadb54a6eb9bb7dd6d5cb9975206))
+* read only the open space into memory ([78cc6e7](https://github.com/chainlist/scratchnote/commit/78cc6e70603c7a748f5da5951bdacb05fdc76330))
+* read only the page files that changed ([e184c7d](https://github.com/chainlist/scratchnote/commit/e184c7d45758f6c86a770c91a40e43ce918bd552))
+* stop repairing page stubs at launch ([652646f](https://github.com/chainlist/scratchnote/commit/652646fd46e28b0e9ee287104e28726d911cf709))
+
 ## [0.3.0](https://github.com/chainlist/scratchnote/compare/v0.2.0...v0.3.0) (2026-09-29)
 
 

@@ -12,6 +12,7 @@
 		type Note
 	} from '$lib/api';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import Recall from '$lib/components/Recall.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
@@ -30,7 +31,8 @@
 		onretry,
 		oncategory,
 		onsimilar,
-		onmove
+		onmove,
+		onopennote
 	}: {
 		/** The page to open, or null for a new one. */
 		id: string | null;
@@ -46,6 +48,8 @@
 		onsimilar?: (page: Note) => void;
 		/** Ask to move it to another space, once its text is saved. Left out with one space. */
 		onmove?: (page: Note) => void;
+		/** Show an old note the text is about, where it is. */
+		onopennote?: (note: Note) => void;
 	} = $props();
 
 	/** The page as last saved or read, null until a new one has a title. */
@@ -54,6 +58,8 @@
 	let body = $state('');
 	/** The text the file holds, to tell typing apart from what was loaded. */
 	let savedBody = $state('');
+	/** The text the view opened with: recall waits for it to change. */
+	let openedWith = $state('');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let saving = $state(false);
@@ -83,6 +89,7 @@
 				title = pageDraft.title;
 				body = pageDraft.body;
 				savedBody = body;
+				openedWith = body;
 				loading = false;
 				await tick();
 				titleInput?.focus();
@@ -90,6 +97,7 @@
 			}
 			try {
 				load(await getPage(id));
+				openedWith = body;
 			} catch (e) {
 				error = String(e);
 			}
@@ -337,6 +345,15 @@
 			>
 		{/if}
 		<span class={error ? 'text-red-400' : ''} aria-live="polite">{status}</span>
+		{#if !loading}
+			<Recall
+				text={body}
+				initial={openedWith}
+				exclude={page?.id}
+				onopen={onopennote}
+				class="max-w-full"
+			/>
+		{/if}
 	</div>
 
 	{#if !loading}

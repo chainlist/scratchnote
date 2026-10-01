@@ -79,6 +79,7 @@ pub fn run() {
             commands::search::search,
             commands::search::search_meaning,
             commands::search::similar_notes,
+            commands::search::recall,
             commands::search::notes_containing,
             commands::chat::chat,
             commands::chat::stop_chat,
@@ -137,6 +138,7 @@ pub fn run() {
             commands::plugins::uninstall_plugin,
             hide_capture,
             capture_to_page,
+            reveal_note,
             set_tray_labels,
         ])
         .setup(|app| {
@@ -280,6 +282,20 @@ async fn capture_to_page(
     show_main(&app);
     let _ = app.emit_to(MAIN, "new-page", serde_json::json!({ "body": body }));
     Ok(())
+}
+
+/// Show a note of the open space in the main window, for the capture
+/// window's recall (SPEC 6.3): the capture window goes, keeping its draft as
+/// Esc does, and the main window comes up on the note.
+#[tauri::command]
+fn reveal_note(app: AppHandle, id: String, date: String, kind: Option<String>) {
+    hide_capture(app.clone());
+    show_main(&app);
+    let _ = app.emit_to(
+        MAIN,
+        "reveal-note",
+        serde_json::json!({ "id": id, "date": date, "kind": kind }),
+    );
 }
 
 /// The capture window is built once at startup and only ever shown and

@@ -11,6 +11,7 @@
 		onNoteEnriched,
 		onNoteUpdated,
 		onOpenSettings,
+		onRevealNote,
 		onSettingsChanged,
 		onSpacesChanged,
 		setSettings,
@@ -137,6 +138,8 @@
 			off.push(onNoteEnriched(() => void shell.refresh()));
 			off.push(onOpenSettings(() => (shell.settingsOpen = true)));
 			off.push(onNewPage((body) => shell.takeCaptureDraft(body)));
+			// The capture window's recall, showing the old note a draft is about.
+			off.push(onRevealNote((note) => void shell.openCited(note)));
 			off.push(
 				onSpacesChanged((view) =>
 					view.active !== data.spaces.active ? void shell.switchSpace() : void shell.refresh()
@@ -233,6 +236,7 @@
 							oncategory={shell.openCategory}
 							onsimilar={shell.canSimilar ? shell.showSimilar : undefined}
 							onmove={shell.canMove ? shell.askMove : undefined}
+							onopennote={(note) => void shell.openCited(note)}
 						/>
 					{/key}
 				</div>

@@ -168,34 +168,58 @@ impl Vectors {
         let Some((_, a)) = self.notes.get(id) else {
             return Vec::new();
         };
-        // Nothing is left to say what is usual.
-        if self.notes.len() < 3 {
+        self.closest(a, Some(id), k, min_score)
+    }
+
+    /// Up to `k` notes that score at least `min_score` against `query`, best
+    /// first, scored as `similar` scores them. The query need not be stored:
+    /// it can be a draft not saved yet. `exclude`, such as the note a draft
+    /// is an edit of, is neither listed nor counted in the mean.
+    pub fn closest(
+        &self,
+        query: &[f32],
+        exclude: Option<&str>,
+        k: usize,
+        min_score: f32,
+    ) -> Vec<(String, f32)> {
+        if query.len() != self.dims {
             return Vec::new();
         }
-        let rest = (self.notes.len() - 2) as f32;
+        let mut a = query.to_vec();
+        normalize(&mut a);
+        let others: Vec<(&String, &Vec<f32>)> = self
+            .notes
+            .iter()
+            .filter(|(id, _)| Some(id.as_str()) != exclude)
+            .map(|(id, (_, vector))| (id, vector))
+            .collect();
+        // Nothing is left to say what is usual.
+        if others.len() < 2 {
+            return Vec::new();
+        }
+        let rest = (others.len() - 1) as f32;
         let mut sum = vec![0.0; self.dims];
-        for (_, vector) in self.notes.values() {
-            for (s, x) in sum.iter_mut().zip(vector) {
+        for (_, vector) in &others {
+            for (s, x) in sum.iter_mut().zip(vector.iter()) {
                 *s += x;
             }
         }
 
-        // Expanded rather than centred copies, with m = (S - a - b) / rest:
-        // (a - m)·(b - m) is a·b - a·m - b·m + m·m, and |a - m|² is
-        // a·a - 2 a·m + m·m, each dot with m written through S.
+        // Expanded rather than centred copies, with m = (S - b) / rest, S the
+        // sum of every note but the one left out: (a - m)·(b - m) is
+        // a·b - a·m - b·m + m·m, and |a - m|² is a·a - 2 a·m + m·m, each dot
+        // with m written through S.
         let ss = dot(&sum, &sum);
-        let aa = dot(a, a);
-        let a_s = dot(a, &sum);
+        let aa = dot(&a, &a);
+        let a_s = dot(&a, &sum);
 
-        let scored: Vec<(&String, f32)> = self
-            .notes
-            .iter()
-            .filter(|(other, _)| other.as_str() != id)
-            .filter_map(|(other, (_, b))| {
-                let (ab, bb, b_s) = (dot(a, b), dot(b, b), dot(b, &sum));
-                let am = (a_s - aa - ab) / rest;
-                let bm = (b_s - ab - bb) / rest;
-                let mm = (ss + aa + bb - 2.0 * a_s - 2.0 * b_s + 2.0 * ab) / (rest * rest);
+        let scored: Vec<(&String, f32)> = others
+            .into_iter()
+            .filter_map(|(other, b)| {
+                let (ab, bb, b_s) = (dot(&a, b), dot(b, b), dot(b, &sum));
+                let am = (a_s - ab) / rest;
+                let bm = (b_s - bb) / rest;
+                let mm = (ss - 2.0 * b_s + bb) / (rest * rest);
                 let norm =
                     (aa - 2.0 * am + mm).max(0.0).sqrt() * (bb - 2.0 * bm + mm).max(0.0).sqrt();
                 // A note that is the mean has no direction of its own left.
@@ -556,6 +580,40 @@ mod tests {
         }
         assert_eq!(ids(&vectors.similar("01A", 5, 0.28)), vec!["01B"]);
         assert_eq!(ids(&vectors.similar("01B", 5, 0.28)), vec!["01A"]);
+    }
+
+    #[test]
+    fn closest_scores_a_draft_as_similar_scores_the_note_it_would_be() {
+        let mut vectors = Vectors::new("m", 4);
+        for (id, vector) in [
+            ("01A", vec![1.0, 1.0, 0.0, 0.0]),
+            ("01B", vec![1.0, 0.9, 0.1, 0.0]),
+            ("01C", vec![1.0, 0.0, 1.0, 0.0]),
+            ("01D", vec![1.0, 0.0, 0.0, 1.0]),
+        ] {
+            vectors.insert(id.into(), "h".into(), vector).unwrap();
+        }
+
+        // A draft of 01A, with 01A left out as the note being edited, finds
+        // what Similar notes finds for 01A.
+        let draft = [2.0, 2.0, 0.0, 0.0];
+        let found = vectors.closest(&draft, Some("01A"), 5, 0.28);
+        let similar = vectors.similar("01A", 5, 0.28);
+        assert_eq!(ids(&found), ids(&similar));
+        assert_eq!(ids(&found), vec!["01B"]);
+        assert!((found[0].1 - similar[0].1).abs() < 1e-5);
+
+        // A new draft has nothing left out, so 01A is closest to it.
+        assert_eq!(ids(&vectors.closest(&draft, None, 1, 0.28)), vec!["01A"]);
+        assert!(vectors.closest(&[1.0, 0.0], None, 5, -1.0).is_empty());
+
+        // Two notes are not enough to say what is usual.
+        let mut two = Vectors::new("m", 4);
+        for id in ["01A", "01B"] {
+            two.insert(id.into(), "h".into(), vec![1.0, 1.0, 0.0, 0.0])
+                .unwrap();
+        }
+        assert!(two.closest(&draft, Some("01A"), 5, -1.0).is_empty());
     }
 
     #[test]

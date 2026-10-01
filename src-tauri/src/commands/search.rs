@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use tauri::{AppHandle, State};
 
 use crate::search::Found;
+use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::categories;
 use crate::storage::daily_file::Note;
@@ -123,12 +124,135 @@ const MIN_SIMILARITY: f32 = 0.28;
 pub fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec<Note>, String> {
     let space = state.space()?;
     let hits = space.similar(&id, SIMILAR_NOTES, MIN_SIMILARITY);
+    notes_of(&space, &hits)
+}
+
+/// `hits` as notes with their text, in their order. A hit the index no
+/// longer has is left out.
+fn notes_of(space: &Space, hits: &[(String, f32)]) -> Result<Vec<Note>, String> {
     let found = space.read(|idx, db| {
         let notes: HashMap<&str, &IndexEntry> = idx.entries().map(|e| (e.id.as_str(), e)).collect();
-        let similar = hits
+        let found = hits
             .iter()
             .filter_map(|(hit, _)| notes.get(hit.as_str()).copied());
-        crate::search::with_bodies(db, similar)
+        crate::search::with_bodies(db, found)
     })?;
     Ok(found.unwrap_or_default())
+}
+
+/// The score, as Similar notes scores, an old note needs against a draft for
+/// recall to name it. Stricter than Similar notes, which is asked for:
+/// recall speaks up unasked, while the note is being written.
+const MIN_RECALL: f32 = 0.35;
+/// A draft shorter than this, in characters, says too little to go on.
+const MIN_RECALL_CHARS: usize = 12;
+
+/// The old note a draft is about, when one stands out (SPEC 6.3): the
+/// closest to it in meaning, if it is close enough. `exclude` is the note the
+/// draft is an edit of. None for a draft written into a space that is not
+/// open, whose vectors are not in memory, without the embedding model, or
+/// with the model switched off.
+#[tauri::command]
+pub async fn recall(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    text: String,
+    exclude: Option<String>,
+    space: Option<String>,
+) -> Result<Option<Note>, String> {
+    let open = state.space()?;
+    if space.is_some_and(|name| name != open.name) {
+        return Ok(None);
+    }
+    let text = text.trim().to_string();
+    if text.chars().count() < MIN_RECALL_CHARS {
+        return Ok(None);
+    }
+
+    // Loading and running the model both block.
+    let embedder_app = app.clone();
+    let vector = tauri::async_runtime::spawn_blocking(move || {
+        let embedder = crate::embed::embedder(&embedder_app)?;
+        embedder
+            .embed_document(&text)
+            .map_err(|e| log::warn!("could not embed the draft: {e}"))
+            .ok()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(vector) = vector else {
+        return Ok(None);
+    };
+    state.mark_used();
+
+    let hits = open.closest(&vector, exclude.as_deref(), 1, MIN_RECALL);
+    Ok(notes_of(&open, &hits)?.into_iter().next())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::embed::vectors::Vectors;
+    use crate::embed::{installed_embedder, samples, Embedder};
+
+    /// What recall names for the first half of each made-up note, the note
+    /// left out as if it were being written: a note on the same thing nearly
+    /// every time, and never one on another thing. Needs the embedding
+    /// model; `cargo test recall_names -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the downloaded embedding model"]
+    fn recall_names_a_note_on_the_same_thing_and_never_another() {
+        let Some(embedder) = installed_embedder() else {
+            return;
+        };
+        let notes = samples::notes();
+        let mut vectors = Vectors::new(embedder.model_id(), embedder.dims());
+        for (_, note) in &notes {
+            let vector = embedder.embed_document(&note.body).unwrap();
+            vectors
+                .insert(note.id.clone(), note.hash.clone(), vector)
+                .unwrap();
+        }
+        let about: HashMap<&str, &str> = notes
+            .iter()
+            .map(|(thing, note)| (note.id.as_str(), *thing))
+            .collect();
+
+        let (mut found, mut on_a_thing, mut wrong) = (0, 0, Vec::new());
+        for (thing, note) in &notes {
+            let words: Vec<&str> = note.body.split_whitespace().collect();
+            let draft = words[..words.len().div_ceil(2)].join(" ");
+            let vector = embedder.embed_document(&draft).unwrap();
+            if !thing.starts_with('-') {
+                on_a_thing += 1;
+            }
+            match vectors
+                .closest(&vector, Some(&note.id), 1, MIN_RECALL)
+                .first()
+            {
+                Some((id, score)) if about[id.as_str()] == *thing => {
+                    eprintln!("{score:.2} {thing:>10} {draft}");
+                    found += 1;
+                }
+                Some((id, score)) => wrong.push(format!(
+                    "{draft:?} named {} at {score:.2}",
+                    about[id.as_str()]
+                )),
+                None => eprintln!("     {thing:>10} {draft}"),
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "named another thing:
+  {}",
+            wrong.join(
+                "
+  "
+            )
+        );
+        assert!(
+            found * 100 >= on_a_thing * 85,
+            "found {found} of {on_a_thing}"
+        );
+    }
 }

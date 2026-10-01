@@ -163,6 +163,8 @@
 	"note_edit": "Modifica",
 	"note_rerun": "Riesegui modello",
 	"note_similar": "Note simili",
+	"recall_title": "Ne hai scritto il {date}",
+	"recall_open": "Apri",
 	"note_show_tag": "Mostra le note #{tag}",
 	"search_placeholder": "Cerca note, # per le categorie",
 	"search_label": "Cerca note",

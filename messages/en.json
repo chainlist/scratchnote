@@ -163,6 +163,8 @@
 	"note_edit": "Edit",
 	"note_rerun": "Re-run model",
 	"note_similar": "Similar notes",
+	"recall_title": "You wrote about this on {date}",
+	"recall_open": "Open",
 	"note_show_tag": "Show #{tag} notes",
 	"search_placeholder": "Search notes, # for categories",
 	"search_label": "Search notes",

@@ -76,6 +76,30 @@ export const searchMeaning = (query: string) =>
 export const similarNotes = (id: string) => invoke<Note[]>('similar_notes', { id });
 
 /**
+ * The old note a draft is about, when one stands out (SPEC 6.3). `exclude` is
+ * the note the draft is an edit of, and `space` the one it goes into, when
+ * the capture window picked one: nothing is found for a space not open. Null
+ * without the embedding model.
+ */
+export const recall = (text: string, exclude?: string, space?: string) =>
+	invoke<Note | null>('recall', { text, exclude, space });
+
+/**
+ * From the capture window: hide it, keeping its draft, and show the note in
+ * the main window.
+ */
+export const revealNote = (note: Pick<Note, 'id' | 'date' | 'kind'>) =>
+	invoke<void>('reveal_note', { id: note.id, date: note.date, kind: note.kind });
+
+/** Fired in the main window when the capture window asks it to show a note. */
+export const onRevealNote = (
+	handler: (note: Pick<Note, 'id' | 'date' | 'kind'>) => void
+): Promise<UnlistenFn> =>
+	listen<{ id: string; date: string; kind: Note['kind'] | null }>('reveal-note', (event) =>
+		handler({ ...event.payload, kind: event.payload.kind ?? undefined })
+	);
+
+/**
  * Every note and page whose body holds any of `needles` as typed, newest
  * first, such as `[ ]` for the tasks view. An empty needle matches all.
  */

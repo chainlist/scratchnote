@@ -17,11 +17,14 @@
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import RouteIcon from '@lucide/svelte/icons/route';
+	import RouteOffIcon from '@lucide/svelte/icons/route-off';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
 	import { categoryLabel } from '$lib/categories';
 	import { joinText, pageDraft } from '$lib/page-draft';
 	import { m } from '$lib/paraglide/messages';
+	import { getShell } from '$lib/shell.svelte';
 
 	let {
 		id,
@@ -80,6 +83,7 @@
 		return chain;
 	}
 
+	const shell = getShell();
 	const words = $derived(body.split(/\s+/).filter(Boolean).length);
 	const cleanTitle = (raw: string) => raw.split(/\s+/).filter(Boolean).join(' ');
 
@@ -307,7 +311,7 @@
 				>
 					<EllipsisIcon class="size-4" />
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-40">
+				<DropdownMenu.Content align="end" class="w-52">
 					{#if onsimilar}
 						<DropdownMenu.Item onSelect={() => onsimilar(current)}>
 							<WaypointsIcon />{m.note_similar()}
@@ -321,6 +325,15 @@
 					{#if onmove}
 						<DropdownMenu.Item onSelect={() => void move(onmove)}>
 							<FolderInputIcon />{m.move_to()}
+						</DropdownMenu.Item>
+					{/if}
+					{#if shell.threadOf(current.id)}
+						<DropdownMenu.Item onSelect={() => void shell.keepOut(current, true)}>
+							<RouteOffIcon />{m.thread_leave()}
+						</DropdownMenu.Item>
+					{:else if shell.keptOut(current.id)}
+						<DropdownMenu.Item onSelect={() => void shell.keepOut(current, false)}>
+							<RouteIcon />{m.thread_rejoin()}
 						</DropdownMenu.Item>
 					{/if}
 					<DropdownMenu.Separator />

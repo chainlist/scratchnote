@@ -12,6 +12,7 @@ use std::sync::{Mutex, RwLock, RwLockWriteGuard};
 
 use serde::{Deserialize, Serialize};
 
+use crate::embed::threads::Threads;
 use crate::embed::vectors::Vectors;
 use crate::enrich::queue::{queue_path, Job, Queue};
 use crate::enrich::worker::Wake;
@@ -216,6 +217,10 @@ pub struct Space {
     /// The note embeddings the chat searches. `None` until the embed task
     /// first runs with a model, which loads them from `vectors.bin`.
     pub vectors: Mutex<Option<Vectors>>,
+    /// The thread each note is in (SPEC 6.4), placed from the vectors.
+    /// `None` until the embed task first runs with a model, which loads it
+    /// from `threads.json`. Taken after `vectors` when both are needed.
+    pub threads: Mutex<Option<Threads>>,
     /// Nudges the embed task whenever the index changes.
     embed_wake: Wake,
     /// Pages open in the editor. Neither model touches them until the page
@@ -238,6 +243,7 @@ impl Space {
             search: Mutex::new(None),
             queue: Mutex::new(Queue::load(&root)),
             vectors: Mutex::new(None),
+            threads: Mutex::new(None),
             watcher: Mutex::new(None),
             retired: AtomicBool::new(false),
             root,
@@ -301,6 +307,9 @@ impl Space {
         }
         if let Ok(mut vectors) = self.vectors.lock() {
             *vectors = None;
+        }
+        if let Ok(mut threads) = self.threads.lock() {
+            *threads = None;
         }
         if let Ok(mut watcher) = self.watcher.lock() {
             *watcher = None;

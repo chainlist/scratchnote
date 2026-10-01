@@ -9,3 +9,4 @@ pub mod plugins;
 pub mod search;
 pub mod settings;
 pub mod spaces;
+pub mod threads;

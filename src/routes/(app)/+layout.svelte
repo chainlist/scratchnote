@@ -14,6 +14,7 @@
 		onRevealNote,
 		onSettingsChanged,
 		onSpacesChanged,
+		onThreadsChanged,
 		setSettings,
 		setTrayLabels,
 		today,
@@ -140,6 +141,9 @@
 			off.push(onNewPage((body) => shell.takeCaptureDraft(body)));
 			// The capture window's recall, showing the old note a draft is about.
 			off.push(onRevealNote((note) => void shell.openCited(note)));
+			// The embed task placing notes in threads, or a thread renamed.
+			off.push(onThreadsChanged(() => void shell.loadThreads()));
+			void shell.loadThreads();
 			off.push(
 				onSpacesChanged((view) =>
 					view.active !== data.spaces.active ? void shell.switchSpace() : void shell.refresh()

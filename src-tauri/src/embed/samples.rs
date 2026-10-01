@@ -1,7 +1,7 @@
 //! Made-up notes about a few things each, over a few months, in English and
 //! French, for the tests that run the real embedding model: what recall
-//! names can be checked against the thing each note is about. A note whose
-//! thing starts with `-` is the only one about it.
+//! names and what threads gather can be checked against the thing each note
+//! is about. A note whose thing starts with `-` is the only one about it.
 
 use crate::storage::daily_file::{body_hash, Kind, Note, Status};
 use crate::storage::relative_day_path;

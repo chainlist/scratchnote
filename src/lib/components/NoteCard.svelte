@@ -6,6 +6,7 @@
 	import TimelineItem from '$lib/components/TimelineItem.svelte';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import Recall from '$lib/components/Recall.svelte';
+	import ThreadLine from '$lib/components/ThreadLine.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
@@ -13,6 +14,8 @@
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import RouteIcon from '@lucide/svelte/icons/route';
+	import RouteOffIcon from '@lucide/svelte/icons/route-off';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
@@ -32,6 +35,7 @@
 		onmove,
 		onerror,
 		showDate = false,
+		threadLine = true,
 		blink = false
 	}: {
 		note: Note;
@@ -54,6 +58,8 @@
 		onerror: (message: string) => void;
 		/** Search results span days, so each card says which one. */
 		showDate?: boolean;
+		/** Name the thread the note is in, as everywhere but in that thread. */
+		threadLine?: boolean;
 		/** Blink once to show where a chat citation led. */
 		blink?: boolean;
 	} = $props();
@@ -77,6 +83,8 @@
 	// A pending note glows only while the model is there to label it. With
 	// the model off, missing or still downloading, it waits like any other.
 	let glowing = $derived(note.status === 'pending' && shell.modelAvailable);
+	const inThread = $derived(shell.threadOf(note.id) !== undefined);
+	const keptOut = $derived(shell.keptOut(note.id));
 	/** How long the glow takes to come and go, text and edge alike. */
 	const glowFade = { duration: 500 };
 
@@ -205,6 +213,7 @@
 					<Markdown text={body} class="note-glow-blur" />
 				</div>
 			{/if}
+			{#if threadLine}<ThreadLine id={note.id} class="mt-1.5" />{/if}
 		{/if}
 	</div>
 
@@ -223,7 +232,7 @@
 				>
 					<EllipsisIcon class="size-3.5" />
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-44">
+				<DropdownMenu.Content align="end" class="w-52">
 					<DropdownMenu.Item onSelect={() => onedit(note)}>
 						<PencilIcon />{m.note_edit()}
 					</DropdownMenu.Item>
@@ -238,6 +247,15 @@
 					{#if onmove}
 						<DropdownMenu.Item onSelect={() => onmove(note)}>
 							<FolderInputIcon />{m.move_to()}
+						</DropdownMenu.Item>
+					{/if}
+					{#if inThread}
+						<DropdownMenu.Item onSelect={() => void shell.keepOut(note, true)}>
+							<RouteOffIcon />{m.thread_leave()}
+						</DropdownMenu.Item>
+					{:else if keptOut}
+						<DropdownMenu.Item onSelect={() => void shell.keepOut(note, false)}>
+							<RouteIcon />{m.thread_rejoin()}
 						</DropdownMenu.Item>
 					{/if}
 					{#if canRetry}

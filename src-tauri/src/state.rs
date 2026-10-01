@@ -189,6 +189,17 @@ impl AppState {
             .ok_or_else(|| "no space is open".to_string())
     }
 
+    /// The space named, or the open one when no name is given, as for a note
+    /// the capture window sends to another space.
+    pub fn space_or_open(&self, name: Option<&str>) -> Result<Arc<Space>, String> {
+        match name {
+            Some(name) => self
+                .find_space(name)
+                .ok_or_else(|| format!("no space {name}")),
+            None => self.space(),
+        }
+    }
+
     pub fn find_space(&self, name: &str) -> Option<Arc<Space>> {
         self.spaces
             .read()

@@ -49,7 +49,7 @@
 	"capture_hint": "Ctrl+Enter para salvar, Ctrl+Shift+Enter para uma página, Esc para descartar",
 	"capture_saved": "Salvo",
 	"capture_saving": "Salvando…",
-	"capture_space_title": "Salvando neste espaço",
+	"capture_space_title": "O espaço para onde vai a nota. {first} a {last} escolhem um.",
 	"categories_heading": "Categorias",
 	"calendar_pick": "Escolher um dia",
 	"calendar_title": "Calendário",

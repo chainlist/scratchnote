@@ -49,7 +49,7 @@
 	"capture_hint": "Ctrl+Enter pour enregistrer, Ctrl+Maj+Enter pour une page, Esc pour annuler",
 	"capture_saved": "Enregistré",
 	"capture_saving": "Enregistrement…",
-	"capture_space_title": "Enregistrement dans cet espace",
+	"capture_space_title": "L'espace où va la note. {first} à {last} en choisissent un.",
 	"categories_heading": "Catégories",
 	"calendar_pick": "Choisir un jour",
 	"calendar_title": "Calendrier",

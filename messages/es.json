@@ -49,7 +49,7 @@
 	"capture_hint": "Ctrl+Enter para guardar, Ctrl+Mayús+Enter para una página, Esc para cerrar",
 	"capture_saved": "Guardado",
 	"capture_saving": "Guardando…",
-	"capture_space_title": "Guardando en este espacio",
+	"capture_space_title": "El espacio donde va la nota. {first} a {last} eligen uno.",
 	"categories_heading": "Categorías",
 	"calendar_pick": "Elige un día",
 	"calendar_title": "Calendario",

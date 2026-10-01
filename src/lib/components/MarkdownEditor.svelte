@@ -6,6 +6,7 @@
 		Compartment,
 		EditorSelection,
 		EditorState,
+		Facet,
 		Prec,
 		type Extension,
 		type Range
@@ -108,25 +109,37 @@
 		return node;
 	}
 
+	/** The space an editor's attachments are in, when it is not the open one. */
+	const attachmentSpace = Facet.define<string, string | undefined>({
+		combine: (spaces) => spaces[0]
+	});
+
 	/** An attachment drawn where its markup is: its image, or the card the read-only view draws. */
 	class Attached extends WidgetType {
 		readonly path: string;
 		readonly name: string;
 		readonly image: boolean;
-		constructor(path: string, name: string, image: boolean) {
+		readonly space: string | undefined;
+		constructor(path: string, name: string, image: boolean, space: string | undefined) {
 			super();
 			this.path = path;
 			this.name = name || fileName(path);
 			this.image = image;
+			this.space = space;
 		}
 		eq(other: Attached) {
-			return other.path === this.path && other.name === this.name && other.image === this.image;
+			return (
+				other.path === this.path &&
+				other.name === this.name &&
+				other.image === this.image &&
+				other.space === this.space
+			);
 		}
 		toDOM(view: EditorView) {
 			if (this.image) {
 				const img = document.createElement('img');
 				img.className = 'md-image';
-				img.src = attachmentUrl(this.path);
+				img.src = attachmentUrl(this.path, this.space);
 				img.alt = this.name;
 				img.dataset.attachment = this.path;
 				// Its height is known once it loads, and the editor's lines move for it.
@@ -188,10 +201,11 @@
 				);
 		}
 		// On the line being edited an attachment stays in view after its markup.
+		const space = state.facet(attachmentSpace);
 		for (const attached of attachments) {
 			const { from, to } = attached;
 			if (text.slice(from, to).includes('\n')) continue;
-			const widget = new Attached(attached.path, attached.name, attached.image);
+			const widget = new Attached(attached.path, attached.name, attached.image, space);
 			if (shown(from)) {
 				ranges.push(markup.range(from, to));
 				ranges.push(Decoration.widget({ widget, side: 1 }).range(to));
@@ -214,7 +228,8 @@
 						update.docChanged ||
 						update.selectionSet ||
 						update.focusChanged ||
-						syntaxTree(update.startState) !== syntaxTree(update.state)
+						syntaxTree(update.startState) !== syntaxTree(update.state) ||
+						update.startState.facet(attachmentSpace) !== update.state.facet(attachmentSpace)
 					)
 						this.decorations = decorate(update.view);
 				}
@@ -339,7 +354,9 @@
 		value = $bindable(''),
 		placeholder = '',
 		label,
+		space,
 		onerror,
+		onattach,
 		class: className = '',
 		toolbarClass = ''
 	}: {
@@ -348,8 +365,12 @@
 		placeholder?: string;
 		/** Accessible name of the text field. */
 		label: string;
+		/** The space files are attached to and drawn from, when not the open one. */
+		space?: string;
 		/** A file pasted, dropped or picked could not be attached. */
 		onerror: (message: string) => void;
+		/** Files were attached into `space`, as it was then, and their links written in. */
+		onattach?: (attached: Attachment[], space: string | undefined) => void;
 		/** Box, padding and type; a max height makes it scroll past it. */
 		class?: string;
 		/** The toolbar's, such as a background to keep it in view on a long page. */
@@ -364,6 +385,10 @@
 	let pluginActive = $state.raw<ToolbarEntry[]>([]);
 	/** Where the plugins' syntax and keys go, so they change without a new editor. */
 	const plugins = new Compartment();
+	/** Where `space` goes, so its attachments are drawn from the space it names. */
+	const attachedIn = new Compartment();
+	const spaceFacet = (name: string | undefined) =>
+		name === undefined ? [] : attachmentSpace.of(name);
 
 	/** The formats at the cursor, the app's and the plugins'. */
 	function refreshActive(current: EditorView) {
@@ -402,14 +427,19 @@
 		view.focus();
 	}
 
-	/** Link what `pending` attaches at the cursor once it is copied in (SPEC 3.7). */
-	async function attach(pending: Promise<Attachment[]>) {
+	/**
+	 * Link what `copy` attaches at the cursor once it is copied in (SPEC 3.7),
+	 * into the space the editor names as it starts.
+	 */
+	async function attach(copy: (into: string | undefined) => Promise<Attachment[]>) {
+		const into = space;
 		try {
-			const attached = await pending;
+			const attached = await copy(into);
 			if (!view) return;
 			view.focus();
 			if (attached.length === 0) return;
 			view.dispatch(view.state.replaceSelection(attached.map(attachmentLink).join('\n')));
+			onattach?.(attached, into);
 		} catch (e) {
 			onerror(String(e));
 		}
@@ -423,7 +453,7 @@
 			// Text wins: an office app puts a picture of the text on the clipboard too.
 			if (files.length === 0 || data?.getData('text/plain')) return false;
 			event.preventDefault();
-			void attach(Promise.all(files.map(saveAttachment)));
+			void attach((into) => Promise.all(files.map((file) => saveAttachment(file, into))));
 			return true;
 		}
 	});
@@ -431,17 +461,15 @@
 	function drop(paths: string[], at: { x: number; y: number }) {
 		if (!view) return;
 		view.dispatch({ selection: { anchor: view.posAtCoords(at, false) } });
-		void attach(addAttachments(paths));
+		void attach((into) => addAttachments(paths, into));
 	}
 
 	/** Pick files to attach at the cursor, for the paperclip. */
 	function attachFiles() {
-		void attach(
-			(async () => {
-				const picked = await pickFiles({ multiple: true });
-				return picked ? addAttachments(picked) : [];
-			})()
-		);
+		void attach(async (into) => {
+			const picked = await pickFiles({ multiple: true });
+			return picked ? addAttachments(picked, into) : [];
+		});
 	}
 
 	onMount(() => {
@@ -457,6 +485,7 @@
 					formatKeys,
 					keymap.of([...standardKeymap, ...historyKeymap]),
 					plugins.of(plugged()),
+					attachedIn.of(spaceFacet(space)),
 					links,
 					pasteFiles,
 					EditorView.lineWrapping,
@@ -492,6 +521,13 @@
 		if (!view) return;
 		view.dispatch({ effects: plugins.reconfigure(extension) });
 		refreshActive(view);
+	});
+
+	// Another space to attach to, as the capture window's draft is sent
+	// elsewhere: the images are drawn from there.
+	$effect(() => {
+		const extension = spaceFacet(space);
+		view?.dispatch({ effects: attachedIn.reconfigure(extension) });
 	});
 
 	// A value set from outside, such as a draft cleared after saving.

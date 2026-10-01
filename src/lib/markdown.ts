@@ -138,6 +138,11 @@ export function attachmentLink(attachment: { name: string; path: string }): stri
 	return `${isImage(attachment.path) ? '!' : ''}[${text}](<${TO_SPACE}${attachment.path}>)`;
 }
 
+/** `text` with the links `attachmentLink` wrote to the file at `from` pointed at `to` instead. */
+export function relink(text: string, from: string, to: string): string {
+	return text.replaceAll(`(<${TO_SPACE}${from}>)`, `(<${TO_SPACE}${to}>)`);
+}
+
 /** The last part of a path, for an attachment linked without a name. */
 export const fileName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 

@@ -11,8 +11,10 @@ export function followSpace() {
 }
 
 /**
- * Where the webview loads an attachment from: the backend's `attachment`
- * protocol. The space is in the path, so files of the same name in two
- * spaces are never taken for one another's cached image.
+ * Where the webview loads an attachment of the open space from, or of
+ * `inSpace`: the backend's `attachment` protocol. The space is in the path,
+ * so files of the same name in two spaces are never taken for one another's
+ * cached image.
  */
-export const attachmentUrl = (path: string) => convertFileSrc(`${space}/${path}`, 'attachment');
+export const attachmentUrl = (path: string, inSpace = space) =>
+	convertFileSrc(`${inSpace}/${path}`, 'attachment');

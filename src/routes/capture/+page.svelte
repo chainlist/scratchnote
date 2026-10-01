@@ -5,39 +5,96 @@
 		getSettings,
 		hideCapture,
 		listSpaces,
+		moveAttachments,
 		onCaptureShown,
 		onSettingsChanged,
 		onSpacesChanged,
-		saveNote
+		saveNote,
+		type Attachment,
+		type SpacesView
 	} from '$lib/api';
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
+	import { relink } from '$lib/markdown';
 	import { m } from '$lib/paraglide/messages';
+	import { formatHotkey } from '$lib/plugins/commands';
 
 	let draft = $state('');
 	let saving = $state(false);
 	let error = $state<string | null>(null);
 	let saved = $state(false);
-	/** Where the note will be saved; only named when there is a choice. */
-	let space = $state<string | null>(null);
+	let spaces = $state<SpacesView | null>(null);
+	/** The space picked for this draft; until then it goes into the open one. */
+	let picked = $state<string | null>(null);
+	/** Where the note will be saved. */
+	const target = $derived(picked ?? spaces?.active ?? '');
+	/**
+	 * The space the draft's files were attached to, once it has any. More go
+	 * there too, and they all follow the draft if it is sent elsewhere.
+	 */
+	let attachedIn = $state<string | null>(null);
+	/** The files this draft attached, by path. */
+	let attached: string[] = [];
 	// SPEC 3.1: hiding at once is the default; the toast is opt-in.
 	let hideImmediately = true;
 	let input: MarkdownEditor;
+
+	const mac = navigator.userAgent.includes('Mac');
+	/** The shortcut that picks the nth space, counting from 1. */
+	const spaceHotkey = (n: number) => formatHotkey(`Mod-${n}`);
 
 	onMount(() => {
 		input?.focus();
 		// The window is hidden, never closed, so this component stays mounted
 		// and the draft survives an Esc.
 		const unlisten = [
-			onCaptureShown(() => input?.focus()),
+			onCaptureShown(() => {
+				// A new note starts in the open space; one left half written keeps its own.
+				if (draft.trim() === '') forget();
+				input?.focus();
+			}),
 			onSettingsChanged((settings) => (hideImmediately = settings.hideImmediately)),
-			onSpacesChanged((view) => (space = view.spaces.length > 1 ? view.active : null))
+			onSpacesChanged(followSpaces)
 		];
-		void listSpaces().then((view) => (space = view.spaces.length > 1 ? view.active : null));
+		void listSpaces().then(followSpaces);
 		void getSettings().then((settings) => (hideImmediately = settings.hideImmediately));
 		return () => unlisten.forEach((p) => void p.then((off) => off()));
 	});
+
+	/** A space renamed or deleted from the main window is no longer one to save into. */
+	function followSpaces(view: SpacesView) {
+		spaces = view;
+		const names = view.spaces.map((space) => space.name);
+		if (picked !== null && !names.includes(picked)) picked = null;
+		if (attachedIn !== null && !names.includes(attachedIn)) {
+			attachedIn = null;
+			attached = [];
+		}
+	}
+
+	/** The draft is gone, so its space and its files are too. */
+	function forget() {
+		picked = null;
+		attachedIn = null;
+		attached = [];
+	}
+
+	function onAttach(files: Attachment[], space: string | undefined) {
+		attachedIn ??= space ?? null;
+		if (space === attachedIn) attached.push(...files.map((file) => file.path));
+	}
+
+	/** Move the files the draft attached into the space it goes to, when that is another. */
+	async function bringAttachments(into: string) {
+		const from = attachedIn;
+		if (from === null || from === into || attached.length === 0) return;
+		const moved = await moveAttachments(from, into, attached);
+		draft = attached.reduce((text, path, i) => relink(text, path, moved[i]), draft);
+		attached = moved;
+		attachedIn = into;
+	}
 
 	async function save() {
 		if (saving) return;
@@ -48,8 +105,11 @@
 		saving = true;
 		error = null;
 		try {
-			await saveNote(draft);
+			const into = target;
+			await bringAttachments(into);
+			await saveNote(draft, undefined, into);
 			draft = '';
+			forget();
 			if (!hideImmediately) {
 				saved = true;
 				await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -63,16 +123,36 @@
 		}
 	}
 
-	/** Hand the draft to a new page in the main window (SPEC 3.5). */
+	/** Hand the draft to a new page in the main window, in the space picked (SPEC 3.5). */
 	async function toPage() {
 		if (saving) return;
+		saving = true;
 		try {
-			await captureToPage(draft);
+			const into = target;
+			await bringAttachments(into);
+			await captureToPage(draft, into);
 			draft = '';
+			forget();
 			error = null;
 		} catch (e) {
 			error = String(e);
+		} finally {
+			saving = false;
 		}
+	}
+
+	/**
+	 * Ctrl or Cmd and 1 to 9 pick a space by its place in the list, whatever
+	 * the keyboard layout, so on AZERTY without Shift too.
+	 */
+	function pickByNumber(event: KeyboardEvent) {
+		const digit = /^Digit([1-9])$/.exec(event.code);
+		const mod = mac ? event.metaKey : event.ctrlKey;
+		if (!digit || !mod || event.shiftKey || event.altKey || event.defaultPrevented) return false;
+		const space = spaces && spaces.spaces.length > 1 && spaces.spaces[Number(digit[1]) - 1];
+		if (!space) return false;
+		picked = space.name;
+		return true;
 	}
 
 	function onKeydown(event: KeyboardEvent) {
@@ -85,6 +165,8 @@
 		} else if (event.key === 'Escape') {
 			event.preventDefault();
 			void hideCapture();
+		} else if (pickByNumber(event)) {
+			event.preventDefault();
 		}
 	}
 </script>
@@ -102,22 +184,43 @@
 		bind:value={draft}
 		placeholder={m.capture_placeholder()}
 		label={m.capture_placeholder()}
+		space={attachedIn ?? (target || undefined)}
 		onerror={(message) => (error = message)}
+		onattach={onAttach}
 		class="min-h-0 flex-1 rounded bg-neutral-800 p-2 text-sm leading-relaxed [--md-image-height:6rem]"
 	/>
 
 	<div
-		class="flex items-center justify-between text-[0.6875rem] text-neutral-500"
+		class="flex items-center justify-between gap-2 text-[0.6875rem] text-neutral-500"
 		data-tauri-drag-region="deep"
 	>
 		{#if error}
-			<span class="text-red-400">{error}</span>
+			<span class="min-w-0 truncate text-red-400" title={error}>{error}</span>
 		{:else}
-			<span>{m.capture_hint()}</span>
+			<span class="min-w-0 truncate">{m.capture_hint()}</span>
 		{/if}
-		<span class="flex items-center gap-2">
+		<span class="flex shrink-0 items-center gap-2">
 			<span>{saved ? m.capture_saved() : saving ? m.capture_saving() : ''}</span>
-			{#if space}<span class="text-neutral-400" title={m.capture_space_title()}>{space}</span>{/if}
+			{#if spaces && spaces.spaces.length > 1}
+				<!-- Where the note goes: the open space unless another is picked,
+				     which stands out. Picked, the text takes the focus back. -->
+				<SpaceSwitcher
+					view={spaces}
+					chosen={target}
+					onpick={(name) => (picked = name)}
+					hotkey={spaceHotkey}
+					title={m.capture_space_title({
+						first: spaceHotkey(1),
+						last: spaceHotkey(Math.min(spaces.spaces.length, 9))
+					})}
+					align="end"
+					returnFocus={() => input?.focus()}
+					class="ml-0 max-w-40 gap-1 px-1.5 text-[0.6875rem] font-normal [&_svg]:size-3 {target ===
+					spaces.active
+						? 'text-neutral-400'
+						: 'text-neutral-100'}"
+				/>
+			{/if}
 			<Button
 				size="icon-sm"
 				onclick={save}

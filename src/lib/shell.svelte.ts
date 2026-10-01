@@ -7,6 +7,8 @@ import {
 	deleteNote,
 	deletePage,
 	isPage,
+	keepOutOfThreads,
+	listThreads,
 	moveNote,
 	movePage,
 	noteToPage,
@@ -17,13 +19,20 @@ import {
 	type ModelStatus,
 	type Note,
 	type NoteEdit,
-	type SpacesView
+	type SpacesView,
+	type Thread
 } from '$lib/api';
 import { categoryLabel } from '$lib/categories';
 import { loadDock, saveDock, type DockSide } from '$lib/dock';
 import { addToPageDraft } from '$lib/page-draft';
 import { notesChanged, type WorkspaceHost } from '$lib/plugins/app';
 import { toggleCategory } from '$lib/query';
+
+/** Where a note sits in its thread: the thread, and its place in it from 0. */
+export interface ThreadPlace {
+	thread: Thread;
+	index: number;
+}
 
 /** A view's title row, which the top bar shows a copy of once it scrolls away. */
 export interface ViewTitle {
@@ -54,6 +63,10 @@ export class Shell implements WorkspaceHost {
 	/** Similar notes come from the embedding model's vectors. */
 	embeddingInstalled = $state(false);
 	canSimilar = $derived(this.embeddingInstalled && this.model.state !== 'disabled');
+	/** The thread each note of the open space is in, by note (SPEC 6.4). */
+	threads = $state.raw<Record<string, ThreadPlace>>({});
+	/** The notes taken out of threads. */
+	alone = $state.raw<string[]>([]);
 	/** The text size setting, in pixels: the rem the day's columns are sized in. */
 	textSize = $state(16);
 	/** The views' width, which a docked page narrows. Taken with the
@@ -155,6 +168,40 @@ export class Shell implements WorkspaceHost {
 
 	showSimilar = (note: Note) => {
 		void goto(resolve(`/similar/${note.date}/${note.id}/`));
+	};
+
+	/** Where a note sits in its thread, while threads are on offer. */
+	threadOf = (id: string): ThreadPlace | undefined =>
+		this.canSimilar ? this.threads[id] : undefined;
+
+	/** A note taken out of threads, which can be let back in while threads are on offer. */
+	keptOut = (id: string) => this.canSimilar && this.alone.includes(id);
+
+	/** Read the open space's threads again, as the backend placed them. */
+	loadThreads = async () => {
+		try {
+			const view = await listThreads();
+			const places: Record<string, ThreadPlace> = {};
+			for (const thread of view.threads)
+				thread.notes.forEach((id, index) => (places[id] = { thread, index }));
+			this.threads = places;
+			this.alone = view.alone;
+			// The view of a thread lists its notes itself.
+			await invalidate('app:threads');
+		} catch (e) {
+			this.error = String(e);
+		}
+	};
+
+	showThread = (id: string) => goto(resolve(`/thread/${id}/`));
+
+	/** Take a note out of threads, where it stays, or let it back in. */
+	keepOut = async (note: Pick<Note, 'id'>, out: boolean) => {
+		try {
+			await keepOutOfThreads(note.id, out);
+		} catch (e) {
+			this.error = String(e);
+		}
 	};
 
 	showPages = () => goto(resolve('/pages/'));
@@ -362,10 +409,11 @@ export class Shell implements WorkspaceHost {
 		if (
 			route === '/(app)/search' ||
 			route === '/(app)/similar/[date]/[id]' ||
+			route === '/(app)/thread/[id]' ||
 			route === '/(app)/page/[date]/[id]'
 		)
 			await this.openDay(this.day);
-		await this.refresh();
+		await Promise.all([this.refresh(), this.loadThreads()]);
 	};
 
 	/** What every card can do. */

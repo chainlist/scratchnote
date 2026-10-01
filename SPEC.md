@@ -259,10 +259,10 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 Opened from tray icon or app launch. Three areas:
 
 1. **Sidebar**: the space switcher (see 4.6), a day picker, and the categories in use with counts, sorted by count. In search, `#` completes category names, and a note's category filters on click.
-2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. Pages show as cards among them (3.5). The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page while the model is there to label it (on and installed, loaded or not), a `failed` one has a faint turning red border, and the others look alike.
+2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. Pages show as cards among them (3.5). A note or page in a thread has a line under its text naming the thread, which opens it (6.4). The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page while the model is there to label it (on and installed, loaded or not), a `failed` one has a faint turning red border, and the others look alike.
 3. **Search bar** at the top: full-text over body and subject; supports a `#category` token as a filter (e.g. `#infrastructure kubernetes`). Results are note cards across all days.
 
-Note actions (on hover): edit body inline, edit subject and category manually, similar notes (with the embedding model, see 6.2), move to another space (4.6), re-run enrichment, delete.
+Note actions (on hover): edit body inline, edit subject and category manually, similar notes (with the embedding model, see 6.2), move to another space (4.6), take out of its thread (6.4), re-run enrichment, delete.
 
 ### 3.3 Tray
 
@@ -418,6 +418,8 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
         index.jsonl      # derived cache, rebuildable
         search.db        # the notes' text for search, SQLite, derived, rebuildable
         vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
+        threads.json     # the thread each note was placed in, derived, rebuildable
+        thread-edits.json  # thread titles and notes kept out of threads, the user's
         queue.json       # pending enrichment jobs
         categories.json  # the categories the model picks from, English names: ["development", ...]
     Work/
@@ -726,6 +728,17 @@ The grammar only lets the model write a listed category, so nothing it returns n
 - The draft is embedded as a note is (5.2) and scored against the open space's vectors as Similar notes scores (6.2), the note being edited left out of the mean too. The best note shows when it scores 0.35 or more, stricter than Similar notes because recall speaks up unasked. On 45 made-up notes about a dozen things, no draft's best note about another thing scored over 0.33, while the first half of a note found one on the same thing 34 times in 37.
 - Nothing is looked for without the embedding model, with the model switched off, or for a draft going into a space that is not open, whose vectors are not in memory.
 
+### 6.4 Threads
+
+- A thread gathers the notes and pages about one thing across days: a bug chased for two weeks, a kitchen being redone, a book being read. Nothing is filed by hand: notes are placed from their vectors as they are embedded.
+- A note in a thread has a line under its text, a page one at the foot of its card: the thread's title and the note's place in it, such as 3 of 5. A click opens the thread, `/thread/<id>/`: its notes oldest first, across days, under its title, how many notes it holds and since when, and Rename. Its title is the subject of its most typical note, the one closest to the rest once what every note shares is taken off, until the user gives it one; renamed empty, it goes back to that.
+- A note joins the thread it scores best against, at 0.35 or more, scored as Similar notes scores two notes (6.2) but against the average of the thread's notes. A note close to no thread starts one with the note on its own it scores best against, at 0.40 or more, since two notes are a thinner sign than a thread. Only notes within 60 days of a thread's first or last note, or of each other, are compared, so a thread follows one stretch of something, and a pass stays short however many notes the space holds. A note on its own placed before a thread formed or grew near it joins it then, if it scores enough.
+- Threads form once the space holds 12 notes: in fewer, one thread's notes are most of what is usual, and once that is taken off every other note looks like every other.
+- Take out of the thread, in a note's menu and the page view's, keeps a note out of threads for good; Let it join a thread lets it back, and it is placed again at once. A thread down to one note is no thread, and that note is placed again.
+- `threads.json` is derived, like `vectors.bin`: where each note was placed and from which body. A note is placed once, and again only when its text changes; a file that is missing, damaged or made from another model's vectors places every note again, oldest first. A first pass over 10,000 notes takes under a second in a release build. `thread-edits.json` holds what the user decided, titles and notes kept out, which nothing derives.
+- On 45 made-up notes about a dozen things, every thread held notes about one thing only, every note about a thing was in its thread, and every note on its own stayed so. On the 40 distinct notes of a real space, two threads formed, each about one thing.
+- Threads follow the embedding model and the model switch, as Similar notes does.
+
 ## 7. Settings
 
 - Notes root directory
@@ -760,6 +773,10 @@ category_names() -> Vec<String>               // every listed category
 search(query, offset?, limit?) -> Found       // { notes, total }: the limit matches from offset, every one without a limit
 similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
 recall(text, exclude?, space?) -> Note?     // the old note a draft is about, if one stands out (6.3)
+list_threads() -> { threads, alone }        // every thread, its notes oldest first, and the notes kept out (6.4)
+get_thread(id) -> { thread, notes }?        // a thread and its notes with their text
+rename_thread(id, title)                    // an empty title goes back to its most typical note's subject
+keep_out_of_threads(id, out)                // takes a note out of threads for good, or lets it back in
 notes_containing(needles) -> Vec<Note>      // every note and page whose body holds any needle as typed, newest first
 get_settings() / set_settings(...)
 model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle | disabled
@@ -801,7 +818,7 @@ A page comes back as a `Note` with `kind: "page"` and its title as `subject`. `g
 
 An `Attachment` is `{ name, path }`: the name the file came with, and where it was copied from the space's folder (`attachments/2026/2026-09-28 image.png`). The webview loads attachments through the `attachment` protocol (4.8).
 
-Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` and `reveal-note { id, date, kind }` (to the main window), `plugins-changed { ...PluginsView }`, `plugin-data-changed { id, window }`. The UI updates live when enrichment finishes.
+Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` and `reveal-note { id, date, kind }` (to the main window), `plugins-changed { ...PluginsView }`, `plugin-data-changed { id, window }`, `threads-changed { space }`. The UI updates live when enrichment finishes.
 
 ## 9. Project Structure
 

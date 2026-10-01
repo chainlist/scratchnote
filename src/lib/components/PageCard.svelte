@@ -2,6 +2,7 @@
 	import { fade } from 'svelte/transition';
 	import type { Note } from '$lib/api';
 	import Markdown from '$lib/components/Markdown.svelte';
+	import ThreadLine from '$lib/components/ThreadLine.svelte';
 	import TimelineItem from '$lib/components/TimelineItem.svelte';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
@@ -18,6 +19,7 @@
 		ondelete,
 		oncategory,
 		showDate = false,
+		threadLine = true,
 		blink = false
 	}: {
 		/** A page: its subject is its title (SPEC 3.5). */
@@ -29,6 +31,8 @@
 		ondelete: (page: Note) => void;
 		oncategory: (category: string) => void;
 		showDate?: boolean;
+		/** Name the thread the page is in, as everywhere but in that thread. */
+		threadLine?: boolean;
 		blink?: boolean;
 	} = $props();
 
@@ -144,6 +148,7 @@
 						>
 					{/if}
 				</div>
+				{#if threadLine}<ThreadLine id={note.id} class="mt-1.5" />{/if}
 			</div>
 		{/if}
 	</div>

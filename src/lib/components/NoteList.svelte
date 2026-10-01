@@ -23,6 +23,7 @@
 		empty,
 		showDate = false,
 		blinking = null,
+		threadLine = true,
 		...actions
 	}: Actions & {
 		notes: Note[];
@@ -32,6 +33,8 @@
 		showDate?: boolean;
 		/** The note to blink once, where a chat citation led. */
 		blinking?: string | null;
+		/** Off in a thread's own view, where every card is of the one thread. */
+		threadLine?: boolean;
 	} = $props();
 </script>
 
@@ -49,10 +52,11 @@
 						ondelete={actions.ondelete}
 						oncategory={actions.oncategory}
 						{showDate}
+						{threadLine}
 						blink={note.id === blinking}
 					/>
 				{:else}
-					<NoteCard {note} {...actions} {showDate} blink={note.id === blinking} />
+					<NoteCard {note} {...actions} {showDate} {threadLine} blink={note.id === blinking} />
 				{/if}
 			</li>
 		{/each}

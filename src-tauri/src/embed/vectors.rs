@@ -55,6 +55,32 @@ impl Vectors {
         self.model_id == model_id && self.dims == dims
     }
 
+    pub fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    pub fn dims(&self) -> usize {
+        self.dims
+    }
+
+    pub fn len(&self) -> usize {
+        self.notes.len()
+    }
+
+    /// A note's unit vector and the body hash it was made from.
+    pub fn get(&self, id: &str) -> Option<(&str, &[f32])> {
+        self.notes
+            .get(id)
+            .map(|(hash, vector)| (hash.as_str(), vector.as_slice()))
+    }
+
+    /// Every note's id, body hash and unit vector, in no order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str, &[f32])> {
+        self.notes
+            .iter()
+            .map(|(id, (hash, vector))| (id.as_str(), hash.as_str(), vector.as_slice()))
+    }
+
     /// Temp file, fsync, rename, as the writer does, so a crash mid-save
     /// leaves the previous file whole. Written here rather than through the
     /// writer because the watcher never looks at it and the writer only
@@ -293,8 +319,25 @@ fn ranked(mut scored: Vec<(&String, f32)>, k: usize) -> Vec<(String, f32)> {
         .collect()
 }
 
-fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| x * y).sum()
+/// Summed in eight lanes, which the compiler turns into vector
+/// instructions: one running sum would make each addition wait on the last.
+pub(crate) fn dot(a: &[f32], b: &[f32]) -> f32 {
+    let len = a.len().min(b.len());
+    let (a, b) = (&a[..len], &b[..len]);
+    let mut lanes = [0.0f32; 8];
+    let (a8, b8) = (a.chunks_exact(8), b.chunks_exact(8));
+    let tail: f32 = a8
+        .remainder()
+        .iter()
+        .zip(b8.remainder())
+        .map(|(x, y)| x * y)
+        .sum();
+    for (x, y) in a8.zip(b8) {
+        for i in 0..8 {
+            lanes[i] += x[i] * y[i];
+        }
+    }
+    lanes.iter().sum::<f32>() + tail
 }
 
 fn put_str(out: &mut Vec<u8>, text: &str) {

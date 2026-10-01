@@ -84,6 +84,45 @@ export const similarNotes = (id: string) => invoke<Note[]>('similar_notes', { id
 export const recall = (text: string, exclude?: string, space?: string) =>
 	invoke<Note | null>('recall', { text, exclude, space });
 
+/** The notes about one thing, gathered across days (SPEC 6.4). */
+export interface Thread {
+	/** The id of the note it started with, which it keeps. */
+	id: string;
+	/** The user's, else the subject of its most typical note; null while none has one. */
+	title: string | null;
+	/** The title is the user's. */
+	named: boolean;
+	/** Its notes and pages, oldest first. */
+	notes: string[];
+	/** The day of its first note. */
+	since: string;
+}
+
+export interface ThreadsView {
+	threads: Thread[];
+	/** The notes taken out of threads, which stay out. */
+	alone: string[];
+}
+
+/** Every thread of the open space. Empty without the embedding model. */
+export const listThreads = () => invoke<ThreadsView>('list_threads');
+
+/** A thread with its notes, oldest first, or null once it is gone. */
+export const getThread = (id: string) =>
+	invoke<{ thread: Thread; notes: Note[] } | null>('get_thread', { id });
+
+/** An empty title goes back to the subject of its most typical note. */
+export const renameThread = (id: string, title: string) =>
+	invoke<void>('rename_thread', { id, title });
+
+/** Take a note out of threads, where it stays, or let it back in. */
+export const keepOutOfThreads = (id: string, out: boolean) =>
+	invoke<void>('keep_out_of_threads', { id, out });
+
+/** Fired when the notes were placed in threads anew, or a thread renamed. */
+export const onThreadsChanged = (handler: () => void): Promise<UnlistenFn> =>
+	listen('threads-changed', () => handler());
+
 /**
  * From the capture window: hide it, keeping its draft, and show the note in
  * the main window.

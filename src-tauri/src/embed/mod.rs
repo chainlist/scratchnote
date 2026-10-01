@@ -8,6 +8,7 @@ pub mod llama;
 #[cfg(test)]
 pub mod samples;
 pub mod sync;
+pub mod threads;
 pub mod vectors;
 
 use std::sync::Arc;

@@ -9,8 +9,9 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Mutex, RwLock};
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
+use super::threads::{self, threads_path, Edits, Threads};
 use super::vectors::{vectors_path, Vectors};
 use super::Embedder;
 use crate::enrich::worker::Wake;
@@ -26,34 +27,44 @@ pub fn spawn(app: AppHandle, wake: Wake) {
             // A wake during a pass is kept as a permit, so the notes saved
             // meanwhile get a pass of their own straight after.
             wake.notified().await;
-            let app = app.clone();
+            let passing = app.clone();
             // Loading the model and embedding both block, so they stay off
             // the async runtime.
             let pass = tauri::async_runtime::spawn_blocking(move || {
-                let Some(embedder) = super::embedder(&app) else {
-                    return;
+                let Some(embedder) = super::embedder(&passing) else {
+                    return Vec::new();
                 };
-                let state = app.state::<AppState>();
+                let state = passing.state::<AppState>();
                 // Stamped as the worker stamps a job, so the idle unload
                 // counts embedding as use.
                 state.mark_used();
-                for space in state.all_spaces() {
-                    sync_space(&state, &space, embedder.as_ref());
-                }
+                let threaded: Vec<String> = state
+                    .all_spaces()
+                    .iter()
+                    .filter(|space| sync_space(&state, space, embedder.as_ref()))
+                    .map(|space| space.name.clone())
+                    .collect();
                 state.mark_used();
+                threaded
             });
-            if let Err(e) = pass.await {
-                log::warn!("embedding notes failed: {e}");
+            match pass.await {
+                Ok(threaded) => {
+                    for name in threaded {
+                        let _ = app.emit("threads-changed", serde_json::json!({ "space": name }));
+                    }
+                }
+                Err(e) => log::warn!("embedding notes failed: {e}"),
             }
         }
     });
 }
 
 /// Only the open space is embedded: the vectors serve its chat and similar
-/// notes, and another space catches up when it opens (SPEC 4.6).
-fn sync_space(state: &AppState, space: &Space, embedder: &dyn Embedder) {
+/// notes, and another space catches up when it opens (SPEC 4.6). Its notes
+/// are then placed in threads. True when its threads changed.
+fn sync_space(state: &AppState, space: &Space, embedder: &dyn Embedder) -> bool {
     if space.is_retired() || !space.is_open() {
-        return;
+        return false;
     }
     let path = vectors_path(&space.root);
     let keep_going = || !space.is_retired() && space.is_open() && state.model_enabled();
@@ -69,19 +80,50 @@ fn sync_space(state: &AppState, space: &Space, embedder: &dyn Embedder) {
     ) {
         // A space renamed or deleted meanwhile: its folder is gone from here.
         Ok(true) if !space.is_retired() => {
-            let Ok(vectors) = space.vectors.lock() else {
-                return;
-            };
-            if let Some(vectors) = vectors.as_ref() {
-                match vectors.save(&path) {
-                    Ok(()) => log::info!("updated the vectors of {}", space.name),
-                    Err(e) => log::warn!("could not save the vectors of {}: {e}", space.name),
+            if let Ok(vectors) = space.vectors.lock() {
+                if let Some(vectors) = vectors.as_ref() {
+                    match vectors.save(&path) {
+                        Ok(()) => log::info!("updated the vectors of {}", space.name),
+                        Err(e) => log::warn!("could not save the vectors of {}: {e}", space.name),
+                    }
                 }
             }
         }
         Ok(_) => {}
         Err(e) => log::warn!("could not embed the notes of {}: {e}", space.name),
     }
+    sync_threads(space)
+}
+
+/// Place the open space's notes in threads from its vectors as they are
+/// (SPEC 6.4), and save where they went. True when the threads changed, or
+/// were read from disk, which the views have not seen either. Without
+/// vectors in memory, nothing is placed.
+pub(crate) fn sync_threads(space: &Space) -> bool {
+    let when = match space.index.read() {
+        Ok(index) if !index.is_closed() => threads::when_written(&index),
+        _ => return false,
+    };
+    let alone: HashSet<String> = Edits::load(&space.root).alone.into_iter().collect();
+    let path = threads_path(&space.root);
+    let Ok(vectors) = space.vectors.lock() else {
+        return false;
+    };
+    let Some(vectors) = vectors.as_ref() else {
+        return false;
+    };
+    let Ok(mut slot) = space.threads.lock() else {
+        return false;
+    };
+    let read = slot.is_none();
+    let threads = slot.get_or_insert_with(|| Threads::load(&path));
+    let changed = threads.reconcile(vectors, &when, &alone);
+    if changed && !space.is_retired() {
+        if let Err(e) = threads.save(&path) {
+            log::warn!("could not save the threads of {}: {e}", space.name);
+        }
+    }
+    read || changed
 }
 
 /// A first pass over thousands of notes takes minutes, so it saves as it
@@ -439,6 +481,59 @@ mod tests {
         reconcile(&index.0, &index.1, &reloaded, &path, &next, &HashSet::new(), || true).unwrap();
         assert_eq!(next.calls(), 100);
 
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// From a space's index and vectors to `threads.json` and back: what
+    /// the embed task does after each pass.
+    #[test]
+    fn a_pass_places_the_open_space_in_threads_and_saves_them() {
+        use crate::spaces::Space;
+        use crate::storage::daily_file::append_note;
+
+        let root = scratch_root("threads");
+        let bodies = [
+            ("01A", "2026-09-10", "kitchen renovation tiles plumber quote"),
+            ("01B", "2026-09-12", "kitchen renovation plumber tiles started"),
+            ("01C", "2026-09-14", "kitchen renovation tiles plumber done"),
+            ("01D", "2026-09-11", "coffee beans market"),
+            ("01E", "2026-09-13", "dentist appointment moved"),
+            ("01F", "2026-09-15", "rust borrow checker lifetimes"),
+            ("01G", "2026-09-16", "marathon long run shin"),
+            ("01H", "2026-09-17", "electricity bill went up"),
+            ("01I", "2026-09-18", "severance season finale goats"),
+            ("01J", "2026-09-19", "lisbon flights booked october"),
+            ("01K", "2026-09-20", "garage brake pads discs"),
+            ("01L", "2026-09-21", "postgres connection pool exhausted"),
+            ("01M", "2026-09-22", "mom birthday dinner italian"),
+            ("01N", "2026-09-23", "usb hub homelab ethernet"),
+        ];
+        for (id, date, body) in bodies {
+            let mut written = note(id, body);
+            written.date = date.to_string();
+            written.file = crate::storage::relative_day_path(date);
+            let path = crate::storage::day_path(&root, date);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, append_note("", &written, date)).unwrap();
+        }
+        let (space, _) = Space::open("Test", root.clone(), std::sync::Arc::new(tokio::sync::Notify::new()));
+        reconcile(&space.index, &space.search, &space.vectors, &vectors_path(&root), &StubEmbedder, &HashSet::new(), || true).unwrap();
+
+        assert!(sync_threads(&space), "read for the first time and placed");
+        assert!(threads_path(&root).exists());
+        assert!(!sync_threads(&space), "nothing new");
+        let placed = Threads::load(&threads_path(&root));
+        assert_eq!(*space.threads.lock().unwrap(), Some(placed));
+        {
+            let threads = space.threads.lock().unwrap();
+            let threads = threads.as_ref().unwrap();
+            assert!(["01A", "01B", "01C"].iter().all(|id| threads.of(id) == Some("01A")));
+            let others = ["01D", "01E", "01F", "01G", "01H", "01I", "01J", "01K", "01L", "01M", "01N"];
+            // The stub's buckets may pair two of these by chance, but none
+            // shares the kitchen's words.
+            assert!(others.iter().all(|id| threads.of(id) != Some("01A")));
+        }
+        drop(space);
         let _ = std::fs::remove_dir_all(&root);
     }
 

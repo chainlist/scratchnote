@@ -5,18 +5,17 @@
 //! relative link, `../../attachments/...`, reaches the file from either, in
 //! the app and in any other markdown editor. Nothing indexes attachments:
 //! the links in the notes are all there is, and a file stays when its note
-//! goes.
+//! goes. The commands that add and open them are in
+//! `commands::attachments`.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 
-use chrono::Local;
 use percent_encoding::percent_decode_str;
 use serde::Serialize;
 use tauri::http::{header, Request, Response, StatusCode};
-use tauri::ipc::InvokeBody;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
 
@@ -110,7 +109,7 @@ fn create(dir: &Path, date: &str, original: &str) -> io::Result<(File, String)> 
 
 /// Write `original` into the space at `root`, its contents from `write`,
 /// and say where it went. A write that fails leaves no file behind.
-fn store(
+pub fn store(
     root: &Path,
     date: &str,
     original: &str,
@@ -130,82 +129,10 @@ fn store(
     })
 }
 
-fn today() -> String {
-    Local::now().format("%Y-%m-%d").to_string()
-}
-
-/// Copy files from disk into the open space: dropped on an editor, or picked
-/// with its attach button. Every path is checked before anything is copied,
-/// so a folder among them copies nothing.
-#[tauri::command]
-pub async fn add_attachments(
-    state: State<'_, AppState>,
-    paths: Vec<String>,
-) -> Result<Vec<Attachment>, String> {
-    let root = state.space()?.root.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        for path in &paths {
-            match fs::metadata(path) {
-                Ok(meta) if meta.is_file() => {}
-                Ok(_) => return Err(format!("{path} is not a file")),
-                Err(e) => return Err(format!("could not attach {path}: {e}")),
-            }
-        }
-        let date = today();
-        paths
-            .iter()
-            .map(|path| {
-                let source = Path::new(path);
-                let name = source
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                File::open(source)
-                    .and_then(|mut from| {
-                        store(&root, &date, &name, |to| {
-                            io::copy(&mut from, to).map(|_| ())
-                        })
-                    })
-                    .map_err(|e| format!("could not attach {path}: {e}"))
-            })
-            .collect()
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-/// Save a file pasted into an editor, a screenshot say, into the open space.
-/// The request's body is the file; its `x-name` header, URI-encoded, is the
-/// name it came with.
-#[tauri::command]
-pub async fn save_attachment(
-    state: State<'_, AppState>,
-    request: tauri::ipc::Request<'_>,
-) -> Result<Attachment, String> {
-    let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("expected the file's bytes".to_string());
-    };
-    let name = request
-        .headers()
-        .get("x-name")
-        .and_then(|value| value.to_str().ok())
-        .map(|value| percent_decode_str(value).decode_utf8_lossy().into_owned())
-        .unwrap_or_default();
-    let root = state.space()?.root.clone();
-    let bytes = bytes.clone();
-    let original = name.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        store(&root, &today(), &original, |to| to.write_all(&bytes))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| format!("could not attach {name}: {e}"))
-}
-
 /// The file a space-relative `path` names, when it is inside the space's
 /// attachments folder: `attachments/2026/x.png`. Anything that could climb
 /// out of it is refused.
-fn resolve(root: &Path, path: &str) -> Option<PathBuf> {
+pub fn resolve(root: &Path, path: &str) -> Option<PathBuf> {
     let mut parts = path.split('/');
     if parts.next() != Some(DIR) {
         return None;
@@ -225,25 +152,6 @@ fn resolve(root: &Path, path: &str) -> Option<PathBuf> {
         named = true;
     }
     named.then_some(file)
-}
-
-/// Open an attachment of the open space in its own app, as a double click
-/// in the file manager would.
-#[tauri::command]
-pub fn open_attachment(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    let file =
-        resolve(&state.space()?.root, &path).ok_or_else(|| format!("not an attachment: {path}"))?;
-    if !file.is_file() {
-        return Err(format!("{path} is not there"));
-    }
-    app.opener()
-        .open_path(file.to_string_lossy(), None::<&str>)
-        .map_err(|e| format!("could not open {path}: {e}"))
 }
 
 /// What the webview is told an attached file is, so it draws the images.
@@ -304,6 +212,7 @@ pub async fn serve(app: AppHandle, request: Request<Vec<u8>>) -> Response<Vec<u8
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     fn scratch(name: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!("scratchnote-attachments-{name}"));

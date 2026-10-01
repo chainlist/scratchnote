@@ -7,29 +7,25 @@
 //!
 //! A page open in the editor is held: the page view saves it every pause in
 //! typing, and neither model runs on it until `finish_page` says the view
-//! closed (SPEC 3.5).
+//! closed (SPEC 3.5). The page view's commands are in `commands::pages`.
 
-use chrono::Local;
 use tauri::{AppHandle, Emitter, State};
-use ulid::Ulid;
 
-use crate::commands::notes::{enqueue, persist_queue, read_note};
+use crate::commands::notes::enqueue;
 use crate::spaces::Space;
 use crate::state::AppState;
-use crate::storage::daily_file::{self, body_hash, Kind, Note, Status, Stub};
+use crate::storage::daily_file::{self, Note, Status, Stub};
+use crate::storage::day_path;
 use crate::storage::index::{Index, IndexEntry};
 use crate::storage::page_file;
 use crate::storage::writer::Writer;
-use crate::storage::{check_date, day_path};
-
-const NO_TITLE: &str = "a page needs a title";
 
 fn lock_poisoned<T>(_: T) -> String {
     "index lock poisoned".to_string()
 }
 
 /// The page's entry in the index, or why there is none.
-fn entry(space: &Space, id: &str) -> Result<IndexEntry, String> {
+pub fn entry(space: &Space, id: &str) -> Result<IndexEntry, String> {
     space
         .index
         .read()
@@ -52,7 +48,7 @@ pub async fn read_page(space: &Space, id: &str) -> Result<Note, String> {
 
 /// Reparse a page's file into the index. `None` when it is gone or no
 /// longer a page, which leaves the index as it was.
-fn reindex(space: &Space, file: &str) -> Result<Option<Note>, String> {
+pub fn reindex(space: &Space, file: &str) -> Result<Option<Note>, String> {
     let page = std::fs::read_to_string(space.root.join(file))
         .ok()
         .and_then(|contents| page_file::parse_page(&contents, file));
@@ -64,7 +60,7 @@ fn reindex(space: &Space, file: &str) -> Result<Option<Note>, String> {
 
 /// A path for a page of `date` called `title` that no other file has taken.
 /// `current` is the page's own file, which it may keep, in any case.
-fn free_path(space: &Space, date: &str, title: &str, current: Option<&str>) -> String {
+pub fn free_path(space: &Space, date: &str, title: &str, current: Option<&str>) -> String {
     let current = current.map(str::to_lowercase);
     (1..)
         .map(|n| page_file::relative_path(date, &page_file::file_name(date, title, n)))
@@ -118,7 +114,7 @@ pub async fn drop_stub(
 }
 
 /// Write a new page's file, refusing to replace one that appeared meanwhile.
-async fn write_new(writer: &Writer, space: &Space, page: &Note) -> Result<(), String> {
+pub async fn write_new(writer: &Writer, space: &Space, page: &Note) -> Result<(), String> {
     let rendered = page_file::render_page(page);
     let written = writer
         .rewrite(space.root.join(&page.file), move |existing| {
@@ -131,275 +127,15 @@ async fn write_new(writer: &Writer, space: &Space, page: &Note) -> Result<(), St
     Ok(())
 }
 
-fn emit_updated(app: &AppHandle, id: &str) {
+pub fn emit_updated(app: &AppHandle, id: &str) {
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
 }
 
-/// Start a page on a day, today's unless another is given, at the current
-/// time. The file is written first, then the stub (SPEC 4.7). It is made in
-/// the page view, so it is held until `finish_page`.
-#[tauri::command]
-pub async fn create_page(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    title: String,
-    body: String,
-    date: Option<String>,
-) -> Result<Note, String> {
-    let title = page_file::clean_title(&title).ok_or(NO_TITLE)?;
-    if let Some(date) = &date {
-        check_date(date)?;
-    }
-    let space = state.space()?;
-    let now = Local::now();
-    let date = date.unwrap_or_else(|| now.format("%Y-%m-%d").to_string());
-    let body = body.trim().to_string();
-    let page = Note {
-        id: Ulid::generate().to_string(),
-        file: free_path(&space, &date, &title, None),
-        date,
-        time: now.format("%H:%M").to_string(),
-        subject: Some(title),
-        category: None,
-        status: Status::Pending,
-        hash: body_hash(&body),
-        lang: None,
-        body,
-        kind: Kind::Page,
-        missing: false,
-    };
-
-    space.hold(&page.id);
-    write_new(&state.writer, &space, &page).await?;
-    space.page_changed(&page)?;
-    space.persist_index(&state.writer).await?;
-    sync_stub(&state.writer, &space, &page).await?;
-
-    emit_updated(&app, &page.id);
-    Ok(page)
-}
-
 /// Every page in the index, newest first: by date, then by time within the day.
-fn newest_first(index: &Index) -> Vec<Note> {
+pub fn newest_first(index: &Index) -> Vec<Note> {
     let mut pages: Vec<Note> = index.pages().map(IndexEntry::to_note).collect();
     pages.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
     pages
-}
-
-/// Every page of the open space, for the list of pages (SPEC 3.5).
-#[tauri::command]
-pub fn list_pages(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
-    let space = state.space()?;
-    let mut pages = {
-        let index = space.index.read().map_err(lock_poisoned)?;
-        newest_first(&index)
-    };
-    space.fill_bodies(&mut pages);
-    Ok(pages)
-}
-
-#[tauri::command]
-pub async fn get_page(state: State<'_, AppState>, id: String) -> Result<Note, String> {
-    let space = state.space()?;
-    read_page(&space, &id).await
-}
-
-/// Replace a page's text, as the page view autosaves it. A changed text
-/// marks the page pending, unless the user set the category by hand or only
-/// ticked task boxes, but it only goes to the model once the view closes
-/// (`finish_page`). Pending in the file, it is queued at the next launch
-/// should the app quit first. An empty text is allowed: the title is still
-/// there.
-#[tauri::command]
-pub async fn update_page(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-    body: String,
-) -> Result<Note, String> {
-    let space = state.space()?;
-    space.hold(&id);
-    let body = body.trim().to_string();
-    let current = read_page(&space, &id).await?;
-    if current.body == body {
-        return Ok(current);
-    }
-
-    let relabel =
-        current.status != Status::Manual && !daily_file::only_ticks_changed(&current.body, &body);
-    let file = current.file.clone();
-    let written = {
-        let file = file.clone();
-        state
-            .writer
-            .rewrite(space.root.join(&file), move |existing| {
-                page_file::replace_body(existing?, &file, &body, relabel.then_some(Status::Pending))
-            })
-            .await?
-    };
-    if !written {
-        return Err(format!("{file} no longer holds page {id}"));
-    }
-    let page = reindex(&space, &file)?.ok_or_else(|| format!("{file} is gone"))?;
-    space.persist_index(&state.writer).await?;
-
-    emit_updated(&app, &id);
-    Ok(page)
-}
-
-/// The page view closed: the page is released, and goes to the model when
-/// its text changed while it was open. The embed task is woken for it too.
-/// A page only read, or re-run by hand since its last change, was not held
-/// and needs nothing. A page deleted meanwhile is only released.
-#[tauri::command]
-pub async fn finish_page(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let space = state.space()?;
-    if !space.release(&id) {
-        return Ok(());
-    }
-    let pending = entry(&space, &id)
-        .ok()
-        .filter(|page| page.status == Status::Pending);
-    if let Some(page) = pending {
-        enqueue(&state, &space, id, page.date).await;
-    }
-    space.index_changed();
-    Ok(())
-}
-
-/// Retitle a page, which renames its file and rewrites its stub. It happens
-/// in the page view, so the page is held.
-#[tauri::command]
-pub async fn rename_page(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-    title: String,
-) -> Result<Note, String> {
-    let title = page_file::clean_title(&title).ok_or(NO_TITLE)?;
-    let space = state.space()?;
-    space.hold(&id);
-    let current = read_page(&space, &id).await?;
-    if current.subject.as_deref() == Some(title.as_str()) {
-        return Ok(current);
-    }
-
-    let file = free_path(&space, &current.date, &title, Some(&current.file));
-    if file != current.file {
-        state
-            .writer
-            .rename(space.root.join(&current.file), space.root.join(&file))
-            .await?;
-    }
-    {
-        let (file, title) = (file.clone(), title.clone());
-        state
-            .writer
-            .rewrite(space.root.join(&file), move |existing| {
-                page_file::set_title(existing?, &file, &title)
-            })
-            .await?;
-    }
-    let page = reindex(&space, &file)?.ok_or_else(|| format!("{file} is gone"))?;
-    space.persist_index(&state.writer).await?;
-    sync_stub(&state.writer, &space, &page).await?;
-
-    emit_updated(&app, &id);
-    Ok(page)
-}
-
-/// Delete a page: its stub first, then its file, so a crash between the two
-/// leaves a page the next launch gives a stub again rather than a stub whose
-/// text is gone. `date` is the day showing it, which is how a stub whose
-/// page is missing is removed too.
-#[tauri::command]
-pub async fn delete_page(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    date: String,
-    id: String,
-) -> Result<(), String> {
-    check_date(&date)?;
-    let space = state.space()?;
-    space.release(&id);
-    let page = entry(&space, &id).ok();
-
-    drop_stub(&state.writer, &space, &date, &id).await?;
-    if let Some(page) = page {
-        if page.date != date {
-            drop_stub(&state.writer, &space, &page.date, &id).await?;
-        }
-        state.writer.remove(space.root.join(&page.file)).await?;
-        space.page_removed(&id)?;
-        space.persist_index(&state.writer).await?;
-        if let Ok(mut queue) = space.queue.lock() {
-            queue.remove(&id);
-        }
-        persist_queue(&state, &space).await;
-    }
-
-    emit_updated(&app, &id);
-    Ok(())
-}
-
-/// Turn a note into a page with the same day, time, text and labels. The
-/// page gets a new id and is written first; then the note's block becomes
-/// its stub, so a crash between the two leaves the text twice rather than
-/// nowhere. The page view opens on it next, so it is held, and a note still
-/// waiting on the model goes to it when the view closes.
-#[tauri::command]
-pub async fn note_to_page(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    date: String,
-    id: String,
-    title: String,
-) -> Result<Note, String> {
-    let title = page_file::clean_title(&title).ok_or(NO_TITLE)?;
-    check_date(&date)?;
-    let space = state.space()?;
-    let note = read_note(&space, &date, &id).await?;
-
-    let page = Note {
-        id: Ulid::generate().to_string(),
-        file: free_path(&space, &note.date, &title, None),
-        subject: Some(title),
-        // A failed note gets another go as a page.
-        status: match note.status {
-            Status::Done => Status::Done,
-            Status::Manual => Status::Manual,
-            Status::Pending | Status::Failed => Status::Pending,
-        },
-        kind: Kind::Page,
-        missing: false,
-        ..note
-    };
-    space.hold(&page.id);
-    write_new(&state.writer, &space, &page).await?;
-
-    let stub = Stub::for_page(&page);
-    let note_id = id.clone();
-    let replaced = state
-        .writer
-        .rewrite(day_path(&space.root, &date), move |existing| {
-            daily_file::note_to_stub(existing?, &note_id, &stub)
-        })
-        .await?;
-    if !replaced {
-        // The note went meanwhile. The page stays, with a stub of its own.
-        sync_stub(&state.writer, &space, &page).await?;
-    }
-    space.day_changed(&date)?;
-    space.page_changed(&page)?;
-    space.persist_index(&state.writer).await?;
-    if let Ok(mut queue) = space.queue.lock() {
-        queue.remove(&id);
-    }
-    persist_queue(&state, &space).await;
-
-    emit_updated(&app, &id);
-    emit_updated(&app, &page.id);
-    Ok(page)
 }
 
 /// Put a page back in the queue by hand (SPEC 5.6). One whose category the
@@ -436,6 +172,7 @@ pub async fn retry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::daily_file::{body_hash, Kind};
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
 

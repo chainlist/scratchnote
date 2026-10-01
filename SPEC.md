@@ -787,15 +787,18 @@ Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `
 ```
 src-tauri/src/
   main.rs
-  commands/ (notes.rs, search.rs, chat.rs, settings.rs, models.rs, spaces.rs)
+  lib.rs             # setup, windows, tray; their three commands (hide_capture, capture_to_page, set_tray_labels)
+  commands/ (notes.rs, pages.rs, search.rs, chat.rs, settings.rs, models.rs, spaces.rs,
+             attachments.rs, plugins.rs)   # every other Tauri command
   storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, categories.rs, writer.rs)
   enrich/  (model.rs, prompt.rs, grammar.rs, normalize.rs, queue.rs)
   watcher.rs
   spaces.rs
   search.rs
   settings.rs
-  attachments.rs     # copying files in, the `attachment` protocol, opening them
-  plugins/ (mod.rs state, code, data, install; registry.rs GitHub or a folder)
+  pages.rs           # a page's file and its stub
+  attachments.rs     # naming and storing files, the `attachment` protocol
+  plugins/ (mod.rs state, data, install; registry.rs GitHub or a folder)
 src/
   routes/
     +layout.ts        # ssr = false, prerender = true

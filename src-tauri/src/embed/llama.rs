@@ -1,5 +1,5 @@
-//! EmbeddingGemma-300M through llama.cpp, in the same process and on the
-//! same backend as the chat model.
+//! EmbeddingGemma-300M through llama.cpp, in the same process as the chat
+//! model but always on the CPU.
 //!
 //! The model averages over every token and is trained on inputs that start
 //! and end with its special tokens, so a cut text keeps its end-of-text token.
@@ -34,7 +34,6 @@ pub struct LlamaEmbedder {
     context: Mutex<Option<Context>>,
     /// Boxed so the context's reference to it survives `Self` moving.
     model: Box<LlamaModel>,
-    use_gpu: bool,
     id: String,
     dims: usize,
 }
@@ -46,16 +45,21 @@ struct Context(LlamaContext<'static>);
 unsafe impl Send for Context {}
 
 impl LlamaEmbedder {
-    /// `use_gpu` as for the chat model: false keeps everything on the CPU.
-    pub fn load_with(path: &Path, use_gpu: bool) -> Result<Self, String> {
-        let model = load_model(path, use_gpu)?;
+    /// On the CPU whatever the GPU setting, which is the chat model's. The
+    /// model stays loaded, and on an integrated GPU, whose memory is the
+    /// system's, llama.cpp holds a copy of the weights there and a second
+    /// copy of the vocabulary on the host, none of it backed by the file:
+    /// about 900 MB against 260 MB on the CPU, where the file is mapped and
+    /// only the pages read count. A note takes 31 ms there against 13 ms on
+    /// the GPU, quick enough for a search or a draft.
+    pub fn load(path: &Path) -> Result<Self, String> {
+        let model = load_model(path, false)?;
         // The width llama.cpp reads pooled vectors out at.
         let dims = model.n_embd_out() as usize;
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         Ok(Self {
             context: Mutex::new(None),
             model: Box::new(model),
-            use_gpu,
             id: model_id(&stem, dims),
             dims,
         })
@@ -68,7 +72,7 @@ impl LlamaEmbedder {
             .with_n_ctx(NonZeroU32::new(MAX_TOKENS))
             .with_n_batch(MAX_TOKENS)
             .with_n_ubatch(MAX_TOKENS)
-            .with_op_offload(self.use_gpu);
+            .with_op_offload(false);
         // SAFETY: the model is boxed and never replaced, so the reference
         // stays valid however `self` moves, and `context` is dropped before
         // `model`, so no context outlives it.
@@ -282,7 +286,7 @@ mod tests {
             eprintln!("no embedding model at {}, skipping", path.display());
             return;
         }
-        let embedder = LlamaEmbedder::load_with(&path, true).expect("the model should load");
+        let embedder = LlamaEmbedder::load(&path).expect("the model should load");
         assert_eq!(
             embedder.model_id(),
             "embeddinggemma-300M-Q8_0/768/Mean/title: none | text:/To do:|Done:"

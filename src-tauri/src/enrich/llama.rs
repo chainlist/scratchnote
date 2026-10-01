@@ -37,7 +37,7 @@ pub(crate) fn llama_backend() -> Result<&'static LlamaBackend, String> {
 }
 
 /// Loads a GGUF, all on the GPU or all on the CPU. Shared with the embedding
-/// model, which wants the same placement as the chat model.
+/// model, which always asks for the CPU.
 pub(crate) fn load_model(path: &std::path::Path, use_gpu: bool) -> Result<LlamaModel, String> {
     let backend = llama_backend()?;
 

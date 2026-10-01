@@ -315,15 +315,9 @@ pub fn replace_legacy_embedding_model(app: &AppHandle) {
     });
 }
 
-/// Drop the loaded model, and the embedding model with it. The next job
-/// loads whatever the settings now point at.
-pub(super) fn unload_model(app: &AppHandle, state: &State<'_, AppState>) {
-    let status = state.unload_model();
-    let _ = app.emit("model-status", &status);
-}
-
-/// `unload_model` for the chat model alone, which is how a model switch
-/// takes effect. The embedding model stays loaded.
+/// Drop the chat model, which is how a model switch or a GPU change takes
+/// effect: the next job loads whatever the settings now point at. The
+/// embedding model stays loaded.
 pub(super) fn unload_chat_model(app: &AppHandle, state: &State<'_, AppState>) {
     let status = state.unload_chat_model();
     let _ = app.emit("model-status", &status);

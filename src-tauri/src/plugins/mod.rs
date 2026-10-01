@@ -11,13 +11,16 @@
 //!   `main.js`, `styles.css` if it has one, and its `data.json`.
 //! - `core-plugins/<id>.json`: a core plugin's data. Core plugins are built
 //!   into the app, so there is no code to keep.
+//!
+//! The commands the settings and the webview call are in
+//! `commands::plugins`.
 
 pub mod registry;
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State, Window};
+use tauri::{AppHandle, Emitter};
 
 use crate::state::AppState;
 
@@ -83,7 +86,7 @@ pub fn valid_id(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-fn check_id(id: &str) -> Result<(), String> {
+pub fn check_id(id: &str) -> Result<(), String> {
     if valid_id(id) {
         Ok(())
     } else {
@@ -95,11 +98,11 @@ fn meta_dir(root: &Path) -> PathBuf {
     root.join(".scratchnote")
 }
 
-fn plugins_dir(root: &Path) -> PathBuf {
+pub fn plugins_dir(root: &Path) -> PathBuf {
     meta_dir(root).join(PLUGINS_DIR)
 }
 
-fn data_path(root: &Path, id: &str, core: bool) -> PathBuf {
+pub fn data_path(root: &Path, id: &str, core: bool) -> PathBuf {
     if core {
         meta_dir(root)
             .join(CORE_DATA_DIR)
@@ -140,7 +143,7 @@ pub fn installed(root: &Path) -> Vec<Manifest> {
     found
 }
 
-fn view(root: &Path) -> PluginsView {
+pub fn view(root: &Path) -> PluginsView {
     PluginsView {
         state: load_state(root),
         installed: installed(root),
@@ -148,7 +151,7 @@ fn view(root: &Path) -> PluginsView {
 }
 
 /// Ids made valid and unique, in the order given.
-fn clean_ids(ids: Vec<String>) -> Result<Vec<String>, String> {
+pub fn clean_ids(ids: Vec<String>) -> Result<Vec<String>, String> {
     let mut seen = Vec::new();
     for id in ids {
         check_id(&id)?;
@@ -159,7 +162,7 @@ fn clean_ids(ids: Vec<String>) -> Result<Vec<String>, String> {
     Ok(seen)
 }
 
-async fn save_state(
+pub async fn save_state(
     app: &AppHandle,
     state: &AppState,
     plugins: PluginState,
@@ -174,7 +177,7 @@ async fn save_state(
 
 /// Tells every window what is installed and on now, so each loads and
 /// unloads plugins to match.
-fn changed(app: &AppHandle, root: &Path) -> PluginsView {
+pub fn changed(app: &AppHandle, root: &Path) -> PluginsView {
     let view = view(root);
     let _ = app.emit("plugins-changed", &view);
     view
@@ -204,159 +207,10 @@ pub fn older(a: &str, b: &str) -> bool {
     false
 }
 
-#[tauri::command]
-pub fn plugins_view(state: State<'_, AppState>) -> PluginsView {
-    view(&state.root)
-}
-
-/// Save which plugins are on. Every window hears of it and follows.
-#[tauri::command]
-pub async fn set_plugins(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    plugins: PluginState,
-) -> Result<PluginsView, String> {
-    let plugins = PluginState {
-        community: plugins.community,
-        enabled: clean_ids(plugins.enabled)?,
-        core_disabled: clean_ids(plugins.core_disabled)?,
-        core_enabled: clean_ids(plugins.core_enabled)?,
-    };
-    save_state(&app, &state, plugins).await
-}
-
-/// An enabled community plugin's code. Nothing is handed out while
-/// community plugins are off, whatever the webview asks.
-#[tauri::command]
-pub fn plugin_code(state: State<'_, AppState>, id: String) -> Result<PluginCode, String> {
-    check_id(&id)?;
-    let plugins = load_state(&state.root);
-    if !plugins.community || !plugins.enabled.contains(&id) {
-        return Err(format!("{id} is not switched on"));
-    }
-    let dir = plugins_dir(&state.root).join(&id);
-    let main = std::fs::read_to_string(dir.join("main.js"))
-        .map_err(|e| format!("could not read the code of {id}: {e}"))?;
-    let styles = std::fs::read_to_string(dir.join("styles.css")).ok();
-    Ok(PluginCode { main, styles })
-}
-
-/// What a plugin saved, or null before it ever did.
-#[tauri::command]
-pub fn plugin_data(
-    state: State<'_, AppState>,
-    id: String,
-    core: bool,
-) -> Result<Option<serde_json::Value>, String> {
-    check_id(&id)?;
-    match std::fs::read_to_string(data_path(&state.root, &id, core)) {
-        Ok(raw) => serde_json::from_str(&raw)
-            .map(Some)
-            .map_err(|e| format!("the data of {id} is not readable: {e}")),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-/// Save a plugin's data. The other windows hear of it, so their copy of the
-/// plugin can read it again.
-#[tauri::command]
-pub async fn save_plugin_data(
-    app: AppHandle,
-    window: Window,
-    state: State<'_, AppState>,
-    id: String,
-    core: bool,
-    data: serde_json::Value,
-) -> Result<(), String> {
-    check_id(&id)?;
-    if !core && !plugins_dir(&state.root).join(&id).is_dir() {
-        return Err(format!("{id} is not installed"));
-    }
-    let json = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
-    state
-        .writer
-        .write_index(data_path(&state.root, &id, core), json)
-        .await?;
-    let _ = app.emit(
-        "plugin-data-changed",
-        serde_json::json!({ "id": id, "window": window.label() }),
-    );
-    Ok(())
-}
-
-fn check_community(state: &AppState) -> Result<(), String> {
-    if load_state(&state.root).community {
-        Ok(())
-    } else {
-        Err("community plugins are turned off".to_string())
-    }
-}
-
-/// Every plugin the registry lists.
-#[tauri::command]
-pub async fn browse_plugins(state: State<'_, AppState>) -> Result<Vec<registry::Entry>, String> {
-    check_community(&state)?;
-    registry::Source::current()?.list().await
-}
-
-/// A plugin's latest manifest and its README.
-#[tauri::command]
-pub async fn plugin_details(
-    state: State<'_, AppState>,
-    repo: String,
-) -> Result<registry::Details, String> {
-    check_community(&state)?;
-    registry::Source::current()?.details(&repo).await
-}
-
-/// Download the latest release of the plugin `id` from `repo` and install
-/// it, over an older one if there is one. Its data is kept. Enabling it is
-/// left to the user.
-#[tauri::command]
-pub async fn install_plugin(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    repo: String,
-    id: String,
-) -> Result<PluginsView, String> {
-    check_id(&id)?;
-    check_community(&state)?;
-    let source = registry::Source::current()?;
-    let latest = source.latest(&repo).await?;
-    if latest.id != id {
-        return Err(format!("{repo} holds the plugin {}, not {id}", latest.id));
-    }
-    let app_version = app.package_info().version.to_string();
-    if let Some(needed) = &latest.min_app_version {
-        if older(&app_version, needed) {
-            return Err(format!(
-                "{} needs Scratchnote {needed} or newer",
-                latest.name
-            ));
-        }
-    }
-    let release = source.release(&repo, &latest.version).await?;
-    let manifest: Manifest = serde_json::from_slice(&release.manifest)
-        .map_err(|e| format!("the released manifest is not readable: {e}"))?;
-    if manifest.id != id || manifest.version != latest.version {
-        return Err(format!(
-            "release {} of {repo} does not match its manifest",
-            latest.version
-        ));
-    }
-    let root = state.root.clone();
-    tauri::async_runtime::spawn_blocking(move || put_in_place(&plugins_dir(&root), &id, &release))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| format!("could not install the plugin: {e}"))?;
-    Ok(changed(&app, &state.root))
-}
-
 /// Writes the release into a folder of its own, then swaps it in for the
 /// installed one, so a plugin is never half written. The old one's
 /// `data.json` comes along.
-fn put_in_place(dir: &Path, id: &str, release: &registry::Release) -> std::io::Result<()> {
+pub fn put_in_place(dir: &Path, id: &str, release: &registry::Release) -> std::io::Result<()> {
     let target = dir.join(id);
     let staging = dir.join(format!(".{id}.new"));
     let old = dir.join(format!(".{id}.old"));
@@ -383,23 +237,6 @@ fn put_in_place(dir: &Path, id: &str, release: &registry::Release) -> std::io::R
         std::fs::remove_dir_all(&old)?;
     }
     Ok(())
-}
-
-/// Remove a community plugin, its data with it, and switch it off.
-#[tauri::command]
-pub async fn uninstall_plugin(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<PluginsView, String> {
-    check_id(&id)?;
-    let dir = plugins_dir(&state.root).join(&id);
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir).map_err(|e| format!("could not remove {id}: {e}"))?;
-    }
-    let mut plugins = load_state(&state.root);
-    plugins.enabled.retain(|enabled| *enabled != id);
-    save_state(&app, &state, plugins).await
 }
 
 #[cfg(test)]

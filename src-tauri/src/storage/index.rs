@@ -2,9 +2,9 @@
 //!
 //! Nothing here is authoritative. Every entry can be reproduced by reparsing
 //! the markdown, which is what a rebuild does and what startup does for any
-//! day whose file changed since it was last read. Deleting `.scratchnote/`
-//! costs nothing but the time to reparse. The notes' text is not held here
-//! but in `search.db` (SPEC 6), which follows the same files.
+//! day or page whose file changed since it was last read. Deleting
+//! `.scratchnote/` costs nothing but the time to reparse. The notes' text is
+//! not held here but in `search.db` (SPEC 6), which follows the same files.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -353,22 +353,84 @@ pub fn parse_page(root: &Path, path: &Path) -> Option<Note> {
     page_file::parse_page(&contents, &relative(root, path)?)
 }
 
-/// Every page under the root. A second file with an id already seen, such as
-/// a copy made by hand, is left out.
-fn parse_pages(root: &Path) -> Vec<Note> {
-    let mut seen = HashSet::new();
-    let mut pages = Vec::new();
-    for path in page_files(root) {
-        let Some(page) = parse_page(root, &path) else {
+/// Bring the pages of the index and of `db` in step with the files under
+/// `pages/`. A file is read when `read`, what `db` recorded of the files, has
+/// it at another time or length, or when it is newer than the cache, written
+/// at `cached_at`; any other is not read at all. Returns whether the index
+/// changed.
+fn read_pages(
+    root: &Path,
+    db: &mut SearchDb,
+    index: &mut Index,
+    read: &HashMap<String, Stamp>,
+    cached_at: i64,
+) -> bool {
+    let files: Vec<(String, PathBuf)> = page_files(root)
+        .into_iter()
+        .filter_map(|path| Some((relative(root, &path)?, path)))
+        .collect();
+    let present: HashSet<&str> = files.iter().map(|(file, _)| file.as_str()).collect();
+    let mut changed = false;
+
+    // A page whose file is gone leaves first, so one renamed by hand is
+    // found at its new name rather than taken for a copy of itself.
+    let gone: Vec<String> = index
+        .pages()
+        .filter(|page| !present.contains(page.file.as_str()))
+        .map(|page| page.id.clone())
+        .collect();
+    for id in &gone {
+        index.remove_page(id);
+        changed = true;
+    }
+
+    for (file, path) in &files {
+        // Taken before the file is read, as for a day.
+        let stamp = Stamp::of(path);
+        let newer = stamp.is_some_and(|stamp| stamp.modified > cached_at);
+        let stale_text = stamp.is_none() || read.get(file) != stamp.as_ref();
+        if !newer && !stale_text {
             continue;
+        }
+        changed |= newer;
+        let page = parse_page(root, path);
+        // The page the file held, if it now holds another or none, goes.
+        let held = index.page_at(file).map(|held| held.id.clone());
+        if let Some(held) = held.filter(|held| page.as_ref().map(|page| &page.id) != Some(held)) {
+            index.remove_page(&held);
+            changed = true;
+        }
+        let written = match page {
+            // A copy made by hand of a page held in another file is left
+            // out, and not recorded as read, so it is taken once that file
+            // goes.
+            Some(page)
+                if index
+                    .page(&page.id)
+                    .is_some_and(|other| other.file != *file) =>
+            {
+                log::warn!("{} repeats page {}; skipping it", path.display(), page.id);
+                db.stamp_page_file(file, None)
+            }
+            Some(page) => {
+                let entry = IndexEntry::from(&page);
+                changed |= !index
+                    .replace_page(entry.clone())
+                    .is_some_and(|before| before.same_meta(&entry));
+                db.replace_page(&page, stamp)
+            }
+            None => db.stamp_page_file(file, stamp),
         };
-        if seen.insert(page.id.clone()) {
-            pages.push(page);
-        } else {
-            log::warn!("{} repeats page {}; skipping it", path.display(), page.id);
+        if let Err(e) = written {
+            log::warn!("could not put {file} in search.db: {e}");
         }
     }
-    pages
+
+    let ids: HashSet<&str> = index.pages().map(|page| page.id.as_str()).collect();
+    if let Err(e) = db.retain_pages(&present, &ids) {
+        log::warn!("could not drop the pages gone from search.db: {e}");
+    }
+    changed
 }
 
 /// The runs of text between spaces that hold a letter or a digit, so a
@@ -396,13 +458,7 @@ pub fn rebuild(root: &Path, db: &mut SearchDb) -> Index {
             }
             index.replace_day(&date, entries(&notes));
         }
-        let pages = parse_pages(root);
-        if let Err(e) = db.replace_pages(&pages) {
-            log::warn!("could not put the pages in search.db: {e}");
-        }
-        for page in &pages {
-            index.replace_page(IndexEntry::from(page));
-        }
+        read_pages(root, db, &mut index, &HashMap::new(), i64::MIN);
     });
     index
 }
@@ -428,6 +484,10 @@ pub fn load(root: &Path, db: &mut SearchDb) -> (Index, bool) {
     let files = daily_files(root);
     let read = db.days().unwrap_or_else(|e| {
         log::warn!("could not read search.db, reading every day again: {e}");
+        HashMap::new()
+    });
+    let pages_read = db.page_files().unwrap_or_else(|e| {
+        log::warn!("could not read search.db, reading every page again: {e}");
         HashMap::new()
     });
     let mut changed = false;
@@ -460,28 +520,11 @@ pub fn load(root: &Path, db: &mut SearchDb) -> (Index, bool) {
             log::warn!("could not drop the days gone from search.db: {e}");
         }
 
-        // Pages are few and each file is read anyway, so what they say
-        // replaces the cache outright: a page renamed by hand keeps its
-        // mtime, which would otherwise leave the cache pointing at its old
-        // name.
-        let pages = parse_pages(root);
-        if let Err(e) = db.replace_pages(&pages) {
-            log::warn!("could not put the pages in search.db: {e}");
-        }
-        let cached = std::mem::take(&mut index.pages);
-        changed |= cached.len() != pages.len()
-            || pages.iter().any(|page| {
-                !cached
-                    .get(&page.id)
-                    .is_some_and(|c| c.same_meta(&IndexEntry::from(page)))
-            });
-        for page in &pages {
-            index.replace_page(IndexEntry::from(page));
-        }
+        changed |= read_pages(root, db, &mut index, &pages_read, cached_at);
     };
-    // A search.db that has read no day yet, new or from another version, is
+    // A search.db that has read no file yet, new or from another version, is
     // filled in one go.
-    if read.is_empty() {
+    if read.is_empty() && pages_read.is_empty() {
         db.in_bulk(read_again);
     } else {
         db.at_once(read_again);
@@ -991,6 +1034,96 @@ mod tests {
         assert!(changed, "the cache has to be written back");
         let moved = index.page("01PPP").unwrap();
         assert_eq!(moved.file, "pages/2026/sync.md");
+        assert_eq!(db.bodies(["01PPP"]).unwrap()["01PPP"], "the meeting");
+        assert_eq!(
+            db.page_files().unwrap().keys().collect::<Vec<_>>(),
+            ["pages/2026/sync.md"],
+            "the old name is forgotten"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_page_as_last_read_is_not_read_again() {
+        let root = scratch_root("fresh-page");
+        let sync = page("01PPP", "2026-09-22", "Weekly sync", "the meeting");
+        write_page(&root, &sync);
+        // Not a page, and recorded as read all the same.
+        std::fs::write(root.join("pages/2026/loose.md"), "# loose\n").unwrap();
+        let mut db = db();
+        let cache = index_path(&root);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+        assert!(db.page_files().unwrap().contains_key("pages/2026/loose.md"));
+
+        // Changed to the same length, its time put back: read again, the page
+        // would say otherwise.
+        let path = root.join(&sync.file);
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::write(&path, text.replace("the meeting", "THE MEETING")).unwrap();
+        filetime::set_file_mtime(&path, filetime::FileTime::from_system_time(modified)).unwrap();
+
+        let (index, changed) = load(&root, &mut db);
+        assert!(!changed, "a fresh cache needs no write back");
+        assert!(index.page("01PPP").is_some());
+        assert_eq!(db.bodies(["01PPP"]).unwrap()["01PPP"], "the meeting");
+
+        // With search.db gone, the page is read into a new one.
+        let mut fresh = self::db();
+        let (index, _) = load(&root, &mut fresh);
+        assert_eq!(fresh.bodies(["01PPP"]).unwrap()["01PPP"], "THE MEETING");
+        assert_eq!(index.page("01PPP").unwrap().hash, body_hash("THE MEETING"));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn load_forgets_a_page_whose_file_is_gone() {
+        let root = scratch_root("vanished-page");
+        let sync = page("01PPP", "2026-09-22", "Weekly sync", "the meeting");
+        write_page(&root, &sync);
+        write_page(&root, &page("01QQQ", "2026-09-24", "Retro", "went well"));
+        let mut db = db();
+        let cache = index_path(&root);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+
+        std::fs::remove_file(root.join(&sync.file)).unwrap();
+        let (index, changed) = load(&root, &mut db);
+        assert!(changed);
+        assert!(index.page("01PPP").is_none());
+        assert!(index.page("01QQQ").is_some());
+        assert!(db.bodies(["01PPP"]).unwrap().is_empty());
+        assert!(!db.page_files().unwrap().contains_key(&sync.file));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_copy_of_a_page_is_taken_once_the_page_is_gone() {
+        let root = scratch_root("copied-page");
+        let sync = page("01PPP", "2026-09-22", "Weekly sync", "the meeting");
+        write_page(&root, &sync);
+        let mut db = db();
+        let cache = index_path(&root);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+
+        let copy = "pages/2026/copy.md";
+        std::fs::copy(root.join(&sync.file), root.join(copy)).unwrap();
+        let (index, _) = load(&root, &mut db);
+        assert_eq!(index.page("01PPP").unwrap().file, sync.file);
+        assert!(
+            !db.page_files().unwrap().contains_key(copy),
+            "a copy left out is read again"
+        );
+
+        std::fs::remove_file(root.join(&sync.file)).unwrap();
+        let (index, changed) = load(&root, &mut db);
+        assert!(changed);
+        assert_eq!(index.page("01PPP").unwrap().file, copy);
         assert_eq!(db.bodies(["01PPP"]).unwrap()["01PPP"], "the meeting");
 
         let _ = std::fs::remove_dir_all(&root);

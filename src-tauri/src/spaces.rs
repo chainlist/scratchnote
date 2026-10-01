@@ -429,7 +429,7 @@ impl Space {
     }
 
     /// Change the text in search.db, if the space is open. A write that fails
-    /// is only logged: its day stays marked as read before it, so it is read
+    /// is only logged: its file stays marked as read before it, so it is read
     /// again at the next open.
     fn write_text(&self, change: impl FnOnce(&mut SearchDb) -> Result<(), String>) {
         let Ok(mut search) = self.search.lock() else {
@@ -486,7 +486,8 @@ impl Space {
 
     /// A page added or changed. Returns what the index had for it before.
     pub fn page_changed(&self, page: &Note) -> Result<Option<IndexEntry>, String> {
-        self.write_text(|db| db.replace_page(page));
+        let stamp = Stamp::of(&self.root.join(&page.file));
+        self.write_text(|db| db.replace_page(page, stamp));
         Ok(self
             .index_to_change()?
             .and_then(|mut idx| idx.replace_page(IndexEntry::from(page))))
@@ -494,7 +495,7 @@ impl Space {
 
     /// A page deleted. Returns what the index had for it.
     pub fn page_removed(&self, id: &str) -> Result<Option<IndexEntry>, String> {
-        self.write_text(|db| db.remove(id));
+        self.write_text(|db| db.remove_page(id));
         Ok(self
             .index_to_change()?
             .and_then(|mut idx| idx.remove_page(id)))
@@ -511,7 +512,7 @@ impl Space {
             id.and_then(|id| idx.remove_page(&id))
         };
         if let Some(page) = &gone {
-            self.write_text(|db| db.remove(&page.id));
+            self.write_text(|db| db.remove_page(&page.id));
         }
         Ok(gone)
     }

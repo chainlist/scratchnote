@@ -9,7 +9,8 @@
 //! as search matches them. `texts_fts` indexes the folded text with the
 //! trigram tokenizer, which finds any run of three characters or more, so a
 //! search still matches inside words. `days` records each day file's time and
-//! length as last read, which is how a launch tells the days to read again.
+//! length as last read, and `page_files` each file under `pages/`, which is
+//! how a launch tells the files to read again.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -21,7 +22,7 @@ use super::daily_file::Note;
 use crate::search::fold;
 
 /// Bumped when the tables change: a file of another version is made again.
-const VERSION: i64 = 1;
+const VERSION: i64 = 2;
 
 /// An id is not unique: a note block copied by hand into another day keeps
 /// its id, and both copies are still found.
@@ -41,6 +42,13 @@ const TABLES: &str = "
     );
     CREATE TABLE days (
         day TEXT PRIMARY KEY,
+        modified INTEGER NOT NULL,
+        len INTEGER NOT NULL
+    );
+    -- `id` is the page the file held, or NULL for a file that holds none.
+    CREATE TABLE page_files (
+        path TEXT PRIMARY KEY,
+        id TEXT,
         modified INTEGER NOT NULL,
         len INTEGER NOT NULL
     );
@@ -64,6 +72,7 @@ const DROP: &str = "
     DROP TABLE IF EXISTS texts_fts;
     DROP TABLE IF EXISTS texts;
     DROP TABLE IF EXISTS days;
+    DROP TABLE IF EXISTS page_files;
 ";
 
 pub fn search_db_path(root: &Path) -> PathBuf {
@@ -227,6 +236,27 @@ impl SearchDb {
         rows.collect::<Result<_, _>>().map_err(to_string)
     }
 
+    /// Every file under `pages/` as it was last read, by its path relative
+    /// to the root.
+    pub fn page_files(&self) -> Result<HashMap<String, Stamp>, String> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT path, modified, len FROM page_files")
+            .map_err(to_string)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    Stamp {
+                        modified: row.get(1)?,
+                        len: row.get(2)?,
+                    },
+                ))
+            })
+            .map_err(to_string)?;
+        rows.collect::<Result<_, _>>().map_err(to_string)
+    }
+
     /// Put a day's notes in place of what it had, and record its file as
     /// read at `stamp`: `None` for a file that is gone.
     pub fn replace_day(
@@ -255,32 +285,79 @@ impl SearchDb {
         tx.commit().map_err(to_string)
     }
 
-    /// A page's text in place of what it had, if anything.
-    pub fn replace_page(&mut self, page: &Note) -> Result<(), String> {
+    /// A page's text in place of what it had, if anything, and its file as
+    /// read at `stamp`. The file it was read from before, if another, is
+    /// forgotten.
+    pub fn replace_page(&mut self, page: &Note, stamp: Option<Stamp>) -> Result<(), String> {
         let tx = self.conn.savepoint().map_err(to_string)?;
         tx.execute("DELETE FROM texts WHERE id = ?1", [&page.id])
             .map_err(to_string)?;
+        tx.execute(
+            "DELETE FROM page_files WHERE id = ?1 OR path = ?2",
+            [&page.id, &page.file],
+        )
+        .map_err(to_string)?;
         insert(&tx, page, None)?;
-        tx.commit().map_err(to_string)
-    }
-
-    /// Every page's text, in place of the pages it had: one no longer among
-    /// `pages` goes.
-    pub fn replace_pages(&mut self, pages: &[Note]) -> Result<(), String> {
-        let tx = self.conn.savepoint().map_err(to_string)?;
-        tx.execute("DELETE FROM texts WHERE day IS NULL", [])
+        if let Some(stamp) = stamp {
+            tx.execute(
+                "INSERT INTO page_files (path, id, modified, len) VALUES (?1, ?2, ?3, ?4)",
+                params![page.file, page.id, stamp.modified, stamp.len],
+            )
             .map_err(to_string)?;
-        for page in pages {
-            insert(&tx, page, None)?;
         }
         tx.commit().map_err(to_string)
     }
 
-    pub fn remove(&mut self, id: &str) -> Result<(), String> {
-        self.conn
-            .execute("DELETE FROM texts WHERE id = ?1", [id])
-            .map(|_| ())
-            .map_err(to_string)
+    /// A file under `pages/` that holds no page, as read at `stamp`, so it is
+    /// not read again while it stays so. `None` forgets it, and it is read
+    /// at the next launch.
+    pub fn stamp_page_file(&mut self, path: &str, stamp: Option<Stamp>) -> Result<(), String> {
+        match stamp {
+            Some(stamp) => self.conn.execute(
+                "INSERT INTO page_files (path, id, modified, len) VALUES (?1, NULL, ?2, ?3) \
+                 ON CONFLICT(path) DO UPDATE SET id = NULL, modified = excluded.modified, len = excluded.len",
+                params![path, stamp.modified, stamp.len],
+            ),
+            None => self
+                .conn
+                .execute("DELETE FROM page_files WHERE path = ?1", [path]),
+        }
+        .map(|_| ())
+        .map_err(to_string)
+    }
+
+    /// A page gone: its text, and its file as read.
+    pub fn remove_page(&mut self, id: &str) -> Result<(), String> {
+        let tx = self.conn.savepoint().map_err(to_string)?;
+        tx.execute("DELETE FROM texts WHERE id = ?1", [id])
+            .map_err(to_string)?;
+        tx.execute("DELETE FROM page_files WHERE id = ?1", [id])
+            .map_err(to_string)?;
+        tx.commit().map_err(to_string)
+    }
+
+    /// Forget the files under `pages/` not among `files`, and the text of the
+    /// pages not among `ids`.
+    pub fn retain_pages(
+        &mut self,
+        files: &HashSet<&str>,
+        ids: &HashSet<&str>,
+    ) -> Result<(), String> {
+        let known_files = self.ids("SELECT path FROM page_files", &[])?;
+        let known_ids = self.ids("SELECT id FROM texts WHERE day IS NULL", &[])?;
+        let tx = self.conn.savepoint().map_err(to_string)?;
+        for path in known_files
+            .iter()
+            .filter(|path| !files.contains(path.as_str()))
+        {
+            tx.execute("DELETE FROM page_files WHERE path = ?1", [path])
+                .map_err(to_string)?;
+        }
+        for id in known_ids.iter().filter(|id| !ids.contains(id.as_str())) {
+            tx.execute("DELETE FROM texts WHERE day IS NULL AND id = ?1", [id])
+                .map_err(to_string)?;
+        }
+        tx.commit().map_err(to_string)
     }
 
     /// Forget the days whose file is gone.
@@ -555,17 +632,29 @@ mod tests {
             .unwrap();
         let mut page = note("01P", "2026-09-22", "page text");
         page.kind = Kind::Page;
-        db.replace_page(&page).unwrap();
+        page.file = "pages/2026/plan.md".into();
+        db.replace_page(&page, Some(stamp)).unwrap();
 
         let bodies = db.bodies(["01A", "01P", "01Z"]).unwrap();
         assert_eq!(bodies["01A"], "the body");
         assert_eq!(bodies["01P"], "page text");
         assert!(!bodies.contains_key("01Z"));
         assert_eq!(db.days().unwrap()["2026-09-22"], stamp);
+        assert_eq!(db.page_files().unwrap()["pages/2026/plan.md"], stamp);
 
-        db.replace_pages(&[]).unwrap();
+        // Renamed: the old file is forgotten.
+        page.file = "pages/2026/the plan.md".into();
+        db.replace_page(&page, Some(stamp)).unwrap();
+        let files = db.page_files().unwrap();
+        assert_eq!(files.keys().collect::<Vec<_>>(), ["pages/2026/the plan.md"]);
+
+        db.retain_pages(&HashSet::from(["pages/2026/the plan.md"]), &HashSet::new())
+            .unwrap();
         assert!(db.bodies(["01P"]).unwrap().is_empty());
         assert_eq!(db.bodies(["01A"]).unwrap().len(), 1, "the notes stay");
+        assert_eq!(db.page_files().unwrap().len(), 1);
+        db.retain_pages(&HashSet::new(), &HashSet::new()).unwrap();
+        assert!(db.page_files().unwrap().is_empty());
     }
 
     #[test]

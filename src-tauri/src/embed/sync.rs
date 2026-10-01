@@ -34,18 +34,13 @@ pub fn spawn(app: AppHandle, wake: Wake) {
                 let Some(embedder) = super::embedder(&passing) else {
                     return Vec::new();
                 };
-                let state = passing.state::<AppState>();
-                // Stamped as the worker stamps a job, so the idle unload
-                // counts embedding as use.
-                state.mark_used();
-                let threaded: Vec<String> = state
+                passing
+                    .state::<AppState>()
                     .all_spaces()
                     .iter()
                     .filter(|space| sync_space(space, embedder.as_ref()))
                     .map(|space| space.name.clone())
-                    .collect();
-                state.mark_used();
-                threaded
+                    .collect::<Vec<String>>()
             });
             match pass.await {
                 Ok(threaded) => {

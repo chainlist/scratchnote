@@ -76,5 +76,6 @@
 		onretry={shell.retry}
 		oncategory={shell.openCategory}
 		onsimilar={shell.canSimilar ? shell.showSimilar : undefined}
+		onmove={shell.canMove ? shell.askMove : undefined}
 	/>
 </View>

@@ -14,6 +14,7 @@
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
@@ -28,7 +29,8 @@
 		ondelete,
 		onretry,
 		oncategory,
-		onsimilar
+		onsimilar,
+		onmove
 	}: {
 		/** The page to open, or null for a new one. */
 		id: string | null;
@@ -42,6 +44,8 @@
 		oncategory: (category: string) => void;
 		/** Left out without the embedding model. */
 		onsimilar?: (page: Note) => void;
+		/** Ask to move it to another space, once its text is saved. Left out with one space. */
+		onmove?: (page: Note) => void;
 	} = $props();
 
 	/** The page as last saved or read, null until a new one has a title. */
@@ -223,6 +227,15 @@
 		}
 	}
 
+	/** The text typed so far is saved first, so none of it stays behind. */
+	async function move(ask: (page: Note) => void) {
+		clearTimeout(timer);
+		timer = undefined;
+		await queue(saveBody);
+		// A save that failed says why in the status line, and the page stays.
+		if (page && body.trim() === savedBody.trim()) ask(page);
+	}
+
 	function onTitleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
 			event.preventDefault();
@@ -295,6 +308,11 @@
 					{#if current.status === 'done' || current.status === 'failed'}
 						<DropdownMenu.Item onSelect={() => onretry(current)}>
 							<RefreshCwIcon />{m.note_rerun()}
+						</DropdownMenu.Item>
+					{/if}
+					{#if onmove}
+						<DropdownMenu.Item onSelect={() => void move(onmove)}>
+							<FolderInputIcon />{m.move_to()}
 						</DropdownMenu.Item>
 					{/if}
 					<DropdownMenu.Separator />

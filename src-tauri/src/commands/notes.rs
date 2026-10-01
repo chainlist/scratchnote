@@ -1,5 +1,7 @@
 //! Notes: capture, the day view, edits, and the index behind them.
 
+use std::sync::Arc;
+
 use chrono::Local;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -266,15 +268,7 @@ pub async fn update_note_meta(
 
     // A category typed in by hand joins the list, so the model is offered it
     // for later notes.
-    if let Some(contents) = category
-        .as_deref()
-        .and_then(|c| categories::with_added(&space.root, c))
-    {
-        state
-            .writer
-            .write_index(categories::categories_path(&space.root), contents)
-            .await?;
-    }
+    list_category(&state, &space, category.as_deref()).await?;
 
     let patch = NotePatch {
         subject,
@@ -296,6 +290,107 @@ pub async fn update_note_meta(
 
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     read_note(&space, &date, &id).await
+}
+
+/// Add `category` to the space's list when it is not there yet, so the model
+/// is offered it from then on.
+pub(crate) async fn list_category(
+    state: &State<'_, AppState>,
+    space: &Space,
+    category: Option<&str>,
+) -> Result<(), String> {
+    if let Some(contents) = category.and_then(|c| categories::with_added(&space.root, c)) {
+        state
+            .writer
+            .write_index(categories::categories_path(&space.root), contents)
+            .await?;
+    }
+    Ok(())
+}
+
+/// The space a note or a page of the open space moves to: any other.
+pub(crate) fn move_target(state: &State<'_, AppState>, name: &str) -> Result<Arc<Space>, String> {
+    let to = state.space_or_open(Some(name))?;
+    if Arc::ptr_eq(&to, &state.space()?) {
+        return Err(format!("it is already in {name}"));
+    }
+    Ok(to)
+}
+
+/// The id a note or a page moving to `space` onto `date` takes there: its
+/// own, unless that day already holds it, as a move cut short by a crash
+/// leaves it in both spaces.
+pub(crate) async fn free_id(space: &Space, date: &str, id: &str) -> String {
+    let contents = tokio::fs::read_to_string(day_path(&space.root, date))
+        .await
+        .unwrap_or_default();
+    let taken = daily_file::parse_notes(&contents, date, "")
+        .iter()
+        .any(|note| note.id == id)
+        || daily_file::parse_stubs(&contents)
+            .iter()
+            .any(|stub| stub.id == id);
+    if taken {
+        Ulid::generate().to_string()
+    } else {
+        id.to_string()
+    }
+}
+
+/// Move a note of the open space to another, onto the same day at the same
+/// time, with its labels and the files it links (SPEC 3.2). It is written
+/// there before it leaves here, so a crash in between leaves it in both
+/// spaces, never in neither. Its category joins the other space's list, and
+/// a note still waiting on the model waits there.
+#[tauri::command]
+pub async fn move_note(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    date: String,
+    id: String,
+    space: String,
+) -> Result<(), String> {
+    check_date(&date)?;
+    let from = state.space()?;
+    let to = move_target(&state, &space)?;
+    let note = read_note(&from, &date, &id).await?;
+
+    let (body, carried) = {
+        let (from, to, body) = (from.root.clone(), to.root.clone(), note.body.clone());
+        tauri::async_runtime::spawn_blocking(move || crate::attachments::carry(&from, &to, &body))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("could not take its attachments along: {e}"))?
+    };
+    let moved = Note {
+        id: free_id(&to, &date, &id).await,
+        hash: daily_file::body_hash(&body),
+        body,
+        ..note
+    };
+    list_category(&state, &to, moved.category.as_deref()).await?;
+    state
+        .writer
+        .append_note(day_path(&to.root, &date), date.clone(), moved.clone())
+        .await?;
+    to.note_added(&state.writer, &moved).await?;
+    if moved.status == Status::Pending {
+        enqueue(&state, &to, moved.id.clone(), date.clone()).await;
+    }
+
+    state
+        .writer
+        .delete_note(day_path(&from.root, &date), id.clone())
+        .await?;
+    reindex_day(&state, &from, &date).await?;
+    if let Ok(mut queue) = from.queue.lock() {
+        queue.remove(&id);
+    }
+    persist_queue(&state, &from).await;
+    crate::attachments::drop_carried(&from, &carried);
+
+    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    Ok(())
 }
 
 fn is_page(space: &Space, id: &str) -> bool {

@@ -9,6 +9,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
+	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
@@ -26,6 +27,7 @@
 		oncategory,
 		onsimilar,
 		onpage,
+		onmove,
 		onerror,
 		showDate = false,
 		blink = false
@@ -44,6 +46,8 @@
 		onsimilar?: (note: Note) => void;
 		/** Turn the note into a page; the page asks for its title. */
 		onpage: (note: Note) => void;
+		/** Move the note to another space; the page asks which. Left out with one space. */
+		onmove?: (note: Note) => void;
 		/** A file could not be attached while editing. */
 		onerror: (message: string) => void;
 		/** Search results span days, so each card says which one. */
@@ -219,6 +223,11 @@
 					<DropdownMenu.Item onSelect={() => onpage(note)}>
 						<FileTextIcon />{m.pages_turn_into()}
 					</DropdownMenu.Item>
+					{#if onmove}
+						<DropdownMenu.Item onSelect={() => onmove(note)}>
+							<FolderInputIcon />{m.move_to()}
+						</DropdownMenu.Item>
+					{/if}
 					{#if canRetry}
 						<DropdownMenu.Item onSelect={() => onretry(note)}>
 							<RefreshCwIcon />{m.note_rerun()}

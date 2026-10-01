@@ -5,7 +5,7 @@ use chrono::Local;
 use tauri::{AppHandle, State};
 use ulid::Ulid;
 
-use super::notes::{enqueue, persist_queue, read_note};
+use super::notes::{enqueue, free_id, list_category, move_target, persist_queue, read_note};
 use crate::pages::{
     drop_stub, emit_updated, entry, free_path, newest_first, read_page, reindex, sync_stub,
     write_new,
@@ -215,6 +215,67 @@ pub async fn delete_page(
         }
         persist_queue(&state, &space).await;
     }
+
+    emit_updated(&app, &id);
+    Ok(())
+}
+
+/// Move a page of the open space to another, onto the same day at the same
+/// time, with its title, labels and the files it links (SPEC 3.5). Its file
+/// and stub are written there before they leave here, stub first as for a
+/// delete, so a crash in between leaves it in both spaces, never in neither.
+/// `date` is the day showing it, as for `delete_page`. The page view closes
+/// on it, so it is released; one waiting on the model waits there.
+#[tauri::command]
+pub async fn move_page(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    date: String,
+    id: String,
+    space: String,
+) -> Result<(), String> {
+    check_date(&date)?;
+    let from = state.space()?;
+    let to = move_target(&state, &space)?;
+    let page = read_page(&from, &id).await?;
+    let title = page.subject.clone().unwrap_or_default();
+
+    let (body, carried) = {
+        let (from, to, body) = (from.root.clone(), to.root.clone(), page.body.clone());
+        tauri::async_runtime::spawn_blocking(move || crate::attachments::carry(&from, &to, &body))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("could not take its attachments along: {e}"))?
+    };
+    let moved = Note {
+        id: free_id(&to, &page.date, &id).await,
+        file: free_path(&to, &page.date, &title, None),
+        hash: body_hash(&body),
+        body,
+        ..page.clone()
+    };
+    list_category(&state, &to, moved.category.as_deref()).await?;
+    write_new(&state.writer, &to, &moved).await?;
+    to.page_changed(&moved)?;
+    to.persist_index(&state.writer).await?;
+    sync_stub(&state.writer, &to, &moved).await?;
+    if moved.status == Status::Pending {
+        enqueue(&state, &to, moved.id.clone(), moved.date.clone()).await;
+    }
+
+    drop_stub(&state.writer, &from, &date, &id).await?;
+    if page.date != date {
+        drop_stub(&state.writer, &from, &page.date, &id).await?;
+    }
+    state.writer.remove(from.root.join(&page.file)).await?;
+    from.page_removed(&id)?;
+    from.persist_index(&state.writer).await?;
+    from.release(&id);
+    if let Ok(mut queue) = from.queue.lock() {
+        queue.remove(&id);
+    }
+    persist_queue(&state, &from).await;
+    crate::attachments::drop_carried(&from, &carried);
 
     emit_updated(&app, &id);
     Ok(())

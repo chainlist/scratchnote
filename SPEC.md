@@ -261,7 +261,7 @@ Opened from tray icon or app launch. Three areas:
 2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. Pages show as cards among them (3.5). The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page, a `failed` one has a faint turning red border, and the others look alike.
 3. **Search bar** at the top: full-text over body and subject; supports a `#category` token as a filter (e.g. `#infrastructure kubernetes`). Results are note cards across all days.
 
-Note actions (on hover): edit body inline, edit subject and category manually, similar notes (with the embedding model, see 6.2), re-run enrichment, delete.
+Note actions (on hover): edit body inline, edit subject and category manually, similar notes (with the embedding model, see 6.2), move to another space (4.6), re-run enrichment, delete.
 
 ### 3.3 Tray
 
@@ -292,7 +292,7 @@ A page is a note for longer writing, such as meeting notes. It has a title and a
 - All pages lists every page of the space, newest first, as the same cards, each with its date. Its button, under the calendar's on the left edge of the window, opens it from any view, as does the command center. Its cards open and dock a page as a day's do.
 - A button on the card docks the page beside the timeline instead, so it can be written while the timeline goes through days, search and similar notes. The dock holds the page view, which works there as it does in the timeline, and its close button closes the view. It opens on the right; a button beside the close button moves it to the other side, as wide as it was. Dragging the line between the dock and the timeline makes it wider or narrower, from a fifth of the room beside the ribbon to seven tenths. Its side and width are kept between launches. The narrower timeline shows only the neighbouring days its width holds, and the chat floats clear of the dock. Opening the docked page in the timeline takes it out of the dock, so a page is never open twice.
 - The page view takes the timeline's place, with a way back. The title is edited in place and saved on Enter or when focus moves elsewhere in the window, not when another app takes it; an empty title goes back to the last one. The text saves itself a second after typing stops, and when the view closes. Saves leave the models alone: a page open in the view is held, and when the view closes it goes to the model, and to the embedding model, once, if its text changed. A page still pending when the app quits is queued at the next launch.
-- The page view's menu offers similar notes, re-run and delete, as a note's does. Deleting asks first.
+- The page view's menu offers similar notes, move to another space (4.6), re-run and delete, as a note's does. Deleting asks first. Moving saves the text typed so far first.
 - A stub whose page file is gone shows as a card saying the page was not found. The stub stays: with a sync tool, the file may not have arrived yet.
 - Search, chat, similar notes and categories treat a page as a note whose subject is its title. The embedding model reads only the first 1,023 tokens of a long page, and chat sends the first 800 characters of a page it retrieves.
 
@@ -316,6 +316,7 @@ A note or a page can carry files: screenshots, photos, PDFs, anything. Each is c
 - An image shows in the text, in the editor and on the card, at most 20rem tall (6rem in the capture window). Any other file shows as a small card: its type (the extension, such as PDF or DOCX, or a paperclip when the name has none) beside its name without that extension, cut short, with the full name on hover. On the line being edited the markup shows as well, with the image or card after it. A click on a note card, or Ctrl or Cmd and a click in the editor, opens the file in its own app, a PDF in the default PDF viewer. The previews on page cards, in dialogs and above similar notes, which clip to a few lines, show any attachment as its name after a paperclip.
 - Only attachments are drawn. An image link to anywhere else, such as the web, shows as typed: nothing is fetched (1).
 - Deleting a note, a page or a link leaves the file where it is. Files nothing links to are removed by hand.
+- Moving a note or a page to another space (4.6) takes the files it links along (4.8).
 - Search, chat, the models and the index see the link as part of the text. Nothing reads what is inside an attachment.
 
 ### 3.8 Basics
@@ -512,7 +513,9 @@ A space is a separate set of notes with its own categories, index and queue. Not
 - Data from before this layout, with `notes/` and the per-space files at the root, is moved once at startup into `spaces/<its old name>/` (with a number added if a folder already has that name).
 - Space names are folder names, so they must be valid on every platform: no `<>:"/\|?*`, no leading or trailing dot, no Windows reserved names, at most 40 characters, and unique ignoring case. Renaming a space renames its folder.
 - Deleting a space moves its folder to `.scratchnote/trash/<name> <timestamp>`; moving it back under `spaces/` restores it.
-- Only the open space is read into memory and watched. The others are listed with their queue alone, and are read when they are opened; the space left is let go of, index, vectors and watcher. Note commands act on the open space, except that the capture window's note and its attachments go into the space it picked (3.1). A note saved into a space not open is an edit from outside to it: queued there, and read into its index when it opens.
+- Only the open space is read into memory and watched. The others are listed with their queue alone, and are read when they are opened; the space left is let go of, index, vectors and watcher. Note commands act on the open space, except that the capture window's note and its attachments go into the space it picked (3.1), and that a note or a page moves to another. A note saved into a space not open is an edit from outside to it: queued there, and read into its index when it opens.
+- Move to, in a note's menu and the page view's, shows with more than one space. It opens a dialog with the note's first two lines, or the page's title and its first two, and a list of the other spaces, the first one picked. The note or page goes onto the same day there at the same time, with its subject or title, its category and its status, and its attachments (4.8); a page gets a file name free there (4.7). The open space stays open: the note leaves its views, a page its page view or the dock. A category the other space does not list joins its list (4.5), and a note or page still pending is queued there.
+- A move writes the note into the other space before it takes it out of this one, a page's file and stub before its stub and file here, so a crash in between leaves it in both spaces, never in neither. It keeps its id, unless its day there already holds that id, as such a crash leaves it.
 - The single enrichment worker drains every space's queue, the open space first. It needs no index for that: a job's note is read from its day's file, and for a space not open, from its page files when the day does not hold it. What it writes reaches that space's index when the space next opens, its files being newer than the cache.
 - An edit made outside the app to a space not open (a folder synced from elsewhere, say) is picked up when the space opens: its days are newer than the cache, and what they left pending is queued then.
 - The switcher shows each space's note count: counted while it is open, and as it was when last left otherwise. A space never opened, such as a folder made by hand, shows none.
@@ -566,6 +569,7 @@ Rules:
 - The file is named after the day it was attached and the name it came with, `attachments/<year>/<date> <name>.<ext>`, cleaned as a page's file name is (4.7), except that `#` and `%` become spaces too, since they break a link in other editors. A pasted screenshot comes as `image.png`. A name already taken gets ` 2`, ` 3` and so on before the extension. The name is claimed as the file is created (`create_new`), so two attachments never share a file.
 - Day files and page files both sit two folders below the space, so the one link `../../attachments/...` reaches the file from either. It keeps working through Turn into page, a renamed space, or the whole folder synced elsewhere. The destination is in angle brackets, as in a page's stub, because names have spaces.
 - An attachment is a new file that is never rewritten, so it does not go through the single writer (4.3): it is written in place and fsynced, and a copy that fails is removed. Files dropped or picked are all checked before any is copied, so a folder among them copies nothing. The watcher ignores the folder.
+- A note or a page moved to another space (4.6) takes the files it links, in either form of the link: each is copied into that space's `attachments/`, under the same name unless one there has it, and its links follow the copies. Once it has left, the originals go, except those another note or page of the space still links. A copy that fails takes back the ones made before it, and the note stays where it was.
 - Nothing indexes attachments: the links in the text are all there is.
 - The webview reads attachments through the `attachment` protocol, `attachment://localhost/<space>/attachments/...` (`http://attachment.localhost/...` on Windows), which serves only files inside a space's `attachments/` folder. It is registered in code rather than with Tauri's asset protocol, whose scope is fixed in the config while the notes root is chosen at runtime. The space is in the path, so files of the same name in two spaces are never taken for one another's cached image. Its responses carry `Content-Security-Policy: sandbox`, so an SVG opened as a page runs no script.
 
@@ -738,6 +742,7 @@ save_note(body: String, date?, space?) -> NoteMeta  // appends to the day's file
 update_note(id, body) -> NoteMeta             // re-enqueues if hash changed
 update_note_meta(id, subject?, category?) -> NoteMeta  // sets status=manual
 delete_note(id)
+move_note(date, id, space)                    // into another space, same day: written there, then removed here, with its attachments
 retry_enrichment(id)
 get_day(date: String) -> Vec<Note>
 list_days() -> Vec<DaySummary>                // date + note and page count + words in its notes
@@ -765,6 +770,7 @@ finish_page(id)                               // the page view closed: releases 
 rename_page(id, title) -> Note                // renames the file, rewrites the stub
 delete_page(id)                               // stub, then file
 note_to_page(date, id, title) -> Note         // page with a new id, then the note's block becomes its stub; held
+move_page(date, id, space)                    // file and stub into another space, then stub and file out of this one; released
 capture_to_page(body, space?)                 // opens the space named if another, hides the capture window, opens a new page in the main window
 add_attachments(paths, space?) -> Vec<Attachment>  // copies files into attachments/ of the open space or the one named; every path checked first
 save_attachment(bytes) -> Attachment          // a pasted file as the raw body, its name in the `x-name` header, its space if not the open one in `x-space`

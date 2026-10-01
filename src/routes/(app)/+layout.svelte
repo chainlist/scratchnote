@@ -24,6 +24,7 @@
 	import DeleteNoteDialog from '$lib/components/DeleteNoteDialog.svelte';
 	import Dock from '$lib/components/Dock.svelte';
 	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
+	import MoveDialog from '$lib/components/MoveDialog.svelte';
 	import NoteEditor from '$lib/components/NoteEditor.svelte';
 	import NoteToPageDialog from '$lib/components/NoteToPageDialog.svelte';
 	import PageView from '$lib/components/PageView.svelte';
@@ -56,6 +57,12 @@
 	// The plugins reach the views through it from the start, their pages
 	// included, which mount before this layout does.
 	onDestroy(bindWorkspace(shell));
+
+	// Listed again with the notes whenever a space is opened, made, renamed
+	// or deleted.
+	$effect(() => {
+		shell.spaces = data.spaces;
+	});
 
 	/** Release notes waiting to be read after an update. */
 	let releaseNotes = $state<Release[] | null>(null);
@@ -220,6 +227,7 @@
 							onretry={shell.retry}
 							oncategory={shell.openCategory}
 							onsimilar={shell.canSimilar ? shell.showSimilar : undefined}
+							onmove={shell.canMove ? shell.askMove : undefined}
 						/>
 					{/key}
 				</div>
@@ -261,6 +269,8 @@
 <DeleteNoteDialog bind:note={shell.deleting} onconfirm={shell.remove} />
 
 <NoteToPageDialog bind:note={shell.turning} onconfirm={shell.turnIntoPage} />
+
+<MoveDialog bind:note={shell.moving} spaces={shell.spaces} onconfirm={shell.moveTo} />
 
 <WhatsNew bind:releases={releaseNotes} />
 

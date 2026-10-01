@@ -7,6 +7,8 @@ import {
 	deleteNote,
 	deletePage,
 	isPage,
+	moveNote,
+	movePage,
 	noteToPage,
 	retryEnrichment,
 	updateNote,
@@ -14,7 +16,8 @@ import {
 	type IndexEntry,
 	type ModelStatus,
 	type Note,
-	type NoteEdit
+	type NoteEdit,
+	type SpacesView
 } from '$lib/api';
 import { categoryLabel } from '$lib/categories';
 import { loadDock, saveDock, type DockSide } from '$lib/dock';
@@ -60,6 +63,12 @@ export class Shell implements WorkspaceHost {
 	deleting = $state<Note | null>(null);
 	/** The note waiting on a title to become a page. */
 	turning = $state<Note | null>(null);
+	/** The note or page waiting on the space it moves to. */
+	moving = $state<Note | null>(null);
+	/** Every space and the open one, as the app layout last listed them. */
+	spaces = $state.raw<SpacesView | null>(null);
+	/** A note can move only with another space to go to. */
+	canMove = $derived((this.spaces?.spaces.length ?? 0) > 1);
 	/** The page docked beside the view, to write in while the day stays in reach. */
 	docked = $state<Note | null>(null);
 	/** A plugin's view docked beside the view instead, by its type. */
@@ -284,6 +293,30 @@ export class Shell implements WorkspaceHost {
 		}
 	};
 
+	/** A note or a page asks to move; the dialog asks where. */
+	askMove = (note: Note) => {
+		this.moving = note;
+	};
+
+	/**
+	 * Move a note or a page to another space. It leaves the views here, the
+	 * editor, the dock and its own page included. Resolves to an error for
+	 * the dialog to show, or null once moved.
+	 */
+	moveTo = async (note: Note, space: string): Promise<string | null> => {
+		try {
+			if (isPage(note)) await movePage(note.date, note.id, space);
+			else await moveNote(note.date, note.id, space);
+			if (this.editing?.id === note.id) this.editing = null;
+			if (this.docked?.id === note.id) this.docked = null;
+			if (page.params.id === note.id) await this.openDay(this.day);
+			await this.refresh();
+			return null;
+		} catch (e) {
+			return String(e);
+		}
+	};
+
 	retry = async (note: Note) => {
 		try {
 			await retryEnrichment(note.date, note.id);
@@ -343,6 +376,7 @@ export class Shell implements WorkspaceHost {
 		onopen: (note: Note) => void this.openPage(note),
 		ondock: this.dock,
 		onpage: (note: Note) => (this.turning = note),
+		onmove: this.canMove ? this.askMove : undefined,
 		onerror: this.showError
 	});
 }

@@ -137,6 +137,13 @@ export function splitCitations(text: string): (string | number[])[] {
  */
 export const deleteNote = (date: string, id: string) => invoke<void>('delete_note', { date, id });
 
+/**
+ * Moves a note of the open space to another, onto the same day, with its
+ * labels and the files it links.
+ */
+export const moveNote = (date: string, id: string, space: string) =>
+	invoke<void>('move_note', { date, id, space });
+
 /** Today in the local timezone, matching how the backend picks a daily file. */
 export const today = () => invoke<string>('today');
 
@@ -366,6 +373,13 @@ export const renamePage = (id: string, title: string) => invoke<Note>('rename_pa
 
 /** Remove a page's stub from `date`, the day showing it, then its file. */
 export const deletePage = (date: string, id: string) => invoke<void>('delete_page', { date, id });
+
+/**
+ * Moves a page of the open space to another, onto the same day, with its
+ * file, its stub and the files it links. `date` is the day showing it.
+ */
+export const movePage = (date: string, id: string, space: string) =>
+	invoke<void>('move_page', { date, id, space });
 
 /** Turn a note into a page with that title. The page has a new id. */
 export const noteToPage = (date: string, id: string, title: string) =>

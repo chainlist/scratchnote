@@ -21,7 +21,7 @@ const editable = (s: Settings): Settings => ({
 	modelEnabled: s.modelEnabled,
 	modelVariant: s.modelVariant,
 	modelPath: s.modelPath,
-	idleUnloadMinutes: s.idleUnloadMinutes,
+	idleUnloadSeconds: s.idleUnloadSeconds,
 	useGpu: s.useGpu,
 	accentColor: s.accentColor,
 	fontFamily: s.fontFamily,
@@ -46,7 +46,7 @@ export class SettingsState {
 		modelEnabled: true,
 		modelVariant: 'default',
 		modelPath: null,
-		idleUnloadMinutes: 10,
+		idleUnloadSeconds: 600,
 		useGpu: true,
 		...DEFAULT_APPEARANCE,
 		language: 'system',
@@ -65,8 +65,7 @@ export class SettingsState {
 		this.view !== null &&
 			(this.draft.root !== this.view.root ||
 				this.draft.captureHotkey !== this.view.captureHotkey ||
-				this.draft.hideImmediately !== this.view.hideImmediately ||
-				this.draft.idleUnloadMinutes !== this.view.idleUnloadMinutes)
+				this.draft.hideImmediately !== this.view.hideImmediately)
 	);
 
 	/** Loads the settings and follows changes made elsewhere. Returns the teardown. */
@@ -129,7 +128,7 @@ export class SettingsState {
 
 	/** The draft takes what is saved, but keeps the edits waiting on the Save button. */
 	#sync(saved: Settings) {
-		const { root, captureHotkey, hideImmediately, idleUnloadMinutes } = this.draft;
-		this.draft = { ...editable(saved), root, captureHotkey, hideImmediately, idleUnloadMinutes };
+		const { root, captureHotkey, hideImmediately } = this.draft;
+		this.draft = { ...editable(saved), root, captureHotkey, hideImmediately };
 	}
 }

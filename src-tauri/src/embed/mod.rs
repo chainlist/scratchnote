@@ -37,11 +37,13 @@ pub trait Embedder: Send + Sync {
 /// switch leaves it alone: it is light enough to run where the chat model
 /// cannot, so similar notes, search by meaning, recall and threads stay with
 /// the model off. Loaded on first use, as `enrich::worker::backend` loads
-/// the chat model, and dropped by `AppState::unload_model`. A load that
-/// fails is tried again on the next call, which comes with the next change
-/// to a note or the next chat message, never in a loop. One load runs at a
-/// time: a search that comes while the embed task loads the model waits for
-/// that one.
+/// the chat model, then kept: the idle unload leaves it, since it is small
+/// and every new note and search by meaning needs it, and only a GPU change
+/// drops it, through `AppState::unload_model`. A load that fails is tried
+/// again on the next call, which comes with the next change to a note or
+/// the next chat message, never in a loop. One load runs at a time: a
+/// search that comes while the embed task loads the model waits for that
+/// one.
 pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
     let state = app.state::<AppState>();
     crate::state::load_once(&state.embedder, &state.embedder_loading, || {
@@ -53,8 +55,6 @@ pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
 
         match llama::LlamaEmbedder::load_with(&path, state.use_gpu()) {
             Ok(loaded) => {
-                // Otherwise the idle unload counts from before the load.
-                state.mark_used();
                 let loaded: Arc<dyn Embedder> = Arc::new(loaded);
                 Some(loaded)
             }

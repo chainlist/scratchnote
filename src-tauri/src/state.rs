@@ -36,8 +36,9 @@ pub struct AppState {
     /// to be unloaded for that on Windows, and this keeps the worker from
     /// loading it straight back.
     pub swapping: AtomicBool,
-    /// When the worker last started or finished a job, for the idle unload in
-    /// SPEC 5.1.
+    /// When the chat model was last used, by a job or a chat, for the idle
+    /// unload in SPEC 5.1. The embedding model does not count: it is never
+    /// unloaded for being idle.
     pub last_used: Mutex<Instant>,
     /// True while the worker has a job in hand, loading the model included.
     pub busy: AtomicBool,
@@ -46,8 +47,9 @@ pub struct AppState {
     pub batch_done: AtomicUsize,
     /// Nudges the worker when a job is queued or a model becomes available.
     pub wake: Wake,
-    /// `None` until an embedding model is loaded. Read through
-    /// `embed::embedder`, which the model switch does not reach.
+    /// `None` until an embedding model is loaded, and then until the GPU
+    /// setting changes. Read through `embed::embedder`, which neither the
+    /// model switch nor the idle unload reaches.
     pub embedder: RwLock<Option<Arc<dyn Embedder>>>,
     /// Held while the embedding model loads (`load_once`).
     pub embedder_loading: Mutex<()>,
@@ -118,8 +120,9 @@ impl AppState {
     }
 
     /// Drop the loaded model, and the embedding model with it, and say what
-    /// state that leaves. A job still holding one finishes first, since it
-    /// owns its own reference. Both load again lazily when next needed.
+    /// state that leaves: for a GPU change, the one setting both follow. A
+    /// job still holding one finishes first, since it owns its own
+    /// reference. Both load again lazily when next needed.
     pub fn unload_model(&self) -> ModelStatus {
         if let Ok(mut slot) = self.embedder.write() {
             *slot = None;
@@ -128,7 +131,8 @@ impl AppState {
     }
 
     /// `unload_model` for the chat model alone, when the switch, the model
-    /// choice or its file changes: none of them is the embedding model's.
+    /// choice or its file changes, or it sits idle: none of them is the
+    /// embedding model's.
     pub fn unload_chat_model(&self) -> ModelStatus {
         if let Ok(mut slot) = self.backend.write() {
             *slot = None;

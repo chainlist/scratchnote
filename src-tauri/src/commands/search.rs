@@ -100,7 +100,6 @@ pub async fn search_meaning(
     let Some(vector) = vector else {
         return Ok(Vec::new());
     };
-    state.mark_used();
 
     let hits = space.related(&vector, usize::MAX, MIN_LEAD);
     let found =
@@ -181,7 +180,6 @@ pub async fn recall(
     let Some(vector) = vector else {
         return Ok(None);
     };
-    state.mark_used();
 
     let hits = open.closest(&vector, exclude.as_deref(), 1, MIN_RECALL);
     Ok(notes_of(&open, &hits)?.into_iter().next())

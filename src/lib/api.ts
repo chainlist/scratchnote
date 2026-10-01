@@ -503,8 +503,8 @@ export interface Settings {
 	modelVariant: ModelVariant;
 	/** A GGUF file of the user's own, used instead of modelVariant. */
 	modelPath: string | null;
-	/** Unload the model after this many idle minutes; 0 keeps it loaded. */
-	idleUnloadMinutes: number;
+	/** Unload the chat model after this many idle seconds; 0 keeps it loaded. */
+	idleUnloadSeconds: number;
 	/** Run the model on the GPU when one is available. */
 	useGpu: boolean;
 	/** Accent preset name, see ACCENTS in appearance.ts. */

@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { gpuDevices } from '$lib/api';
-	import { Input } from '$lib/components/ui/input';
 	import { Progress } from '$lib/components/ui/progress';
+	import * as Select from '$lib/components/ui/select';
 	import { Switch } from '$lib/components/ui/switch';
 	import { m } from '$lib/paraglide/messages';
+	import { getLocale } from '$lib/paraglide/runtime';
 	import EmbeddingModel from './EmbeddingModel.svelte';
 	import ModelBenchmark from './ModelBenchmark.svelte';
 	import ModelChoices from './ModelChoices.svelte';
@@ -20,6 +21,31 @@
 	const model = $derived(settings.model);
 
 	let gpus = $state<string[]>([]);
+
+	/** In seconds. Never, 0, goes last. */
+	const IDLE_CHOICES = [30, 60, 300, 600, 1800, 3600];
+	// One saved by hand, or carried over from minutes, shows among them.
+	const idleChoices = $derived(
+		[...new Set([...IDLE_CHOICES, view.idleUnloadSeconds])]
+			.filter((seconds) => seconds > 0)
+			.sort((a, b) => a - b)
+			.concat(0)
+	);
+
+	function idleLabel(seconds: number): string {
+		if (seconds === 0) return m.settings_idle_never();
+		const [value, unit]: [number, string] =
+			seconds % 3600 === 0
+				? [seconds / 3600, 'hour']
+				: seconds % 60 === 0
+					? [seconds / 60, 'minute']
+					: [seconds, 'second'];
+		return new Intl.NumberFormat(getLocale(), {
+			style: 'unit',
+			unit,
+			unitDisplay: 'long'
+		}).format(value);
+	}
 
 	onMount(async () => {
 		try {
@@ -97,17 +123,22 @@
 						onCheckedChange={(useGpu) => settings.apply({ useGpu })}
 					/>
 				</SettingRow>
-				<SettingRow id="idle" label={m.settings_idle()} hint={m.settings_idle_hint()}>
-					<div class="flex items-center gap-2">
-						<Input
-							id="idle"
-							type="number"
-							min="0"
-							bind:value={settings.draft.idleUnloadMinutes}
-							class="w-20 text-right font-mono"
-						/>
-						<span class={hint}>{m.settings_idle_unit()}</span>
-					</div>
+				<SettingRow label={m.settings_idle()} hint={m.settings_idle_hint()}>
+					<!-- Applies at once: the idle check reads it every few seconds. -->
+					<Select.Root
+						type="single"
+						value={String(view.idleUnloadSeconds)}
+						onValueChange={(seconds) => settings.apply({ idleUnloadSeconds: Number(seconds) })}
+					>
+						<Select.Trigger size="sm" class="w-36" aria-label={m.settings_idle()}>
+							{idleLabel(view.idleUnloadSeconds)}
+						</Select.Trigger>
+						<Select.Content>
+							{#each idleChoices as seconds (seconds)}
+								<Select.Item value={String(seconds)} label={idleLabel(seconds)} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</SettingRow>
 			</div>
 		</section>

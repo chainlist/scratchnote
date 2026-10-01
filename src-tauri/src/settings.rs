@@ -25,9 +25,10 @@ pub struct Settings {
     pub model_variant: Variant,
     /// A GGUF file of the user's own, used instead of `model_variant`.
     pub model_path: Option<PathBuf>,
-    /// Unload the model after this many minutes without a job (SPEC 5.1).
-    /// Zero keeps it loaded.
-    pub idle_unload_minutes: u32,
+    /// Unload the chat model after this many seconds without a job or a
+    /// chat (SPEC 5.1). Zero keeps it loaded. The embedding model is never
+    /// unloaded for being idle.
+    pub idle_unload_seconds: u32,
     /// Run the model on the GPU when one is available.
     pub use_gpu: bool,
     /// Name of the accent preset the windows paint buttons and focus rings in.
@@ -60,7 +61,9 @@ impl Default for Settings {
             model_enabled: !cfg!(mobile),
             model_variant: Variant::Default,
             model_path: None,
-            idle_unload_minutes: 10,
+            // The default model takes a few seconds to load, too long to pay
+            // for every short pause between notes.
+            idle_unload_seconds: 600,
             use_gpu: true,
             accent_color: "neutral".to_string(),
             font_family: "inter".to_string(),
@@ -81,7 +84,7 @@ impl Settings {
     pub fn load(app: &AppHandle) -> Self {
         let default_root = default_root(app);
         let mut settings = match std::fs::read_to_string(settings_path(&default_root)) {
-            Ok(raw) => serde_json::from_str::<Settings>(&raw).unwrap_or_else(|e| {
+            Ok(raw) => Self::parse(&raw).unwrap_or_else(|e| {
                 log::warn!("settings.json is not readable ({e}), falling back to defaults");
                 Settings::default()
             }),
@@ -91,6 +94,21 @@ impl Settings {
             settings.root = default_root;
         }
         settings
+    }
+
+    /// Settings from the text of settings.json, with what an older build
+    /// wrote under another name carried over.
+    fn parse(raw: &str) -> serde_json::Result<Self> {
+        let value: serde_json::Value = serde_json::from_str(raw)?;
+        let mut settings = Self::deserialize(&value)?;
+        // The idle unload was counted in minutes until it took seconds.
+        if value.get("idleUnloadSeconds").is_none() {
+            if let Some(minutes) = value.get("idleUnloadMinutes").and_then(|m| m.as_u64()) {
+                settings.idle_unload_seconds =
+                    u32::try_from(minutes.saturating_mul(60)).unwrap_or(u32::MAX);
+            }
+        }
+        Ok(settings)
     }
 
     /// Check what the settings screen sent before anything is saved.
@@ -177,6 +195,19 @@ mod tests {
         assert_eq!(back.language, "system");
         assert!(!back.onboarded);
         assert_eq!(back.last_seen_version, None);
+    }
+
+    #[test]
+    fn an_idle_unload_in_minutes_is_read_as_seconds() {
+        let old = Settings::parse(r#"{"idleUnloadMinutes":5}"#).unwrap();
+        assert_eq!(old.idle_unload_seconds, 300);
+        let kept = Settings::parse(r#"{"idleUnloadMinutes":0}"#).unwrap();
+        assert_eq!(kept.idle_unload_seconds, 0);
+        // Seconds, once written, win over a leftover minutes.
+        let new = Settings::parse(r#"{"idleUnloadMinutes":5,"idleUnloadSeconds":45}"#).unwrap();
+        assert_eq!(new.idle_unload_seconds, 45);
+        assert_eq!(Settings::parse("{}").unwrap().idle_unload_seconds, 600);
+        assert!(!Settings::default().to_json().contains("idleUnloadMinutes"));
     }
 
     #[test]

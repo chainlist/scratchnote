@@ -141,7 +141,7 @@
 				type="button"
 				title={title ?? m.spaces_switch()}
 				class={cn(
-					'-ml-2 flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-base leading-none font-medium hover:bg-input/30',
+					'-ml-2 flex min-w-0 items-center gap-1.5 rounded-md px-2 text-base leading-normal font-medium hover:bg-input/30',
 					className
 				)}
 			>

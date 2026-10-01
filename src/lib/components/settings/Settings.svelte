@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Tabs from '$lib/components/ui/tabs';
+	import ActivityIcon from '@lucide/svelte/icons/activity';
 	import BlocksIcon from '@lucide/svelte/icons/blocks';
 	import BrainIcon from '@lucide/svelte/icons/brain';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
@@ -16,6 +17,7 @@
 	import { m } from '$lib/paraglide/messages';
 	import { coreIds, pluginDescription, pluginName } from '$lib/plugins/loader';
 	import { registry } from '$lib/plugins/registry.svelte';
+	import ActivityTab from './ActivityTab.svelte';
 	import AppearanceTab from './AppearanceTab.svelte';
 	import CommunityPluginsTab from './CommunityPluginsTab.svelte';
 	import CorePluginsTab from './CorePluginsTab.svelte';
@@ -57,6 +59,13 @@
 			description: m.settings_index_description,
 			icon: DatabaseIcon,
 			content: IndexTab
+		},
+		{
+			value: 'activity',
+			label: m.settings_tab_activity,
+			description: m.settings_activity_description,
+			icon: ActivityIcon,
+			content: ActivityTab
 		},
 		{
 			value: 'core-plugins',

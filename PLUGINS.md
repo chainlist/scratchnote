@@ -419,6 +419,10 @@ new Setting(section.contentEl).setName('Colour').addDropdown(/* ... */);
 | `markdown.images(text)`                                                   | the attached images a text shows: where, name, and `url`       |
 | `on('notes-changed', listener)`                                           | a note was saved, labelled or deleted, or another space opened |
 
+What a plugin saves with `notes.setBody` and `notes.create` goes on the
+space's activity log under the plugin's id, so the user can see which plugin
+changed a note.
+
 ### Icons
 
 An icon is SVG markup: a whole `<svg>`, or only what goes inside a 24 by 24

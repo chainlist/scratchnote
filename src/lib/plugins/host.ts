@@ -1,5 +1,5 @@
 import { onHeaderChange, type ItemView } from './api';
-import { app, reportError } from './app';
+import { appFor, reportError } from './app';
 import type { ViewEntry } from './registry.svelte';
 
 export interface Header {
@@ -25,7 +25,7 @@ export function openView(
 	let view: ItemView;
 	try {
 		view = entry.create();
-		view.app = app;
+		view.app = appFor(entry.plugin);
 		view.containerEl = el;
 		view.params = params;
 	} catch (e) {

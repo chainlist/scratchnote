@@ -266,7 +266,7 @@
 
 <Dialog.Root bind:open={shell.settingsOpen}>
 	<Dialog.Content
-		class="h-[min(1000px,85vh)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[min(1100px,calc(100%-2rem))]"
+		class="h-[min(1000px,85vh)] grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[min(1100px,calc(100%-2rem))]"
 	>
 		<Settings />
 	</Dialog.Content>

@@ -12,7 +12,9 @@ use tokio::sync::Notify;
 
 use crate::spaces::Space;
 use crate::state::AppState;
+use crate::storage::activity::{self, Action, Actor, Event};
 use crate::storage::daily_file::{self, Kind, Status};
+use crate::storage::index::IndexEntry;
 use crate::storage::{day_path, index, page_file, relative_day_path};
 
 use super::model::{Backend, TIMEOUT_SECS};
@@ -195,7 +197,11 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
                 }
                 Some(_) => {
                     let patch = runner::patch(&enrichment, language);
-                    write_back(&state, space, &job, &place, &patch).await;
+                    if write_back(&state, space, &job, &place, &patch).await {
+                        if let Some(event) = labelled(&note, &patch) {
+                            space.record(&state.writer, event).await;
+                        }
+                    }
                     emit_enriched(app, space, &job);
                 }
                 None => {}
@@ -210,7 +216,10 @@ async fn run(app: &AppHandle, space: &Space, job: Job, backend: Arc<dyn Backend>
             };
             if give_up {
                 log::warn!("giving up on {}", job.id);
-                write_back(&state, space, &job, &place, &runner::failed_patch(&note)).await;
+                if write_back(&state, space, &job, &place, &runner::failed_patch(&note)).await {
+                    let failed = Event::of_note(Actor::Model, Action::Fail, &note);
+                    space.record(&state.writer, failed).await;
+                }
                 emit_enriched(app, space, &job);
             } else {
                 tokio::time::sleep(Duration::from_secs(backoff)).await;
@@ -278,6 +287,23 @@ fn read_note(place: &Place, job: &Job) -> Option<daily_file::Note> {
     }
 }
 
+/// What the model's labels changed, for the activity log (SPEC 4.11).
+/// `None` when they came out as they were.
+fn labelled(note: &daily_file::Note, patch: &daily_file::NotePatch) -> Option<Event> {
+    let before = IndexEntry::from(note);
+    let after = IndexEntry {
+        // A page's title is the user's.
+        subject: match note.kind {
+            Kind::Note => patch.subject.clone(),
+            Kind::Page => before.subject.clone(),
+        },
+        category: patch.category.clone(),
+        ..before.clone()
+    };
+    let (action, changes) = activity::compare(&before, &after)?;
+    Some(Event::of_entry(Actor::Model, action, &after).with_changes(changes))
+}
+
 fn emit_enriched(app: &AppHandle, space: &Space, job: &Job) {
     let _ = app.emit(
         "note-enriched",
@@ -285,17 +311,19 @@ fn emit_enriched(app: &AppHandle, space: &Space, job: &Job) {
     );
 }
 
+/// Write the model's labels into the note's file. False when they could not
+/// be written.
 async fn write_back(
     state: &AppState,
     space: &Space,
     job: &Job,
     place: &Place,
     patch: &daily_file::NotePatch,
-) {
+) -> bool {
     // A space renamed or deleted mid-job: its notes are no longer at this
     // path, and a pending note is picked up again where they went.
     if space.is_retired() {
-        return;
+        return false;
     }
 
     match place {
@@ -306,10 +334,10 @@ async fn write_back(
                 .await
             {
                 log::warn!("could not write enrichment for {}: {e}", job.id);
-                return;
+                return false;
             }
             if space.day_changed(&job.date).is_err() {
-                return;
+                return true;
             }
         }
         // Only the category is the model's to write; the title is the user's.
@@ -329,19 +357,20 @@ async fn write_back(
                 .await
             {
                 log::warn!("could not write enrichment for {}: {e}", job.id);
-                return;
+                return false;
             }
             let Some(page) = index::parse_page(&space.root, path) else {
-                return;
+                return true;
             };
             if space.page_changed(&page).is_err() {
-                return;
+                return true;
             }
         }
     }
     if let Err(e) = space.persist_index(&state.writer).await {
         log::warn!("could not persist the index after enriching: {e}");
     }
+    true
 }
 
 #[cfg(test)]
@@ -380,5 +409,57 @@ mod tests {
         // A note that is nowhere still costs its job.
         assert!(locate(&space, &Job::new("01ZZZ", date)).is_none());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_log_hears_of_labels_only_when_they_change() {
+        let note = Note {
+            id: "01AAA".to_string(),
+            date: "2026-09-22".to_string(),
+            time: "14:32".to_string(),
+            file: relative_day_path("2026-09-22"),
+            subject: None,
+            category: None,
+            status: Status::Pending,
+            hash: body_hash("pin the chart"),
+            lang: None,
+            body: "pin the chart".to_string(),
+            kind: Kind::Note,
+            missing: false,
+        };
+        let patch = daily_file::NotePatch {
+            subject: Some("Pin the chart".to_string()),
+            category: Some("infrastructure".to_string()),
+            status: Status::Done,
+            lang: Some("en".to_string()),
+        };
+        let event = labelled(&note, &patch).expect("a first label");
+        assert_eq!(event.actor, Actor::Model);
+        assert_eq!(event.action, Action::Label);
+        assert_eq!(event.subject.as_deref(), Some("Pin the chart"));
+        assert_eq!(
+            event.changes.keys().copied().collect::<Vec<_>>(),
+            ["category", "subject"]
+        );
+
+        let relabelled = Note {
+            subject: patch.subject.clone(),
+            category: patch.category.clone(),
+            ..note.clone()
+        };
+        assert!(labelled(&relabelled, &patch).is_none(), "nothing changed");
+
+        // A page keeps its title, so only its category is the model's.
+        let page = Note {
+            kind: Kind::Page,
+            subject: Some("Weekly sync".to_string()),
+            ..note
+        };
+        let event = labelled(&page, &patch).unwrap();
+        assert_eq!(event.subject.as_deref(), Some("Weekly sync"));
+        assert_eq!(
+            event.changes.keys().copied().collect::<Vec<_>>(),
+            ["category"]
+        );
     }
 }

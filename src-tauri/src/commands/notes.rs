@@ -9,6 +9,7 @@ use crate::enrich::normalize;
 use crate::enrich::queue::Job;
 use crate::spaces::Space;
 use crate::state::AppState;
+use crate::storage::activity::{self, Action, Actor, Event, Target};
 use crate::storage::categories;
 use crate::storage::daily_file::{self, Kind, Note, NotePatch, Status};
 use crate::storage::index::{self, IndexEntry};
@@ -24,13 +25,15 @@ pub struct DaySummary {
 
 /// Append a note to a day's file, today's unless another date is given, and
 /// tell the rest of the app about it. The note carries the current time
-/// either way. An empty body is a no-op, not an error.
+/// either way. An empty body is a no-op, not an error. `plugin` is the
+/// plugin saving it through the plugin API, for the activity log.
 #[tauri::command]
 pub async fn save_note(
     app: AppHandle,
     state: State<'_, AppState>,
     body: String,
     date: Option<String>,
+    plugin: Option<String>,
 ) -> Result<Option<Note>, String> {
     let body = body.trim().to_string();
     if body.is_empty() {
@@ -66,6 +69,9 @@ pub async fn save_note(
     space.note_added(&state.writer, &note).await?;
 
     enqueue(&state, &space, note.id.clone(), note.date.clone()).await;
+    let created = Event::of_note(Actor::from_plugin(plugin), Action::Create, &note)
+        .words(None, Some(index::words(&note.body)));
+    space.record(&state.writer, created).await;
 
     let _ = app.emit("note-updated", serde_json::json!({ "id": note.id }));
     Ok(Some(note))
@@ -173,6 +179,12 @@ pub async fn delete_note(
     check_date(&date)?;
     let space = state.space()?;
     let path = day_path(&space.root, &date);
+    // For the activity log, which keeps its subject, not its text.
+    let gone = space
+        .index
+        .read()
+        .ok()
+        .and_then(|idx| idx.day(&date).iter().find(|e| e.id == id).cloned());
     if !state.writer.delete_note(path.clone(), id.clone()).await? {
         return Err(format!("no note {id} in {date}"));
     }
@@ -186,6 +198,15 @@ pub async fn delete_note(
         queue.remove(&id);
     }
     persist_queue(&state, &space).await;
+    let deleted = match &gone {
+        Some(entry) => Event::of_entry(Actor::User, Action::Delete, entry).words(entry.words, None),
+        None => Event {
+            id: Some(id.clone()),
+            date: Some(date),
+            ..Event::new(Actor::User, Action::Delete, Target::Note)
+        },
+    };
+    space.record(&state.writer, deleted).await;
 
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     Ok(())
@@ -193,7 +214,8 @@ pub async fn delete_note(
 
 /// Edit a note's body in the app. A changed body goes back to the model,
 /// unless the user has taken the note over (SPEC 4.2) or only ticked task
-/// boxes (SPEC 3.4).
+/// boxes (SPEC 3.4). `plugin` is the plugin saving it through the plugin
+/// API, for the activity log.
 #[tauri::command]
 pub async fn update_note(
     app: AppHandle,
@@ -201,6 +223,7 @@ pub async fn update_note(
     date: String,
     id: String,
     body: String,
+    plugin: Option<String>,
 ) -> Result<Note, String> {
     check_date(&date)?;
     let space = state.space()?;
@@ -213,8 +236,9 @@ pub async fn update_note(
         return Ok(current);
     }
 
-    let requeue =
-        current.status != Status::Manual && !daily_file::only_ticks_changed(&current.body, &body);
+    let ticks = daily_file::only_ticks_changed(&current.body, &body);
+    let requeue = current.status != Status::Manual && !ticks;
+    let words = (index::words(&current.body), index::words(&body));
     let path = day_path(&space.root, &date);
     if !state.writer.replace_body(path, id.clone(), body).await? {
         return Err(format!("no note {id} in {date}"));
@@ -228,7 +252,12 @@ pub async fn update_note(
     }
 
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
-    read_note(&space, &date, &id).await
+    let note = read_note(&space, &date, &id).await?;
+    let action = if ticks { Action::Tick } else { Action::Edit };
+    let edited = Event::of_note(Actor::from_plugin(plugin), action, &note)
+        .words(Some(words.0), Some(words.1));
+    space.record(&state.writer, edited).await;
+    Ok(note)
 }
 
 /// Set a note's subject and category by hand. The note becomes `manual`,
@@ -290,7 +319,14 @@ pub async fn update_note_meta(
     persist_queue(&state, &space).await;
 
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
-    read_note(&space, &date, &id).await
+    let note = read_note(&space, &date, &id).await?;
+    if let Some((action, changes)) =
+        activity::compare(&IndexEntry::from(&current), &IndexEntry::from(&note))
+    {
+        let labelled = Event::of_note(Actor::User, action, &note).with_changes(changes);
+        space.record(&state.writer, labelled).await;
+    }
+    Ok(note)
 }
 
 fn is_page(space: &Space, id: &str) -> bool {
@@ -422,6 +458,11 @@ pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Resul
     }
     persist_queue(&state, &space).await;
     state.wake.notify_one();
+    let regenerated = Event {
+        count: Some(notes.len()),
+        ..Event::new(Actor::User, Action::Regenerate, Target::Space)
+    };
+    space.record(&state.writer, regenerated).await;
 
     let _ = app.emit("index-rebuilt", ());
     Ok(notes.len())
@@ -454,6 +495,8 @@ pub async fn retry_enrichment(
     mark_pending(&state, &space, &note).await?;
     reindex_day(&state, &space, &date).await?;
     enqueue(&state, &space, id.clone(), date).await;
+    let rerun = Event::of_note(Actor::User, Action::Rerun, &note);
+    space.record(&state.writer, rerun).await;
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     Ok(())
 }

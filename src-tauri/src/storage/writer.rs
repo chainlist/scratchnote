@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{mpsc, oneshot};
 
+use super::activity::{self, Event};
 use super::daily_file::{self, Note, NotePatch};
 use super::fingerprint;
 
@@ -83,6 +84,14 @@ enum WriteRequest {
         /// False when the file was not there.
         reply: oneshot::Sender<io::Result<bool>>,
     },
+    /// One more line on a space's activity log (SPEC 4.11), appended rather
+    /// than rewritten. The watcher reads only markdown, so it needs no
+    /// fingerprint.
+    LogActivity {
+        space_root: PathBuf,
+        event: Box<Event>,
+        reply: oneshot::Sender<io::Result<()>>,
+    },
 }
 
 /// What `Writer::rewrite` does to a file's contents; `None` leaves it alone.
@@ -148,6 +157,13 @@ impl Writer {
                     }
                     WriteRequest::Remove { path, reply } => {
                         let _ = reply.send(remove(&path, &seen).await);
+                    }
+                    WriteRequest::LogActivity {
+                        space_root,
+                        event,
+                        reply,
+                    } => {
+                        let _ = reply.send(activity::append(&space_root, &event).await);
                     }
                 }
             }
@@ -274,6 +290,19 @@ impl Writer {
         let (reply, response) = oneshot::channel();
         self.send(WriteRequest::Remove { path, reply }, response)
             .await
+    }
+
+    pub async fn log_activity(&self, space_root: PathBuf, event: Event) -> Result<(), String> {
+        let (reply, response) = oneshot::channel();
+        self.send(
+            WriteRequest::LogActivity {
+                space_root,
+                event: Box::new(event),
+                reply,
+            },
+            response,
+        )
+        .await
     }
 
     async fn send<T>(
@@ -633,6 +662,20 @@ mod tests {
             "{\"id\":\"01CCC\"}\n"
         );
 
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn logs_activity_in_the_space_it_happened_in() {
+        use crate::storage::activity::{self, Action, Actor, Event, Target};
+        let root = scratch_dir("activity");
+        let writer = Writer::spawn();
+        let event = Event::new(Actor::User, Action::Attach, Target::Attachment);
+        let path = activity::day_path(&root, event.at.date_naive());
+        writer.log_activity(root.clone(), event).await.unwrap();
+        let contents = std::fs::read_to_string(path).unwrap();
+        assert!(contents.contains("\"action\":\"attach\""));
+        assert!(contents.ends_with('\n'));
         let _ = std::fs::remove_dir_all(&root);
     }
 

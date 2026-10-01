@@ -153,6 +153,11 @@ impl Index {
         self.pages.remove(id)
     }
 
+    /// A day's notes, its pages left out.
+    pub fn day(&self, date: &str) -> &[IndexEntry] {
+        self.by_date.get(date).map_or(&[], Vec::as_slice)
+    }
+
     pub fn page(&self, id: &str) -> Option<&IndexEntry> {
         self.pages.get(id)
     }
@@ -435,7 +440,7 @@ fn read_pages(
 
 /// The runs of text between spaces that hold a letter or a digit, so a
 /// list's `-` or a task's box is not a word.
-fn words(text: &str) -> usize {
+pub fn words(text: &str) -> usize {
     text.split_whitespace()
         .filter(|token| !matches!(*token, "[x]" | "[X]"))
         .filter(|token| token.chars().any(char::is_alphanumeric))

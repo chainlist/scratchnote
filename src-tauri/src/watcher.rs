@@ -3,9 +3,10 @@
 //!
 //! Events are debounced, because one save from an editor typically produces
 //! several, and the app's own writes are filtered out by comparing the file
-//! against the fingerprint the writer recorded.
+//! against the fingerprint the writer recorded. What the edits did goes on
+//! the activity log, as made outside the app (SPEC 4.11).
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -17,6 +18,7 @@ use tokio::sync::mpsc;
 use crate::enrich::queue::Job;
 use crate::spaces::Space;
 use crate::state::AppState;
+use crate::storage::activity::{self, Seen};
 use crate::storage::daily_file::Status;
 use crate::storage::search_db::Stamp;
 use crate::storage::{check_date, fingerprint, index};
@@ -79,23 +81,36 @@ async fn process(app: AppHandle, space: Weak<Space>, mut rx: mpsc::UnboundedRece
             return;
         };
         let mut touched = false;
+        let mut seen = Vec::new();
         for path in batch.drain() {
-            touched |= reindex(&app, &space, &path);
+            touched |= reindex(&app, &space, &path, &mut seen);
         }
         if touched {
             let _ = app.emit("index-rebuilt", ());
+        }
+        // A batch at a time, so a note moved between two files is one event.
+        let events = activity::external(seen);
+        if !events.is_empty() {
+            let app = app.clone();
+            let space = space.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app.state::<AppState>();
+                for event in events {
+                    space.record(&state.writer, event).await;
+                }
+            });
         }
     }
 }
 
 /// Reparse one changed file into the index: a daily file or a page file.
 /// Anything else in the space's folder is not the watcher's business.
-/// Returns whether anything changed.
-fn reindex(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
+/// Returns whether anything changed, and adds the notes it changed to `seen`.
+fn reindex(app: &AppHandle, space: &Arc<Space>, path: &Path, seen: &mut Vec<Seen>) -> bool {
     if path.starts_with(space.root.join("pages")) {
-        reindex_page(app, space, path)
+        reindex_page(app, space, path, seen)
     } else if path.starts_with(space.root.join("notes")) {
-        reindex_day(app, space, path)
+        reindex_day(app, space, path, seen)
     } else {
         false
     }
@@ -104,7 +119,7 @@ fn reindex(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
 /// Reparse one page file (SPEC 4.3). A page renamed or moved is found again
 /// by its id, and its stub follows it. A page file that is gone leaves the
 /// index, and its stub stays.
-fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
+fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path, seen: &mut Vec<Seen>) -> bool {
     let Some(state) = app.try_state::<AppState>() else {
         return false;
     };
@@ -127,6 +142,7 @@ fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
             _ => return false,
         },
     };
+    seen.push((before.clone(), parsed.as_ref().map(index::IndexEntry::from)));
     // Edited text parses as pending, as in a daily file.
     let queued = parsed.as_ref().is_some_and(|entry| {
         entry.status == Status::Pending
@@ -178,7 +194,7 @@ fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
 }
 
 /// Reparse one daily file into the index. Returns whether anything changed.
-fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
+fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path, seen: &mut Vec<Seen>) -> bool {
     let Some(date) = path.file_stem().and_then(|s| s.to_str()) else {
         return false;
     };
@@ -199,6 +215,11 @@ fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     // look older than it is, and read again.
     let stamp = Stamp::of(path);
     let notes = index::parse_day(path, &date);
+    let before = space
+        .index
+        .read()
+        .map(|idx| idx.day(&date).to_vec())
+        .unwrap_or_default();
     // A labelled note whose body was edited parses as pending, and so does a
     // block typed in by hand: both go to the model.
     let pending: Vec<String> = notes
@@ -209,6 +230,7 @@ fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     if space.set_day(&date, &notes, stamp).is_err() {
         return false;
     }
+    seen.extend(pair_up(before, index::entries(&notes)));
     let queued = match space.queue.lock() {
         Ok(mut queue) => pending.into_iter().fold(false, |any, id| {
             queue.push(Job::new(id, date.clone())) || any
@@ -233,6 +255,18 @@ fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
 
     log::info!("reindexed {date} in {} after an external edit", space.name);
     true
+}
+
+/// A day's notes before and after, matched by id, in the order of the file.
+fn pair_up(before: Vec<index::IndexEntry>, after: Vec<index::IndexEntry>) -> Vec<Seen> {
+    let mut by_id: BTreeMap<String, index::IndexEntry> =
+        before.into_iter().map(|e| (e.id.clone(), e)).collect();
+    let mut pairs: Vec<Seen> = after
+        .into_iter()
+        .map(|new| (by_id.remove(&new.id), Some(new)))
+        .collect();
+    pairs.extend(by_id.into_values().map(|old| (Some(old), None)));
+    pairs
 }
 
 /// True when the file on disk still matches what the app last wrote there, so

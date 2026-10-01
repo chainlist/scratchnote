@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::embed::vectors::Vectors;
 use crate::enrich::queue::{queue_path, Job, Queue};
 use crate::enrich::worker::Wake;
+use crate::storage::activity::{self, Actor, Event};
 use crate::storage::day_path;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{self, Index, IndexEntry};
@@ -221,11 +222,34 @@ pub struct Space {
     /// Pages open in the editor. Neither model touches them until the page
     /// view closes, so autosaves do not run either one again (SPEC 3.5).
     editing: Mutex<HashSet<String>>,
+    /// The edits to pages held in the editor, each logged as one when its
+    /// page is let go, rather than one per autosave (SPEC 4.11).
+    edits: Mutex<HashMap<String, PageEdit>>,
     /// Held only to keep it alive; dropping it stops watching.
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
     /// Set once the space is deleted or renamed away, so a job still in hand
     /// for it does not write files back into the old folder.
     pub retired: AtomicBool,
+}
+
+/// Edits to a page held in the editor, not logged yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageEdit {
+    pub actor: Actor,
+    /// How many words the page had before them.
+    pub words: usize,
+    /// Whether they only ticked or cleared task boxes.
+    pub ticks: bool,
+}
+
+impl PageEdit {
+    pub fn action(&self) -> activity::Action {
+        if self.ticks {
+            activity::Action::Tick
+        } else {
+            activity::Action::Edit
+        }
+    }
 }
 
 impl Space {
@@ -243,6 +267,7 @@ impl Space {
             root,
             embed_wake,
             editing: Mutex::new(HashSet::new()),
+            edits: Mutex::new(HashMap::new()),
         }
     }
 
@@ -356,6 +381,58 @@ impl Space {
             .lock()
             .map(|editing| editing.clone())
             .unwrap_or_default()
+    }
+
+    /// A held page's text changed, `ticks` when only in its task boxes.
+    /// The first change opens its edit, with the words it had before.
+    /// Returns the edit this one ends, someone else's, for the caller to log
+    /// with the words the page has now.
+    pub fn page_edited(
+        &self,
+        id: &str,
+        actor: Actor,
+        words: usize,
+        ticks: bool,
+    ) -> Option<PageEdit> {
+        let mut edits = self.edits.lock().ok()?;
+        match edits.get_mut(id) {
+            Some(open) if open.actor == actor => {
+                open.ticks &= ticks;
+                None
+            }
+            _ => {
+                let edit = PageEdit {
+                    actor,
+                    words,
+                    ticks,
+                };
+                edits.insert(id.to_string(), edit)
+            }
+        }
+    }
+
+    /// The edit open on a page, ended.
+    pub fn take_edit(&self, id: &str) -> Option<PageEdit> {
+        self.edits.lock().ok()?.remove(id)
+    }
+
+    /// Every edit still open, ended, as the space is left or the app quits.
+    pub fn take_edits(&self) -> Vec<(String, PageEdit)> {
+        self.edits
+            .lock()
+            .map(|mut edits| edits.drain().collect())
+            .unwrap_or_default()
+    }
+
+    /// Add an event to the space's activity log (SPEC 4.11). A failure is
+    /// only logged, so the log never stands in the way of a save.
+    pub async fn record(&self, writer: &Writer, event: Event) {
+        if self.is_retired() {
+            return;
+        }
+        if let Err(e) = writer.log_activity(self.root.clone(), event).await {
+            log::warn!("could not write to the activity log of {}: {e}", self.name);
+        }
     }
 
     pub fn queued(&self) -> usize {
@@ -701,6 +778,36 @@ mod tests {
         space.load();
         assert_eq!(space.note_count(), Some(3));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_page_edit_lasts_until_someone_else_edits_or_it_is_let_go() {
+        let space = Space::new("Test", scratch("edits"), wake());
+        let plugin = Actor::Plugin("tasks".to_string());
+
+        // Every autosave of one sitting is one edit, from the words before it.
+        assert_eq!(space.page_edited("01PPP", Actor::User, 10, true), None);
+        assert_eq!(space.page_edited("01PPP", Actor::User, 12, false), None);
+        // A plugin saving the open page ends it.
+        let ended = space.page_edited("01PPP", plugin.clone(), 15, true);
+        assert_eq!(
+            ended,
+            Some(PageEdit {
+                actor: Actor::User,
+                words: 10,
+                ticks: false,
+            })
+        );
+        assert_eq!(ended.unwrap().action(), activity::Action::Edit);
+
+        assert_eq!(space.page_edited("01QQQ", Actor::User, 3, false), None);
+        let ticked = space.take_edit("01PPP").unwrap();
+        assert_eq!((ticked.actor.clone(), ticked.words), (plugin, 15));
+        assert_eq!(ticked.action(), activity::Action::Tick);
+        assert_eq!(space.take_edit("01PPP"), None, "taken once");
+        let left: Vec<String> = space.take_edits().into_iter().map(|(id, _)| id).collect();
+        assert_eq!(left, ["01QQQ"]);
+        assert!(space.take_edits().is_empty());
     }
 
     #[test]

@@ -83,8 +83,9 @@ async fn load_space_off_thread(app: &AppHandle, space: &Arc<Space>) -> Result<()
 }
 
 /// Close the space being left, and note how many notes it held for the
-/// switcher to show meanwhile.
-fn close_space(state: &AppState, space: &Space) -> Result<(), String> {
+/// switcher to show meanwhile. A page left open there is let go of with it.
+async fn close_space(state: &AppState, space: &Space) -> Result<(), String> {
+    crate::pages::log_open_edits(&state.writer, space).await;
     if let Some(count) = space.unload() {
         state
             .registry
@@ -181,7 +182,7 @@ pub async fn create_space(
         .write()
         .map_err(|_| "spaces lock poisoned".to_string())?
         .active = name;
-    close_space(&state, &left)?;
+    close_space(&state, &left).await?;
     spaces_changed(&app, &state).await
 }
 
@@ -209,7 +210,7 @@ pub async fn set_active_space(
         .write()
         .map_err(|_| "spaces lock poisoned".to_string())?
         .active = name;
-    close_space(&state, &left)?;
+    close_space(&state, &left).await?;
     // Its notes are now first in line for the model.
     state.wake.notify_one();
     spaces_changed(&app, &state).await

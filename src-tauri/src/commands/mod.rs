@@ -1,5 +1,6 @@
 //! Tauri commands, SPEC 8.
 
+pub mod activity;
 pub mod chat;
 pub mod models;
 pub mod notes;

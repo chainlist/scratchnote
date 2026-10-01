@@ -351,6 +351,7 @@ Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, c
 - The plugins load before the first view, so the first card is drawn with their syntax. The app waits two seconds at most on a plugin that loads asynchronously.
 - Each window times its startup: loading the app, the wait on the plugins (reading the plugin list, each plugin's load, listening for changes), and the first view, from when the window began loading until its first view is up. It logs them to its console, and Settings > General shows the main window's total under the version, with Details for every step.
 - A plugin that throws, while loading, drawing a widget, or running a command, is reported and the rest of the app carries on: a widget that fails leaves its text as typed.
+- What a plugin saves through `app.notes` goes on the space's activity log as the plugin's (4.11).
 - PLUGINS.md is the guide for authors: the files, the API, and how to publish.
 
 ### 3.10 Mentions
@@ -415,6 +416,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
         vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
         queue.json       # pending enrichment jobs
         categories.json  # the categories the model picks from, English names: ["development", ...]
+        activity/        # who did what, a file per day, kept 90 days (4.11)
     Work/
       notes/...
       .scratchnote/...
@@ -602,6 +604,36 @@ Community plugins come from GitHub, as Obsidian's do.
 - A local folder can stand in for GitHub: `SCRATCHNOTE_PLUGIN_REGISTRY` names one, and a dev build reads the repository's own `plugin-registry/`. It mirrors the URLs host first, `<folder>/raw.githubusercontent.com/<repo>/HEAD/manifest.json`, so a folder that works is a GitHub layout that works. Repositories and versions are checked before any of them becomes a path, so none reaches outside the folder.
 - Nothing is fetched until the user asks: the list when Browse opens, a plugin's details when it is picked, its release when it is installed or updated, and every installed plugin's manifest on Check for updates.
 
+### 4.11 Activity log
+
+Each space keeps a log of who did what to its notes and pages, a line of JSON per event, in a file per day under its `.scratchnote/`:
+
+```
+.scratchnote/
+  activity/
+    2026/
+      2026-10-01.jsonl
+```
+
+<!-- prettier-ignore -->
+```jsonl
+{"at":"2026-10-01T14:32:05+02:00","actor":"plugin:basics","action":"tick","kind":"note","id":"01J8Z3K6Q9X2","date":"2026-09-22","file":"notes/2026/2026-09-22.md","subject":"Rollback plan for ArgoCD sync issue","changes":{"words":[42,42]}}
+```
+
+Rules:
+
+- `at` is when it happened, in local time with its offset, and picks the file: an edit today to last week's note goes in today's file, and its `date` says which day the note is on.
+- `actor` is `user` (the app's windows), `plugin:<id>` (a plugin, through `app.notes`), `model` (the enrichment worker) or `external` (another editor or a sync tool, as the watcher saw it). The plugin API gives each plugin an `app` of its own, which names it in what it saves. Plugins are not sandboxed (3.9), so that is what a plugin says it is, not proof. A window can name a plugin, never the model.
+- `action` is one of `create`, `edit`, `tick` (an edit only to task boxes, 3.4), `label` (a subject or a category set, by the model or by hand), `fail` (the model gave up, 5.6), `rerun`, `rename` (a page's title or file), `move` (a note's day or a page's file changed outside the app, its text the same), `delete`, `to-page` (Turn into page, with the note's id and the page's in `changes.id`), `attach` (3.7) and `regenerate` (every note sent back to the model, with how many in `count`).
+- `kind` is `note`, `page`, `attachment` or `space`. `id`, `date`, `file` and `subject` (a page's title, an attachment's name) say where, as the event left it.
+- `changes` holds each field that changed as `[before, after]`: `words`, `subject` or a page's `title`, `category`, `date`, `file`. The text itself is never written here, so deleting a note deletes its text. Its subject stays until its day's file goes.
+- A page open in the editor saves every pause in typing (3.5). Those saves are one `edit`, logged when the page is let go: its view closes, the space is left, or the app quits. A save by someone else, a plugin say, ends the edit open and starts one of its own.
+- The model's labels are logged only when they change what the note shows.
+- Edits outside the app are logged as the watcher sees them (4.3), so only in the open space while the app runs. A note moved from one day's file to another, or a page to another file, is one `move`. What changed while the app was closed or the space not open is not logged.
+- A day's file is removed once it is 90 days old, when the first event of a later day is written. Anything else in the folder is left alone.
+- Settings > Activity shows the open space's log, newest first, under a heading per day: each event's time, who (a plugin by its name), what, and on which note or page, with what changed beside it (words, category, the old title, the days of a move). A filter keeps one actor: you, plugins, the model, or other apps. A click on a note or a page closes the settings and opens it, unless a later event deleted it or turned it into a page. Show more reads a hundred further. Lines that do not read, and days past keeping not yet removed, are passed over.
+- Lines go through the single writer (4.3), appended rather than rewritten, and are not synced to disk one by one: a power cut may cost the last ones. A line cut short by a crash stays as it is, and the next one starts on a line of its own. The watcher reads only markdown, so the log never looks like an edit.
+
 ## 5. Enrichment (LLM)
 
 ### 5.1 Runtime
@@ -723,6 +755,7 @@ The grammar only lets the model write a listed category, so nothing it returns n
 - Rebuild index
 - Launch at login
 - General also shows the app's icon, name and version, Check for updates, and News for the release notes of every version (3.6), and how long the window took to start, with Details for each step and plugin (3.9)
+- Activity: the open space's activity log (4.11)
 - Core plugins: each core plugin's switch (3.9)
 - Community plugins: on or off, browsed, installed, updated and removed (3.9)
 - Each plugin's own tab, under Core plugins or Community plugins in the sidebar (3.9)

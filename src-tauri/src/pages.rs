@@ -7,17 +7,19 @@
 //!
 //! A page open in the editor is held: the page view saves it every pause in
 //! typing, and neither model runs on it until `finish_page` says the view
-//! closed (SPEC 3.5).
+//! closed (SPEC 3.5). The activity log takes those saves as one edit, logged
+//! as the page is let go (SPEC 4.11).
 
 use chrono::Local;
 use tauri::{AppHandle, Emitter, State};
 use ulid::Ulid;
 
 use crate::commands::notes::{enqueue, persist_queue, read_note};
-use crate::spaces::Space;
+use crate::spaces::{PageEdit, Space};
 use crate::state::AppState;
+use crate::storage::activity::{self, Action, Actor, Event, Target};
 use crate::storage::daily_file::{self, body_hash, Kind, Note, Status, Stub};
-use crate::storage::index::{Index, IndexEntry};
+use crate::storage::index::{self, Index, IndexEntry};
 use crate::storage::page_file;
 use crate::storage::writer::Writer;
 use crate::storage::{check_date, day_path};
@@ -135,6 +137,29 @@ fn emit_updated(app: &AppHandle, id: &str) {
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
 }
 
+/// Log an edit made while the page was held, now that it ended. `page` is
+/// the page as the edit left it.
+async fn log_edit(writer: &Writer, space: &Space, page: &IndexEntry, edit: PageEdit) {
+    let action = edit.action();
+    let event = Event::of_entry(edit.actor, action, page).words(Some(edit.words), page.words);
+    space.record(writer, event).await;
+}
+
+/// Log the edits still open on held pages, as the space is left or the app
+/// quits, where no view closing will end them.
+pub async fn log_open_edits(writer: &Writer, space: &Space) {
+    for (id, edit) in space.take_edits() {
+        let page = space
+            .index
+            .read()
+            .ok()
+            .and_then(|idx| idx.page(&id).cloned());
+        if let Some(page) = page {
+            log_edit(writer, space, &page, edit).await;
+        }
+    }
+}
+
 /// Start a page on a day, today's unless another is given, at the current
 /// time. The file is written first, then the stub (SPEC 4.7). It is made in
 /// the page view, so it is held until `finish_page`.
@@ -174,6 +199,9 @@ pub async fn create_page(
     space.page_changed(&page)?;
     space.persist_index(&state.writer).await?;
     sync_stub(&state.writer, &space, &page).await?;
+    let created = Event::of_note(Actor::User, Action::Create, &page)
+        .words(None, Some(index::words(&page.body)));
+    space.record(&state.writer, created).await;
 
     emit_updated(&app, &page.id);
     Ok(page)
@@ -209,13 +237,15 @@ pub async fn get_page(state: State<'_, AppState>, id: String) -> Result<Note, St
 /// ticked task boxes, but it only goes to the model once the view closes
 /// (`finish_page`). Pending in the file, it is queued at the next launch
 /// should the app quit first. An empty text is allowed: the title is still
-/// there.
+/// there. `plugin` is the plugin saving it through the plugin API, for the
+/// activity log.
 #[tauri::command]
 pub async fn update_page(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
     body: String,
+    plugin: Option<String>,
 ) -> Result<Note, String> {
     let space = state.space()?;
     space.hold(&id);
@@ -225,8 +255,8 @@ pub async fn update_page(
         return Ok(current);
     }
 
-    let relabel =
-        current.status != Status::Manual && !daily_file::only_ticks_changed(&current.body, &body);
+    let ticks = daily_file::only_ticks_changed(&current.body, &body);
+    let relabel = current.status != Status::Manual && !ticks;
     let file = current.file.clone();
     let written = {
         let file = file.clone();
@@ -242,6 +272,12 @@ pub async fn update_page(
     }
     let page = reindex(&space, &file)?.ok_or_else(|| format!("{file} is gone"))?;
     space.persist_index(&state.writer).await?;
+    // An edit by someone else, open on the page, ends where this one starts.
+    let before = IndexEntry::from(&current);
+    let actor = Actor::from_plugin(plugin);
+    if let Some(ended) = space.page_edited(&id, actor, before.words.unwrap_or(0), ticks) {
+        log_edit(&state.writer, &space, &before, ended).await;
+    }
 
     emit_updated(&app, &id);
     Ok(page)
@@ -257,9 +293,11 @@ pub async fn finish_page(state: State<'_, AppState>, id: String) -> Result<(), S
     if !space.release(&id) {
         return Ok(());
     }
-    let pending = entry(&space, &id)
-        .ok()
-        .filter(|page| page.status == Status::Pending);
+    let page = entry(&space, &id).ok();
+    if let (Some(edit), Some(page)) = (space.take_edit(&id), &page) {
+        log_edit(&state.writer, &space, page, edit).await;
+    }
+    let pending = page.filter(|page| page.status == Status::Pending);
     if let Some(page) = pending {
         enqueue(&state, &space, id, page.date).await;
     }
@@ -303,6 +341,12 @@ pub async fn rename_page(
     let page = reindex(&space, &file)?.ok_or_else(|| format!("{file} is gone"))?;
     space.persist_index(&state.writer).await?;
     sync_stub(&state.writer, &space, &page).await?;
+    if let Some((action, changes)) =
+        activity::compare(&IndexEntry::from(&current), &IndexEntry::from(&page))
+    {
+        let renamed = Event::of_note(Actor::User, action, &page).with_changes(changes);
+        space.record(&state.writer, renamed).await;
+    }
 
     emit_updated(&app, &id);
     Ok(page)
@@ -323,9 +367,10 @@ pub async fn delete_page(
     let space = state.space()?;
     space.release(&id);
     let page = entry(&space, &id).ok();
+    let edit = space.take_edit(&id);
 
     drop_stub(&state.writer, &space, &date, &id).await?;
-    if let Some(page) = page {
+    if let Some(page) = &page {
         if page.date != date {
             drop_stub(&state.writer, &space, &page.date, &id).await?;
         }
@@ -337,6 +382,21 @@ pub async fn delete_page(
         }
         persist_queue(&state, &space).await;
     }
+    let deleted = match &page {
+        Some(page) => {
+            if let Some(edit) = edit {
+                log_edit(&state.writer, &space, page, edit).await;
+            }
+            Event::of_entry(Actor::User, Action::Delete, page).words(page.words, None)
+        }
+        // A stub whose page was already gone.
+        None => Event {
+            id: Some(id.clone()),
+            date: Some(date),
+            ..Event::new(Actor::User, Action::Delete, Target::Page)
+        },
+    };
+    space.record(&state.writer, deleted).await;
 
     emit_updated(&app, &id);
     Ok(())
@@ -396,6 +456,8 @@ pub async fn note_to_page(
         queue.remove(&id);
     }
     persist_queue(&state, &space).await;
+    let turned = Event::of_note(Actor::User, Action::ToPage, &page).change("id", &id, &page.id);
+    space.record(&state.writer, turned).await;
 
     emit_updated(&app, &id);
     emit_updated(&app, &page.id);
@@ -427,8 +489,13 @@ pub async fn retry(
     }
     reindex(space, &page.file)?;
     space.release(id);
+    if let Some(edit) = space.take_edit(id) {
+        log_edit(&state.writer, space, &IndexEntry::from(&page), edit).await;
+    }
     space.persist_index(&state.writer).await?;
     enqueue(state, space, id.to_string(), page.date.clone()).await;
+    let rerun = Event::of_note(Actor::User, Action::Rerun, &page);
+    space.record(&state.writer, rerun).await;
     emit_updated(app, id);
     Ok(())
 }

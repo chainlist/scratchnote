@@ -32,7 +32,7 @@ import {
 	unloadPlugin,
 	type App
 } from './api';
-import { app, describeWindow } from './app';
+import { app, appFor, describeWindow } from './app';
 import type { CorePlugin } from './core';
 import { plugins } from './state.svelte';
 
@@ -173,7 +173,7 @@ async function load(
 	styles?: string | null
 ): Promise<Loaded> {
 	const style = styles ? addStyle(manifest.id, styles) : undefined;
-	const plugin = createPlugin(Class, app, manifest, core);
+	const plugin = createPlugin(Class, appFor(manifest.id), manifest, core);
 	try {
 		await start(plugin);
 	} catch (e) {

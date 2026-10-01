@@ -33,10 +33,11 @@ export interface DaySummary {
 
 /**
  * Saves to today unless a date is given. Returns null when the body was
- * empty, which is a no-op rather than an error.
+ * empty, which is a no-op rather than an error. `plugin` is the plugin
+ * saving it, for the activity log.
  */
-export const saveNote = (body: string, date?: string) =>
-	invoke<Note | null>('save_note', { body, date });
+export const saveNote = (body: string, date?: string, plugin?: string) =>
+	invoke<Note | null>('save_note', { body, date, plugin });
 
 export const getDay = (date: string) => invoke<Note[]>('get_day', { date });
 
@@ -326,9 +327,12 @@ export interface NoteEdit {
 	category: string;
 }
 
-/** Replace a note's body. A changed body is re-enriched unless the note is manual. */
-export const updateNote = (date: string, id: string, body: string) =>
-	invoke<Note>('update_note', { date, id, body });
+/**
+ * Replace a note's body. A changed body is re-enriched unless the note is
+ * manual. `plugin` is the plugin saving it, for the activity log.
+ */
+export const updateNote = (date: string, id: string, body: string, plugin?: string) =>
+	invoke<Note>('update_note', { date, id, body, plugin });
 
 /**
  * Set subject and category by hand, which makes the note manual so the model
@@ -345,14 +349,46 @@ export const updateNoteMeta = (
 export const createPage = (title: string, body: string, date?: string) =>
 	invoke<Note>('create_page', { title, body, date });
 
+/** Whose events Settings > Activity shows (SPEC 4.11). */
+export type ActivityWhose = 'user' | 'plugin' | 'model' | 'external';
+
+/** One line of a space's activity log. */
+export interface ActivityEvent {
+	/** When, in local time with its offset: `2026-10-01T14:32:05+02:00`. */
+	at: string;
+	/** `user`, `plugin:<id>`, `model` or `external`. */
+	actor: string;
+	action: string;
+	/** `note`, `page`, `attachment` or `space`. */
+	kind: string;
+	id?: string;
+	/** The note's or the page's day, which need not be the day of the event. */
+	date?: string;
+	file?: string;
+	/** Its subject, a page's title, or an attachment's name. */
+	subject?: string;
+	/** How many notes an event about the whole space took in. */
+	count?: number;
+	/** Each field that changed, as `[before, after]`. */
+	changes?: Record<string, [unknown, unknown]>;
+}
+
+/** The open space's activity, newest first: `limit` events past the first `offset`. */
+export const listActivity = (offset: number, limit: number, whose?: ActivityWhose) =>
+	invoke<{ events: ActivityEvent[]; more: boolean }>('list_activity', { offset, limit, whose });
+
 /** Every page of the open space, newest first. */
 export const listPages = () => invoke<Note[]>('list_pages');
 
 /** A page read afresh from its file. */
 export const getPage = (id: string) => invoke<Note>('get_page', { id });
 
-/** Replace a page's text, which may be empty. A changed text is re-enriched unless manual. */
-export const updatePage = (id: string, body: string) => invoke<Note>('update_page', { id, body });
+/**
+ * Replace a page's text, which may be empty. A changed text is re-enriched
+ * unless manual. `plugin` is the plugin saving it, for the activity log.
+ */
+export const updatePage = (id: string, body: string, plugin?: string) =>
+	invoke<Note>('update_page', { id, body, plugin });
 
 /**
  * The page view closed. Saves while it was open leave the models alone; this

@@ -18,7 +18,9 @@ use tauri::http::{header, Request, Response, StatusCode};
 use tauri::ipc::InvokeBody;
 use tauri::{AppHandle, Manager, State};
 
+use crate::spaces::Space;
 use crate::state::AppState;
+use crate::storage::activity::{Action, Actor, Event, Target};
 
 /// The folder in a space that holds its attachments.
 const DIR: &str = "attachments";
@@ -134,6 +136,18 @@ fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
 }
 
+/// Put the files copied in on the space's activity log (SPEC 4.11).
+async fn record(state: &AppState, space: &Space, attached: &[Attachment]) {
+    for attachment in attached {
+        let event = Event {
+            file: Some(attachment.path.clone()),
+            subject: Some(attachment.name.clone()),
+            ..Event::new(Actor::User, Action::Attach, Target::Attachment)
+        };
+        space.record(&state.writer, event).await;
+    }
+}
+
 /// Copy files from disk into the open space: dropped on an editor, or picked
 /// with its attach button. Every path is checked before anything is copied,
 /// so a folder among them copies nothing.
@@ -142,8 +156,9 @@ pub async fn add_attachments(
     state: State<'_, AppState>,
     paths: Vec<String>,
 ) -> Result<Vec<Attachment>, String> {
-    let root = state.space()?.root.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let space = state.space()?;
+    let root = space.root.clone();
+    let attached = tauri::async_runtime::spawn_blocking(move || {
         for path in &paths {
             match fs::metadata(path) {
                 Ok(meta) if meta.is_file() => {}
@@ -168,10 +183,12 @@ pub async fn add_attachments(
                     })
                     .map_err(|e| format!("could not attach {path}: {e}"))
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())??;
+    record(&state, &space, &attached).await;
+    Ok(attached)
 }
 
 /// Save a file pasted into an editor, a screenshot say, into the open space.
@@ -191,15 +208,18 @@ pub async fn save_attachment(
         .and_then(|value| value.to_str().ok())
         .map(|value| percent_decode_str(value).decode_utf8_lossy().into_owned())
         .unwrap_or_default();
-    let root = state.space()?.root.clone();
+    let space = state.space()?;
+    let root = space.root.clone();
     let bytes = bytes.clone();
     let original = name.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let attached = tauri::async_runtime::spawn_blocking(move || {
         store(&root, &today(), &original, |to| to.write_all(&bytes))
     })
     .await
     .map_err(|e| e.to_string())?
-    .map_err(|e| format!("could not attach {name}: {e}"))
+    .map_err(|e| format!("could not attach {name}: {e}"))?;
+    record(&state, &space, std::slice::from_ref(&attached)).await;
+    Ok(attached)
 }
 
 /// The file a space-relative `path` names, when it is inside the space's

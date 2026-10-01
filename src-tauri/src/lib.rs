@@ -70,6 +70,7 @@ pub fn run() {
             },
         )
         .invoke_handler(tauri::generate_handler![
+            commands::activity::list_activity,
             commands::notes::save_note,
             commands::notes::get_day,
             commands::notes::list_days,
@@ -239,13 +240,39 @@ pub fn run() {
         .run(on_run_event);
 }
 
-/// Clicking the Dock icon brings back a main window that closing hid.
-#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+/// Clicking the Dock icon brings back a main window that closing hid, and
+/// quitting logs the page edits still open.
 fn on_run_event(app: &AppHandle, event: tauri::RunEvent) {
-    #[cfg(target_os = "macos")]
-    if let tauri::RunEvent::Reopen { .. } = event {
-        show_main(app);
+    match event {
+        tauri::RunEvent::Exit => log_open_edits(app),
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => show_main(app),
+        _ => {}
     }
+}
+
+/// Log the edits still open on pages held in the editor, which no view
+/// closing will end now (SPEC 4.11). Bounded, so a stuck writer cannot
+/// keep the app from quitting.
+fn log_open_edits(app: &AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let spaces = state.all_spaces();
+    let writer = state.writer.clone();
+    tauri::async_runtime::block_on(async move {
+        let logged = async {
+            for space in &spaces {
+                pages::log_open_edits(&writer, space).await;
+            }
+        };
+        if tokio::time::timeout(std::time::Duration::from_secs(2), logged)
+            .await
+            .is_err()
+        {
+            log::warn!("gave up logging the pages still open as the app quit");
+        }
+    });
 }
 
 /// Hiding from Rust keeps the capture webview free of window permissions

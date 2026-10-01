@@ -306,7 +306,7 @@
 	"settings_checking": "Comprobando",
 	"settings_check_updates": "Buscar actualizaciones",
 	"settings_embedding": "Modelo de embeddings",
-	"settings_embedding_hint": "Permite al chat encontrar las notas relevantes en un espacio grande y leer su texto.",
+	"settings_embedding_hint": "Encuentra notas por el sentido: notas similares, hilos, búsqueda por significado y las notas que lee el chat. Funciona aunque el modelo esté desactivado.",
 	"settings_embedding_downloading": "Descargando el modelo de embeddings: {percent}%",
 	"settings_embedding_installed": "Instalado",
 	"settings_embedding_downloaded": "Modelo de embeddings descargado.",

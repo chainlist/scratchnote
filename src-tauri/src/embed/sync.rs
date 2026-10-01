@@ -41,7 +41,7 @@ pub fn spawn(app: AppHandle, wake: Wake) {
                 let threaded: Vec<String> = state
                     .all_spaces()
                     .iter()
-                    .filter(|space| sync_space(&state, space, embedder.as_ref()))
+                    .filter(|space| sync_space(space, embedder.as_ref()))
                     .map(|space| space.name.clone())
                     .collect();
                 state.mark_used();
@@ -62,12 +62,12 @@ pub fn spawn(app: AppHandle, wake: Wake) {
 /// Only the open space is embedded: the vectors serve its chat and similar
 /// notes, and another space catches up when it opens (SPEC 4.6). Its notes
 /// are then placed in threads. True when its threads changed.
-fn sync_space(state: &AppState, space: &Space, embedder: &dyn Embedder) -> bool {
+fn sync_space(space: &Space, embedder: &dyn Embedder) -> bool {
     if space.is_retired() || !space.is_open() {
         return false;
     }
     let path = vectors_path(&space.root);
-    let keep_going = || !space.is_retired() && space.is_open() && state.model_enabled();
+    let keep_going = || !space.is_retired() && space.is_open();
     let held = space.held();
     match reconcile(
         &space.index,

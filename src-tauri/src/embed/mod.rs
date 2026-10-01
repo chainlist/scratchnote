@@ -33,18 +33,17 @@ pub trait Embedder: Send + Sync {
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, String>;
 }
 
-/// The model that embeds notes, or `None` while there is none or the model
-/// is switched off: the one switch covers embeddings too. Loaded on first
-/// use, as `enrich::worker::backend` loads the chat model, and dropped with
-/// it by `AppState::unload_model`. A load that fails is tried again on the
-/// next call, which comes with the next change to a note or the next chat
-/// message, never in a loop. One load runs at a time: a search that comes
-/// while the embed task loads the model waits for that one.
+/// The model that embeds notes, or `None` while there is none. The model
+/// switch leaves it alone: it is light enough to run where the chat model
+/// cannot, so similar notes, search by meaning, recall and threads stay with
+/// the model off. Loaded on first use, as `enrich::worker::backend` loads
+/// the chat model, and dropped by `AppState::unload_model`. A load that
+/// fails is tried again on the next call, which comes with the next change
+/// to a note or the next chat message, never in a loop. One load runs at a
+/// time: a search that comes while the embed task loads the model waits for
+/// that one.
 pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
     let state = app.state::<AppState>();
-    if !state.model_enabled() {
-        return None;
-    }
     crate::state::load_once(&state.embedder, &state.embedder_loading, || {
         if !download::is_installed(&state.root, EmbeddingModel) {
             return None;

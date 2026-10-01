@@ -306,7 +306,7 @@
 	"settings_checking": "Wird geprüft",
 	"settings_check_updates": "Nach Updates suchen",
 	"settings_embedding": "Embedding-Modell",
-	"settings_embedding_hint": "Lässt den Chat in einem großen Space die passenden Notizen finden und ihren Text lesen.",
+	"settings_embedding_hint": "Findet Notizen nach Bedeutung: ähnliche Notizen, Fäden, Suche nach Bedeutung und die Notizen, die der Chat liest. Es läuft auch, wenn das Modell ausgeschaltet ist.",
 	"settings_embedding_downloading": "Embedding-Modell wird heruntergeladen: {percent}%",
 	"settings_embedding_installed": "Installiert",
 	"settings_embedding_downloaded": "Embedding-Modell heruntergeladen.",

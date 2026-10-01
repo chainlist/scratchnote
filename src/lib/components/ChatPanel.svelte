@@ -10,15 +10,12 @@
 		open = $bindable(),
 		space,
 		canChat,
-		modelOff,
 		onopen
 	}: {
 		open: boolean;
 		/** The open space, whose index the chat reads. */
 		space: string;
 		canChat: boolean;
-		/** The model is switched off in settings, which is why chat is not on offer. */
-		modelOff: boolean;
 		/** Show a cited note on its day. */
 		onopen: (entry: IndexEntry) => void;
 	} = $props();
@@ -41,13 +38,7 @@
 <!-- A disabled button shows no title, so the wrapper carries it. -->
 <span
 	class="absolute right-6 bottom-2 z-40"
-	title={open
-		? m.common_close()
-		: canChat
-			? m.search_chat_title()
-			: modelOff
-				? m.search_chat_model_off()
-				: m.search_chat_disabled()}
+	title={open ? m.common_close() : canChat ? m.search_chat_title() : m.search_chat_disabled()}
 >
 	<Button
 		onclick={() => (open = !open)}

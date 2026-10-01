@@ -171,7 +171,6 @@
 	"search_chat_label": "Chatear sobre estas notas",
 	"search_chat_title": "Chatea con el modelo sobre este espacio. Lee el índice del espacio: fechas, asuntos y categorías, y con el modelo de embeddings el texto de las notas más cercanas a tu pregunta.",
 	"search_chat_disabled": "Chatear necesita un modelo. Elige uno en Ajustes.",
-	"search_chat_model_off": "Chatear necesita el modelo, que está desactivado en Ajustes.",
 	"command_group_commands": "Comandos",
 	"command_today": "Ir a hoy",
 	"command_see_all": "Ver todo",

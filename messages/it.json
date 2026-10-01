@@ -171,7 +171,6 @@
 	"search_chat_label": "Chatta su queste note",
 	"search_chat_title": "Chatta con il modello su questo spazio. Legge l'indice dello spazio: date, soggetti e categorie, e con il modello di embedding il testo delle note più vicine alla tua domanda.",
 	"search_chat_disabled": "La chat richiede un modello. Scegline uno nelle Impostazioni.",
-	"search_chat_model_off": "La chat richiede il modello, che è disattivato nelle Impostazioni.",
 	"command_group_commands": "Comandi",
 	"command_today": "Vai a oggi",
 	"command_see_all": "Vedi tutti",

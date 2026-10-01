@@ -116,7 +116,13 @@
 	}
 
 	onMount(() => {
-		const off: Promise<() => void>[] = [onModelStatus((status) => (shell.model = status))];
+		const off: Promise<() => void>[] = [
+			onModelStatus((status) => {
+				shell.model = status;
+				// Turning the model off takes an open chat with it.
+				if (status.state === 'disabled') shell.chatOpen = false;
+			})
+		];
 		void (async () => {
 			const settings = await getSettings();
 			void showReleaseNotes(settings).catch((e) => shell.showError(String(e)));
@@ -187,13 +193,15 @@
 				<main bind:offsetWidth={shell.width} class="h-full overflow-y-auto px-6 pb-16">
 					{@render children()}
 				</main>
-				<ChatPanel
-					bind:open={shell.chatOpen}
-					space={data.spaces.active}
-					canChat={shell.canChat}
-					modelOff={shell.model.state === 'disabled'}
-					onopen={(entry) => void shell.openCited(entry)}
-				/>
+				<!-- With the model turned off in settings, chat is not on offer at all. -->
+				{#if shell.model.state !== 'disabled'}
+					<ChatPanel
+						bind:open={shell.chatOpen}
+						space={data.spaces.active}
+						canChat={shell.canChat}
+						onopen={(entry) => void shell.openCited(entry)}
+					/>
+				{/if}
 			</Resizable.Pane>
 			{#if shell.dockOpen && shell.dockSide === 'right'}
 				<Resizable.Handle class="z-10 after:w-2" />

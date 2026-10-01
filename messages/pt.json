@@ -171,7 +171,6 @@
 	"search_chat_label": "Conversar sobre estas notas",
 	"search_chat_title": "Converse com o modelo sobre este espaço. Ele lê o índice do espaço: datas, assuntos e categorias, e com o modelo de embeddings o texto das notas mais próximas da sua pergunta.",
 	"search_chat_disabled": "Conversar exige um modelo. Escolha um em Configurações.",
-	"search_chat_model_off": "Conversar exige o modelo, que está desativado em Configurações.",
 	"command_group_commands": "Comandos",
 	"command_today": "Ir para hoje",
 	"command_see_all": "Ver tudo",

@@ -171,7 +171,6 @@
 	"search_chat_label": "Discuter de ces notes",
 	"search_chat_title": "Discutez avec le modèle à propos de cet espace. Il lit l'index de l'espace : dates, sujets et catégories, et avec le modèle d'embeddings le texte des notes les plus proches de votre question.",
 	"search_chat_disabled": "La discussion nécessite un modèle. Choisissez-en un dans Paramètres.",
-	"search_chat_model_off": "La discussion nécessite le modèle, qui est désactivé dans Paramètres.",
 	"command_group_commands": "Commandes",
 	"command_today": "Aller à aujourd'hui",
 	"command_see_all": "Tout voir",

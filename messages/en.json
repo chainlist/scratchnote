@@ -171,7 +171,6 @@
 	"search_chat_label": "Chat about these notes",
 	"search_chat_title": "Chat with the model about this space. It reads the space index: dates, subjects and categories, and with the embedding model the text of the notes closest to your question.",
 	"search_chat_disabled": "Chatting needs a model. Pick one in Settings.",
-	"search_chat_model_off": "Chatting needs the model, which is turned off in Settings.",
 	"command_group_commands": "Commands",
 	"command_today": "Go to today",
 	"command_see_all": "See all",

@@ -171,7 +171,6 @@
 	"search_chat_label": "Über diese Notizen chatten",
 	"search_chat_title": "Chatte mit dem Modell über diesen Space. Es liest den Space-Index: Datumsangaben, Themen und Kategorien, und mit dem Embedding-Modell den Text der Notizen, die deiner Frage am nächsten sind.",
 	"search_chat_disabled": "Zum Chatten wird ein Modell benötigt. Wähle eins in den Einstellungen.",
-	"search_chat_model_off": "Zum Chatten wird das Modell benötigt, das in den Einstellungen ausgeschaltet ist.",
 	"command_group_commands": "Befehle",
 	"command_today": "Zu heute springen",
 	"command_see_all": "Alle anzeigen",

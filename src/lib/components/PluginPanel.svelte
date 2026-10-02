@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
-	import Dock from '$lib/components/Dock.svelte';
-	import PluginIcon from '$lib/components/PluginIcon.svelte';
-	import { openView, type Header } from '$lib/plugins/host';
-	import { registry, type ViewEntry } from '$lib/plugins/registry.svelte';
+	import Dock from '#lib/components/Dock.svelte';
+	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import { openView, type Header } from '#lib/plugins/host.js';
+	import { registry, type ViewEntry } from '#lib/plugins/registry.svelte.js';
 
 	/** A plugin's view in the dock, where a page docks (SPEC 3.9). */
 	let { type, onclose }: { type: string; onclose: () => void } = $props();

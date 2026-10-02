@@ -3,9 +3,9 @@
 	import type { Attachment } from 'svelte/attachments';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
-	import TimelineItem from '$lib/components/TimelineItem.svelte';
-	import type { Note } from '$lib/plugins/api';
-	import { m } from '$lib/paraglide/messages';
+	import TimelineItem from '#lib/components/TimelineItem.svelte';
+	import type { Note } from '#lib/plugins/api.js';
+	import { m } from '#lib/paraglide/messages.js';
 	import type { BasicsPlugin } from '../plugin.svelte';
 	import { tasks, toggleTask } from './tasks';
 

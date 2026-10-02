@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
-	import type { PluginSettingTab } from '$lib/plugins/api';
-	import { clearSettings } from '$lib/plugins/setting.svelte';
+	import type { PluginSettingTab } from '#lib/plugins/api.js';
+	import { clearSettings } from '#lib/plugins/setting.svelte.js';
 
 	/**
 	 * A plugin's settings tab, drawn while it shows: `display` fills the

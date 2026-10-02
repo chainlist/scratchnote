@@ -5,8 +5,8 @@ import {
 	SettingSection,
 	type App,
 	type Component
-} from '$lib/plugins/api';
-import { m } from '$lib/paraglide/messages';
+} from '#lib/plugins/api.js';
+import { m } from '#lib/paraglide/messages.js';
 import { COLORS, Highlights, type HighlightColor } from './highlights/feature';
 import { Tasks } from './tasks/feature';
 

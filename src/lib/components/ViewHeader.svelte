@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import { getLocale } from '$lib/paraglide/runtime';
+	import { getLocale } from '#lib/paraglide/runtime.js';
 
 	/** A day as its title reads, or shorter, as the top bar has it. */
 	export function dayHeading(date: string, short = false) {
@@ -24,10 +24,10 @@
 </script>
 
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell, type ViewTitle } from '$lib/shell.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell, type ViewTitle } from '#lib/shell.svelte.js';
 
 	let {
 		back,

@@ -13,15 +13,15 @@
 		saveNote,
 		type Attachment,
 		type SpacesView
-	} from '$lib/api';
-	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import Recall from '$lib/components/Recall.svelte';
-	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
-	import { Button } from '$lib/components/ui/button';
+	} from '#lib/api.js';
+	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
+	import Recall from '#lib/components/Recall.svelte';
+	import SpaceSwitcher from '#lib/components/SpaceSwitcher.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
-	import { relink } from '$lib/markdown';
-	import { m } from '$lib/paraglide/messages';
-	import { formatHotkey } from '$lib/plugins/commands';
+	import { relink } from '#lib/markdown.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { formatHotkey } from '#lib/plugins/commands.js';
 
 	let draft = $state('');
 	let saving = $state(false);

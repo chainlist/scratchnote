@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { isPage, type Note, type SpacesView } from '$lib/api';
-	import { Button } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Label } from '$lib/components/ui/label';
-	import * as Select from '$lib/components/ui/select';
-	import Markdown from '$lib/components/Markdown.svelte';
-	import { m } from '$lib/paraglide/messages';
+	import { isPage, type Note, type SpacesView } from '#lib/api.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import * as Select from '#lib/components/ui/select/index.js';
+	import Markdown from '#lib/components/Markdown.svelte';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		note = $bindable(),

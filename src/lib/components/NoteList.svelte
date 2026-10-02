@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
-	import { isPage, type Note } from '$lib/api';
-	import NoteCard from '$lib/components/NoteCard.svelte';
-	import PageCard from '$lib/components/PageCard.svelte';
+	import { isPage, type Note } from '#lib/api.js';
+	import NoteCard from '#lib/components/NoteCard.svelte';
+	import PageCard from '#lib/components/PageCard.svelte';
 
 	type Actions = Pick<
 		ComponentProps<typeof NoteCard>,

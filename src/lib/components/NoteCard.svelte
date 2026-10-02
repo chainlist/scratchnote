@@ -1,15 +1,15 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import type { Note } from '$lib/api';
-	import Markdown from '$lib/components/Markdown.svelte';
-	import TimelineItem from '$lib/components/TimelineItem.svelte';
-	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import DayAhead, { aheadLabel } from '$lib/components/DayAhead.svelte';
-	import Recall from '$lib/components/Recall.svelte';
-	import ThreadLine from '$lib/components/ThreadLine.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import type { Note } from '#lib/api.js';
+	import Markdown from '#lib/components/Markdown.svelte';
+	import TimelineItem from '#lib/components/TimelineItem.svelte';
+	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
+	import DayAhead, { aheadLabel } from '#lib/components/DayAhead.svelte';
+	import Recall from '#lib/components/Recall.svelte';
+	import ThreadLine from '#lib/components/ThreadLine.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
@@ -21,9 +21,9 @@
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
-	import { categoryLabel } from '$lib/categories';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
+	import { categoryLabel } from '#lib/categories.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let {
 		note,

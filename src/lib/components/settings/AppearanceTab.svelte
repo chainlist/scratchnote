@@ -1,10 +1,17 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import * as Select from '$lib/components/ui/select';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Select from '#lib/components/ui/select/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
-	import { ACCENTS, DEFAULT_APPEARANCE, FONT_SIZES, FONTS, RADII, THEMES } from '$lib/appearance';
-	import { LANGUAGE_NAMES, LANGUAGES, type Language } from '$lib/i18n.svelte';
-	import { m } from '$lib/paraglide/messages';
+	import {
+		ACCENTS,
+		DEFAULT_APPEARANCE,
+		FONT_SIZES,
+		FONTS,
+		RADII,
+		THEMES
+	} from '#lib/appearance.js';
+	import { LANGUAGE_NAMES, LANGUAGES, type Language } from '#lib/i18n.svelte.js';
+	import { m } from '#lib/paraglide/messages.js';
 	import Segmented from './Segmented.svelte';
 	import SettingRow from './SettingRow.svelte';
 	import type { SettingsState } from './state.svelte';

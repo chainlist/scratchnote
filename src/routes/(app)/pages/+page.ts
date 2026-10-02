@@ -1,4 +1,4 @@
-import { listPages } from '$lib/api';
+import { listPages } from '#lib/api.js';
 import type { PageLoad } from './$types';
 
 /** Every page of the space, newest first. */

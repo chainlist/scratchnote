@@ -1,5 +1,5 @@
-import names from '$lib/category-names.json';
-import { getLocale } from '$lib/paraglide/runtime';
+import names from '#lib/category-names.json';
+import { getLocale } from '#lib/paraglide/runtime.js';
 
 /** Every known category, by language, row for row the same in each. */
 const table: Record<string, string[]> = names;

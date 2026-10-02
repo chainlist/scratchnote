@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { shortDay } from '$lib/components/ViewHeader.svelte';
+	import { shortDay } from '#lib/components/ViewHeader.svelte';
 	import RouteIcon from '@lucide/svelte/icons/route';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
-	import { cn } from '$lib/utils.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
+	import { cn } from '#lib/utils.js';
 
 	let {
 		id,

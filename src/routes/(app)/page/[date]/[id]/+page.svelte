@@ -2,11 +2,11 @@
 	import { untrack } from 'svelte';
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import type { Note } from '$lib/api';
-	import PageView from '$lib/components/PageView.svelte';
-	import View from '$lib/components/View.svelte';
-	import { dayHeading } from '$lib/components/ViewHeader.svelte';
-	import { getShell } from '$lib/shell.svelte';
+	import type { Note } from '#lib/api.js';
+	import PageView from '#lib/components/PageView.svelte';
+	import View from '#lib/components/View.svelte';
+	import { dayHeading } from '#lib/components/ViewHeader.svelte';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let { params } = $props();
 
@@ -29,7 +29,9 @@
 	let shown = untrack(() => id);
 	/** Counts the pages opened here, each of which rises into place. */
 	let opened = $state(0);
-	afterNavigate(() => {
+
+	afterNavigate(({ shallow }) => {
+		if (shallow) return;
 		if (id === shown) return;
 		shown = id;
 		opened++;
@@ -38,10 +40,9 @@
 	/** A new page has its title and its file; the view stays as it is. */
 	async function adopt(created: Note) {
 		shown = created.id;
-		await goto(resolve(`/page/${created.date}/${created.id}/`), {
-			replaceState: true,
-			keepFocus: true,
-			noScroll: true
+		await goto(resolve(`page/${created.date}/${created.id}/`), {
+			replace: true,
+			reset: false
 		});
 		await shell.refresh();
 	}
@@ -59,7 +60,7 @@
 	});
 </script>
 
-<View back={resolve(`/day/${date}/`)} key={opened}>
+<View back={resolve(`day/${date}/`)} key={opened}>
 	{#snippet heading(compact: boolean)}
 		<!-- The page's title is its own heading, in the view; this is its day. -->
 		<span class="text-sm font-medium whitespace-nowrap text-muted-foreground">

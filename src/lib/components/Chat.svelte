@@ -7,14 +7,14 @@
 		warmChat,
 		type ChatMessage,
 		type IndexEntry
-	} from '$lib/api';
-	import { Button } from '$lib/components/ui/button';
+	} from '#lib/api.js';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import SquarePenIcon from '@lucide/svelte/icons/square-pen';
 	import XIcon from '@lucide/svelte/icons/x';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		space,

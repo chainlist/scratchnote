@@ -1,4 +1,9 @@
-import { defineCustomClientStrategy, isLocale, locales, type Locale } from '$lib/paraglide/runtime';
+import {
+	defineCustomClientStrategy,
+	isLocale,
+	locales,
+	type Locale
+} from '#lib/paraglide/runtime.js';
 
 /** The language the settings pick, or undefined to follow the OS. */
 let chosen = $state<Locale | undefined>(undefined);

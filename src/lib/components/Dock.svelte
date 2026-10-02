@@ -1,12 +1,12 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Button } from '$lib/components/ui/button';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import PanelLeftIcon from '@lucide/svelte/icons/panel-left';
 	import PanelLeftCloseIcon from '@lucide/svelte/icons/panel-left-close';
 	import PanelRightIcon from '@lucide/svelte/icons/panel-right';
 	import PanelRightCloseIcon from '@lucide/svelte/icons/panel-right-close';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	/** What the dock holds, a page or a plugin's view, under a row with its
 	 *  title and the buttons that move it to the view's other side and close

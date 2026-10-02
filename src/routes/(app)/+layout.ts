@@ -9,8 +9,8 @@ import {
 	modelInfo,
 	modelStatus,
 	today
-} from '$lib/api';
-import { resumeStep } from '$lib/onboarding';
+} from '#lib/api.js';
+import { resumeStep } from '#lib/onboarding.js';
 import type { LayoutLoad } from './$types';
 
 /** The onboarding check is made once, when the window first opens. */
@@ -22,13 +22,16 @@ export const load: LayoutLoad = async ({ depends }) => {
 		// already has a model, or turned it off, is left alone. A run under
 		// way, as after the restart a new folder takes, picks up again.
 		const [settings, info] = await Promise.all([getSettings(), modelInfo()]);
+
 		const fresh =
 			!settings.onboarded &&
 			settings.modelEnabled &&
 			!info.activePath &&
 			!info.light &&
 			!info.default;
-		if (fresh || resumeStep() !== null) redirect(307, resolve('/onboarding/'));
+
+		if (fresh || resumeStep() !== null) redirect(307, resolve('onboarding/'));
+
 		checked = true;
 	}
 

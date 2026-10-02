@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type { Note } from '$lib/api';
+	import type { Note } from '#lib/api.js';
 
 	/** What a line names a note by: its subject, or the start of its text without markup. */
 	export function noteTitle(note: Pick<Note, 'subject' | 'body'>) {
@@ -12,14 +12,14 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { recall } from '$lib/api';
-	import Markdown from '$lib/components/Markdown.svelte';
-	import { dayHeading, shortDay } from '$lib/components/ViewHeader.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import * as Popover from '$lib/components/ui/popover';
+	import { recall } from '#lib/api.js';
+	import Markdown from '#lib/components/Markdown.svelte';
+	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Popover from '#lib/components/ui/popover/index.js';
 	import HistoryIcon from '@lucide/svelte/icons/history';
-	import { m } from '$lib/paraglide/messages';
-	import { cn } from '$lib/utils.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { cn } from '#lib/utils.js';
 
 	let {
 		text,

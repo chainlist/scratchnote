@@ -1,7 +1,7 @@
 import type { Extension } from '@codemirror/state';
 import type { Tree } from '@lezer/common';
 import type { MarkdownExtension } from '@lezer/markdown';
-import { pluginData, savePluginData, type Note, type PluginManifest } from '$lib/api';
+import { pluginData, savePluginData, type Note, type PluginManifest } from '#lib/api.js';
 import type { Editor } from './editor';
 import { contribute, registry } from './registry.svelte';
 

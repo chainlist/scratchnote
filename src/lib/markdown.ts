@@ -6,8 +6,8 @@ import {
 	type MarkdownParser
 } from '@lezer/markdown';
 import type { SyntaxNode, Tree } from '@lezer/common';
-import type { NodeRender, WidgetContext } from '$lib/plugins/api';
-import { registry, type SyntaxEntry } from '$lib/plugins/registry.svelte';
+import type { NodeRender, WidgetContext } from '#lib/plugins/api.js';
+import { registry, type SyntaxEntry } from '#lib/plugins/registry.svelte.js';
 
 /**
  * The markdown notes are shown with: CommonMark, bare links and

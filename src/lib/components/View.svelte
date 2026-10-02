@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import Onboarding from '$lib/components/Onboarding.svelte';
-	import ViewHeader from '$lib/components/ViewHeader.svelte';
-	import { getShell, type ViewTitle } from '$lib/shell.svelte';
+	import Onboarding from '#lib/components/Onboarding.svelte';
+	import ViewHeader from '#lib/components/ViewHeader.svelte';
+	import { getShell, type ViewTitle } from '#lib/shell.svelte.js';
 
 	let {
 		key,

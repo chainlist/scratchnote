@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import View from '$lib/components/View.svelte';
-	import { getShell } from '$lib/shell.svelte';
+	import View from '#lib/components/View.svelte';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	const shell = getShell();
 </script>

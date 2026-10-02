@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { Badge } from '$lib/components/ui/badge';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Table from '$lib/components/ui/table';
-	import { m } from '$lib/paraglide/messages';
-	import { getLocale } from '$lib/paraglide/runtime';
-	import { pluginName } from '$lib/plugins/loader';
-	import { duration, type StartupRow, type StartupTimes } from '$lib/startup';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Table from '#lib/components/ui/table/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { pluginName } from '#lib/plugins/loader.js';
+	import { duration, type StartupRow, type StartupTimes } from '#lib/startup.js';
 
 	/** This window's startup, step by step, as the console logs it. */
 	let { open = $bindable(false), times }: { open: boolean; times: StartupTimes } = $props();

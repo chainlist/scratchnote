@@ -1,6 +1,6 @@
 import { TaskList } from '@lezer/markdown';
-import type { MarkdownSyntax, WidgetContext } from '$lib/plugins/api';
-import { m } from '$lib/paraglide/messages';
+import type { MarkdownSyntax, WidgetContext } from '#lib/plugins/api.js';
+import { m } from '#lib/paraglide/messages.js';
 import { BOX } from './tasks';
 
 /**

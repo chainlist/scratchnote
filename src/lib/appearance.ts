@@ -6,8 +6,8 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/literata';
 import '@fontsource-variable/playpen-sans';
 import '@fontsource-variable/shantell-sans';
-import type { Settings } from '$lib/api';
-import { m } from '$lib/paraglide/messages';
+import type { Settings } from '#lib/api.js';
+import { m } from '#lib/paraglide/messages.js';
 
 type Appearance = Pick<Settings, 'accentColor' | 'fontFamily' | 'fontSize' | 'radius' | 'theme'>;
 

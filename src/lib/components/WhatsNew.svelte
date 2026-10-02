@@ -1,15 +1,15 @@
 <script lang="ts">
-	import type { Release } from '$lib/changelog';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import Markdown from '$lib/components/Markdown.svelte';
+	import type { Release } from '#lib/changelog.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Tabs from '#lib/components/ui/tabs/index.js';
+	import Markdown from '#lib/components/Markdown.svelte';
 	import BugIcon from '@lucide/svelte/icons/bug';
 	import GaugeIcon from '@lucide/svelte/icons/gauge';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
-	import { m } from '$lib/paraglide/messages';
-	import { getLocale } from '$lib/paraglide/runtime';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
 
 	let {
 		releases = $bindable()

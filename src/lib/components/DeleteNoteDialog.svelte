@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { isPage, type Note } from '$lib/api';
-	import { Button } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import Markdown from '$lib/components/Markdown.svelte';
-	import { m } from '$lib/paraglide/messages';
+	import { isPage, type Note } from '#lib/api.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import Markdown from '#lib/components/Markdown.svelte';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		note = $bindable(),

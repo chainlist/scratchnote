@@ -5,18 +5,18 @@
 		pluginDetails,
 		uninstallPlugin,
 		type PluginManifest
-	} from '$lib/api';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Switch } from '$lib/components/ui/switch';
+	} from '#lib/api.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import { Switch } from '#lib/components/ui/switch/index.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import ShieldAlertIcon from '@lucide/svelte/icons/shield-alert';
 	import StoreIcon from '@lucide/svelte/icons/store';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import { m } from '$lib/paraglide/messages';
-	import { adopt, older, plugins, setCommunity, setCommunityPlugin } from '$lib/plugins/loader';
+	import { m } from '#lib/paraglide/messages.js';
+	import { adopt, older, plugins, setCommunity, setCommunityPlugin } from '#lib/plugins/loader.js';
 	import PluginBrowser from './PluginBrowser.svelte';
 	import PluginOptions from './PluginOptions.svelte';
 	import SettingRow from './SettingRow.svelte';

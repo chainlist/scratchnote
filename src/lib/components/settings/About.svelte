@@ -1,17 +1,17 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { dev } from '$app/environment';
+	import { dev } from '$app/env';
 	import { getVersion } from '@tauri-apps/api/app';
 	import { asset } from '$app/paths';
-	import { appUpdate } from '$lib/app-update.svelte';
-	import { releases, type Release } from '$lib/changelog';
-	import { Button } from '$lib/components/ui/button';
-	import WhatsNew from '$lib/components/WhatsNew.svelte';
+	import { appUpdate } from '#lib/app-update.svelte.js';
+	import { releases, type Release } from '#lib/changelog.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import WhatsNew from '#lib/components/WhatsNew.svelte';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import { m } from '$lib/paraglide/messages';
-	import { getLocale } from '$lib/paraglide/runtime';
-	import { duration, startupTimes } from '$lib/startup';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { duration, startupTimes } from '#lib/startup.js';
 	import type { SettingsState } from './state.svelte';
 	import StartupDetails from './StartupDetails.svelte';
 	import { group, hint } from './styles';
@@ -54,7 +54,8 @@
 
 <div class={group}>
 	<div class="flex items-center gap-4 px-4 py-4">
-		<img src={asset('/icon.svg')} alt="" class="size-14 shrink-0" />
+		<img src={asset('icon.svg')} alt="" class="size-14 shrink-0" />
+
 		<div class="flex flex-1 flex-col gap-0.5">
 			<span class="text-base font-semibold">Scratchnote</span>
 			{#if version}
@@ -67,10 +68,8 @@
 						variant="link"
 						size="xs"
 						class="h-auto p-0 text-xs"
-						onclick={() => (startupShown = true)}
+						onclick={() => (startupShown = true)}>{m.settings_startup_details()}</Button
 					>
-						{m.settings_startup_details()}
-					</Button>
 				</span>
 			{/if}
 			{#if upToDate}
@@ -105,9 +104,9 @@
 				</Button>
 			{/if}
 			{#if current.length}
-				<Button variant="secondary" size="sm" onclick={() => (releaseNotes = current)}>
-					{m.settings_about_news()}
-				</Button>
+				<Button variant="secondary" size="sm" onclick={() => (releaseNotes = current)}
+					>{m.settings_about_news()}</Button
+				>
 			{/if}
 		</div>
 	</div>

@@ -23,13 +23,8 @@
 	"window_close": "Close",
 	"page_results": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "{count} result",
 				"countPlural=other": "{count} results"
@@ -142,13 +137,8 @@
 	"onboarding_appearance_body": "Pick a theme, an accent and a font. Every choice applies at once, and Settings has them all later.",
 	"tags_notes": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "{count} note",
 				"countPlural=other": "{count} notes"
@@ -360,13 +350,8 @@
 	"settings_rebuilding": "Rebuilding",
 	"settings_rebuilt": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "Index rebuilt from the markdown: {count} note.",
 				"countPlural=other": "Index rebuilt from the markdown: {count} notes."
@@ -381,13 +366,8 @@
 	"settings_regenerating": "Queuing",
 	"settings_regenerate_queued": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "{count} note queued. The model works through it in the background.",
 				"countPlural=other": "{count} notes queued. The model works through them in the background."
@@ -404,13 +384,8 @@
 	"dock_move_right": "Move to the right",
 	"pages_words": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "{count} word",
 				"countPlural=other": "{count} words"
@@ -511,13 +486,8 @@
 	"stats_show": "Show stats",
 	"stats_notes": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "note or page",
 				"countPlural=other": "notes and pages"
@@ -526,13 +496,8 @@
 	],
 	"stats_pages": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "page",
 				"countPlural=other": "pages"
@@ -541,13 +506,8 @@
 	],
 	"stats_days": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "day written",
 				"countPlural=other": "days written"
@@ -556,13 +516,8 @@
 	],
 	"stats_streak": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "day in a row",
 				"countPlural=other": "days in a row"
@@ -571,13 +526,8 @@
 	],
 	"stats_words": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "word per note",
 				"countPlural=other": "words per note"

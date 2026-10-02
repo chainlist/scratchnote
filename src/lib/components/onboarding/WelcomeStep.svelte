@@ -4,7 +4,7 @@
 	import MessageCircleIcon from '@lucide/svelte/icons/message-circle';
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
 	import TagIcon from '@lucide/svelte/icons/tag';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 
 	const features = [
 		{

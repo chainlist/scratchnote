@@ -1,5 +1,5 @@
-import { app } from '$lib/plugins/app';
-import { pluginName, pluginStartup, type StartupStep } from '$lib/plugins/loader';
+import { app } from '#lib/plugins/app.js';
+import { pluginName, pluginStartup, type StartupStep } from '#lib/plugins/loader.js';
 
 /**
  * How long this window took to start: loading the app's code, the wait on

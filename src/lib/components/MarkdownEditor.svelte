@@ -30,9 +30,9 @@
 		openLink,
 		saveAttachment,
 		type Attachment
-	} from '$lib/api';
-	import { attachmentUrl } from '$lib/attachments.svelte';
-	import { bold, bullets, formats, italic, link } from '$lib/format';
+	} from '#lib/api.js';
+	import { attachmentUrl } from '#lib/attachments.svelte.js';
+	import { bold, bullets, formats, italic, link } from '#lib/format.js';
 	import {
 		attachmentLink,
 		cardName,
@@ -41,9 +41,9 @@
 		markdownExtensions,
 		preview,
 		type WidgetRender
-	} from '$lib/markdown';
-	import { runCommand } from '$lib/plugins/commands';
-	import { registry } from '$lib/plugins/registry.svelte';
+	} from '#lib/markdown.js';
+	import { runCommand } from '#lib/plugins/commands.js';
+	import { registry } from '#lib/plugins/registry.svelte.js';
 
 	class Bullet extends WidgetType {
 		eq() {
@@ -342,13 +342,13 @@
 	import LinkIcon from '@lucide/svelte/icons/link';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
-	import PluginIcon from '$lib/components/PluginIcon.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { Separator } from '$lib/components/ui/separator';
-	import { Toggle } from '$lib/components/ui/toggle';
-	import { m } from '$lib/paraglide/messages';
-	import { Editor } from '$lib/plugins/editor';
-	import { labelText, type ToolbarEntry } from '$lib/plugins/registry.svelte';
+	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { Toggle } from '#lib/components/ui/toggle/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { Editor } from '#lib/plugins/editor.js';
+	import { labelText, type ToolbarEntry } from '#lib/plugins/registry.svelte.js';
 
 	let {
 		value = $bindable(''),

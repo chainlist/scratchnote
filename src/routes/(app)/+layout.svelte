@@ -19,31 +19,31 @@
 		setTrayLabels,
 		today,
 		type SettingsView
-	} from '$lib/api';
-	import AppHeader from '$lib/components/AppHeader.svelte';
-	import ChatPanel from '$lib/components/ChatPanel.svelte';
-	import CommandCenter from '$lib/components/CommandCenter.svelte';
-	import DeleteNoteDialog from '$lib/components/DeleteNoteDialog.svelte';
-	import Dock from '$lib/components/Dock.svelte';
-	import ModelStatusBar from '$lib/components/ModelStatusBar.svelte';
-	import MoveDialog from '$lib/components/MoveDialog.svelte';
-	import NoteEditor from '$lib/components/NoteEditor.svelte';
-	import NoteToPageDialog from '$lib/components/NoteToPageDialog.svelte';
-	import PageView from '$lib/components/PageView.svelte';
-	import PluginPanel from '$lib/components/PluginPanel.svelte';
-	import Ribbon from '$lib/components/Ribbon.svelte';
-	import Settings from '$lib/components/settings/Settings.svelte';
-	import ViewHeader from '$lib/components/ViewHeader.svelte';
-	import WhatsNew from '$lib/components/WhatsNew.svelte';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Resizable from '$lib/components/ui/resizable';
-	import { m } from '$lib/paraglide/messages';
-	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '$lib/changelog';
-	import { DOCK_MAX, DOCK_MIN } from '$lib/dock';
-	import { bindWorkspace } from '$lib/plugins/app';
-	import { matchesHotkey, runCommand } from '$lib/plugins/commands';
-	import { registry } from '$lib/plugins/registry.svelte';
-	import { setShell, Shell } from '$lib/shell.svelte';
+	} from '#lib/api.js';
+	import AppHeader from '#lib/components/AppHeader.svelte';
+	import ChatPanel from '#lib/components/ChatPanel.svelte';
+	import CommandCenter from '#lib/components/CommandCenter.svelte';
+	import DeleteNoteDialog from '#lib/components/DeleteNoteDialog.svelte';
+	import Dock from '#lib/components/Dock.svelte';
+	import ModelStatusBar from '#lib/components/ModelStatusBar.svelte';
+	import MoveDialog from '#lib/components/MoveDialog.svelte';
+	import NoteEditor from '#lib/components/NoteEditor.svelte';
+	import NoteToPageDialog from '#lib/components/NoteToPageDialog.svelte';
+	import PageView from '#lib/components/PageView.svelte';
+	import PluginPanel from '#lib/components/PluginPanel.svelte';
+	import Ribbon from '#lib/components/Ribbon.svelte';
+	import Settings from '#lib/components/settings/Settings.svelte';
+	import ViewHeader from '#lib/components/ViewHeader.svelte';
+	import WhatsNew from '#lib/components/WhatsNew.svelte';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Resizable from '#lib/components/ui/resizable/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
+	import { DOCK_MAX, DOCK_MIN } from '#lib/dock.js';
+	import { bindWorkspace } from '#lib/plugins/app.js';
+	import { matchesHotkey, runCommand } from '#lib/plugins/commands.js';
+	import { registry } from '#lib/plugins/registry.svelte.js';
+	import { setShell, Shell } from '#lib/shell.svelte.js';
 
 	let { data, children } = $props();
 

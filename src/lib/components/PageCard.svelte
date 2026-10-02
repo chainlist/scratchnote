@@ -1,17 +1,17 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import type { Note } from '$lib/api';
-	import Markdown from '$lib/components/Markdown.svelte';
-	import DayAhead from '$lib/components/DayAhead.svelte';
-	import ThreadLine from '$lib/components/ThreadLine.svelte';
-	import TimelineItem from '$lib/components/TimelineItem.svelte';
+	import type { Note } from '#lib/api.js';
+	import Markdown from '#lib/components/Markdown.svelte';
+	import DayAhead from '#lib/components/DayAhead.svelte';
+	import ThreadLine from '#lib/components/ThreadLine.svelte';
+	import TimelineItem from '#lib/components/TimelineItem.svelte';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FileXIcon from '@lucide/svelte/icons/file-x';
 	import PanelRightOpenIcon from '@lucide/svelte/icons/panel-right-open';
-	import { categoryLabel } from '$lib/categories';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
+	import { categoryLabel } from '#lib/categories.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let {
 		note,

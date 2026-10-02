@@ -5,8 +5,8 @@ import {
 	type MarkdownImage,
 	type Note,
 	type RenderedMarkdown
-} from '$lib/plugins/api';
-import { m } from '$lib/paraglide/messages';
+} from '#lib/plugins/api.js';
+import { m } from '#lib/paraglide/messages.js';
 
 /** Lucide's book-open. */
 const BOOK =

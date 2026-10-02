@@ -1,4 +1,4 @@
-import type { MarkdownRenderer } from '$lib/plugins/api';
+import type { MarkdownRenderer } from '#lib/plugins/api.js';
 
 /** A task: its box by the offset of its `[`, and its first line from the list mark on. */
 export type Task = { at: number; done: boolean; from: number; to: number };

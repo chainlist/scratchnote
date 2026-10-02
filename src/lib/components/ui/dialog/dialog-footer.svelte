@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { Dialog as DialogPrimitive } from 'bits-ui';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import { m } from '$lib/paraglide/messages';
-	import { cn, type WithElementRef } from '$lib/utils.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { cn, type WithElementRef } from '#lib/utils.js';
 	import type { HTMLAttributes } from 'svelte/elements';
 
 	let {

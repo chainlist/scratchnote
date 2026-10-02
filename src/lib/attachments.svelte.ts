@@ -1,5 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { listSpaces, onSpacesChanged } from '$lib/api';
+import { listSpaces, onSpacesChanged } from '#lib/api.js';
 
 /** The open space, whose attachments the notes on show link to. */
 let space = $state('');

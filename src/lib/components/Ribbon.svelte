@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import { Button } from '$lib/components/ui/button';
-	import { Separator } from '$lib/components/ui/separator';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import FilesIcon from '@lucide/svelte/icons/files';
-	import PluginIcon from '$lib/components/PluginIcon.svelte';
-	import { m } from '$lib/paraglide/messages';
-	import { coreIds } from '$lib/plugins/loader';
-	import { labelText, registry, type RibbonEntry } from '$lib/plugins/registry.svelte';
-	import { getShell } from '$lib/shell.svelte';
+	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { coreIds } from '#lib/plugins/loader.js';
+	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	/** Down the left edge of every view: the calendar, All pages and the
 	 *  core plugins' buttons, then the community plugins' own (SPEC 3.9). */
@@ -33,7 +33,7 @@
 	<Button
 		variant="ghost"
 		size="icon-sm"
-		href={resolve('/calendar/')}
+		href={resolve('calendar/')}
 		aria-label={m.calendar_pick()}
 		title={m.calendar_pick()}
 		class="text-muted-foreground hover:text-foreground"
@@ -43,7 +43,7 @@
 	<Button
 		variant="ghost"
 		size="icon-sm"
-		href={resolve('/pages/')}
+		href={resolve('pages/')}
 		aria-label={m.pages_all()}
 		title={m.pages_all()}
 		class="text-muted-foreground hover:text-foreground"

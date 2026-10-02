@@ -1,13 +1,13 @@
 <script lang="ts">
 	import './layout.css';
 	import { onMount } from 'svelte';
-	import favicon from '$lib/assets/favicon.svg';
-	import { getSettings, onSettingsChanged, type Settings } from '$lib/api';
-	import { applyAppearance } from '$lib/appearance';
-	import { followSpace } from '$lib/attachments.svelte';
-	import { applyLanguage } from '$lib/i18n.svelte';
-	import { getLocale } from '$lib/paraglide/runtime';
-	import { recordStartup } from '$lib/startup';
+	import favicon from '#lib/assets/favicon.svg';
+	import { getSettings, onSettingsChanged, type Settings } from '#lib/api.js';
+	import { applyAppearance } from '#lib/appearance.js';
+	import { followSpace } from '#lib/attachments.svelte.js';
+	import { applyLanguage } from '#lib/i18n.svelte.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { recordStartup } from '#lib/startup.js';
 
 	let { children } = $props();
 

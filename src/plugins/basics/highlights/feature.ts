@@ -1,6 +1,6 @@
 import type { MarkdownConfig } from '@lezer/markdown';
-import { Component } from '$lib/plugins/api';
-import { m } from '$lib/paraglide/messages';
+import { Component } from '#lib/plugins/api.js';
+import { m } from '#lib/paraglide/messages.js';
 import type { BasicsPlugin } from '../plugin.svelte';
 
 /** Lucide's highlighter. */

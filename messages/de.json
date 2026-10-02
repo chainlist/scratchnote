@@ -23,13 +23,8 @@
 	"window_close": "Schließen",
 	"page_results": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "{count} Ergebnis",
 				"countPlural=other": "{count} Ergebnisse"
@@ -142,13 +137,8 @@
 	"onboarding_appearance_body": "Wähle ein Design, eine Akzentfarbe und eine Schrift. Jede Wahl gilt sofort, und in den Einstellungen findest du sie später alle.",
 	"tags_notes": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "{count} Notiz",
 				"countPlural=other": "{count} Notizen"
@@ -360,13 +350,8 @@
 	"settings_rebuilding": "Wird neu aufgebaut",
 	"settings_rebuilt": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "Index aus dem Markdown neu aufgebaut: {count} Notiz.",
 				"countPlural=other": "Index aus dem Markdown neu aufgebaut: {count} Notizen."
@@ -381,13 +366,8 @@
 	"settings_regenerating": "Wird eingereiht",
 	"settings_regenerate_queued": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "{count} Notiz eingereiht. Das Modell arbeitet sie im Hintergrund ab.",
 				"countPlural=other": "{count} Notizen eingereiht. Das Modell arbeitet sie im Hintergrund ab."
@@ -404,13 +384,8 @@
 	"dock_move_right": "Nach rechts verschieben",
 	"pages_words": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "{count} Wort",
 				"countPlural=other": "{count} Wörter"
@@ -511,13 +486,8 @@
 	"stats_show": "Statistik anzeigen",
 	"stats_notes": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "Notiz oder Seite",
 				"countPlural=other": "Notizen und Seiten"
@@ -526,13 +496,8 @@
 	],
 	"stats_pages": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "Seite",
 				"countPlural=other": "Seiten"
@@ -541,13 +506,8 @@
 	],
 	"stats_days": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "Tag geschrieben",
 				"countPlural=other": "Tage geschrieben"
@@ -556,13 +516,8 @@
 	],
 	"stats_streak": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "Tag in Folge",
 				"countPlural=other": "Tage in Folge"
@@ -571,13 +526,8 @@
 	],
 	"stats_words": [
 		{
-			"declarations": [
-				"input count",
-				"local countPlural = count: plural"
-			],
-			"selectors": [
-				"countPlural"
-			],
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
 			"match": {
 				"countPlural=one": "Wort pro Notiz",
 				"countPlural=other": "Wörter pro Notiz"

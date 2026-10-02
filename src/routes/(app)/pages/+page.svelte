@@ -1,8 +1,8 @@
 <script lang="ts">
-	import NoteList from '$lib/components/NoteList.svelte';
-	import View from '$lib/components/View.svelte';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
+	import NoteList from '#lib/components/NoteList.svelte';
+	import View from '#lib/components/View.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let { data } = $props();
 

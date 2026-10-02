@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { Input } from '$lib/components/ui/input';
-	import { m } from '$lib/paraglide/messages';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		id,

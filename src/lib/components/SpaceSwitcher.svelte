@@ -7,20 +7,20 @@
 		setActiveSpace,
 		type SpaceSummary,
 		type SpacesView
-	} from '$lib/api';
-	import { sidebarItem } from '$lib/components/sidebar';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import * as Popover from '$lib/components/ui/popover';
+	} from '#lib/api.js';
+	import { sidebarItem } from '#lib/components/sidebar.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Popover from '#lib/components/ui/popover/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import { parts, slot } from '$lib/i18n.svelte';
-	import { m } from '$lib/paraglide/messages';
-	import { cn } from '$lib/utils';
+	import { parts, slot } from '#lib/i18n.svelte.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { cn } from '#lib/utils.js';
 
 	let {
 		view,

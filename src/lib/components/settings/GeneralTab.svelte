@@ -3,10 +3,10 @@
 	import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Button } from '$lib/components/ui/button';
-	import { Switch } from '$lib/components/ui/switch';
-	import { clearResumeStep } from '$lib/onboarding';
-	import { m } from '$lib/paraglide/messages';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Switch } from '#lib/components/ui/switch/index.js';
+	import { clearResumeStep } from '#lib/onboarding.js';
+	import { m } from '#lib/paraglide/messages.js';
 	import About from './About.svelte';
 	import FolderPicker from './FolderPicker.svelte';
 	import HotkeyInput from './HotkeyInput.svelte';
@@ -43,7 +43,7 @@
 	/** From the first step, whatever an earlier run left behind. */
 	function runOnboarding() {
 		clearResumeStep();
-		void goto(resolve('/onboarding/'));
+		void goto(resolve('onboarding/'));
 	}
 </script>
 

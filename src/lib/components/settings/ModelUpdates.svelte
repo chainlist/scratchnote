@@ -1,10 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { checkModelUpdate, onModelUpdateProgress, updateModel, type UpdateCheck } from '$lib/api';
-	import { Button } from '$lib/components/ui/button';
+	import {
+		checkModelUpdate,
+		onModelUpdateProgress,
+		updateModel,
+		type UpdateCheck
+	} from '#lib/api.js';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 	import type { SettingsState } from './state.svelte';
 	import { hint } from './styles';
 

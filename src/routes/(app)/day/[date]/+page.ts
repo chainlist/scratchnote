@@ -1,4 +1,4 @@
-import { getDay, notesAbout, type Note } from '$lib/api';
+import { getDay, notesAbout, type Note } from '#lib/api.js';
 import type { PageLoad } from './$types';
 
 // Any day, so none is known ahead to prerender; the fallback page serves it.

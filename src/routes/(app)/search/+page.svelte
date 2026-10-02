@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import NoteList from '$lib/components/NoteList.svelte';
-	import View from '$lib/components/View.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { m } from '$lib/paraglide/messages';
-	import { RESULTS_STEP } from '$lib/query';
-	import { getShell } from '$lib/shell.svelte';
+	import NoteList from '#lib/components/NoteList.svelte';
+	import View from '#lib/components/View.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { RESULTS_STEP } from '#lib/query.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let { data } = $props();
 
@@ -17,10 +17,9 @@
 		const q = encodeURIComponent(data.query);
 		// resolve() takes no query string, so the query follows the path it gives.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		void goto(`${resolve('/search/')}?q=${q}&n=${data.shown + RESULTS_STEP}`, {
-			replaceState: true,
-			noScroll: true,
-			keepFocus: true
+		void goto(`${resolve('search/')}?q=${q}&n=${data.shown + RESULTS_STEP}`, {
+			replace: true,
+			reset: false
 		});
 	}
 </script>

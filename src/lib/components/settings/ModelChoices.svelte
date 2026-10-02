@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { downloadModel, MODEL_CHOICES, type ModelVariant } from '$lib/api';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import * as RadioGroup from '$lib/components/ui/radio-group';
+	import { downloadModel, MODEL_CHOICES, type ModelVariant } from '#lib/api.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import * as RadioGroup from '#lib/components/ui/radio-group/index.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 	import ModelUpdates from './ModelUpdates.svelte';
 	import type { SettingsState } from './state.svelte';
 	import { hint } from './styles';

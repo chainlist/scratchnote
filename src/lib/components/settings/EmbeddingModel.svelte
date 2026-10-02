@@ -6,12 +6,12 @@
 		embeddingModelInfo,
 		onEmbeddingStatus,
 		type EmbeddingModelInfo
-	} from '$lib/api';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import { Progress } from '$lib/components/ui/progress';
+	} from '#lib/api.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Progress } from '#lib/components/ui/progress/index.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 	import SettingRow from './SettingRow.svelte';
 	import type { SettingsState } from './state.svelte';
 	import { group } from './styles';

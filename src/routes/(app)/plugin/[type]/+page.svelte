@@ -2,11 +2,11 @@
 	import { untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import { page } from '$app/state';
-	import View from '$lib/components/View.svelte';
-	import { m } from '$lib/paraglide/messages';
-	import { openView, type Header } from '$lib/plugins/host';
-	import { registry, type ViewEntry } from '$lib/plugins/registry.svelte';
-	import { getShell } from '$lib/shell.svelte';
+	import View from '#lib/components/View.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { openView, type Header } from '#lib/plugins/host.js';
+	import { registry, type ViewEntry } from '#lib/plugins/registry.svelte.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	const shell = getShell();
 

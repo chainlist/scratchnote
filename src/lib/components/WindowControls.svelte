@@ -5,8 +5,8 @@
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import CopyIcon from '@lucide/svelte/icons/copy';
 	import XIcon from '@lucide/svelte/icons/x';
-	import { cn } from '$lib/utils';
-	import { m } from '$lib/paraglide/messages';
+	import { cn } from '#lib/utils.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	const appWindow = getCurrentWindow();
 	let maximized = $state(false);

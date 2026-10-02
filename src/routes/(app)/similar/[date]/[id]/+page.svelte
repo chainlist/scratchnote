@@ -1,9 +1,9 @@
 <script lang="ts">
-	import Markdown from '$lib/components/Markdown.svelte';
-	import NoteList from '$lib/components/NoteList.svelte';
-	import View from '$lib/components/View.svelte';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
+	import Markdown from '#lib/components/Markdown.svelte';
+	import NoteList from '#lib/components/NoteList.svelte';
+	import View from '#lib/components/View.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let { data, params } = $props();
 

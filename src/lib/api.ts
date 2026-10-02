@@ -1,8 +1,8 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { storedQuery } from '$lib/categories';
-import type { Language } from '$lib/i18n.svelte';
-import { m } from '$lib/paraglide/messages';
+import { storedQuery } from '#lib/categories.js';
+import type { Language } from '#lib/i18n.svelte.js';
+import { m } from '#lib/paraglide/messages.js';
 
 export type NoteStatus = 'pending' | 'done' | 'failed' | 'manual';
 

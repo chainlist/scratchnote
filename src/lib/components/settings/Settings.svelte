@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import * as Alert from '$lib/components/ui/alert';
-	import { Button } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Tabs from '$lib/components/ui/tabs';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import BlocksIcon from '@lucide/svelte/icons/blocks';
 	import BrainIcon from '@lucide/svelte/icons/brain';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
@@ -12,10 +12,10 @@
 	import PackageIcon from '@lucide/svelte/icons/package';
 	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
-	import PluginIcon from '$lib/components/PluginIcon.svelte';
-	import { m } from '$lib/paraglide/messages';
-	import { coreIds, pluginDescription, pluginName } from '$lib/plugins/loader';
-	import { registry } from '$lib/plugins/registry.svelte';
+	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { coreIds, pluginDescription, pluginName } from '#lib/plugins/loader.js';
+	import { registry } from '#lib/plugins/registry.svelte.js';
 	import AppearanceTab from './AppearanceTab.svelte';
 	import CommunityPluginsTab from './CommunityPluginsTab.svelte';
 	import CorePluginsTab from './CorePluginsTab.svelte';

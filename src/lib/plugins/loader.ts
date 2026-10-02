@@ -14,8 +14,8 @@ import {
 	type PluginManifest,
 	type PluginState,
 	type PluginsView
-} from '$lib/api';
-import { m } from '$lib/paraglide/messages';
+} from '#lib/api.js';
+import { m } from '#lib/paraglide/messages.js';
 import { corePlugins } from '../../plugins';
 import {
 	Component,
@@ -212,7 +212,7 @@ export interface StartupStep {
 
 /**
  * When the plugins' startup began and ended, in ms since the window began
- * loading, and its steps, for the startup times (`$lib/startup`).
+ * loading, and its steps, for the startup times (`#lib/startup.js`).
  */
 export const pluginStartup = { start: 0, end: 0, steps: [] as StartupStep[] };
 

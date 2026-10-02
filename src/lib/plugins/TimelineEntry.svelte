@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Attachment } from 'svelte/attachments';
-	import PluginIcon from '$lib/components/PluginIcon.svelte';
-	import TimelineItem from '$lib/components/TimelineItem.svelte';
+	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import TimelineItem from '#lib/components/TimelineItem.svelte';
 	import { call } from './setting.svelte';
 	import type { TimelineItemModel } from './timeline.svelte';
 

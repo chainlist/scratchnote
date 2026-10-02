@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { MODEL_CHOICES, type Hardware } from '$lib/api';
-	import { group, hint } from '$lib/components/settings/styles';
+	import { MODEL_CHOICES, type Hardware } from '#lib/api.js';
+	import { group, hint } from '#lib/components/settings/styles.js';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import { m } from '$lib/paraglide/messages';
-	import { getLocale } from '$lib/paraglide/runtime';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
 
 	/** Null while the probe runs. */
 	let { hardware }: { hardware: Hardware | null } = $props();

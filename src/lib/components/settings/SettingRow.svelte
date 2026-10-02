@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Label } from '$lib/components/ui/label';
+	import { Label } from '#lib/components/ui/label/index.js';
 	import { hint as hintClass } from './styles';
 
 	let {

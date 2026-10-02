@@ -1,14 +1,14 @@
 <script lang="ts">
-	import type { Note, NoteEdit } from '$lib/api';
-	import { Button } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
+	import type { Note, NoteEdit } from '#lib/api.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import { categoryLabel } from '$lib/categories';
-	import { m } from '$lib/paraglide/messages';
+	import { categoryLabel } from '#lib/categories.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		note = $bindable(),

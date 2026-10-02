@@ -1,4 +1,4 @@
-import { cn } from '$lib/utils';
+import { cn } from '#lib/utils.js';
 
 /**
  * A sidebar row, styled like the settings dialog's vertical tabs so the app

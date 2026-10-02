@@ -8,10 +8,10 @@
 		type DateValue
 	} from '@internationalized/date';
 	import { Calendar as CalendarPrimitive } from 'bits-ui';
-	import type { DaySummary } from '$lib/api';
-	import * as Calendar from '$lib/components/ui/calendar';
-	import { m } from '$lib/paraglide/messages';
-	import { getLocale } from '$lib/paraglide/runtime';
+	import type { DaySummary } from '#lib/api.js';
+	import * as Calendar from '#lib/components/ui/calendar/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
 
 	let {
 		days,

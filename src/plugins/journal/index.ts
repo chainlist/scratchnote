@@ -1,5 +1,5 @@
-import { m } from '$lib/paraglide/messages';
-import type { CorePlugin } from '$lib/plugins/core';
+import { m } from '#lib/paraglide/messages.js';
+import type { CorePlugin } from '#lib/plugins/core.js';
 import { JournalPlugin } from './plugin';
 import styles from './styles.css?inline';
 

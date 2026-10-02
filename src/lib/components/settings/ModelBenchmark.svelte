@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { benchmarkModel, downloadModel, enrichBusy } from '$lib/api';
-	import { Button } from '$lib/components/ui/button';
-	import { Progress } from '$lib/components/ui/progress';
+	import { benchmarkModel, downloadModel, enrichBusy } from '#lib/api.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Progress } from '#lib/components/ui/progress/index.js';
 	import GaugeIcon from '@lucide/svelte/icons/gauge';
-	import { m } from '$lib/paraglide/messages';
-	import { getLocale } from '$lib/paraglide/runtime';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
 	import SettingRow from './SettingRow.svelte';
 	import type { SettingsState } from './state.svelte';
 

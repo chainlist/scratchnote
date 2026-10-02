@@ -6,8 +6,8 @@
 		setSettings,
 		type ModelStatus,
 		type ModelVariant
-	} from '$lib/api';
-	import { m } from '$lib/paraglide/messages';
+	} from '#lib/api.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let { status }: { status: ModelStatus } = $props();
 

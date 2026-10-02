@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { tick, type Component } from 'svelte';
 	import type { EditorView } from '@codemirror/view';
-	import { search, searchMeaning, type Note } from '$lib/api';
-	import PluginIcon from '$lib/components/PluginIcon.svelte';
-	import * as Command from '$lib/components/ui/command';
+	import { search, searchMeaning, type Note } from '#lib/api.js';
+	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import * as Command from '#lib/components/ui/command/index.js';
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
 	import FilesIcon from '@lucide/svelte/icons/files';
@@ -11,11 +11,11 @@
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import { categoryLabel } from '$lib/categories';
-	import { m } from '$lib/paraglide/messages';
-	import { formatHotkey, runCommand } from '$lib/plugins/commands';
-	import { labelText, registry, type CommandEntry } from '$lib/plugins/registry.svelte';
-	import { queryCategories } from '$lib/query';
+	import { categoryLabel } from '#lib/categories.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { formatHotkey, runCommand } from '#lib/plugins/commands.js';
+	import { labelText, registry, type CommandEntry } from '#lib/plugins/registry.svelte.js';
+	import { queryCategories } from '#lib/query.js';
 
 	let {
 		open = $bindable(),

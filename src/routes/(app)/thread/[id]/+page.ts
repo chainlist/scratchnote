@@ -1,4 +1,4 @@
-import { getThread } from '$lib/api';
+import { getThread } from '#lib/api.js';
 import type { PageLoad } from './$types';
 
 // Any thread, so none is known ahead to prerender; the fallback page serves it.

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import { getLocale } from '$lib/paraglide/runtime';
+	import { getLocale } from '#lib/paraglide/runtime.js';
 
 	/** A day ahead in a few characters, its weekday first: the year only when it is not this one. */
 	export function aheadLabel(date: string) {
@@ -15,11 +15,11 @@
 </script>
 
 <script lang="ts">
-	import { dayHeading } from '$lib/components/ViewHeader.svelte';
+	import { dayHeading } from '#lib/components/ViewHeader.svelte';
 	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
-	import { cn } from '$lib/utils.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
+	import { cn } from '#lib/utils.js';
 
 	let {
 		on,

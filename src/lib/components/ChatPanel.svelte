@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { IndexEntry } from '$lib/api';
-	import Chat from '$lib/components/Chat.svelte';
-	import { Button } from '$lib/components/ui/button';
+	import type { IndexEntry } from '#lib/api.js';
+	import Chat from '#lib/components/Chat.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import XIcon from '@lucide/svelte/icons/x';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		open = $bindable(),

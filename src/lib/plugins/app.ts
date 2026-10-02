@@ -10,10 +10,10 @@ import {
 	updateNote,
 	updatePage,
 	type Note
-} from '$lib/api';
-import { attachmentUrl } from '$lib/attachments.svelte';
-import { fileName, parseMarkdown, preview } from '$lib/markdown';
-import { getLocale } from '$lib/paraglide/runtime';
+} from '#lib/api.js';
+import { attachmentUrl } from '#lib/attachments.svelte.js';
+import { fileName, parseMarkdown, preview } from '#lib/markdown.js';
+import { getLocale } from '#lib/paraglide/runtime.js';
 import type { App } from './api';
 import { render } from './render.svelte';
 

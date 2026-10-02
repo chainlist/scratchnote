@@ -1,5 +1,5 @@
-import { m } from '$lib/paraglide/messages';
-import type { CorePlugin } from '$lib/plugins/core';
+import { m } from '#lib/paraglide/messages.js';
+import type { CorePlugin } from '#lib/plugins/core.js';
 import highlightStyles from './highlights/styles.css?inline';
 import { BasicsPlugin } from './plugin.svelte';
 import taskStyles from './tasks/styles.css?inline';

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { rebuildIndex, regenerateAll } from '$lib/api';
-	import { Button } from '$lib/components/ui/button';
+	import { rebuildIndex, regenerateAll } from '#lib/api.js';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 	import SettingRow from './SettingRow.svelte';
 	import type { SettingsState } from './state.svelte';
 	import { group, hint } from './styles';

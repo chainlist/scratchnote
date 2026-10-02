@@ -1,18 +1,18 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { saveNote } from '$lib/api';
-	import NewNote from '$lib/components/NewNote.svelte';
-	import NoteList from '$lib/components/NoteList.svelte';
-	import { noteTitle } from '$lib/components/Recall.svelte';
-	import View from '$lib/components/View.svelte';
-	import { dayHeading, shortDay } from '$lib/components/ViewHeader.svelte';
-	import { Button } from '$lib/components/ui/button';
+	import { saveNote } from '#lib/api.js';
+	import NewNote from '#lib/components/NewNote.svelte';
+	import NoteList from '#lib/components/NoteList.svelte';
+	import { noteTitle } from '#lib/components/Recall.svelte';
+	import View from '#lib/components/View.svelte';
+	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 	import type { Day } from './+page';
 
 	let { data } = $props();
@@ -38,7 +38,7 @@
 	/** The day whose empty-day editor is open, which takes the place of its message. */
 	let writingOn = $state<string | null>(null);
 
-	const dayHref = (date: string) => resolve(`/day/${date}/`);
+	const dayHref = (date: string) => resolve(`day/${date}/`);
 
 	/** Add a note to the day shown. */
 	async function addNote(body: string): Promise<boolean> {

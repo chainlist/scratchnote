@@ -8,9 +8,9 @@
 		onEnrichProgress,
 		type EnrichProgress,
 		type ModelStatus
-	} from '$lib/api';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { m } from '$lib/paraglide/messages';
+	} from '#lib/api.js';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let { status }: { status: ModelStatus } = $props();
 

@@ -3,10 +3,10 @@
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
-	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import Recall from '$lib/components/Recall.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { m } from '$lib/paraglide/messages';
+	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
+	import Recall from '#lib/components/Recall.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		onsave,

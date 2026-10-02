@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { renameThread, type Note } from '$lib/api';
-	import NoteList from '$lib/components/NoteList.svelte';
-	import View from '$lib/components/View.svelte';
-	import { dayHeading, shortDay } from '$lib/components/ViewHeader.svelte';
+	import { renameThread, type Note } from '#lib/api.js';
+	import NoteList from '#lib/components/NoteList.svelte';
+	import View from '#lib/components/View.svelte';
+	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let { data, params } = $props();
 

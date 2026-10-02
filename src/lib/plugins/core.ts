@@ -1,4 +1,4 @@
-import type { PluginManifest } from '$lib/api';
+import type { PluginManifest } from '#lib/api.js';
 import type { App, Plugin } from './api';
 
 /**

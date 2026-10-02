@@ -1,5 +1,5 @@
-import { search } from '$lib/api';
-import { RESULTS_STEP } from '$lib/query';
+import { search } from '#lib/api.js';
+import { RESULTS_STEP } from '#lib/query.js';
 import type { PageLoad } from './$types';
 
 // The query is in the URL's search, which prerendering cannot know.

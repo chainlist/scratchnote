@@ -22,12 +22,12 @@ import {
 	type NoteEdit,
 	type SpacesView,
 	type Thread
-} from '$lib/api';
-import { categoryLabel } from '$lib/categories';
-import { loadDock, saveDock, type DockSide } from '$lib/dock';
-import { addToPageDraft } from '$lib/page-draft';
-import { notesChanged, type WorkspaceHost } from '$lib/plugins/app';
-import { toggleCategory } from '$lib/query';
+} from '#lib/api.js';
+import { categoryLabel } from '#lib/categories.js';
+import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
+import { addToPageDraft } from '#lib/page-draft.js';
+import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
+import { toggleCategory } from '#lib/query.js';
 
 /** Where a note sits in its thread: the thread, and its place in it from 0. */
 export interface ThreadPlace {
@@ -121,7 +121,7 @@ export class Shell implements WorkspaceHost {
 
 	/** The day to go back to. */
 	get back() {
-		return resolve(`/day/${this.day}/`);
+		return resolve(`day/${this.day}/`);
 	}
 
 	/** Load what the views show again, after a change here or on disk. */
@@ -138,20 +138,20 @@ export class Shell implements WorkspaceHost {
 		this.error = message;
 	};
 
-	openDay = (date: string) => goto(resolve(`/day/${date}/`));
+	openDay = (date: string) => goto(resolve(`day/${date}/`));
 
 	/** Open a page in the views' place. A docked page leaves the dock, so no
 	 *  page is open in two editors at once. */
 	openPage = async (note: Pick<Note, 'id' | 'date'>) => {
 		if (this.docked?.id === note.id) this.docked = null;
-		await goto(resolve(`/page/${note.date}/${note.id}/`));
+		await goto(resolve(`page/${note.date}/${note.id}/`));
 	};
 
 	/** Start a page on the day shown. Its draft comes back if there is one;
 	 *  an open one is already it. The focus stays for its title to take. */
 	newPage = () => {
 		if (this.draft) return;
-		void goto(resolve(`/page/${this.day}/new/`), { keepFocus: true });
+		void goto(resolve(`page/${this.day}/new/`), { reset: false });
 	};
 
 	/** The new page open in the view, which takes text where it is typed. */
@@ -169,7 +169,7 @@ export class Shell implements WorkspaceHost {
 	};
 
 	showSimilar = (note: Note) => {
-		void goto(resolve(`/similar/${note.date}/${note.id}/`));
+		void goto(resolve(`similar/${note.date}/${note.id}/`));
 	};
 
 	/** Where a note sits in its thread, while threads are on offer. */
@@ -184,8 +184,10 @@ export class Shell implements WorkspaceHost {
 		try {
 			const view = await listThreads();
 			const places: Record<string, ThreadPlace> = {};
+
 			for (const thread of view.threads)
 				thread.notes.forEach((id, index) => (places[id] = { thread, index }));
+
 			this.threads = places;
 			this.alone = view.alone;
 			// The view of a thread lists its notes itself.
@@ -195,7 +197,7 @@ export class Shell implements WorkspaceHost {
 		}
 	};
 
-	showThread = (id: string) => goto(resolve(`/thread/${id}/`));
+	showThread = (id: string) => goto(resolve(`thread/${id}/`));
 
 	/** Forget the day ahead the model read in a note, for one it read wrong. */
 	clearDayAhead = async (note: Pick<Note, 'id' | 'date'>) => {
@@ -216,7 +218,7 @@ export class Shell implements WorkspaceHost {
 		}
 	};
 
-	showPages = () => goto(resolve('/pages/'));
+	showPages = () => goto(resolve('pages/'));
 
 	/** A plugin's page, `/plugin/<type>/`, with its query string. */
 	openPluginPage = (type: string, params: Record<string, string> = {}) => {
@@ -225,7 +227,7 @@ export class Shell implements WorkspaceHost {
 			.join('&');
 		// resolve() takes no query string, so the query follows the path it gives.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		return goto(`${resolve(`/plugin/${type}/`)}${query ? `?${query}` : ''}`);
+		return goto(`${resolve(`plugin/${type}/`)}${query ? `?${query}` : ''}`);
 	};
 
 	/** The dock holds one thing: a page, or a plugin's view. */
@@ -271,7 +273,7 @@ export class Shell implements WorkspaceHost {
 		if (!trimmed) return this.openDay(this.day);
 		// resolve() takes no query string, so the query follows the path it gives.
 		// eslint-disable-next-line svelte/no-navigation-without-resolve
-		await goto(`${resolve('/search/')}?q=${encodeURIComponent(trimmed)}`);
+		await goto(`${resolve('search/')}?q=${encodeURIComponent(trimmed)}`);
 	};
 
 	/** Open a note's day, bring the note into view and blink it. A page opens. */

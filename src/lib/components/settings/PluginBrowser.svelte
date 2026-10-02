@@ -7,19 +7,19 @@
 		pluginDetails,
 		type PluginDetails,
 		type RegistryEntry
-	} from '$lib/api';
-	import Markdown from '$lib/components/Markdown.svelte';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import { Input } from '$lib/components/ui/input';
-	import { Switch } from '$lib/components/ui/switch';
+	} from '#lib/api.js';
+	import Markdown from '#lib/components/Markdown.svelte';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Card from '#lib/components/ui/card/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import { Switch } from '#lib/components/ui/switch/index.js';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import { m } from '$lib/paraglide/messages';
-	import { adopt, coreIds, older, plugins, setCommunityPlugin } from '$lib/plugins/loader';
+	import { m } from '#lib/paraglide/messages.js';
+	import { adopt, coreIds, older, plugins, setCommunityPlugin } from '#lib/plugins/loader.js';
 	import type { SettingsState } from './state.svelte';
 	import { hint } from './styles';
 

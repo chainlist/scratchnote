@@ -1,5 +1,5 @@
-import { ItemView, Plugin, PluginSettingTab, Setting, type App } from '$lib/plugins/api';
-import { m } from '$lib/paraglide/messages';
+import { ItemView, Plugin, PluginSettingTab, Setting, type App } from '#lib/plugins/api.js';
+import { m } from '#lib/paraglide/messages.js';
 
 /** Lucide's chart-column. */
 const CHART =

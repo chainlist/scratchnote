@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { Switch } from '$lib/components/ui/switch';
-	import { m } from '$lib/paraglide/messages';
-	import type { CorePlugin } from '$lib/plugins/core';
-	import { coreOn, corePlugins, plugins, setCorePlugin } from '$lib/plugins/loader';
+	import { Switch } from '#lib/components/ui/switch/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import type { CorePlugin } from '#lib/plugins/core.js';
+	import { coreOn, corePlugins, plugins, setCorePlugin } from '#lib/plugins/loader.js';
 	import PluginOptions from './PluginOptions.svelte';
 	import type { SettingsState } from './state.svelte';
 	import { group, hint } from './styles';

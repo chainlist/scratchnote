@@ -9,9 +9,9 @@ import {
 	type ModelStatus,
 	type Settings,
 	type SettingsView
-} from '$lib/api';
-import { DEFAULT_APPEARANCE } from '$lib/appearance';
-import { m } from '$lib/paraglide/messages';
+} from '#lib/api.js';
+import { DEFAULT_APPEARANCE } from '#lib/appearance.js';
+import { m } from '#lib/paraglide/messages.js';
 
 /** The fields `setSettings` takes, out of a view that carries more. */
 const editable = (s: Settings): Settings => ({

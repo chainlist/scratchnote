@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { gpuDevices } from '$lib/api';
-	import { Progress } from '$lib/components/ui/progress';
-	import * as Select from '$lib/components/ui/select';
-	import { Switch } from '$lib/components/ui/switch';
-	import { m } from '$lib/paraglide/messages';
-	import { getLocale } from '$lib/paraglide/runtime';
+	import { gpuDevices } from '#lib/api.js';
+	import { Progress } from '#lib/components/ui/progress/index.js';
+	import * as Select from '#lib/components/ui/select/index.js';
+	import { Switch } from '#lib/components/ui/switch/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
 	import EmbeddingModel from './EmbeddingModel.svelte';
 	import ModelBenchmark from './ModelBenchmark.svelte';
 	import ModelChoices from './ModelChoices.svelte';

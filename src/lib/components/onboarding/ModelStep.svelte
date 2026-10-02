@@ -8,18 +8,18 @@
 		type EmbeddingStatus,
 		type Hardware,
 		type ModelVariant
-	} from '$lib/api';
-	import type { SettingsState } from '$lib/components/settings/state.svelte';
-	import ModelBenchmark from '$lib/components/settings/ModelBenchmark.svelte';
-	import { group, hint } from '$lib/components/settings/styles';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import { Label } from '$lib/components/ui/label';
-	import { Progress } from '$lib/components/ui/progress';
-	import * as RadioGroup from '$lib/components/ui/radio-group';
+	} from '#lib/api.js';
+	import type { SettingsState } from '#lib/components/settings/state.svelte.js';
+	import ModelBenchmark from '#lib/components/settings/ModelBenchmark.svelte';
+	import { group, hint } from '#lib/components/settings/styles.js';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Label } from '#lib/components/ui/label/index.js';
+	import { Progress } from '#lib/components/ui/progress/index.js';
+	import * as RadioGroup from '#lib/components/ui/radio-group/index.js';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import DownloadIcon from '@lucide/svelte/icons/download';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		settings,

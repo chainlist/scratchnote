@@ -1,4 +1,4 @@
-import type { PluginsView } from '$lib/api';
+import type { PluginsView } from '#lib/api.js';
 
 export type PluginStatus = { state: 'on' } | { state: 'failed'; error: string };
 

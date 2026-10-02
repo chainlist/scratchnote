@@ -1,13 +1,13 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import type { SpacesView } from '$lib/api';
-	import AppUpdate from '$lib/components/AppUpdate.svelte';
-	import SpaceSwitcher from '$lib/components/SpaceSwitcher.svelte';
-	import WindowControls from '$lib/components/WindowControls.svelte';
-	import { Button } from '$lib/components/ui/button';
+	import type { SpacesView } from '#lib/api.js';
+	import AppUpdate from '#lib/components/AppUpdate.svelte';
+	import SpaceSwitcher from '#lib/components/SpaceSwitcher.svelte';
+	import WindowControls from '#lib/components/WindowControls.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
-	import { m } from '$lib/paraglide/messages';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let {
 		spaces,

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { iconSvg } from '$lib/plugins/icons';
+	import { iconSvg } from '#lib/plugins/icons.js';
 
 	/** A plugin's icon: its SVG markup, or the puzzle piece without one. */
 	let { icon, class: className = 'size-4' }: { icon?: string; class?: string } = $props();

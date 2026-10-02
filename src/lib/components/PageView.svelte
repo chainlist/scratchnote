@@ -10,11 +10,11 @@
 		renamePage,
 		updatePage,
 		type Note
-	} from '$lib/api';
-	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
-	import DayAhead, { aheadLabel } from '$lib/components/DayAhead.svelte';
-	import Recall from '$lib/components/Recall.svelte';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	} from '#lib/api.js';
+	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
+	import DayAhead, { aheadLabel } from '#lib/components/DayAhead.svelte';
+	import Recall from '#lib/components/Recall.svelte';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
@@ -23,10 +23,10 @@
 	import RouteOffIcon from '@lucide/svelte/icons/route-off';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
-	import { categoryLabel } from '$lib/categories';
-	import { joinText, pageDraft } from '$lib/page-draft';
-	import { m } from '$lib/paraglide/messages';
-	import { getShell } from '$lib/shell.svelte';
+	import { categoryLabel } from '#lib/categories.js';
+	import { joinText, pageDraft } from '#lib/page-draft.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let {
 		id,

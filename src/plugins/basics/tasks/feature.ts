@@ -1,6 +1,6 @@
 import { mount, unmount } from 'svelte';
-import { Component, ItemView } from '$lib/plugins/api';
-import { m } from '$lib/paraglide/messages';
+import { Component, ItemView } from '#lib/plugins/api.js';
+import { m } from '#lib/paraglide/messages.js';
 import type { BasicsPlugin } from '../plugin.svelte';
 import TasksList from './TasksList.svelte';
 import { taskSyntax } from './syntax';

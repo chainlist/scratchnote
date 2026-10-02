@@ -3,18 +3,18 @@
 	import { getVersion } from '@tauri-apps/api/app';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { EMBEDDING_SIZE, restartApp, systemProfile, type Hardware } from '$lib/api';
-	import MachineStep from '$lib/components/onboarding/MachineStep.svelte';
-	import ModelStep from '$lib/components/onboarding/ModelStep.svelte';
-	import WelcomeStep from '$lib/components/onboarding/WelcomeStep.svelte';
-	import AppearanceTab from '$lib/components/settings/AppearanceTab.svelte';
-	import FolderPicker from '$lib/components/settings/FolderPicker.svelte';
-	import HotkeyInput from '$lib/components/settings/HotkeyInput.svelte';
-	import { SettingsState } from '$lib/components/settings/state.svelte';
-	import { hint } from '$lib/components/settings/styles';
-	import WindowControls from '$lib/components/WindowControls.svelte';
-	import * as Alert from '$lib/components/ui/alert';
-	import { Button } from '$lib/components/ui/button';
+	import { EMBEDDING_SIZE, restartApp, systemProfile, type Hardware } from '#lib/api.js';
+	import MachineStep from '#lib/components/onboarding/MachineStep.svelte';
+	import ModelStep from '#lib/components/onboarding/ModelStep.svelte';
+	import WelcomeStep from '#lib/components/onboarding/WelcomeStep.svelte';
+	import AppearanceTab from '#lib/components/settings/AppearanceTab.svelte';
+	import FolderPicker from '#lib/components/settings/FolderPicker.svelte';
+	import HotkeyInput from '#lib/components/settings/HotkeyInput.svelte';
+	import { SettingsState } from '#lib/components/settings/state.svelte.js';
+	import { hint } from '#lib/components/settings/styles.js';
+	import WindowControls from '#lib/components/WindowControls.svelte';
+	import * as Alert from '#lib/components/ui/alert/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import CpuIcon from '@lucide/svelte/icons/cpu';
@@ -24,9 +24,9 @@
 	import LanguagesIcon from '@lucide/svelte/icons/languages';
 	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import { LANGUAGE_NAMES, LANGUAGES, type Language } from '$lib/i18n.svelte';
-	import { clearResumeStep, resumeStep, setResumeStep } from '$lib/onboarding';
-	import { m } from '$lib/paraglide/messages';
+	import { LANGUAGE_NAMES, LANGUAGES, type Language } from '#lib/i18n.svelte.js';
+	import { clearResumeStep, resumeStep, setResumeStep } from '#lib/onboarding.js';
+	import { m } from '#lib/paraglide/messages.js';
 
 	/**
 	 * The first-run walkthrough. The main page sends a fresh install here;
@@ -134,7 +134,7 @@
 			const lastSeenVersion = await getVersion();
 			if (!(await settings.apply({ onboarded: true, lastSeenVersion }))) return;
 			clearResumeStep();
-			await goto(resolve('/'));
+			await goto(resolve('/(app)'));
 		} finally {
 			working = false;
 		}

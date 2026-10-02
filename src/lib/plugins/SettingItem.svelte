@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import * as Select from '$lib/components/ui/select';
-	import { Switch } from '$lib/components/ui/switch';
-	import { hint, section } from '$lib/components/settings/styles';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import { Input } from '#lib/components/ui/input/index.js';
+	import * as Select from '#lib/components/ui/select/index.js';
+	import { Switch } from '#lib/components/ui/switch/index.js';
+	import { hint, section } from '#lib/components/settings/styles.js';
 	import { call, type SettingModel } from './setting.svelte';
 
 	/** One `Setting` of a plugin's tab; the builder changes the model it draws. */

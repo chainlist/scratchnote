@@ -1,7 +1,7 @@
 import { syntaxTree } from '@codemirror/language';
 import type { ChangeSpec, EditorState, StateCommand } from '@codemirror/state';
 import type { SyntaxNode } from '@lezer/common';
-import { itemMarks } from '$lib/markdown';
+import { itemMarks } from '#lib/markdown.js';
 
 /**
  * What the editor's toolbar and shortcuts do (SPEC 3.4): each writes the

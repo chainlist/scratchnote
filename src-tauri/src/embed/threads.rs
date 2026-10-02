@@ -221,6 +221,23 @@ struct Part<'a> {
     all: f32,
 }
 
+/// What every note of the space adds up to.
+fn total(vectors: &Vectors) -> Vec<f32> {
+    let mut sum = vec![0.0; vectors.dims()];
+    for (_, _, vector) in vectors.iter() {
+        for (s, x) in sum.iter_mut().zip(vector) {
+            *s += x;
+        }
+    }
+    sum
+}
+
+/// The average note of the space, which says what is usual.
+fn mean(vectors: &Vectors) -> Vec<f32> {
+    let count = vectors.len().max(1) as f32;
+    total(vectors).into_iter().map(|s| s / count).collect()
+}
+
 /// What every note of the space adds up to, which says what is usual, and
 /// each note's dot products with itself and that sum.
 struct Usual {
@@ -233,12 +250,7 @@ struct Usual {
 
 impl Usual {
     fn of(vectors: &Vectors) -> Self {
-        let mut sum = vec![0.0; vectors.dims()];
-        for (_, _, vector) in vectors.iter() {
-            for (s, x) in sum.iter_mut().zip(vector) {
-                *s += x;
-            }
-        }
+        let sum = total(vectors);
         let dots = vectors
             .iter()
             .map(|(id, _, vector)| (id.to_string(), (dot(vector, vector), dot(vector, &sum))))
@@ -534,26 +546,61 @@ impl Threads {
                     .push(id.as_str());
             }
         }
-        let usual = Usual::of(vectors);
+        let mean = mean(vectors);
         members
             .into_iter()
-            .filter(|(_, notes)| notes.len() > 1)
-            .map(|(id, mut notes)| {
-                notes.sort_by(|a, b| (&when[*a], a).cmp(&(&when[*b], b)));
-                let custom = titles.get(id).filter(|title| !title.trim().is_empty());
-                let title = custom
-                    .cloned()
-                    .or_else(|| most_typical(&notes, vectors, &usual, subjects));
-                Thread {
-                    id: id.to_string(),
-                    title,
-                    named: custom.is_some(),
-                    since: when[notes[0]].date.format("%Y-%m-%d").to_string(),
-                    notes: notes.into_iter().map(str::to_string).collect(),
-                }
-            })
+            .filter_map(|(id, notes)| shown(id, notes, vectors, &mean, when, subjects, titles))
             .collect()
     }
+
+    /// One thread as `list` gives it, without titling every other, or
+    /// `None` once it is gone.
+    pub fn get(
+        &self,
+        id: &str,
+        vectors: &Vectors,
+        when: &HashMap<String, When>,
+        subjects: &HashMap<String, String>,
+        titles: &BTreeMap<String, String>,
+    ) -> Option<Thread> {
+        let notes: Vec<&str> = self
+            .notes
+            .iter()
+            .filter(|(note, placed)| {
+                placed.thread.as_deref() == Some(id) && when.contains_key(*note)
+            })
+            .map(|(note, _)| note.as_str())
+            .collect();
+        shown(id, notes, vectors, &mean(vectors), when, subjects, titles)
+    }
+}
+
+/// Thread `id` of `notes` as the views show it, or `None` for a thread of
+/// one note, which is no thread.
+fn shown(
+    id: &str,
+    mut notes: Vec<&str>,
+    vectors: &Vectors,
+    mean: &[f32],
+    when: &HashMap<String, When>,
+    subjects: &HashMap<String, String>,
+    titles: &BTreeMap<String, String>,
+) -> Option<Thread> {
+    if notes.len() < 2 {
+        return None;
+    }
+    notes.sort_by(|a, b| (&when[*a], a).cmp(&(&when[*b], b)));
+    let custom = titles.get(id).filter(|title| !title.trim().is_empty());
+    let title = custom
+        .cloned()
+        .or_else(|| most_typical(&notes, vectors, mean, subjects));
+    Some(Thread {
+        id: id.to_string(),
+        title,
+        named: custom.is_some(),
+        since: when[notes[0]].date.format("%Y-%m-%d").to_string(),
+        notes: notes.into_iter().map(str::to_string).collect(),
+    })
 }
 
 /// Where a note of `date` goes: the thread it scores best against, or the
@@ -610,21 +657,17 @@ fn best_thread(
 
 /// The subject of the note most like the rest of its thread, once what
 /// every note shares is taken off: the one that best says what the thread
-/// is about. A note without a subject yet gives way to the next.
+/// is about. A note without a subject yet gives way to the next. `mean` is
+/// the space's average note.
 fn most_typical(
     notes: &[&str],
     vectors: &Vectors,
-    usual: &Usual,
+    mean: &[f32],
     subjects: &HashMap<String, String>,
 ) -> Option<String> {
     let dims = vectors.dims();
-    let mean: Vec<f32> = usual
-        .sum
-        .iter()
-        .map(|s| s / usual.count.max(1) as f32)
-        .collect();
     let centred =
-        |vector: &[f32]| -> Vec<f32> { vector.iter().zip(&mean).map(|(x, m)| x - m).collect() };
+        |vector: &[f32]| -> Vec<f32> { vector.iter().zip(mean).map(|(x, m)| x - m).collect() };
     let mut middle = vec![0.0; dims];
     let found: Vec<(&str, Vec<f32>)> = notes
         .iter()
@@ -889,6 +932,36 @@ mod tests {
         let named = threads.list(&vectors, &when, &subjects, &titles);
         assert_eq!(named[0].title.as_deref(), Some("Kitchen"));
         assert!(named[0].named);
+    }
+
+    #[test]
+    fn one_thread_is_got_as_it_is_listed() {
+        let notes = with_others(&[
+            ("01A", "2026-09-10", 1),
+            ("01B", "2026-09-12", 1),
+            ("01C", "2026-09-14", 2),
+            ("01D", "2026-09-16", 2),
+        ]);
+        let (vectors, when) = space(&notes);
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &HashSet::new());
+        let subjects: HashMap<String, String> = [("01A", "Kitchen"), ("01D", "Garden")]
+            .into_iter()
+            .map(|(id, s)| (id.to_string(), s.to_string()))
+            .collect();
+        let titles: BTreeMap<String, String> = [("01C".to_string(), "Mine".to_string())].into();
+
+        let listed = threads.list(&vectors, &when, &subjects, &titles);
+        assert_eq!(listed.len(), 2);
+        for thread in &listed {
+            let got = threads.get(&thread.id, &vectors, &when, &subjects, &titles);
+            assert_eq!(got.as_ref(), Some(thread));
+        }
+        // A note on its own is no thread.
+        assert_eq!(
+            threads.get("01Z1", &vectors, &when, &subjects, &titles),
+            None
+        );
     }
 
     #[test]

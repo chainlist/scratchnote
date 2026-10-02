@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::embed::threads::{edits_path, when_written, Edits, Thread};
+use crate::embed::threads::{edits_path, when_written, Edits, Thread, Threads, When};
+use crate::embed::vectors::Vectors;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
@@ -39,24 +40,11 @@ pub fn list_threads(state: State<'_, AppState>) -> Result<ThreadsView, String> {
 
 fn view(space: &Space) -> ThreadsView {
     let edits = Edits::load(&space.root);
-    let (when, subjects) = match space.index.read() {
-        Ok(index) if !index.is_closed() => {
-            let subjects: HashMap<String, String> = index
-                .entries()
-                .filter_map(|entry| Some((entry.id.clone(), entry.subject.clone()?)))
-                .collect();
-            (when_written(&index), subjects)
-        }
-        _ => return ThreadsView::default(),
+    let Some((when, subjects)) = dates_and_subjects(space) else {
+        return ThreadsView::default();
     };
-    let threads = space.vectors.lock().ok().and_then(|vectors| {
-        let vectors = vectors.as_ref()?;
-        let threads = space.threads.lock().ok()?;
-        Some(
-            threads
-                .as_ref()?
-                .list(vectors, &when, &subjects, &edits.titles),
-        )
+    let threads = placed(space, |threads, vectors| {
+        Some(threads.list(vectors, &when, &subjects, &edits.titles))
     });
     ThreadsView {
         threads: threads.unwrap_or_default(),
@@ -64,11 +52,36 @@ fn view(space: &Space) -> ThreadsView {
     }
 }
 
+/// When each note of the space was written, and the notes' subjects, which
+/// threads are shown with. `None` while the space is closed.
+fn dates_and_subjects(space: &Space) -> Option<(HashMap<String, When>, HashMap<String, String>)> {
+    let index = space.index.read().ok().filter(|index| !index.is_closed())?;
+    let subjects = index
+        .entries()
+        .filter_map(|entry| Some((entry.id.clone(), entry.subject.clone()?)))
+        .collect();
+    Some((when_written(&index), subjects))
+}
+
+/// What `show` makes of where the notes were placed and their vectors,
+/// `None` until the embed task has loaded them.
+fn placed<T>(space: &Space, show: impl FnOnce(&Threads, &Vectors) -> Option<T>) -> Option<T> {
+    let vectors = space.vectors.lock().ok()?;
+    let threads = space.threads.lock().ok()?;
+    show(threads.as_ref()?, vectors.as_ref()?)
+}
+
 /// A thread and its notes, or `None` once it is gone.
 #[tauri::command]
 pub fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option<ThreadNotes>, String> {
     let space = state.space()?;
-    let Some(thread) = view(&space).threads.into_iter().find(|t| t.id == id) else {
+    let Some((when, subjects)) = dates_and_subjects(&space) else {
+        return Ok(None);
+    };
+    let titles = Edits::load(&space.root).titles;
+    let Some(thread) = placed(&space, |threads, vectors| {
+        threads.get(&id, vectors, &when, &subjects, &titles)
+    }) else {
         return Ok(None);
     };
     let notes = space.read(|idx, db| {

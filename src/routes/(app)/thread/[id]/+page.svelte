@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { renameThread } from '$lib/api';
+	import { renameThread, type Note } from '$lib/api';
 	import NoteList from '$lib/components/NoteList.svelte';
 	import View from '$lib/components/View.svelte';
-	import { shortDay } from '$lib/components/ViewHeader.svelte';
+	import { dayHeading, shortDay } from '$lib/components/ViewHeader.svelte';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import { m } from '$lib/paraglide/messages';
 	import { getShell } from '$lib/shell.svelte';
@@ -11,6 +11,17 @@
 
 	const shell = getShell();
 	const thread = $derived(data.found?.thread ?? null);
+
+	/** The thread's notes by day; they come oldest first, so a day's are together. */
+	const days = $derived.by(() => {
+		const days: { date: string; notes: Note[] }[] = [];
+		for (const note of data.found?.notes ?? []) {
+			const last = days.at(-1);
+			if (last?.date === note.date) last.notes.push(note);
+			else days.push({ date: note.date, notes: [note] });
+		}
+		return days;
+	});
 
 	/** The title being typed, while the field is open. */
 	let renaming = $state<string | null>(null);
@@ -39,7 +50,8 @@
 	}
 </script>
 
-<!-- One thread's notes, oldest first, so they read as it went (SPEC 6.4). -->
+<!-- One thread's notes, oldest first, so they read as it went, each day under
+     its own heading with a rail of its own (SPEC 6.4). -->
 <View
 	back={shell.back}
 	title={thread?.title ?? m.thread_untitled()}
@@ -72,13 +84,14 @@
 				<span class="text-xs text-neutral-600">{m.thread_rename_hint()}</span>
 			{/if}
 		</div>
-		<NoteList
-			notes={data.found.notes}
-			empty=""
-			showDate
-			threadLine={false}
-			{...shell.cardActions}
-		/>
+		{#each days as day (day.date)}
+			<section class="mb-8 last:mb-0">
+				<h2 class="border-b border-neutral-800 pb-2 text-sm font-medium text-neutral-400">
+					{dayHeading(day.date)}
+				</h2>
+				<NoteList notes={day.notes} empty="" threadLine={false} {...shell.cardActions} />
+			</section>
+		{/each}
 	{:else}
 		<p class="text-base text-neutral-600">{m.thread_gone()}</p>
 	{/if}

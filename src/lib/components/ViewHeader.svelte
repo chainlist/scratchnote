@@ -1,14 +1,23 @@
 <script lang="ts" module>
 	import { getLocale } from '#lib/paraglide/runtime.js';
 
+	/** The formats `dayHeading` made, by language and length: making one
+	 *  takes far longer than using it, and a thread heads every day with one. */
+	const headings: Record<string, Intl.DateTimeFormat> = {};
+
 	/** A day as its title reads, or shorter, as the top bar has it. */
 	export function dayHeading(date: string, short = false) {
-		return new Date(`${date}T00:00:00`).toLocaleDateString(
+		const day = new Date(`${date}T00:00:00`);
+		// A view being left reads its title once more with the next route's
+		// data, which may hold no date: as toLocaleDateString did, no error.
+		if (Number.isNaN(day.getTime())) return String(day);
+		const format = (headings[`${getLocale()} ${short}`] ??= new Intl.DateTimeFormat(
 			getLocale(),
 			short
 				? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }
 				: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
-		);
+		));
+		return format.format(day);
 	}
 
 	/** A day in a few characters, as a line names it: the year only when it is not this one. */

@@ -71,6 +71,12 @@
 	let draft = $state('');
 	let editor = $state<MarkdownEditor | null>(null);
 	let menuOpen = $state(false);
+	/** The menu is drawn once the card is pointed at or focused, as its
+	 *  button only shows then: a menu on every card is most of what a long
+	 *  list takes to draw. Until then, a plain button stands in for its trigger. */
+	let armed = $state(false);
+	let standIn = $state<HTMLButtonElement | null>(null);
+	let trigger = $state<HTMLElement | null>(null);
 	/** The body with task boxes ticked but not saved yet, shown meanwhile.
 	 *  A plugin's widget can change the text too; it saves the same way. */
 	let ticked = $state<string | null>(null);
@@ -117,6 +123,8 @@
 
 	const action =
 		'cursor-pointer rounded px-1.5 py-0.5 text-[0.625rem] tracking-wide text-neutral-400 uppercase hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50';
+	const menuButton =
+		'cursor-pointer rounded px-1 py-0.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 data-[state=open]:bg-neutral-800 data-[state=open]:text-neutral-200';
 
 	function onEditKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -138,6 +146,17 @@
 	function onMouseDown(event: MouseEvent) {
 		if (!editing && event.detail > 1) event.preventDefault();
 	}
+
+	/** Draw the menu; focus on the stand-in moves to the trigger replacing it. */
+	async function arm() {
+		if (armed) return;
+		const focused = standIn !== null && document.activeElement === standIn;
+		armed = true;
+		if (focused) {
+			await tick();
+			trigger?.focus();
+		}
+	}
 </script>
 
 <!-- The double click is a mouse shortcut; Edit in the menu opens the same
@@ -150,6 +169,8 @@
 	class={[menuOpen && 'bg-neutral-900', blink && 'note-blink', glowing && 'z-10']}
 	ondblclick={onDoubleClick}
 	onmousedown={onMouseDown}
+	onpointerenter={arm}
+	onfocusin={arm}
 >
 	<!-- Enrichment shows only while it matters: a glowing rainbow edge while
 	     the note waits for the model, a faint red ring when it failed. -->
@@ -232,57 +253,76 @@
 				: 'opacity-0'}"
 		>
 			<span class="text-[0.625rem] text-neutral-600 select-none">{m.note_dblclick_hint()}</span>
-			<DropdownMenu.Root bind:open={menuOpen}>
-				<DropdownMenu.Trigger
+			{#if !armed}
+				<button
+					bind:this={standIn}
+					type="button"
 					aria-label={m.note_actions()}
 					title={m.note_actions()}
-					class="cursor-pointer rounded px-1 py-0.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 data-[state=open]:bg-neutral-800 data-[state=open]:text-neutral-200"
+					aria-haspopup="menu"
+					aria-expanded="false"
+					onclick={() => {
+						menuOpen = true;
+						void arm();
+					}}
+					class={menuButton}
 				>
 					<EllipsisIcon class="size-3.5" />
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-52">
-					<DropdownMenu.Item onSelect={() => onedit(note)}>
-						<PencilIcon />{m.note_edit()}
-					</DropdownMenu.Item>
-					{#if onsimilar}
-						<DropdownMenu.Item onSelect={() => onsimilar(note)}>
-							<WaypointsIcon />{m.note_similar()}
+				</button>
+			{:else}
+				<DropdownMenu.Root bind:open={menuOpen}>
+					<DropdownMenu.Trigger
+						bind:ref={trigger}
+						aria-label={m.note_actions()}
+						title={m.note_actions()}
+						class={menuButton}
+					>
+						<EllipsisIcon class="size-3.5" />
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end" class="w-52">
+						<DropdownMenu.Item onSelect={() => onedit(note)}>
+							<PencilIcon />{m.note_edit()}
 						</DropdownMenu.Item>
-					{/if}
-					<DropdownMenu.Item onSelect={() => onpage(note)}>
-						<FileTextIcon />{m.pages_turn_into()}
-					</DropdownMenu.Item>
-					{#if onmove}
-						<DropdownMenu.Item onSelect={() => onmove(note)}>
-							<FolderInputIcon />{m.move_to()}
+						{#if onsimilar}
+							<DropdownMenu.Item onSelect={() => onsimilar(note)}>
+								<WaypointsIcon />{m.note_similar()}
+							</DropdownMenu.Item>
+						{/if}
+						<DropdownMenu.Item onSelect={() => onpage(note)}>
+							<FileTextIcon />{m.pages_turn_into()}
 						</DropdownMenu.Item>
-					{/if}
-					{#if note.on}
-						{@const on = note.on}
-						<DropdownMenu.Item onSelect={() => void shell.clearDayAhead(note)}>
-							<CalendarXIcon />{m.day_ahead_clear({ date: aheadLabel(on) })}
+						{#if onmove}
+							<DropdownMenu.Item onSelect={() => onmove(note)}>
+								<FolderInputIcon />{m.move_to()}
+							</DropdownMenu.Item>
+						{/if}
+						{#if note.on}
+							{@const on = note.on}
+							<DropdownMenu.Item onSelect={() => void shell.clearDayAhead(note)}>
+								<CalendarXIcon />{m.day_ahead_clear({ date: aheadLabel(on) })}
+							</DropdownMenu.Item>
+						{/if}
+						{#if inThread}
+							<DropdownMenu.Item onSelect={() => void shell.keepOut(note, true)}>
+								<RouteOffIcon />{m.thread_leave()}
+							</DropdownMenu.Item>
+						{:else if keptOut}
+							<DropdownMenu.Item onSelect={() => void shell.keepOut(note, false)}>
+								<RouteIcon />{m.thread_rejoin()}
+							</DropdownMenu.Item>
+						{/if}
+						{#if canRetry}
+							<DropdownMenu.Item onSelect={() => onretry(note)}>
+								<RefreshCwIcon />{m.note_rerun()}
+							</DropdownMenu.Item>
+						{/if}
+						<DropdownMenu.Separator />
+						<DropdownMenu.Item variant="destructive" onSelect={() => ondelete(note)}>
+							<Trash2Icon />{m.common_delete()}
 						</DropdownMenu.Item>
-					{/if}
-					{#if inThread}
-						<DropdownMenu.Item onSelect={() => void shell.keepOut(note, true)}>
-							<RouteOffIcon />{m.thread_leave()}
-						</DropdownMenu.Item>
-					{:else if keptOut}
-						<DropdownMenu.Item onSelect={() => void shell.keepOut(note, false)}>
-							<RouteIcon />{m.thread_rejoin()}
-						</DropdownMenu.Item>
-					{/if}
-					{#if canRetry}
-						<DropdownMenu.Item onSelect={() => onretry(note)}>
-							<RefreshCwIcon />{m.note_rerun()}
-						</DropdownMenu.Item>
-					{/if}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item variant="destructive" onSelect={() => ondelete(note)}>
-						<Trash2Icon />{m.common_delete()}
-					</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			{/if}
 		</div>
 
 		{#if note.category}

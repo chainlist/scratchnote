@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/chainlist/scratchnote/compare/v0.4.0...v0.5.0) (2026-10-02)
+
+
+### Features
+
+* divide a thread's notes by day ([521a98a](https://github.com/chainlist/scratchnote/commit/521a98ac6de57cefb3e3b99e9634fa4e1ba68b77))
+
 ## [0.4.0](https://github.com/chainlist/scratchnote/compare/v0.3.0...v0.4.0) (2026-10-01)
 
 

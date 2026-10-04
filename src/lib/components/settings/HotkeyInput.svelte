@@ -32,8 +32,21 @@
 
 	/** Turns a key press into the accelerator syntax the global-shortcut plugin reads. */
 	function recordHotkey(event: KeyboardEvent) {
-		// Once cancelled, keys (Escape to close the dialog) pass through.
-		if (!recording) return;
+		// Recording starts on a click, or from the keyboard on Enter or Space.
+		// Until then, and once cancelled, keys pass through: Tab moves on and
+		// Escape closes the dialog.
+		if (!recording) {
+			if (event.key === 'Enter' || event.key === ' ') {
+				event.preventDefault();
+				recording = true;
+			}
+			return;
+		}
+		// Tab, with Shift or not, still moves on, and is never a shortcut.
+		if (event.key === 'Tab') {
+			recording = false;
+			return;
+		}
 		event.preventDefault();
 		if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) return;
 
@@ -61,7 +74,7 @@
 	{id}
 	readonly
 	value={recording ? m.settings_hotkey_recording() : prettyHotkey(value)}
-	onfocus={() => (recording = true)}
+	onclick={() => (recording = true)}
 	onblur={() => (recording = false)}
 	onkeydown={recordHotkey}
 	class="w-56 cursor-pointer text-center font-mono {recording

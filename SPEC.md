@@ -683,7 +683,7 @@ Community plugins come from GitHub, as Obsidian's do.
 ## 7. Settings
 
 - Notes root directory
-- Capture hotkey
+- Capture hotkey: a click on its field, or Enter or Space once it has the focus, records the next key pressed with a modifier; reaching the field with Tab records nothing, Tab still moves on, and Esc cancels
 - Embedding model download (optional, for search by meaning, similar notes, recall and threads)
 - Hide immediately after save vs. show toast
 - Threads, a tab named the same in every language: the order of a thread's notes, oldest first (default) or newest first (6.4)

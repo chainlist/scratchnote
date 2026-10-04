@@ -46,7 +46,7 @@ const SETTLE_STEP: f32 = 0.25;
 /// The map, by slot: a note keeps its slot while it is on the map, so the
 /// lists of closest notes hold slots, and placing a note looks nothing up
 /// by id. Ids are only for loading and saving.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Map {
     /// The model of the vectors the places came from.
     model: String,
@@ -427,57 +427,67 @@ impl Map {
     }
 }
 
-/// Bring the saved map in line with the vectors. The vectors are held only
-/// while copied, so search goes on meanwhile. The map is loaded from `db`
-/// first if it is not in memory yet. True when any note moved.
+/// Bring the saved map in line with the vectors. The work is done on a copy
+/// of the map, which then takes its place: the vectors and the map are each
+/// held only for an instant, so search and the map view go on meanwhile,
+/// however long a full layout takes. The map is loaded from `db` first if
+/// it is not in memory yet. True when any note moved.
 pub fn reconcile(
     vectors: &Mutex<Option<Vectors>>,
     map: &Mutex<Option<Map>>,
     db: &Mutex<Option<SpaceDb>>,
 ) -> Result<bool, String> {
-    let held = vectors.lock().map_err(|_| "vectors lock poisoned")?;
-    let Some(store) = held.as_ref() else {
-        return Ok(false);
-    };
-    let mut slot = map.lock().map_err(|_| "map lock poisoned")?;
-    if slot.is_none() {
-        let db = db.lock().map_err(|_| "space.db lock poisoned")?;
-        let Some(db) = db.as_ref() else {
+    let (mut working, snapshot) = {
+        let held = vectors.lock().map_err(|_| "vectors lock poisoned")?;
+        let Some(store) = held.as_ref() else {
             return Ok(false);
         };
-        *slot = Some(Map::load(db));
-    }
-    let current = slot.as_mut().expect("loaded just above");
-    if !current.behind(store) {
-        return Ok(false);
-    }
-    let snapshot = Snapshot::of(store);
-    drop(held);
+        let mut slot = map.lock().map_err(|_| "map lock poisoned")?;
+        if slot.is_none() {
+            let db = db.lock().map_err(|_| "space.db lock poisoned")?;
+            let Some(db) = db.as_ref() else {
+                return Ok(false);
+            };
+            *slot = Some(Map::load(db));
+        }
+        let current = slot.as_ref().expect("loaded just above");
+        if !current.behind(store) {
+            return Ok(false);
+        }
+        (current.clone(), Snapshot::of(store))
+    };
 
     let started = std::time::Instant::now();
-    let afresh = current.model != snapshot.model || current.slots.is_empty();
+    let afresh = working.model != snapshot.model || working.slots.is_empty();
     let changes = if afresh {
-        current.lay_out(&snapshot);
+        working.lay_out(&snapshot);
         None
     } else {
-        Some(current.update(&snapshot))
+        Some(working.update(&snapshot))
     };
 
-    let mut db = db.lock().map_err(|_| "space.db lock poisoned")?;
-    // The space was closed meanwhile.
-    let Some(db) = db.as_mut() else {
-        return Ok(false);
-    };
-    match &changes {
-        None => {
-            db.transaction(|tx| current.write_all(tx))?;
-            log::info!(
-                "laid out {} notes in {:?}",
-                snapshot.len(),
-                started.elapsed()
-            );
+    {
+        let mut db = db.lock().map_err(|_| "space.db lock poisoned")?;
+        // The space was closed meanwhile.
+        let Some(db) = db.as_mut() else {
+            return Ok(false);
+        };
+        match &changes {
+            None => {
+                db.transaction(|tx| working.write_all(tx))?;
+                log::info!(
+                    "laid out {} notes in {:?}",
+                    snapshot.len(),
+                    started.elapsed()
+                );
+            }
+            Some(changes) => db.transaction(|tx| working.write_changes(tx, changes))?,
         }
-        Some(changes) => db.transaction(|tx| current.write_changes(tx, changes))?,
+    }
+    let mut slot = map.lock().map_err(|_| "map lock poisoned")?;
+    // Only this task changes the map; a space closed meanwhile has none.
+    if slot.is_some() {
+        *slot = Some(working);
     }
     Ok(true)
 }

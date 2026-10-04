@@ -256,8 +256,14 @@ impl Space {
             );
             SearchDb::in_memory().expect("an in-memory database")
         });
+        crate::startup::step(format!("Opening the search.db of {}", self.name));
         let (loaded, stale) = index::load(&self.root, &mut db);
         log::info!("space {} holds {} notes", self.name, loaded.len());
+        crate::startup::step(format!(
+            "Reading the index of {} ({} notes)",
+            self.name,
+            loaded.len()
+        ));
 
         if let Ok(mut index) = self.index.write() {
             *index = loaded;

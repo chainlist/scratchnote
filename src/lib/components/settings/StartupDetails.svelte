@@ -19,14 +19,15 @@
 	};
 
 	const name = (row: StartupRow) =>
-		row.step === 'plugin' ? pluginName(row.plugin!.id) : NAMES[row.step]();
+		row.label ??
+		(row.step === 'plugin' ? pluginName(row.plugin!.id) : NAMES[row.step as keyof typeof NAMES]());
 	const time = (ms: number) => duration(ms, getLocale());
 	const percent = (share: number) =>
 		new Intl.NumberFormat(getLocale(), { style: 'percent' }).format(share);
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="sm:max-w-lg">
+	<Dialog.Content class="max-h-[calc(100%-2rem)] overflow-y-auto sm:max-w-lg">
 		<Dialog.Header>
 			<Dialog.Title>{m.settings_startup_title()}</Dialog.Title>
 			<Dialog.Description>{m.settings_startup_description()}</Dialog.Description>

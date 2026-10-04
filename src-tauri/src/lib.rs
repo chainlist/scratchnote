@@ -7,6 +7,7 @@ mod plugins;
 mod search;
 mod settings;
 mod spaces;
+mod startup;
 mod state;
 mod storage;
 mod watcher;
@@ -31,6 +32,7 @@ const CAPTURE_FLAG: &str = "--capture";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    startup::begin();
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -125,8 +127,10 @@ pub fn run() {
             capture_to_page,
             reveal_note,
             set_tray_labels,
+            startup::launch_steps,
         ])
         .setup(|app| {
+            startup::step("Starting Tauri and its plugins");
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -141,6 +145,7 @@ pub fn run() {
 
             // Before spaces.json is read, since it may point it at a new folder.
             spaces::migrate_root(&root);
+            startup::step("Reading the settings");
 
             let embed_wake: embed::sync::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
             app.manage(AppState {
@@ -176,6 +181,7 @@ pub fn run() {
             if let Ok(mut spaces) = state.spaces.write() {
                 *spaces = listed;
             }
+            startup::step("Listing the spaces");
             if let Ok(open) = state.space() {
                 commands::spaces::load_space(app.handle(), &open);
             }
@@ -184,10 +190,13 @@ pub fn run() {
             // backfilled.
             embed::sync::spawn(app.handle().clone(), embed_wake);
             commands::models::replace_legacy_embedding_model(app.handle());
+            startup::step("Starting the embedding task");
 
             build_capture_window(app.handle())?;
+            startup::step("Making the capture window");
             build_tray(app.handle())?;
             keep_main_window_alive(app.handle());
+            startup::step("Making the tray icon");
 
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -199,6 +208,8 @@ pub fn run() {
             if std::env::args().any(|a| a == CAPTURE_FLAG) {
                 toggle_capture(app.handle());
             }
+            startup::step("Registering the capture shortcut");
+            startup::done();
 
             Ok(())
         })

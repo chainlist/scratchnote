@@ -60,6 +60,7 @@ pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
     if let Err(e) = crate::watcher::start(app.clone(), space) {
         log::error!("could not watch the notes of {}: {e}", space.name);
     }
+    crate::startup::step(format!("Watching the folder of {}", space.name));
     if !refresh {
         return;
     }

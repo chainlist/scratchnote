@@ -1,6 +1,38 @@
-import { invoke } from '@tauri-apps/api/core';
+import { dev } from '$app/env';
+import { invoke as tauriInvoke, type InvokeArgs, type InvokeOptions } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { Language } from '#lib/i18n.svelte.js';
+
+/** A command the window called while it started, timed from when it began loading. */
+export interface StartupCall {
+	cmd: string;
+	start: number;
+	ms: number;
+}
+
+/**
+ * In a dev build, the commands the window calls until its first view is up,
+ * for the startup details (`#lib/startup.js`), which close the list then.
+ */
+export const startupCalls = { open: dev, calls: [] as StartupCall[] };
+
+function invoke<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions): Promise<T> {
+	if (!startupCalls.open) return tauriInvoke<T>(cmd, args, options);
+	const start = performance.now();
+	return tauriInvoke<T>(cmd, args, options).finally(() =>
+		startupCalls.calls.push({ cmd, start, ms: performance.now() - start })
+	);
+}
+
+/** What the app did at launch before its window loaded (dev builds show it). */
+export interface Launch {
+	/** When the process began, in ms since the Unix epoch. */
+	began: number;
+	steps: { step: string; ms: number }[];
+}
+
+/** The launch's steps, to the first window that asks; null after. */
+export const launchSteps = () => invoke<Launch | null>('launch_steps');
 
 export interface Note {
 	id: string;

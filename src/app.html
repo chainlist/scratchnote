@@ -5,6 +5,9 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<script>
+			// Room for every file a dev build loads one by one, which the
+			// startup details count (#lib/startup.js); 250 by default.
+			performance.setResourceTimingBufferSize(5000);
 			// Repaint what applyAppearance last painted before anything renders,
 			// so a light window does not open dark and wait for the settings.
 			{

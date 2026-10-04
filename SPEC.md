@@ -406,7 +406,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
         search.db        # the notes' text for search, SQLite, derived, rebuildable
-        space.db         # SQLite: note embeddings for search by meaning, similar notes and threads, the thread each note was placed in, and each note's place on the map, derived, rebuildable; thread titles and notes kept out of threads, the user's
+        space.db         # SQLite: note embeddings for search by meaning, similar notes and threads, the thread each note was placed in, each note's place on the map and its closest notes, derived, rebuildable; thread titles and notes kept out of threads, the user's
     Work/
       notes/...
       .scratchnote/...
@@ -666,11 +666,11 @@ Community plugins come from GitHub, as Obsidian's do.
 
 ### 6.5 Map
 
-- Every note of the open space has a place on a 2D map by meaning, saved in `space.db` with the body it was placed from, so no view lays the space out itself. Nothing shows the map yet.
-- A full layout places every note: each is pulled towards its 15 closest notes and pushed away from random others, as UMAP does, starting from the two directions the notes differ most along. Closeness is the cosine once the mean of every note is taken off, as for Similar notes. A fixed start and a fixed random sequence, so a space lays out the same way every time.
-- It compares every note with every other, so it runs in the background after an embedding pass, and only when the space has no places, they came from another model, or over a tenth of its notes were placed one by one since the last one. The vectors are copied first, so search goes on meanwhile.
-- Between full layouts, a note new or written again goes to the average of the places of its 5 closest placed notes, weighted by how close; a deleted note's place goes. No other note moves.
-- Measured on 10,269 notes, release build: a full layout takes 4.1 s (0.9 s of it comparing every note with every other, over all cores) and keeps 36% of each note's 10 closest notes among its 10 closest on the map; a note saved later costs 16 ms, placed and saved. On 102 notes: 32 ms, 60%, and 0.2 ms. PCA alone, the two directions without the layout, kept 5% on the 10,269 notes, in one blob.
+- Every note of the open space has a place on a 2D map by meaning, saved in `space.db` with the body it was placed from, and its 15 closest notes with how close, so no view lays the space out itself. Nothing shows the map yet.
+- Closeness is the cosine once the mean of every note is taken off, as for Similar notes. A note's list keeps the scores it was made with as the mean moves.
+- The map is laid out whole only when a space has none yet, or its notes were embedded by another model: each note is pulled towards its closest notes and pushed away from random others, as UMAP does, starting from the two directions the notes differ most along. That compares every note with every other, so it runs in the background after an embedding pass. A fixed start and a fixed random sequence, so a space lays out the same way every time.
+- After that it is never laid out again. A note new or written again gets its own list, joins the list of every note it is closer to than that list's last, starts at the average of the places of its 5 closest notes weighted by how close, then settles for 30 rounds of the same pulls and pushes together with its closest notes and the notes whose lists it joined; no other note moves. A deleted note leaves every list it was in, and those lists take the next closest note; nothing moves. The vectors are copied first, so search goes on meanwhile.
+- Measured on 10,269 notes, release build. Laid out whole: 5.5 s, keeping 36% of each note's 10 closest notes among its 10 closest on the map. The oldest half laid out, then the newest half added one by one and never laid out again: 34%, with the older notes moving 5% of the map's radius on average. A note saved later costs 20 ms, placed, settled and saved, 11 ms of it copying the vectors. The places and lists take 12.8 MB of `space.db`. On 102 notes: 38 ms, 58%, 1 ms a note, and 0.1 MB. Placing a new note at its neighbours' average without settling kept 26% for those notes; PCA alone, the two directions without the layout, kept 5%, in one blob.
 
 ## 7. Settings
 

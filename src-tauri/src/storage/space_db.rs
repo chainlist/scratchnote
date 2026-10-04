@@ -54,6 +54,13 @@ const TABLES: &str = "
         x REAL NOT NULL,
         y REAL NOT NULL
     );
+    -- Each note's closest notes on the map, and how close.
+    CREATE TABLE links (
+        id TEXT NOT NULL,
+        other TEXT NOT NULL,
+        score REAL NOT NULL,
+        PRIMARY KEY (id, other)
+    ) WITHOUT ROWID;
     -- The thread edits: titles, notes kept out of threads, notes put in one,
     -- and the notes a dismissed suggestion held.
     CREATE TABLE thread_titles (

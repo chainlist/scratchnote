@@ -23,6 +23,7 @@
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/vite": "^4.3.0",
 		"@tauri-apps/cli": "^2.11.5",
+		"@types/d3-force": "^3.0.10",
 		"@types/node": "^22",
 		"bits-ui": "^2.19.3",
 		"cn": "^0.4.0",
@@ -65,7 +66,8 @@
 		"@tauri-apps/plugin-dialog": "^2.7.3",
 		"@tauri-apps/plugin-global-shortcut": "~2.3.2",
 		"@tauri-apps/plugin-process": "~2.3.1",
-		"@tauri-apps/plugin-updater": "~2.12.0"
+		"@tauri-apps/plugin-updater": "~2.12.0",
+		"d3-force": "^3.0.0"
 	},
 	"imports": {
 		"#lib": "./src/lib/index.js",

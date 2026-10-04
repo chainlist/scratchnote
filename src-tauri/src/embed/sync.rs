@@ -103,7 +103,14 @@ fn sync_space(space: &Space, embedder: &dyn Embedder) -> Synced {
     }
     let threads = sync_threads(space);
     let map = !space.is_retired()
-        && super::map::reconcile(&space.vectors, &space.map, &space.db).unwrap_or_else(|e| {
+        && super::map::reconcile(&space.vectors, &space.map, &space.db, || {
+            space
+                .read(|index, db| db.bodies(index.entries().map(|entry| entry.id.as_str())))
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+        })
+        .unwrap_or_else(|e| {
             log::warn!("could not place the notes of {} on its map: {e}", space.name);
             false
         });

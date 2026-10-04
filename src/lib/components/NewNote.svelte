@@ -1,20 +1,25 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
 	import Recall from '#lib/components/Recall.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { noteDrafts } from '#lib/note-draft.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {
+		draftKey,
 		onsave,
 		onpage,
 		onerror,
 		centered = false,
 		writing = $bindable(false)
 	}: {
+		/** The space and day the note is written on, which its draft is kept
+		 *  under while the view is left. */
+		draftKey: string;
 		/** Save the note to the day shown. Resolves true once saved; false keeps the editor open. */
 		onsave: (body: string) => Promise<boolean>;
 		/** Start a page on the day shown instead (SPEC 3.5). */
@@ -28,8 +33,17 @@
 	} = $props();
 
 	let saving = $state(false);
-	let draft = $state('');
+	// What was written here before the view was left, open as it was then.
+	const kept = untrack(() => noteDrafts.get(draftKey));
+	let draft = $state(kept?.body ?? '');
+	if (kept?.writing) writing = true;
 	let editor = $state<MarkdownEditor | null>(null);
+
+	// Kept as it is typed, so that the view left by any way finds it again.
+	$effect(() => {
+		if (draft.trim()) noteDrafts.set(draftKey, { body: draft, writing });
+		else noteDrafts.delete(draftKey);
+	});
 
 	async function start() {
 		writing = true;

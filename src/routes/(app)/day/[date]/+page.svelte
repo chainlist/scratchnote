@@ -37,6 +37,8 @@
 
 	/** The day whose empty-day editor is open, which takes the place of its message. */
 	let writingOn = $state<string | null>(null);
+	/** Where a new note's draft is kept while the day is left. */
+	const draftKey = $derived(`${data.spaces.active}/${data.date}`);
 
 	const dayHref = (date: string) => resolve(`day/${date}/`);
 
@@ -152,6 +154,7 @@
 					</p>
 				{/if}
 				<NewNote
+					{draftKey}
 					onsave={addNote}
 					onpage={shell.newPage}
 					onerror={shell.showError}
@@ -163,7 +166,7 @@
 			</div>
 		{:else}
 			<NoteList notes={data.notes} empty="" blinking={shell.blinking} {...shell.cardActions} />
-			<NewNote onsave={addNote} onpage={shell.newPage} onerror={shell.showError} />
+			<NewNote {draftKey} onsave={addNote} onpage={shell.newPage} onerror={shell.showError} />
 		{/if}
 	</View>
 	{#if columns === 3}{@render besideDay(data.next)}{/if}

@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.5.0](https://github.com/chainlist/scratchnote/compare/v0.4.0...v0.5.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* drop the chat model, keep only the embedding model
+
+### Features
+
+* divide a thread's notes by day ([521a98a](https://github.com/chainlist/scratchnote/commit/521a98ac6de57cefb3e3b99e9634fa4e1ba68b77))
+* dock a thread beside the view and choose the order of its notes ([6600bf3](https://github.com/chainlist/scratchnote/commit/6600bf3497ed09bbd53c005e9504a88aa61e8b61))
+* drop the chat model, keep only the embedding model ([11d9c4b](https://github.com/chainlist/scratchnote/commit/11d9c4b5fe30f98e953604930d508d8656c46b13))
+* find notes on the map by their words and by their days ([83cd0e5](https://github.com/chainlist/scratchnote/commit/83cd0e56ddf85cada00bfad9a49457d0445ad099))
+* group the map's notes into named categories and add a graph view ([3419adc](https://github.com/chainlist/scratchnote/commit/3419adc2ddf407480c29bd18795887a1c4b26deb))
+* keep every note's place on a 2D map of the space in space.db ([2aef88a](https://github.com/chainlist/scratchnote/commit/2aef88afd6c606c588af928b2eac6b8adbfdeeaa))
+* keep vectors, threads and thread edits in space.db ([50dfe94](https://github.com/chainlist/scratchnote/commit/50dfe9469751168e5eb6a120a7bbc4132b1b4fb9))
+* never lay the map out again once it is laid out ([cafe357](https://github.com/chainlist/scratchnote/commit/cafe35761eae52e38ecb70f54ea47334a780e7d5))
+* offer to remove the old chat model at launch ([505a9cc](https://github.com/chainlist/scratchnote/commit/505a9cc754756357af375c0b5592dc9c1524f291))
+* show a spinner over a view that takes a moment to load ([bbe7d09](https://github.com/chainlist/scratchnote/commit/bbe7d09f39d245b3c76d7678232bcce7766aad20))
+* show the map of the space by meaning on its own page ([951c27e](https://github.com/chainlist/scratchnote/commit/951c27e731e8ec42a28f648e8f56ef7bc2366ee9))
+* suggest threads, and put notes in them by hand ([126d7a5](https://github.com/chainlist/scratchnote/commit/126d7a5236067d52a9e8016d3d50c8c07808e44d))
+
+
+### Bug Fixes
+
+* keep a new note's draft when the day is left ([b934244](https://github.com/chainlist/scratchnote/commit/b93424471d58d3c505b46c91e5f20bbda0f75ca8))
+* keep the window responsive while the map is laid out ([1fbda7a](https://github.com/chainlist/scratchnote/commit/1fbda7ac9d6f2d8638dc26c4de349b61c6bffc2b))
+* never make the window wait on placing notes in threads ([ee3c55d](https://github.com/chainlist/scratchnote/commit/ee3c55d5c898cd4516bc0217a5fb8a7d36a195d6))
+* record the capture hotkey only when asked, not on focus ([b4df5b6](https://github.com/chainlist/scratchnote/commit/b4df5b6d6d4cf7706b8430f96c4b36bc27a5c4a4))
+
+
+### Performance Improvements
+
+* draw a note's menu once it is pointed at ([e05dbef](https://github.com/chainlist/scratchnote/commit/e05dbefe3041521ad9e6c87eab5bcb1779b8c5de))
+* draw the map again only when the pointer reaches another note ([c88a2a4](https://github.com/chainlist/scratchnote/commit/c88a2a42bd396040eadf41350734369c8551753a))
+* keep the map and its graph as they are when a note is saved ([37b8403](https://github.com/chainlist/scratchnote/commit/37b840324da2ded9dd6de54654585a4005ec2600))
+* open a thread without titling every other ([c86f2ad](https://github.com/chainlist/scratchnote/commit/c86f2add7148f4854a7888a9777b20cda7e6bde1))
+* settle the map's graph in a Web Worker ([40fc789](https://github.com/chainlist/scratchnote/commit/40fc789c3a5aa399b80b865720f5b30edf58f5b9))
+
 ## [0.4.0](https://github.com/chainlist/scratchnote/compare/v0.3.0...v0.4.0) (2026-10-01)
 
 

@@ -20,7 +20,8 @@ const editable = (s: Settings): Settings => ({
 	theme: s.theme,
 	language: s.language,
 	onboarded: s.onboarded,
-	lastSeenVersion: s.lastSeenVersion
+	lastSeenVersion: s.lastSeenVersion,
+	threadOrder: s.threadOrder
 });
 
 /**
@@ -36,7 +37,8 @@ export class SettingsState {
 		...DEFAULT_APPEARANCE,
 		language: 'system',
 		onboarded: false,
-		lastSeenVersion: null
+		lastSeenVersion: null,
+		threadOrder: 'oldest'
 	});
 	message = $state<{ text: string; error: boolean } | null>(null);
 	/** The tab shown: one of the app's, or `plugin:<id>` for a plugin's own. */

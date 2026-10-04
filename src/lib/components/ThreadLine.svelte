@@ -19,7 +19,7 @@
 </script>
 
 <!-- The thread a note is in (SPEC 6.4): its title and the note's place in
-     it, which open the thread. Nothing for a note on its own. -->
+     it, which dock the thread. Nothing for a note on its own. -->
 {#if place}
 	{@const { thread, index } = place}
 	<button
@@ -27,7 +27,7 @@
 		onclick={(event) => {
 			// A page's card opens the page on any other click.
 			event.stopPropagation();
-			void shell.showThread(thread.id);
+			shell.dockThread(thread.id);
 		}}
 		title={m.thread_open({ count: thread.notes.length, date: shortDay(thread.since) })}
 		class={cn(

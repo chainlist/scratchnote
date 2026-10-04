@@ -31,6 +31,7 @@
 	import PluginPanel from '#lib/components/PluginPanel.svelte';
 	import Ribbon from '#lib/components/Ribbon.svelte';
 	import Settings from '#lib/components/settings/Settings.svelte';
+	import ThreadDock from '#lib/components/ThreadDock.svelte';
 	import ThreadPicker from '#lib/components/ThreadPicker.svelte';
 	import ViewHeader from '#lib/components/ViewHeader.svelte';
 	import WhatsNew from '#lib/components/WhatsNew.svelte';
@@ -130,7 +131,13 @@
 			void showReleaseNotes(settings).catch((e) => shell.showError(String(e)));
 
 			shell.textSize = settings.fontSize;
-			off.push(onSettingsChanged((changed) => (shell.textSize = changed.fontSize)));
+			shell.threadOrder = settings.threadOrder;
+			off.push(
+				onSettingsChanged((changed) => {
+					shell.textSize = changed.fontSize;
+					shell.threadOrder = changed.threadOrder;
+				})
+			);
 			// A note saved from the capture window lands in another webview.
 			off.push(onNoteUpdated(() => void shell.refresh()));
 			// The watcher fires this when a daily file is edited outside the app.
@@ -244,6 +251,8 @@
 		{:else if shell.panel}
 			{@const type = shell.panel}
 			<PluginPanel {type} onclose={() => shell.closePanel(type)} />
+		{:else if shell.dockedThread}
+			<ThreadDock id={shell.dockedThread} onclose={() => (shell.dockedThread = null)} />
 		{/if}
 	</Resizable.Pane>
 {/snippet}

@@ -20,7 +20,8 @@ import {
 	updateNote,
 	type Note,
 	type SpacesView,
-	type Thread
+	type Thread,
+	type ThreadOrder
 } from '#lib/api.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { addToPageDraft } from '#lib/page-draft.js';
@@ -74,6 +75,8 @@ export class Shell implements WorkspaceHost {
 	alone = $state.raw<string[]>([]);
 	/** The text size setting, in pixels: the rem the day's columns are sized in. */
 	textSize = $state(16);
+	/** The thread order setting: which of a thread's notes its view lists first. */
+	threadOrder = $state<ThreadOrder>('oldest');
 	/** The views' width, which a docked page narrows. Taken with the
 	 *  scrollbar, which comes and goes with what the columns hold. */
 	width = $state(0);
@@ -96,7 +99,9 @@ export class Shell implements WorkspaceHost {
 	docked = $state<Note | null>(null);
 	/** A plugin's view docked beside the view instead, by its type. */
 	panel = $state<string | null>(null);
-	dockOpen = $derived(this.docked !== null || this.panel !== null);
+	/** Or a thread, by its id. */
+	dockedThread = $state<string | null>(null);
+	dockOpen = $derived(this.docked !== null || this.panel !== null || this.dockedThread !== null);
 	#dockLayout = loadDock();
 	/** The side of the view the dock sits on. */
 	dockSide = $state<DockSide>(this.#dockLayout.side);
@@ -109,6 +114,9 @@ export class Shell implements WorkspaceHost {
 	query = $state('');
 	paletteOpen = $state(false);
 	settingsOpen = $state(false);
+	/** Counts the times the notes or threads were read again, for a view
+	 *  outside the routes, which loads what it shows itself. */
+	reloads = $state(0);
 	/** The note a link to it led to, blinking while it is set. */
 	blinking = $state<string | null>(null);
 	#blinkTimer: ReturnType<typeof setTimeout> | undefined;
@@ -132,6 +140,7 @@ export class Shell implements WorkspaceHost {
 		// An invalidation aborts a navigation under way, so it waits for one to land.
 		while (navigating.complete) await navigating.complete.catch(() => {});
 		await invalidate('app:notes');
+		this.reloads++;
 		this.error = null;
 		// The plugins' pages and panels load their notes themselves.
 		notesChanged();
@@ -196,6 +205,7 @@ export class Shell implements WorkspaceHost {
 			this.alone = view.alone;
 			// The view of a thread lists its notes itself.
 			await invalidate('app:threads');
+			this.reloads++;
 		} catch (e) {
 			this.error = String(e);
 		}
@@ -247,6 +257,8 @@ export class Shell implements WorkspaceHost {
 			let thread = into;
 			if (pick.kind === 'merge' && pick.from && into) await mergeThreads(pick.from, into);
 			else thread = await putInThread(pick.notes, into);
+			if (pick.kind === 'merge' && thread && this.dockedThread === pick.from)
+				this.dockedThread = thread;
 			if (pick.kind === 'merge' && thread && page.params.id === pick.from)
 				await this.showThread(thread);
 			return null;
@@ -269,15 +281,23 @@ export class Shell implements WorkspaceHost {
 		return goto(`${resolve(`plugin/${type}/`)}${query ? `?${query}` : ''}`);
 	};
 
-	/** The dock holds one thing: a page, or a plugin's view. */
+	/** The dock holds one thing: a page, a plugin's view or a thread. */
 	dock = (note: Note) => {
 		this.panel = null;
+		this.dockedThread = null;
 		this.docked = note;
 	};
 
 	openPanel = (type: string) => {
 		this.docked = null;
+		this.dockedThread = null;
 		this.panel = type;
+	};
+
+	dockThread = (id: string) => {
+		this.docked = null;
+		this.panel = null;
+		this.dockedThread = id;
 	};
 
 	closePanel = (type?: string) => {
@@ -425,6 +445,7 @@ export class Shell implements WorkspaceHost {
 	private leaveSpace = async () => {
 		this.query = '';
 		this.docked = null;
+		this.dockedThread = null;
 		const route = page.route.id;
 		if (
 			route === '/(app)/search' ||

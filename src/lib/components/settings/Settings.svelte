@@ -10,6 +10,7 @@
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import PackageIcon from '@lucide/svelte/icons/package';
 	import PaletteIcon from '@lucide/svelte/icons/palette';
+	import RouteIcon from '@lucide/svelte/icons/route';
 	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -21,6 +22,7 @@
 	import GeneralTab from './GeneralTab.svelte';
 	import IndexTab from './IndexTab.svelte';
 	import PluginSettingsHost from './PluginSettingsHost.svelte';
+	import ThreadsTab from './ThreadsTab.svelte';
 	import { SettingsState } from './state.svelte';
 	import { hint, section } from './styles';
 
@@ -48,6 +50,14 @@
 			description: m.settings_index_description,
 			icon: DatabaseIcon,
 			content: IndexTab
+		},
+		{
+			value: 'threads',
+			// The same word in every language.
+			label: () => 'Threads',
+			description: m.settings_threads_description,
+			icon: RouteIcon,
+			content: ThreadsTab
 		},
 		{
 			value: 'core-plugins',

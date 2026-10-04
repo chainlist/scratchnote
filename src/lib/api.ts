@@ -354,7 +354,11 @@ export interface Settings {
 	onboarded: boolean;
 	/** The app version whose release notes were last shown; null from 0.1.0. */
 	lastSeenVersion: string | null;
+	/** Which of a thread's notes it lists first. */
+	threadOrder: ThreadOrder;
 }
+
+export type ThreadOrder = 'oldest' | 'newest';
 
 export interface SettingsView extends Settings {
 	/** The root this run is using; differs from `root` until the next launch. */

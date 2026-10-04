@@ -20,7 +20,7 @@
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { graph, type Graph, type GraphNode } from './graph.js';
+	import { graph, samePlaces, type Graph, type GraphNode } from './graph.js';
 	import { islands } from './islands.js';
 
 	let { data } = $props();
@@ -417,7 +417,8 @@
 	}
 
 	// The graph, made the first time it is shown and again from where its
-	// notes were whenever they are read again. It only runs while shown.
+	// notes were whenever they move on the map, not when only the threads
+	// changed. It only runs while shown.
 	$effect(() => {
 		if (mode !== 'graph') {
 			untrack(() => graphed?.simulation.stop());
@@ -425,7 +426,7 @@
 		}
 		const notes = data.notes;
 		const current = untrack(() => graphed);
-		if (current?.notes === notes) {
+		if (current && samePlaces(current.notes, notes)) {
 			if (current.simulation.alpha() > current.simulation.alphaMin()) current.simulation.restart();
 			return;
 		}

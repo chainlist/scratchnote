@@ -12,12 +12,13 @@ use std::sync::{Mutex, RwLock, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 
 use crate::embed::sync::Wake;
-use crate::embed::threads::Threads;
-use crate::embed::vectors::{vectors_path, Vectors};
+use crate::embed::threads::{Edits, Threads};
+use crate::embed::vectors::Vectors;
 use crate::storage::day_path;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{self, Index, IndexEntry};
 use crate::storage::search_db::{SearchDb, Stamp};
+use crate::storage::space_db::SpaceDb;
 use crate::storage::writer::Writer;
 
 /// Made on first launch, when there is no space yet.
@@ -202,12 +203,16 @@ pub struct Space {
     /// read holding both cannot meet a write holding them the other way.
     pub search: Mutex<Option<SearchDb>>,
     /// The note embeddings search by meaning reads. `None` until the embed task
-    /// first runs with a model, which loads them from `vectors.bin`.
+    /// first runs with a model, which loads them from `db`.
     pub vectors: Mutex<Option<Vectors>>,
     /// The thread each note is in (SPEC 6.4), placed from the vectors.
     /// `None` until the embed task first runs with a model, which loads it
-    /// from `threads.json`. Taken after `vectors` when both are needed.
+    /// from `db`. Taken after `vectors` when both are needed.
     pub threads: Mutex<Option<Threads>>,
+    /// Where the vectors, the placements and the thread edits are saved,
+    /// `None` while the space is not open. Taken after `vectors` and
+    /// `threads` when held with either.
+    pub db: Mutex<Option<SpaceDb>>,
     /// Nudges the embed task whenever the index changes.
     embed_wake: Wake,
     /// Pages open in the editor. The model does not embed them until the
@@ -229,6 +234,7 @@ impl Space {
             search: Mutex::new(None),
             vectors: Mutex::new(None),
             threads: Mutex::new(None),
+            db: Mutex::new(None),
             watcher: Mutex::new(None),
             retired: AtomicBool::new(false),
             root,
@@ -271,6 +277,17 @@ impl Space {
         if let Ok(mut search) = self.search.lock() {
             *search = Some(db);
         }
+        let db = SpaceDb::open(&self.root).unwrap_or_else(|e| {
+            log::error!(
+                "could not open the space.db of {}, saving nothing it holds: {e}",
+                self.name
+            );
+            SpaceDb::in_memory().expect("an in-memory database")
+        });
+        crate::startup::step(format!("Opening the space.db of {}", self.name));
+        if let Ok(mut slot) = self.db.lock() {
+            *slot = Some(db);
+        }
         // Its notes may have been written with no model, or by another one.
         self.embed_wake.notify_one();
         stale
@@ -293,6 +310,9 @@ impl Space {
         if let Ok(mut threads) = self.threads.lock() {
             *threads = None;
         }
+        if let Ok(mut db) = self.db.lock() {
+            *db = None;
+        }
         if let Ok(mut watcher) = self.watcher.lock() {
             *watcher = None;
         }
@@ -310,10 +330,13 @@ impl Space {
         if let Ok(mut watcher) = self.watcher.lock() {
             *watcher = None;
         }
-        // search.db is held open too, which would keep Windows from moving
-        // the folder.
+        // search.db and space.db are held open too, which would keep
+        // Windows from moving the folder.
         if let Ok(mut search) = self.search.lock() {
             *search = None;
+        }
+        if let Ok(mut db) = self.db.lock() {
+            *db = None;
         }
     }
 
@@ -387,6 +410,32 @@ impl Space {
             .ok()
             .and_then(|vectors| Some(vectors.as_ref()?.closest(query, exclude, k, min_score)))
             .unwrap_or_default()
+    }
+
+    /// What the user decided about threads, none while the space is not
+    /// open.
+    pub fn edits(&self) -> Edits {
+        match self.db.lock().as_deref() {
+            Ok(Some(db)) => Edits::load(db),
+            _ => Edits::default(),
+        }
+    }
+
+    /// Change what the user decided about threads, read and saved under
+    /// one lock so that two changes never undo each other. `change` says
+    /// whether it changed anything, and nothing is saved when it did not.
+    pub fn change_edits(&self, change: impl FnOnce(&mut Edits) -> bool) -> Result<bool, String> {
+        let mut db = self
+            .db
+            .lock()
+            .map_err(|_| "space.db lock poisoned".to_string())?;
+        let db = db.as_mut().ok_or("the space is closed")?;
+        let mut edits = Edits::load(db);
+        if !change(&mut edits) {
+            return Ok(false);
+        }
+        edits.save(db)?;
+        Ok(true)
     }
 
     /// Tell the embed task the index changed. `persist_index` does it, and
@@ -520,16 +569,20 @@ impl Space {
             *idx = rebuilt;
         }
         // Under the lock, so a pass under way neither stores into the old
-        // vectors nor loads the file before it is gone.
+        // vectors nor loads them before they are gone.
         let mut vectors = self
             .vectors
             .lock()
             .map_err(|_| "vectors lock poisoned".to_string())?;
         *vectors = None;
-        match std::fs::remove_file(vectors_path(&self.root)) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(format!("could not remove the vectors: {e}")),
+        if let Some(db) = self
+            .db
+            .lock()
+            .map_err(|_| "space.db lock poisoned".to_string())?
+            .as_mut()
+        {
+            db.clear_vectors()
+                .map_err(|e| format!("could not remove the vectors: {e}"))?;
         }
         Ok(count)
     }
@@ -694,12 +747,16 @@ mod tests {
         vectors
             .insert("01AAA".into(), "h".into(), vec![1.0, 0.0])
             .unwrap();
-        vectors.save(&vectors_path(&root)).unwrap();
+        vectors
+            .save(space.db.lock().unwrap().as_mut().unwrap())
+            .unwrap();
         *space.vectors.lock().unwrap() = Some(vectors);
 
         assert_eq!(space.rebuild(), Ok(1));
         assert!(space.vectors.lock().unwrap().is_none());
-        assert!(!vectors_path(&root).exists());
+        let saved = Vectors::load(space.db.lock().unwrap().as_ref().unwrap(), "m", 2);
+        assert_eq!(saved.len(), 0);
+        drop(space);
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -406,9 +406,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
         search.db        # the notes' text for search, SQLite, derived, rebuildable
-        vectors.bin      # note embeddings for search by meaning, similar notes and threads, derived, rebuildable
-        threads.json     # the thread each note was placed in, derived, rebuildable
-        thread-edits.json  # thread titles and notes kept out of threads, the user's
+        space.db         # SQLite: note embeddings for search by meaning, similar notes and threads, and the thread each note was placed in, derived, rebuildable; thread titles and notes kept out of threads, the user's
     Work/
       notes/...
       .scratchnote/...
@@ -471,7 +469,7 @@ One JSON object per line, one line per note:
 - `on` is the day ahead read off the body (5.3), left out when there is none.
 - New notes are appended. Updates and deletes rewrite the file (it is small; atomic rewrite is fine).
 - On opening a space: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written by a version that labelled notes with a model (its lines carry a `status`) is rebuilt whole. `search.db` records each day file's mtime and length as it last read it, and a day read at another is read again; any other day is not read at all, so opening a space costs a look at each file's date, not a read of its notes. Page files are recorded the same way, by their path: a page new, edited or renamed is read, a page whose file is gone leaves, and a file under `pages/` that holds no page is recorded too, so it is not read again. A copy of a page made by hand is left out and not recorded, so it is taken once the page's own file goes.
-- Provide a "Rebuild index" button in settings that reparses everything, after writing the labelled blocks and pages of the space without their labels (4.5), and drops `vectors.bin`, so every note is embedded again (6).
+- Provide a "Rebuild index" button in settings that reparses everything, after writing the labelled blocks and pages of the space without their labels (4.5), and drops the vectors in `space.db`, so every note is embedded again (6).
 
 ### 4.5 Labels from earlier versions
 
@@ -606,7 +604,7 @@ Community plugins come from GitHub, as Obsidian's do.
 - The onboarding offers the embedding model, EmbeddingGemma-300M (Q8_0, ~330 MB, from `ggml-org/embeddinggemma-300M-GGUF`; Google's own repo is gated), downloaded from Hugging Face with a progress bar, resumable, with SHA-256 verification, into `models/`. Settings has its download row too. Hugging Face answers 401 for a repo that does not exist exactly as it does for a private one, so a wrong repo name surfaces as an authorization error rather than a missing one.
 - The app must be fully usable while the model is downloading or absent: capture, browsing, search by words and the day ahead need no model.
 - Record the resolved Hugging Face revision (commit SHA) alongside the downloaded file, so "which build of this model do I have" has an exact answer. Quant repos are re-uploaded in place, so a filename is not an identity.
-- On an integrated GPU, whose memory is the system's, llama.cpp holds a copy of the weights there and a second copy of the vocabulary on the host, none of it backed by the file: measured on an Intel iGPU, about 900 MB against 260 MB on the CPU, where the file is mapped and only the pages read count, for 13 ms a note against 31 ms, which is why it runs on the CPU. Once it is there, a background task embeds the open space's note bodies into `vectors.bin`, again whenever a body's hash changes; a space not open catches up when it opens. A task's box is embedded as words, `- [ ]` as `To do:` and `- [x]` as `Done:`, so a question about what is left to do finds the notes with tasks. An install that still has the earlier Qwen3-Embedding-0.6B fetches EmbeddingGemma on launch and deletes the old file once the new one is verified; `vectors.bin` records the model and how it embeds a note, and a change to either embeds every note again.
+- On an integrated GPU, whose memory is the system's, llama.cpp holds a copy of the weights there and a second copy of the vocabulary on the host, none of it backed by the file: measured on an Intel iGPU, about 900 MB against 260 MB on the CPU, where the file is mapped and only the pages read count, for 13 ms a note against 31 ms, which is why it runs on the CPU. Once it is there, a background task embeds the open space's note bodies into `space.db`, again whenever a body's hash changes; a space not open catches up when it opens. A task's box is embedded as words, `- [ ]` as `To do:` and `- [x]` as `Done:`, so a question about what is left to do finds the notes with tasks. An install that still has the earlier Qwen3-Embedding-0.6B fetches EmbeddingGemma on launch and deletes the old file once the new one is verified; `space.db` records the model and how it embeds a note, and a change to either embeds every note again.
 
 ### 5.3 The day ahead
 
@@ -624,6 +622,8 @@ Community plugins come from GitHub, as Obsidian's do.
 - Case-insensitive, accent-insensitive substring match over bodies and page titles: every word must be in the folded text. A word of three characters or more is found through the trigram index and then checked as a plain substring; a shorter one is looked for by scanning `search.db` on disk. The index in memory gives the order.
 - `notes_containing` matches its needles as typed, case and all: a needle of three folded characters or more narrows through the index, and a shorter one (`@`) scans.
 - SQLite with trigrams rather than `tantivy`: tantivy matches whole words, and substring matching (`offe` finds `coffee`) would need an n-gram index several times larger.
+- Everything else a space derives or decides beside its notes is in `.scratchnote/space.db`, also SQLite, so `search.db` serves search alone: the vectors (one row per note: its id, body hash and little-endian f32 vector), where each note was placed in threads, and the thread edits. The vectors and placements are held in memory, as every score is over all of them, and a save writes only the rows of the notes changed since the last one: saving one edited note's vector out of 10,269 took 0.5 to 2.4 ms against 32 to 42 ms for rewriting `vectors.bin`, the rest being the sync to disk. Each save is synced to disk before it returns, as the thread edits cannot be rebuilt. Pages are 16 KB, as a vector is about 3 KB, and the write-ahead log is cut back to 1 MB.
+- `space.db` replaced `vectors.bin`, `threads.json` and `thread-edits.json`: when a space opens without it, those files are read into it in one transaction and then deleted. Read back, they give the very same vectors (bit for bit), placements, threads and edits; reading in 10,269 vectors took 0.2 to 0.3 s, once. A `space.db` that cannot be opened is left alone and the space runs from an empty one in memory, saving nothing it holds.
 - Results sorted by date desc, then time desc.
 - The page asks for a stretch of the results and gets the total with it: the command center the first 50, the results view the first 100 and 100 more at each "Show more". Only that stretch leaves the backend, so a short query matching most of a space does not copy all of it to the page. A plugin's search still gets every match.
 - Must stay under 50ms for 10,000 notes, for the 50 results the command center asks.
@@ -637,7 +637,7 @@ Community plugins come from GitHub, as Obsidian's do.
 ### 6.2 Similar notes
 
 - A note's menu offers "Similar notes" when the embedding model is installed. The timeline then lists up to 8 notes of the space closest to it in meaning, best first, under the note itself.
-- No model runs: the note's vector is already in `vectors.bin`, so it costs one pass over the space's vectors. A note not embedded yet has no similar notes.
+- No model runs: the note's vector is already in memory, loaded from `space.db`, so it costs one pass over the space's vectors. A note not embedded yet has no similar notes.
 - The score is a cosine taken after removing the mean of the space's vectors. Plain cosines between notes bunch up (two unrelated work notes score about as high as two notes on the same show), and a bland note comes up for everything. Notes under 0.28 are left out, so a note on its own subject lists none. The cutoff was set on 75 real notes and may need tuning as spaces grow.
 - Similar notes and search by meaning do what tags and categories used to: find the few notes on the same thing.
 
@@ -660,7 +660,7 @@ Community plugins come from GitHub, as Obsidian's do.
 - Two threads that grow near each other in time become one when every note of the smaller would join the larger. The older one goes on, or the user's; two threads of the user's never become one. Their averages are not compared: averaging smooths away what sets each thread apart, and threads would chain into one.
 - Threads form once the space holds 3 notes: two leave no other to say what is usual.
 - Take out of the thread, in a note's menu and the page view's, keeps a note out of threads for good, even one the user put there; Let it join a thread lets it back, and it is placed again at once. A thread down to one note is no thread, and that note is placed again.
-- `threads.json` is derived, like `vectors.bin`: where each note was placed and from which body. A note is placed once, and again only when its text changes; a file that is missing, damaged or made from another model's vectors places every note again, oldest first. A first pass over 10,000 notes takes under a second in a release build. `thread-edits.json` holds what the user decided, which nothing derives: titles, notes kept out, notes put in a thread, and dismissed suggestions with the notes they held then. The notes put in a thread are placed first, so their threads survive placing every note again.
+- Where each note was placed, and from which body, is derived like the vectors and kept beside them in `space.db`. A note is placed once, and again only when its text changes; placements that are missing or made from another model's vectors place every note again, oldest first. A first pass over 10,000 notes takes under a second in a release build. `space.db` also holds what the user decided, which nothing derives and nothing there ever drops: titles, notes kept out, notes put in a thread, and dismissed suggestions with the notes they held then. The notes put in a thread are placed first, so their threads survive placing every note again.
 - On 45 made-up notes about a dozen things, every thread held notes about one thing only, every note about a thing was in its thread, and every note on its own stayed so; the same held for every first 5 to 40 of them, as a space grows. In a real space of 15 notes, six about one game, the notes about nothing in particular stayed on their own, where the mean alone had tied them into a thread. Twenty small spaces, each one thing's notes and two to four notes about nothing else, kept those others out of threads, where the mean alone let 28 of them in, in 14 of the spaces. On a real space of 101 notes and a made-up one of 10,000, the threads were those of the mean alone, but for a few that became one.
 - Threads follow the embedding model, as Similar notes does.
 
@@ -744,7 +744,7 @@ src-tauri/src/
   lib.rs             # setup, windows, tray; their four commands (hide_capture, capture_to_page, reveal_note, set_tray_labels)
   commands/ (notes.rs, pages.rs, search.rs, settings.rs, models.rs, spaces.rs, threads.rs,
              attachments.rs, plugins.rs)   # every other Tauri command
-  storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, search_db.rs, writer.rs)
+  storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, search_db.rs, space_db.rs, writer.rs)
   embed/   (model.rs, download.rs, llama.rs, sync.rs, vectors.rs, threads.rs)
   ahead.rs           # the day ahead, read off a note's words
   watcher.rs

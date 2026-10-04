@@ -15,22 +15,26 @@
 //! other, each against its own average cosine with every other note, which
 //! no shared mean sways.
 //!
-//! Derived like `vectors.bin`: `threads.json` records where each note was
-//! placed and from which body, so a note is placed once, and again only
-//! when its text changes. A file that is missing, damaged or made from
-//! another model's vectors places every note again, oldest first. What the
-//! user decides, a thread's title or a note kept out of threads, is in
-//! `thread-edits.json`, which nothing derives.
+//! Derived like the vectors: the `placed` table of `space.db` records where
+//! each note was placed and from which body, so a note is placed once, and
+//! again only when its text changes. Placements that are missing or made
+//! from another model's vectors place every note again, oldest first. What
+//! the user decides, a thread's title or a note kept out of threads, is in
+//! the thread edit tables beside it, which nothing derives.
+//!
+//! `threads.json` and `thread-edits.json`, the files they were saved in
+//! before, are read once when `space.db` is made.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::{Days, NaiveDate};
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use super::vectors::{dot, Vectors};
 use crate::storage::index::Index;
+use crate::storage::space_db::{to_string, SpaceDb};
 
 /// Where placing draws its lines.
 #[derive(Debug, Clone, Copy)]
@@ -63,14 +67,6 @@ const VERSION: u32 = 2;
 /// Two notes leave no other to say what is usual, so nothing is placed
 /// until a third comes.
 const MIN_NOTES: usize = 3;
-
-pub fn threads_path(root: &Path) -> PathBuf {
-    root.join(".scratchnote").join("threads.json")
-}
-
-pub fn edits_path(root: &Path) -> PathBuf {
-    root.join(".scratchnote").join("thread-edits.json")
-}
 
 /// When a note was written, which orders the notes and spaces them in days.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -107,14 +103,39 @@ struct Placed {
     out: bool,
 }
 
-/// `threads.json`: where every note of the space was placed.
-#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+/// Where every note of the space was placed. The fields are those of
+/// `threads.json`, which is read in once.
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Threads {
     version: u32,
     /// The model the vectors placed from came from.
     model: String,
     notes: BTreeMap<String, Placed>,
+    /// The placements as last loaded or saved, so a save writes only the
+    /// notes placed since. `None` until they are, which writes them all.
+    #[serde(skip)]
+    saved: Option<Saved>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct Saved {
+    version: u32,
+    model: String,
+    notes: BTreeMap<String, Placed>,
+}
+
+impl Saved {
+    fn is_of(&self, version: u32, model: &str) -> bool {
+        self.version == version && self.model == model
+    }
+}
+
+/// The same placements, however much of them is saved.
+impl PartialEq for Threads {
+    fn eq(&self, other: &Self) -> bool {
+        self.version == other.version && self.model == other.model && self.notes == other.notes
+    }
 }
 
 /// What the user decided about threads, which placing never overrides.
@@ -146,16 +167,95 @@ impl Edits {
             .collect()
     }
 
-    /// A missing or unreadable file decides nothing.
-    pub fn load(root: &Path) -> Self {
-        std::fs::read_to_string(edits_path(root))
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default()
+    /// What the user decided. Edits that cannot be read decide nothing.
+    pub fn load(db: &SpaceDb) -> Self {
+        Self::read(db.conn()).unwrap_or_else(|e| {
+            log::warn!("could not read the thread edits: {e}");
+            Self::default()
+        })
     }
 
-    pub fn to_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".to_string())
+    fn read(conn: &Connection) -> rusqlite::Result<Self> {
+        let mut edits = Self::default();
+        let pairs = |sql: &str| -> rusqlite::Result<Vec<(String, String)>> {
+            let mut statement = conn.prepare(sql)?;
+            let rows = statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect();
+            rows
+        };
+        edits.titles = pairs("SELECT thread, title FROM thread_titles")?
+            .into_iter()
+            .collect();
+        edits.pinned = pairs("SELECT note, thread FROM pinned")?
+            .into_iter()
+            .collect();
+        for (thread, note) in pairs("SELECT thread, note FROM dismissed")? {
+            edits.dismissed.entry(thread).or_default().insert(note);
+        }
+        let mut statement = conn.prepare("SELECT note FROM kept_alone")?;
+        edits.alone = statement
+            .query_map([], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(edits)
+    }
+
+    /// Save these in place of the edits saved before.
+    pub fn save(&self, db: &mut SpaceDb) -> Result<(), String> {
+        db.transaction(|tx| self.write(tx))
+    }
+
+    /// What `save` writes, in the caller's transaction. A suggestion
+    /// dismissed with no notes is not kept: holding any note, it is
+    /// suggested again anyway.
+    pub(crate) fn write(&self, tx: &Connection) -> Result<(), String> {
+        tx.execute_batch(
+            "DELETE FROM thread_titles; DELETE FROM kept_alone;
+             DELETE FROM pinned; DELETE FROM dismissed;",
+        )
+        .map_err(to_string)?;
+        let run = |sql: &str, a: &str, b: Option<&str>| -> Result<(), String> {
+            let mut statement = tx.prepare_cached(sql).map_err(to_string)?;
+            match b {
+                Some(b) => statement.execute([a, b]),
+                None => statement.execute([a]),
+            }
+            .map(|_| ())
+            .map_err(to_string)
+        };
+        for (thread, title) in &self.titles {
+            run(
+                "INSERT INTO thread_titles (thread, title) VALUES (?1, ?2)",
+                thread,
+                Some(title),
+            )?;
+        }
+        for note in &self.alone {
+            run("INSERT INTO kept_alone (note) VALUES (?1)", note, None)?;
+        }
+        for (note, thread) in &self.pinned {
+            run(
+                "INSERT INTO pinned (note, thread) VALUES (?1, ?2)",
+                note,
+                Some(thread),
+            )?;
+        }
+        for (thread, notes) in &self.dismissed {
+            for note in notes {
+                run(
+                    "INSERT INTO dismissed (thread, note) VALUES (?1, ?2)",
+                    thread,
+                    Some(note),
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The edits `thread-edits.json` holds, `None` for a file that is
+    /// missing or unreadable.
+    pub fn read_json(path: &Path) -> Option<Self> {
+        serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
     }
 }
 
@@ -357,27 +457,165 @@ enum Choice {
 
 impl Threads {
     /// The saved placements, or none, which places every note again. Never
-    /// an error: the file can always be rebuilt.
-    pub fn load(path: &Path) -> Self {
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default()
+    /// an error: they can always be placed again.
+    pub fn load(db: &SpaceDb) -> Self {
+        let version = db.meta("threads_version").and_then(|v| v.parse().ok());
+        let (Some(version), Some(model)) = (version, db.meta("threads_model")) else {
+            return Self::default();
+        };
+        let notes = match Self::read(db.conn()) {
+            Ok(notes) => notes,
+            Err(e) => {
+                log::warn!("could not read where notes were placed: {e}");
+                return Self::default();
+            }
+        };
+        Self {
+            saved: Some(Saved {
+                version,
+                model: model.clone(),
+                notes: notes.clone(),
+            }),
+            version,
+            model,
+            notes,
+        }
     }
 
-    /// Temp file, fsync, rename, as `Vectors::save`, which it sits beside:
-    /// the watcher never looks at it.
-    pub fn save(&self, path: &Path) -> io::Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+    fn read(conn: &Connection) -> rusqlite::Result<BTreeMap<String, Placed>> {
+        let mut statement = conn.prepare("SELECT id, hash, thread, out FROM placed")?;
+        let rows = statement
+            .query_map([], |row| {
+                let placed = Placed {
+                    hash: row.get(1)?,
+                    thread: row.get(2)?,
+                    out: row.get(3)?,
+                };
+                Ok((row.get(0)?, placed))
+            })?
+            .collect();
+        rows
+    }
+
+    /// Write the notes placed since the last save, all of it in one go.
+    pub fn save(&mut self, db: &mut SpaceDb) -> Result<(), String> {
+        let changes = self.changes();
+        db.transaction(|tx| self.write_changes(tx, changes.as_deref()))?;
+        match (changes, self.saved.as_mut()) {
+            (Some(changes), Some(saved)) => {
+                for (id, placed) in changes {
+                    match placed {
+                        Some(placed) => saved.notes.insert(id, placed),
+                        None => saved.notes.remove(&id),
+                    };
+                }
+            }
+            _ => {
+                self.saved = Some(Saved {
+                    version: self.version,
+                    model: self.model.clone(),
+                    notes: self.notes.clone(),
+                });
+            }
         }
-        let json = serde_json::to_string(self).map_err(io::Error::other)?;
-        let tmp = path.with_extension("json.tmp");
-        let mut file = std::fs::File::create(&tmp)?;
-        file.write_all(json.as_bytes())?;
-        file.sync_all()?;
-        drop(file);
-        std::fs::rename(&tmp, path)
+        Ok(())
+    }
+
+    /// The notes placed or forgotten since the last save, each with where
+    /// it is now. `None` when every placement is to be written: none is
+    /// saved yet, or they were made another way. Both maps are in id order,
+    /// so one pass along them finds every difference.
+    fn changes(&self) -> Option<Vec<(String, Option<Placed>)>> {
+        let saved = self
+            .saved
+            .as_ref()
+            .filter(|saved| saved.is_of(self.version, &self.model))?;
+        let mut changes = Vec::new();
+        let mut now = self.notes.iter().peekable();
+        let mut then = saved.notes.iter().peekable();
+        loop {
+            let order = match (now.peek(), then.peek()) {
+                (None, None) => break,
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (Some((a, _)), Some((b, _))) => a.cmp(b),
+            };
+            match order {
+                std::cmp::Ordering::Less => {
+                    let (id, placed) = now.next().expect("peeked");
+                    changes.push((id.clone(), Some(placed.clone())));
+                }
+                std::cmp::Ordering::Greater => {
+                    let (id, _) = then.next().expect("peeked");
+                    changes.push((id.clone(), None));
+                }
+                std::cmp::Ordering::Equal => {
+                    let ((id, placed), (_, before)) =
+                        (now.next().expect("peeked"), then.next().expect("peeked"));
+                    if placed != before {
+                        changes.push((id.clone(), Some(placed.clone())));
+                    }
+                }
+            }
+        }
+        Some(changes)
+    }
+
+    /// What `save` writes, in the caller's transaction.
+    pub(crate) fn write(&self, tx: &Connection) -> Result<(), String> {
+        self.write_changes(tx, self.changes().as_deref())
+    }
+
+    /// Write `changes`, or every placement when there are none to go by.
+    fn write_changes(
+        &self,
+        tx: &Connection,
+        changes: Option<&[(String, Option<Placed>)]>,
+    ) -> Result<(), String> {
+        let mut put = tx
+            .prepare_cached(
+                "INSERT OR REPLACE INTO placed (id, hash, thread, out) VALUES (?1, ?2, ?3, ?4)",
+            )
+            .map_err(to_string)?;
+        let mut row = |id: &str, placed: &Placed| -> Result<(), String> {
+            put.execute(rusqlite::params![
+                id,
+                placed.hash,
+                placed.thread,
+                placed.out
+            ])
+            .map(|_| ())
+            .map_err(to_string)
+        };
+        match changes {
+            Some(changes) => changes.iter().try_for_each(|(id, placed)| match placed {
+                Some(placed) => row(id, placed),
+                None => tx
+                    .execute("DELETE FROM placed WHERE id = ?1", [id])
+                    .map(|_| ())
+                    .map_err(to_string),
+            }),
+            None => {
+                tx.execute("DELETE FROM placed", []).map_err(to_string)?;
+                SpaceDb::set_meta(tx, "threads_version", &self.version.to_string())?;
+                SpaceDb::set_meta(tx, "threads_model", &self.model)?;
+                self.notes
+                    .iter()
+                    .try_for_each(|(id, placed)| row(id, placed))
+            }
+        }
+    }
+
+    /// The placements `threads.json` holds, `None` for a file that is
+    /// missing or unreadable. The file was saved through serde.
+    pub fn read_json(path: &Path) -> Option<Self> {
+        serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+    }
+
+    /// The file `read_json` reads, as the app saved it before `space.db`.
+    #[cfg(test)]
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap()
     }
 
     /// The thread a note is in, if any.
@@ -412,11 +650,9 @@ impl Threads {
         let alone = &edits.alone;
         let mut changed = false;
         if self.version != VERSION || self.model != vectors.model_id() {
-            *self = Threads {
-                version: VERSION,
-                model: vectors.model_id().to_string(),
-                notes: BTreeMap::new(),
-            };
+            self.version = VERSION;
+            self.model = vectors.model_id().to_string();
+            self.notes.clear();
             changed = true;
         }
 
@@ -1002,17 +1238,14 @@ mod tests {
     }
 
     #[test]
-    fn another_model_places_every_note_again_and_the_file_round_trips() {
-        let root = std::env::temp_dir().join("scratchnote-threads-round-trip");
-        let _ = std::fs::remove_dir_all(&root);
-        let path = threads_path(&root);
+    fn another_model_places_every_note_again_and_the_placements_round_trip() {
+        let mut db = SpaceDb::in_memory().unwrap();
         let notes = with_others(&[("01A", "2026-09-10", 1), ("01B", "2026-09-12", 1)]);
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
         threads.reconcile(&vectors, &when, &Edits::default());
-        threads.save(&path).unwrap();
-        assert_eq!(Threads::load(&path), threads);
-        assert!(!path.with_extension("json.tmp").exists());
+        threads.save(&mut db).unwrap();
+        assert_eq!(Threads::load(&db), threads);
 
         let mut other = Vectors::new("other", 16);
         for (id, _, about) in &notes {
@@ -1020,15 +1253,56 @@ mod tests {
                 .insert(id.to_string(), format!("h{id}"), vector(*about, 16))
                 .unwrap();
         }
-        let mut loaded = Threads::load(&path);
+        let mut loaded = Threads::load(&db);
         assert!(loaded.reconcile(&other, &when, &Edits::default()));
         assert_eq!(loaded.model, "other");
         assert_eq!(threads_of(&loaded, &when), vec![vec!["01A", "01B"]]);
+        loaded.save(&mut db).unwrap();
+        assert_eq!(Threads::load(&db), loaded);
 
         // A broken file is no threads at all.
+        let path = std::env::temp_dir().join("scratchnote-threads-broken.json");
         std::fs::write(&path, "not json").unwrap();
-        assert_eq!(Threads::load(&path), Threads::default());
-        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(Threads::read_json(&path), None);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_save_writes_only_the_notes_placed_since() {
+        let mut db = SpaceDb::in_memory().unwrap();
+        let notes = with_others(&[
+            ("01A", "2026-09-10", 1),
+            ("01B", "2026-09-12", 1),
+            ("01C", "2026-09-14", 1),
+        ]);
+        let (mut vectors, mut when) = space(&notes);
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &Edits::default());
+        threads.save(&mut db).unwrap();
+        let rows = |db: &SpaceDb| db.conn().total_changes();
+        let before = rows(&db);
+
+        // One note joins the thread, one goes.
+        vectors
+            .insert("01Z".into(), "h01Z".into(), vector(1, 16))
+            .unwrap();
+        let written = When {
+            date: NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+            time: "09:00".into(),
+        };
+        when.insert("01Z".into(), written);
+        let present = vectors
+            .iter()
+            .map(|(id, _, _)| id.to_string())
+            .filter(|id| id != "01C")
+            .collect();
+        vectors.retain(&present);
+        when.remove("01C");
+        assert!(threads.reconcile(&vectors, &when, &Edits::default()));
+        threads.save(&mut db).unwrap();
+        assert_eq!(rows(&db), before + 2);
+        assert_eq!(Threads::load(&db), threads);
+        assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B", "01Z"]]);
     }
 
     #[test]
@@ -1283,10 +1557,25 @@ mod tests {
     }
 
     #[test]
-    fn edits_load_empty_without_a_file() {
-        let root = std::env::temp_dir().join("scratchnote-thread-edits-missing");
-        let _ = std::fs::remove_dir_all(&root);
-        assert_eq!(Edits::load(&root), Edits::default());
+    fn edits_round_trip_and_load_empty_when_none_are_saved() {
+        let mut db = SpaceDb::in_memory().unwrap();
+        assert_eq!(Edits::load(&db), Edits::default());
+
+        let mut edits = Edits::default();
+        edits.titles.insert("01A".into(), "Kitchen".into());
+        edits.alone.insert("01D".into());
+        edits.pinned.insert("01B".into(), "01A".into());
+        edits
+            .dismissed
+            .insert("01E".into(), ["01E".to_string(), "01F".to_string()].into());
+        edits.save(&mut db).unwrap();
+        assert_eq!(Edits::load(&db), edits);
+
+        // A save replaces what was saved.
+        edits.titles.clear();
+        edits.dismissed.clear();
+        edits.save(&mut db).unwrap();
+        assert_eq!(Edits::load(&db), edits);
     }
 
     /// The made-up notes, placed with the real model: every thread is about

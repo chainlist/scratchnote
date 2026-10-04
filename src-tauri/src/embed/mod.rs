@@ -25,7 +25,7 @@ use model::{model_file, EmbeddingModel};
 /// A model that turns text into vectors.
 pub trait Embedder: Send + Sync {
     /// Names the model, its dimensions and how it embeds a note.
-    /// `vectors.bin` records it, so vectors made another way are never
+    /// `space.db` records it, so vectors made another way are never
     /// compared with this one's.
     fn model_id(&self) -> &str;
     fn dims(&self) -> usize;

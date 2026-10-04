@@ -6,24 +6,24 @@
 //! wake only delays a note until the next one.
 
 use std::collections::HashSet;
-use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Notify;
 
-use super::threads::{self, threads_path, Edits, Threads};
-use super::vectors::{vectors_path, Vectors};
+use super::threads::{self, Threads};
+use super::vectors::Vectors;
 use super::Embedder;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::index::Index;
 use crate::storage::search_db::SearchDb;
+use crate::storage::space_db::SpaceDb;
 
 /// Woken when an index changes or the model becomes available.
 pub type Wake = Arc<Notify>;
 
-/// One task for every space, so only one ever saves a space's `vectors.bin`.
+/// One task for every space, so only one ever saves a space's vectors.
 pub fn spawn(app: AppHandle, wake: Wake) {
     tauri::async_runtime::spawn(async move {
         loop {
@@ -64,23 +64,22 @@ fn sync_space(space: &Space, embedder: &dyn Embedder) -> bool {
     if space.is_retired() || !space.is_open() {
         return false;
     }
-    let path = vectors_path(&space.root);
     let keep_going = || !space.is_retired() && space.is_open();
     let held = space.held();
     match reconcile(
         &space.index,
         &space.search,
         &space.vectors,
-        &path,
+        &space.db,
         embedder,
         &held,
         keep_going,
     ) {
         // A space renamed or deleted meanwhile: its folder is gone from here.
         Ok(true) if !space.is_retired() => {
-            if let Ok(vectors) = space.vectors.lock() {
-                if let Some(vectors) = vectors.as_ref() {
-                    match vectors.save(&path) {
+            if let (Ok(mut vectors), Ok(mut db)) = (space.vectors.lock(), space.db.lock()) {
+                if let (Some(vectors), Some(db)) = (vectors.as_mut(), db.as_mut()) {
+                    match vectors.save(db) {
                         Ok(()) => log::info!("updated the vectors of {}", space.name),
                         Err(e) => log::warn!("could not save the vectors of {}: {e}", space.name),
                     }
@@ -102,8 +101,7 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
         Ok(index) if !index.is_closed() => threads::when_written(&index),
         _ => return false,
     };
-    let edits = Edits::load(&space.root);
-    let path = threads_path(&space.root);
+    let edits = space.edits();
     let Ok(vectors) = space.vectors.lock() else {
         return false;
     };
@@ -113,11 +111,17 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
     let Ok(mut slot) = space.threads.lock() else {
         return false;
     };
+    let Ok(mut db) = space.db.lock() else {
+        return false;
+    };
+    let Some(db) = db.as_mut() else {
+        return false;
+    };
     let read = slot.is_none();
-    let threads = slot.get_or_insert_with(|| Threads::load(&path));
+    let threads = slot.get_or_insert_with(|| Threads::load(db));
     let changed = threads.reconcile(vectors, &when, &edits);
     if changed && !space.is_retired() {
-        if let Err(e) = threads.save(&path) {
+        if let Err(e) = threads.save(db) {
             log::warn!("could not save the threads of {}: {e}", space.name);
         }
     }
@@ -126,21 +130,21 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
 
 /// A first pass over thousands of notes takes minutes, so it saves as it
 /// goes: quitting midway then loses at most this many notes, not the pass.
-/// Each save rewrites the whole file, hence not after every note.
+/// Each save is a transaction on disk, hence not after every note.
 const SAVE_EVERY: usize = 500;
 
 /// Embed every note the vectors lack or hold for an older body, its text read
 /// from `texts`, and forget notes the index no longer has. An empty body has
 /// nothing to embed. Pages open in the editor, `held`, keep the vector they
-/// had until their view closes. The store is loaded from `path` first if
-/// it is not in memory yet or holds another model's vectors, and saved there
+/// had until their view closes. The store is loaded from `db` first if it
+/// is not in memory yet or holds another model's vectors, and saved there
 /// every `SAVE_EVERY` notes. Stops before the next note once `keep_going`
 /// says so. True when the vectors hold changes not saved yet.
 pub fn reconcile(
     index: &RwLock<Index>,
     texts: &Mutex<Option<SearchDb>>,
     vectors: &Mutex<Option<Vectors>>,
-    path: &Path,
+    db: &Mutex<Option<SpaceDb>>,
     embedder: &dyn Embedder,
     held: &HashSet<String>,
     keep_going: impl Fn() -> bool,
@@ -156,7 +160,15 @@ pub fn reconcile(
         if slot.as_ref().is_some_and(|v| !v.is_from(model_id, dims)) {
             *slot = None;
         }
-        let store = slot.get_or_insert_with(|| Vectors::load(path, model_id, dims));
+        if slot.is_none() {
+            let db = db.lock().map_err(|_| "space.db lock poisoned".to_string())?;
+            // A space closed meanwhile.
+            let Some(db) = db.as_ref() else {
+                return Ok(false);
+            };
+            *slot = Some(Vectors::load(db, model_id, dims));
+        }
+        let store = slot.as_mut().expect("loaded just above");
 
         let index = index
             .read()
@@ -218,7 +230,11 @@ pub fn reconcile(
             embedded += 1;
             // `keep_going` is false for a retired space, whose folder is gone.
             if embedded % SAVE_EVERY == 0 && keep_going() {
-                match store.save(path) {
+                let saved = match db.lock().as_deref_mut() {
+                    Ok(Some(db)) => store.save(db),
+                    _ => Err("the space is closed".to_string()),
+                };
+                match saved {
                     Ok(()) => changed = false,
                     Err(e) => log::warn!("could not save the vectors midway: {e}"),
                 }
@@ -306,6 +322,10 @@ mod tests {
         (RwLock::new(index), Mutex::new(Some(db)))
     }
 
+    fn space_db() -> Mutex<Option<SpaceDb>> {
+        Mutex::new(Some(SpaceDb::in_memory().unwrap()))
+    }
+
     fn scratch_root(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("scratchnote-sync-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -326,17 +346,16 @@ mod tests {
 
     #[test]
     fn embeds_new_and_edited_notes_and_leaves_the_rest_alone() {
-        let root = scratch_root("edits");
-        let path = vectors_path(&root);
+        let db = space_db();
         let embedder = Counting::new("stub-64");
         let vectors = Mutex::new(None);
 
         let index = index_of(&[("01A", "coffee beans"), ("01B", "deploy on friday")]);
-        assert!(reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 2);
 
         // Nothing changed, so nothing is embedded and nothing is reported.
-        assert!(!reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(!reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 2);
 
         // 01B edited, 01C new: only those two go through the model.
@@ -345,116 +364,108 @@ mod tests {
             ("01B", "deploy on monday"),
             ("01C", "grandma's birthday"),
         ]);
-        assert!(reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 4);
         assert_eq!(ids(&vectors), vec!["01A", "01B", "01C"]);
     }
 
     #[test]
     fn a_closed_space_keeps_its_vectors() {
-        let root = scratch_root("closed");
-        let path = vectors_path(&root);
+        let db = space_db();
         let embedder = Counting::new("stub-64");
         let vectors = Mutex::new(None);
         let index = index_of(&[("01A", "coffee beans")]);
-        reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap();
 
         let closed = RwLock::new(Index::closed());
-        assert!(!reconcile(&closed, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(!reconcile(&closed, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(ids(&vectors), vec!["01A"], "no note of it counts as deleted");
     }
 
     #[test]
     fn a_page_being_edited_keeps_its_vector_until_its_view_closes() {
-        let root = scratch_root("held");
-        let path = vectors_path(&root);
+        let db = space_db();
         let embedder = Counting::new("stub-64");
         let vectors = Mutex::new(None);
         let index = index_of(&[("01P", "first draft")]);
-        reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap();
 
         // Every autosave changes the text; none of them reaches the model.
         let held: HashSet<String> = ["01P".to_string()].into();
         for text in ["first draft, more", "first draft, more and more"] {
             let index = index_of(&[("01P", text)]);
-            assert!(!reconcile(&index.0, &index.1, &vectors, &path, &embedder, &held, || true).unwrap());
+            assert!(!reconcile(&index.0, &index.1, &vectors, &db, &embedder, &held, || true).unwrap());
         }
         assert_eq!(embedder.calls(), 1);
         assert_eq!(ids(&vectors), vec!["01P"], "the old vector stays meanwhile");
 
         let index = index_of(&[("01P", "first draft, more and more")]);
-        assert!(reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 2);
     }
 
     #[test]
     fn a_blank_note_is_not_embedded() {
-        let root = scratch_root("blank");
         let embedder = Counting::new("stub-64");
         let vectors = Mutex::new(None);
 
         let index = index_of(&[("01A", "  \n")]);
-        let changed = reconcile(&index.0, &index.1, &vectors, &vectors_path(&root), &embedder, &HashSet::new(), || true);
+        let changed = reconcile(&index.0, &index.1, &vectors, &space_db(), &embedder, &HashSet::new(), || true);
         assert!(!changed.unwrap());
         assert_eq!(embedder.calls(), 0);
     }
 
     #[test]
     fn a_deleted_note_is_forgotten() {
-        let root = scratch_root("deleted");
-        let path = vectors_path(&root);
+        let db = space_db();
         let embedder = Counting::new("stub-64");
         let vectors = Mutex::new(None);
 
         let index = index_of(&[("01A", "coffee beans"), ("01B", "deploy on friday")]);
-        reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap();
 
         let index = index_of(&[("01A", "coffee beans")]);
-        assert!(reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 2);
         assert_eq!(ids(&vectors), vec!["01A"]);
     }
 
     #[test]
     fn stops_before_the_next_note_when_told_to() {
-        let root = scratch_root("stop");
-        let path = vectors_path(&root);
+        let db = space_db();
         let embedder = Counting::new("stub-64");
         let vectors = Mutex::new(None);
         let index = index_of(&[("01A", "one"), ("01B", "two"), ("01C", "three")]);
 
-        let changed = reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || embedder.calls() < 1);
+        let changed = reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || embedder.calls() < 1);
         assert!(changed.unwrap());
         assert_eq!(embedder.calls(), 1);
 
         // The next pass carries on where that one stopped.
-        reconcile(&index.0, &index.1, &vectors, &path, &embedder, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &db, &embedder, &HashSet::new(), || true).unwrap();
         assert_eq!(embedder.calls(), 3);
     }
 
     #[test]
     fn saved_vectors_load_back_and_need_no_embedding() {
-        let root = scratch_root("round-trip");
-        let path = vectors_path(&root);
+        let db = space_db();
         let index = index_of(&[("01A", "coffee beans"), ("01B", "deploy on friday")]);
 
         let first = Mutex::new(None);
-        reconcile(&index.0, &index.1, &first, &path, &Counting::new("stub-64"), &HashSet::new(), || true).unwrap();
-        first.lock().unwrap().as_ref().unwrap().save(&path).unwrap();
+        reconcile(&index.0, &index.1, &first, &db, &Counting::new("stub-64"), &HashSet::new(), || true).unwrap();
+        first.lock().unwrap().as_mut().unwrap().save(db.lock().unwrap().as_mut().unwrap()).unwrap();
 
         let embedder = Counting::new("stub-64");
         let loaded = Mutex::new(None);
-        assert!(!reconcile(&index.0, &index.1, &loaded, &path, &embedder, &HashSet::new(), || true).unwrap());
+        assert!(!reconcile(&index.0, &index.1, &loaded, &db, &embedder, &HashSet::new(), || true).unwrap());
         assert_eq!(embedder.calls(), 0);
         assert_eq!(*loaded.lock().unwrap(), *first.lock().unwrap());
 
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn a_long_pass_cut_short_keeps_what_it_saved_along_the_way() {
-        let root = scratch_root("resume");
-        let path = vectors_path(&root);
+        let db = space_db();
         let bodies: Vec<(String, String)> = (0..SAVE_EVERY + 100)
             .map(|i| (format!("{i:05}"), format!("note number {i}")))
             .collect();
@@ -467,21 +478,19 @@ mod tests {
         // Quit after one save's worth and a bit more, without the final save.
         let first = Counting::new("stub-64");
         let vectors = Mutex::new(None);
-        let unsaved = reconcile(&index.0, &index.1, &vectors, &path, &first, &HashSet::new(), || {
+        let unsaved = reconcile(&index.0, &index.1, &vectors, &db, &first, &HashSet::new(), || {
             first.calls() < SAVE_EVERY + 10
         });
         assert!(unsaved.unwrap());
 
-        // The next launch reads the file and embeds only what it lacks.
+        // The next launch reads what was saved and embeds only what it lacks.
         let next = Counting::new("stub-64");
         let reloaded = Mutex::new(None);
-        reconcile(&index.0, &index.1, &reloaded, &path, &next, &HashSet::new(), || true).unwrap();
+        reconcile(&index.0, &index.1, &reloaded, &db, &next, &HashSet::new(), || true).unwrap();
         assert_eq!(next.calls(), 100);
-
-        let _ = std::fs::remove_dir_all(&root);
     }
 
-    /// From a space's index and vectors to `threads.json` and back: what
+    /// From a space's index and vectors to its placements and back: what
     /// the embed task does after each pass.
     #[test]
     fn a_pass_places_the_open_space_in_threads_and_saves_them() {
@@ -514,12 +523,11 @@ mod tests {
             std::fs::write(path, append_note("", &written, date)).unwrap();
         }
         let (space, _) = Space::open("Test", root.clone(), std::sync::Arc::new(tokio::sync::Notify::new()));
-        reconcile(&space.index, &space.search, &space.vectors, &vectors_path(&root), &StubEmbedder, &HashSet::new(), || true).unwrap();
+        reconcile(&space.index, &space.search, &space.vectors, &space.db, &StubEmbedder, &HashSet::new(), || true).unwrap();
 
         assert!(sync_threads(&space), "read for the first time and placed");
-        assert!(threads_path(&root).exists());
         assert!(!sync_threads(&space), "nothing new");
-        let placed = Threads::load(&threads_path(&root));
+        let placed = Threads::load(space.db.lock().unwrap().as_ref().unwrap());
         assert_eq!(*space.threads.lock().unwrap(), Some(placed));
         {
             let threads = space.threads.lock().unwrap();
@@ -536,22 +544,19 @@ mod tests {
 
     #[test]
     fn another_model_starts_over() {
-        let root = scratch_root("other-model");
-        let path = vectors_path(&root);
+        let db = space_db();
         let index = index_of(&[("01A", "coffee beans"), ("01B", "deploy on friday")]);
 
         let vectors = Mutex::new(None);
-        reconcile(&index.0, &index.1, &vectors, &path, &Counting::new("stub-64"), &HashSet::new(), || true).unwrap();
-        vectors.lock().unwrap().as_ref().unwrap().save(&path).unwrap();
+        reconcile(&index.0, &index.1, &vectors, &db, &Counting::new("stub-64"), &HashSet::new(), || true).unwrap();
+        vectors.lock().unwrap().as_mut().unwrap().save(db.lock().unwrap().as_mut().unwrap()).unwrap();
 
         // Once from disk, once from what is already in memory.
         for slot in [Mutex::new(None), vectors] {
             let other = Counting::new("other-64");
-            assert!(reconcile(&index.0, &index.1, &slot, &path, &other, &HashSet::new(), || true).unwrap());
+            assert!(reconcile(&index.0, &index.1, &slot, &db, &other, &HashSet::new(), || true).unwrap());
             assert_eq!(other.calls(), 2);
             assert!(slot.lock().unwrap().as_ref().unwrap().is_from("other-64", 64));
         }
-
-        let _ = std::fs::remove_dir_all(&root);
     }
 }

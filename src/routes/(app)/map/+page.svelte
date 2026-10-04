@@ -46,8 +46,9 @@
 	/** The scale with every note in view, which zooming is measured against. */
 	let fitScale = 1;
 	let fitted = false;
-	/** The note pointed at, and where its dot is on the canvas. */
-	let hovered = $state<{ note: MapNote; x: number; y: number } | null>(null);
+	/** The note pointed at. Kept raw, so that the pointer moving over the same
+	 *  dot changes nothing and the map is not drawn again. */
+	let hovered = $state.raw<MapNote | null>(null);
 	/** The note clicked, shown in the card on the right. Kept by id so it
 	 *  follows the map when it is read again, and goes if the note does. */
 	let selectedId = $state<string | null>(null);
@@ -92,11 +93,11 @@
 			.sort((a, b) => b.count - a.count)
 	);
 	const looseCount = $derived(groups[0][1].length);
-	const hoveredThread = $derived(hovered ? threadOf.get(hovered.note.id) : undefined);
+	const hoveredThread = $derived(hovered ? threadOf.get(hovered.id) : undefined);
 	const selectedThread = $derived(selected ? threadOf.get(selected.id) : undefined);
 	/** The thread brought forward: the one pointed at, else the one clicked. */
 	const focusThread = $derived(hovered ? hoveredThread : selectedThread);
-	const preview = $derived(hovered ? previews.get(hovered.note.id) : undefined);
+	const preview = $derived(hovered ? previews.get(hovered.id) : undefined);
 	const selectedPreview = $derived(selected ? previews.get(selected.id) : undefined);
 
 	/** The zoom, in steps of √2 from every note in view, so the categories
@@ -130,6 +131,15 @@
 	function place(note: MapNote): { x: number; y: number } {
 		return (mode === 'graph' && graphed?.nodes.get(note.id)) || note;
 	}
+
+	/** Where the dot pointed at is on the canvas, following the graph as it
+	 *  settles. */
+	const hoveredAt = $derived.by(() => {
+		void steps;
+		if (!hovered) return null;
+		const at = place(hovered);
+		return { x: at.x * view.scale + view.left, y: at.y * view.scale + view.top };
+	});
 
 	/** Every note in view, centred. */
 	function fit() {
@@ -215,7 +225,7 @@
 			context.lineWidth = 1;
 			context.globalAlpha = 0.12;
 			lines(graphing.links);
-			const focus = hovered?.note.id ?? selected?.id;
+			const focus = hovered?.id ?? selected?.id;
 			if (focus) {
 				context.globalAlpha = 0.6;
 				lines(
@@ -243,7 +253,7 @@
 			context.arc(x, y, radius + 3, 0, 2 * Math.PI);
 			context.stroke();
 		};
-		for (const note of [hovered?.note, selected]) {
+		for (const note of [hovered, selected]) {
 			if (note) ring(place(note).x * scale + left, place(note).y * scale + top);
 		}
 		if (graphing) {
@@ -291,7 +301,7 @@
 
 	/** The note whose dot is nearest the point, if near enough. */
 	function nearest(x: number, y: number) {
-		let best: { note: MapNote; x: number; y: number } | null = null;
+		let best: MapNote | null = null;
 		let bestDistance = REACH * REACH;
 		for (const note of data.notes) {
 			const at = place(note);
@@ -300,7 +310,7 @@
 			const distance = dx * dx + dy * dy;
 			if (distance <= bestDistance) {
 				bestDistance = distance;
-				best = { note, x: x + dx, y: y + dy };
+				best = note;
 			}
 		}
 		return best;
@@ -334,7 +344,7 @@
 			left: view.left,
 			top: view.top,
 			moved: false,
-			node: pressed ? (graphed?.nodes.get(pressed.note.id) ?? null) : null
+			node: pressed ? (graphed?.nodes.get(pressed.id) ?? null) : null
 		};
 		following = false;
 	}
@@ -367,7 +377,7 @@
 	function up(event: PointerEvent) {
 		if (drag && !drag.moved) {
 			const point = at(event);
-			selectedId = nearest(point.x, point.y)?.note.id ?? null;
+			selectedId = nearest(point.x, point.y)?.id ?? null;
 		}
 		if (drag?.node) {
 			drag.node.fx = drag.node.fy = null;
@@ -435,7 +445,7 @@
 
 	// The text of the notes pointed at or clicked, read once.
 	$effect(() => {
-		for (const id of [hovered?.note.id, selected?.id]) {
+		for (const id of [hovered?.id, selected?.id]) {
 			if (!id || previews.has(id)) continue;
 			previews.set(id, null);
 			void getNote(id).then((note) => previews.set(id, note));
@@ -562,14 +572,14 @@
 					</Card.Content>
 				</Card.Root>
 			{/if}
-			{#if hovered && !dragging && hovered.note.id !== selected?.id}
+			{#if hovered && hoveredAt && !dragging && hovered.id !== selected?.id}
 				{@const thread = hoveredThread}
 				<div
 					class="pointer-events-none absolute z-10 w-72 rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
-					style:left="{hovered.x > width - 300 ? hovered.x - 300 : hovered.x + 14}px"
-					style:top="{hovered.y > height - 140 ? hovered.y - 120 : hovered.y + 14}px"
+					style:left="{hoveredAt.x > width - 300 ? hoveredAt.x - 300 : hoveredAt.x + 14}px"
+					style:top="{hoveredAt.y > height - 140 ? hoveredAt.y - 120 : hoveredAt.y + 14}px"
 				>
-					<p class="text-xs text-muted-foreground">{shortDay(hovered.note.date)}</p>
+					<p class="text-xs text-muted-foreground">{shortDay(hovered.date)}</p>
 					{#if preview?.kind === 'page' && preview.subject}
 						<p class="font-medium">{preview.subject}</p>
 					{/if}

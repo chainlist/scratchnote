@@ -3,10 +3,12 @@
 	import { onMount, untrack } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import ScanIcon from '@lucide/svelte/icons/scan';
+	import SearchIcon from '@lucide/svelte/icons/search';
 	import XIcon from '@lucide/svelte/icons/x';
 	import {
 		getNote,
 		mapLinks,
+		mapSearch,
 		onMapChanged,
 		type MapNote,
 		type Note,
@@ -15,6 +17,8 @@
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
+	import * as InputGroup from '#lib/components/ui/input-group/index.js';
+	import { Slider } from '#lib/components/ui/slider/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import View from '#lib/components/View.svelte';
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
@@ -37,6 +41,15 @@
 	const GAP = 12;
 	/** How wide or tall, in CSS pixels, an island must look to be named. */
 	const NAMED = 32;
+	/** How strongly a note the search or the dates leave out is drawn. */
+	const DIM = 0.12;
+	/** How many bars show how the notes spread over time. */
+	const BARS = 40;
+	const DAY_MS = 86_400_000;
+
+	/** A day as a number of days, which the dates shown are measured in. */
+	const dayNumber = (date: string) => Math.round(Date.parse(`${date}T00:00:00Z`) / DAY_MS);
+	const dateOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
 	let canvas = $state<HTMLCanvasElement>();
 	let width = $state(0);
@@ -67,6 +80,46 @@
 	 *  the user moves it. */
 	let following = false;
 	const previews = new SvelteMap<string, Note | null>();
+	/** What the search box holds, and the notes whose text holds its words,
+	 *  null while it is empty. */
+	let query = $state('');
+	let found = $state.raw<Set<string> | null>(null);
+	/** The first and last day shown, null while every day is. */
+	let span = $state<[number, number] | null>(null);
+
+	/** Each note's day, and the first and last day of them all. */
+	const days = $derived(new Map(data.notes.map((note) => [note.id, dayNumber(note.date)])));
+	const extent = $derived.by(() => {
+		let [first, last] = [Infinity, -Infinity];
+		for (const day of days.values()) [first, last] = [Math.min(first, day), Math.max(last, day)];
+		return [first, last] as const;
+	});
+	/** The notes the search and the dates let through, drawn as ever; null
+	 *  while neither narrows anything. */
+	const lit = $derived.by(() => {
+		if (!found && !span) return null;
+		const through = (note: MapNote) => {
+			const day = days.get(note.id)!;
+			return (!found || found.has(note.id)) && (!span || (day >= span[0] && day <= span[1]));
+		};
+		return new Set(data.notes.filter(through).map((note) => note.id));
+	});
+	/** How many notes each stretch of time holds, highest at 1, and the days
+	 *  it covers, for the bars above the dates. */
+	const bars = $derived.by(() => {
+		const [first, last] = extent;
+		const length = (last - first + 1) / BARS;
+		const counts = Array<number>(BARS).fill(0);
+		for (const day of days.values()) {
+			counts[Math.min(BARS - 1, Math.floor((day - first) / length))]++;
+		}
+		const most = Math.max(1, ...counts);
+		return counts.map((count, i) => ({
+			height: count / most,
+			from: first + i * length,
+			to: first + (i + 1) * length
+		}));
+	});
 
 	const threadOf = $derived(
 		new Map(data.threads.flatMap((thread) => thread.notes.map((id) => [id, thread] as const)))
@@ -93,6 +146,15 @@
 			.sort((a, b) => b.count - a.count)
 	);
 	const looseCount = $derived(groups[0][1].length);
+	/** Each colour's notes, those the search and the dates let through apart
+	 *  from those they leave out. */
+	const parts = $derived(
+		groups.map(([thread, notes]) => ({
+			thread,
+			shown: lit ? notes.filter((note) => lit.has(note.id)) : notes,
+			left: lit ? notes.filter((note) => !lit.has(note.id)) : []
+		}))
+	);
 	const hoveredThread = $derived(hovered ? threadOf.get(hovered.id) : undefined);
 	const selectedThread = $derived(selected ? threadOf.get(selected.id) : undefined);
 	/** The thread brought forward: the one pointed at, else the one clicked. */
@@ -235,16 +297,22 @@
 				);
 			}
 		}
-		for (const [thread, notes] of groups) {
+		// The notes the search or the dates leave out, faint, under the rest.
+		context.globalAlpha = DIM;
+		for (const { thread, left } of parts) {
+			context.fillStyle = thread ? colour(thread) : grey;
+			if (left.length) dots(left, radius);
+		}
+		for (const { thread, shown } of parts) {
 			// Pointing at or clicking a note of a thread brings its thread forward.
 			context.globalAlpha = focusThread && thread !== focusThread ? 0.25 : thread ? 0.9 : 0.55;
 			context.fillStyle = thread ? colour(thread) : grey;
-			dots(notes, radius);
+			dots(shown, radius);
 		}
 		context.globalAlpha = 1;
 		if (focusThread) {
 			context.fillStyle = colour(focusThread);
-			dots(groups.find(([thread]) => thread === focusThread)?.[1] ?? [], radius + 1);
+			dots(parts.find(({ thread }) => thread === focusThread)?.shown ?? [], radius + 1);
 		}
 		context.strokeStyle = foreground;
 		context.lineWidth = 1.5;
@@ -299,11 +367,13 @@
 
 	$effect(draw);
 
-	/** The note whose dot is nearest the point, if near enough. */
+	/** The note whose dot is nearest the point, if near enough, among those
+	 *  the search and the dates let through. */
 	function nearest(x: number, y: number) {
 		let best: MapNote | null = null;
 		let bestDistance = REACH * REACH;
 		for (const note of data.notes) {
+			if (lit && !lit.has(note.id)) continue;
 			const at = place(note);
 			const dx = at.x * view.scale + view.left - x;
 			const dy = at.y * view.scale + view.top - y;
@@ -444,6 +514,29 @@
 		};
 	});
 
+	// The notes the search box finds, a moment after typing stops, and again
+	// whenever the map is read again. Only the latest answer is kept.
+	let searchRun = 0;
+	$effect(() => {
+		const words = query.trim();
+		void data.notes;
+		const run = ++searchRun;
+		if (!words) {
+			found = null;
+			return;
+		}
+		const timer = setTimeout(() => {
+			mapSearch(words)
+				.then((ids) => {
+					if (run === searchRun) found = new Set(ids);
+				})
+				.catch((e) => {
+					if (run === searchRun) shell.showError(String(e));
+				});
+		}, 200);
+		return () => clearTimeout(timer);
+	});
+
 	// The text of the notes pointed at or clicked, read once.
 	$effect(() => {
 		for (const id of [hovered?.id, selected?.id]) {
@@ -510,6 +603,69 @@
 				size="sm"
 				class="absolute top-2 left-2 z-10 max-h-[calc(100%-1rem)] w-64 gap-2 shadow-sm"
 			>
+				<Card.Content class="flex flex-col gap-3">
+					<div class="flex flex-col gap-1">
+						<InputGroup.Root class="h-8">
+							<InputGroup.Addon><SearchIcon /></InputGroup.Addon>
+							<InputGroup.Input
+								bind:value={query}
+								placeholder={m.map_find()}
+								aria-label={m.map_find()}
+								onkeydown={(event) => {
+									if (event.key === 'Escape' && query) {
+										event.preventDefault();
+										query = '';
+									}
+								}}
+							/>
+						</InputGroup.Root>
+						{#if found}
+							<p class="px-1 text-xs text-muted-foreground" aria-live="polite">
+								{lit?.size ? m.page_results({ count: lit.size }) : m.page_no_match()}
+							</p>
+						{/if}
+					</div>
+					{#if extent[1] > extent[0]}
+						{@const [from, to] = span ?? extent}
+						<div class="flex flex-col gap-1.5" role="group" aria-label={m.map_dates()}>
+							<div class="flex h-6 items-end gap-px" aria-hidden="true">
+								{#each bars as bar, i (i)}
+									<div
+										class={[
+											'flex-1 rounded-[1px]',
+											bar.to > from && bar.from <= to ? 'bg-primary/60' : 'bg-muted-foreground/20'
+										]}
+										style:height="{bar.height ? Math.max(8, bar.height * 100) : 0}%"
+									></div>
+								{/each}
+							</div>
+							<Slider
+								type="multiple"
+								min={extent[0]}
+								max={extent[1]}
+								step={1}
+								value={[from, to]}
+								onValueChange={([first, last]) =>
+									(span = first <= extent[0] && last >= extent[1] ? null : [first, last])}
+							/>
+							<div class="flex h-5 items-center justify-between text-xs text-muted-foreground">
+								<span>{shortDay(dateOf(from))}</span>
+								{#if span}
+									<Button
+										variant="ghost"
+										size="icon-xs"
+										aria-label={m.map_dates_all()}
+										title={m.map_dates_all()}
+										onclick={() => (span = null)}
+									>
+										<XIcon />
+									</Button>
+								{/if}
+								<span>{shortDay(dateOf(to))}</span>
+							</div>
+						</div>
+					{/if}
+				</Card.Content>
 				<Card.Content class="min-h-0 overflow-y-auto">
 					<ul class="space-y-1">
 						{#each legend as { thread, count } (thread.id)}

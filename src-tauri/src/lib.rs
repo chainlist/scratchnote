@@ -92,6 +92,7 @@ pub fn run() {
             commands::map::note_map,
             commands::map::map_categories,
             commands::map::map_links,
+            commands::map::map_search,
             commands::notes::get_note,
             commands::search::notes_containing,
             commands::notes::delete_note,

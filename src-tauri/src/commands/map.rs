@@ -56,6 +56,17 @@ pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String
         .collect())
 }
 
+/// The notes of the open space whose text holds every word of `query`, by
+/// id, as search finds them (SPEC 6), for the map to light up. Async, as it
+/// waits on the lock of the notes' text.
+#[tauri::command]
+pub async fn map_search(state: State<'_, AppState>, query: String) -> Result<Vec<String>, String> {
+    let found = state
+        .space()?
+        .read(|idx, db| crate::search::matching_ids(idx, db, &query))?;
+    Ok(found.unwrap_or_default())
+}
+
 /// The closest notes each note is linked to in the graph view.
 const GRAPH_LINKS: usize = 3;
 

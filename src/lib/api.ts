@@ -221,6 +221,10 @@ export interface MapLinks {
 
 export const mapLinks = () => invoke<MapLinks>('map_links');
 
+/** The ids of the notes whose text holds every word, as search finds them,
+ *  for the map to light up. */
+export const mapSearch = (query: string) => invoke<string[]>('map_search', { query });
+
 /** One note or page with its text, or null once it is gone. */
 export const getNote = (id: string) => invoke<Note | null>('get_note', { id });
 

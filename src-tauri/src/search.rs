@@ -132,6 +132,20 @@ pub fn search(
     })
 }
 
+/// The ids of the notes and pages whose text holds every word, in the
+/// index's order, for the map to light them up: no text is read out. None
+/// for a query without words.
+pub fn matching_ids(index: &Index, db: &SearchDb, raw: &str) -> Result<Vec<String>, String> {
+    let Some(matched) = Query::parse(raw).matched(db)? else {
+        return Ok(Vec::new());
+    };
+    Ok(index
+        .entries()
+        .filter(|entry| matched.contains(&entry.id))
+        .map(|entry| entry.id.clone())
+        .collect())
+}
+
 /// Notes and pages whose body holds any of `needles` as typed, newest first.
 /// A plugin asks for the markup it reads, `[ ]` and `[x]` for the tasks
 /// view (SPEC 3.8), and parses the markdown itself to keep the real ones.
@@ -230,6 +244,19 @@ mod tests {
     fn splits_the_query_into_folded_words() {
         let query = Query::parse("Réunion  kubernetes");
         assert_eq!(query.words, vec!["reunion", "kubernetes"]);
+    }
+
+    #[test]
+    fn the_map_lights_the_notes_holding_every_word() {
+        let idx = index(&[
+            note("01A", "2026-09-21", "08:00", "Kitchen tiles arrived"),
+            note("01B", "2026-09-22", "08:00", "The kitchen sink"),
+            note("01C", "2026-09-23", "08:00", "Tiles for the bathroom"),
+        ]);
+        let lit = |raw| matching_ids(&idx.index, &idx.db, raw).unwrap();
+        assert_eq!(lit("kitchen TILES"), vec!["01A"]);
+        assert_eq!(lit("kitch"), vec!["01A", "01B"]);
+        assert!(lit("  ").is_empty());
     }
 
     #[test]

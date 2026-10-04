@@ -322,6 +322,11 @@
 							<CalendarXIcon />{m.day_ahead_clear({ date: aheadLabel(on) })}
 						</DropdownMenu.Item>
 					{/if}
+					{#if shell.canSimilar}
+						<DropdownMenu.Item onSelect={() => shell.askThread(current)}>
+							<RouteIcon />{shell.threadOf(current.id) ? m.thread_move() : m.thread_add()}
+						</DropdownMenu.Item>
+					{/if}
 					{#if shell.threadOf(current.id)}
 						<DropdownMenu.Item onSelect={() => void shell.keepOut(current, true)}>
 							<RouteOffIcon />{m.thread_leave()}

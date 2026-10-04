@@ -7,6 +7,7 @@
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
 	import FilesIcon from '@lucide/svelte/icons/files';
+	import RouteIcon from '@lucide/svelte/icons/route';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
@@ -24,6 +25,7 @@
 		ontoday,
 		onnewpage,
 		onpages,
+		onthreads,
 		onsettings
 	}: {
 		open: boolean;
@@ -42,6 +44,8 @@
 		onnewpage: () => void;
 		/** List every page of the space. */
 		onpages: () => void;
+		/** List the space's threads, while there are threads (SPEC 6.4). */
+		onthreads?: () => void;
 		onsettings: () => void;
 	} = $props();
 
@@ -75,6 +79,9 @@
 		{ value: 'today', name: m.command_today(), icon: CalendarCheckIcon, run: ontoday },
 		{ value: 'new-page', name: m.pages_new(), icon: FilePlusIcon, run: onnewpage },
 		{ value: 'all-pages', name: m.pages_all(), icon: FilesIcon, run: onpages },
+		...(onthreads
+			? [{ value: 'threads', name: m.threads_all(), icon: RouteIcon, run: onthreads }]
+			: []),
 		{ value: 'settings', name: m.common_settings(), icon: SettingsIcon, run: onsettings }
 	]);
 

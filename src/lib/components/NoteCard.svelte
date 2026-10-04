@@ -256,6 +256,11 @@
 								<CalendarXIcon />{m.day_ahead_clear({ date: aheadLabel(on) })}
 							</DropdownMenu.Item>
 						{/if}
+						{#if shell.canSimilar}
+							<DropdownMenu.Item onSelect={() => shell.askThread(note)}>
+								<RouteIcon />{inThread ? m.thread_move() : m.thread_add()}
+							</DropdownMenu.Item>
+						{/if}
 						{#if inThread}
 							<DropdownMenu.Item onSelect={() => void shell.keepOut(note, true)}>
 								<RouteOffIcon />{m.thread_leave()}

@@ -118,10 +118,19 @@ export interface Thread {
 	title: string | null;
 	/** The title is the user's. */
 	named: boolean;
+	/** The user's, rather than only suggested: titled, or holding a note they put there. */
+	kept: boolean;
 	/** Its notes and pages, oldest first. */
 	notes: string[];
 	/** The day of its first note. */
 	since: string;
+	/** The day of its last note. */
+	until: string;
+}
+
+/** A thread with its first two notes, to tell it from others with no title. */
+export interface ThreadCard extends Thread {
+	first: Note[];
 }
 
 export interface ThreadsView {
@@ -144,6 +153,29 @@ export const renameThread = (id: string, title: string) =>
 /** Take a note out of threads, where it stays, or let it back in. */
 export const keepOutOfThreads = (id: string, out: boolean) =>
 	invoke<void>('keep_out_of_threads', { id, out });
+
+/** Every thread with its first notes, the one written in last first. */
+export const threadCards = () => invoke<ThreadCard[]>('thread_cards');
+
+/** The threads a note could be put in, the one it fits best first. */
+export const threadsForNote = (id: string) => invoke<ThreadCard[]>('threads_for_note', { id });
+
+/** Make a suggested thread the user's, so notes like its own keep joining. */
+export const keepThread = (id: string) => invoke<void>('keep_thread', { id });
+
+/** Stop suggesting a thread until it holds another note. */
+export const dismissThread = (id: string) => invoke<void>('dismiss_thread', { id });
+
+/**
+ * Put notes in a thread, or a new one when `into` is null, where they stay
+ * whatever they score. Resolves to the thread's id.
+ */
+export const putInThread = (notes: string[], into: string | null) =>
+	invoke<string>('put_in_thread', { notes, into });
+
+/** Put every note of thread `from` in thread `into`. */
+export const mergeThreads = (from: string, into: string) =>
+	invoke<void>('merge_threads', { from, into });
 
 /** Fired when the notes were placed in threads anew, or a thread renamed. */
 export const onThreadsChanged = (handler: () => void): Promise<UnlistenFn> =>

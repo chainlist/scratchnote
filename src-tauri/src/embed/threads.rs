@@ -3,10 +3,17 @@
 //! A note joins the thread it is closest to, scored against the average of
 //! the thread's notes once what every note shares is taken off, as Similar
 //! notes scores two notes (SPEC 6.2). A note close to no thread, but close
-//! enough to a note on its own, starts a thread with it. Only notes within
-//! a window of days of a thread, or of each other, are compared: a thread
-//! follows one stretch of something rather than a subject for good, and a
-//! pass stays short however many notes the space holds.
+//! enough to a note on its own, starts a thread with it. Two threads that
+//! grow close enough become one. Only notes within a window of days of a
+//! thread, or of each other, are compared: a thread follows one stretch of
+//! something rather than a subject for good, and a pass stays short however
+//! many notes the space holds.
+//!
+//! Taking off the mean misleads in a small space, or one mostly about one
+//! thing: the mean is then mostly that thing, and every other note shares
+//! not being about it. So a note and a thread must also stand out for each
+//! other, each against its own average cosine with every other note, which
+//! no shared mean sways.
 //!
 //! Derived like `vectors.bin`: `threads.json` records where each note was
 //! placed and from which body, so a note is placed once, and again only
@@ -32,6 +39,9 @@ pub struct Cuts {
     pub join: f32,
     /// The score two notes on their own need to start a thread.
     pub pair: f32,
+    /// How far above its usual cosine with the other notes each side must
+    /// score the other, whether to join, start or merge.
+    pub lead: f32,
     /// How many days a note may lie beyond a thread's first or last note
     /// and still join it, and two notes on their own lie apart and still
     /// start one.
@@ -43,16 +53,16 @@ pub struct Cuts {
 pub const CUTS: Cuts = Cuts {
     join: 0.35,
     pair: 0.40,
+    lead: 0.14,
     window: 60,
 };
 
 /// Bumped when the way notes are placed changes, so they are placed again.
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 
-/// No thread forms in a space of fewer notes: one thread's notes would be
-/// most of what is usual, and with that taken off, every other note looks
-/// like every other. They are placed once the space has grown.
-pub const MIN_NOTES: usize = 12;
+/// Two notes leave no other to say what is usual, so nothing is placed
+/// until a third comes.
+const MIN_NOTES: usize = 3;
 
 pub fn threads_path(root: &Path) -> PathBuf {
     root.join(".scratchnote").join("threads.json")
@@ -115,9 +125,27 @@ pub struct Edits {
     pub titles: BTreeMap<String, String>,
     /// Notes taken out of threads, which stay out.
     pub alone: BTreeSet<String>,
+    /// Notes the user put in a thread, by note, which stay there whatever
+    /// they score. A thread holding one is the user's, as is a titled one;
+    /// any other is only suggested.
+    pub pinned: BTreeMap<String, String>,
+    /// Suggested threads the user dismissed, with the notes each held then.
+    /// One is suggested again once it holds another.
+    pub dismissed: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Edits {
+    /// The threads that are the user's: titled, or holding a note they put
+    /// there.
+    pub fn kept(&self) -> HashSet<&str> {
+        self.titles
+            .iter()
+            .filter(|(_, title)| !title.trim().is_empty())
+            .map(|(thread, _)| thread.as_str())
+            .chain(self.pinned.values().map(String::as_str))
+            .collect()
+    }
+
     /// A missing or unreadable file decides nothing.
     pub fn load(root: &Path) -> Self {
         std::fs::read_to_string(edits_path(root))
@@ -140,17 +168,21 @@ pub struct Thread {
     pub title: Option<String>,
     /// The title is the user's.
     pub named: bool,
+    /// The thread is the user's rather than only suggested.
+    pub kept: bool,
     /// Its notes and pages, oldest first.
     pub notes: Vec<String>,
     /// The day of its first note.
     pub since: String,
+    /// The day of its last note.
+    pub until: String,
 }
 
-/// A thread while notes are placed: what its notes add up to, how many
-/// they are, and the days they span.
+/// A thread while notes are placed: its notes, what they add up to, and the
+/// days they span.
 struct Group {
+    notes: Vec<String>,
     sum: Vec<f32>,
-    count: usize,
     /// sum · sum and sum · the space's sum, kept as the thread grows.
     own: f32,
     all: f32,
@@ -161,8 +193,8 @@ struct Group {
 impl Group {
     fn new(dims: usize, date: NaiveDate) -> Self {
         Self {
+            notes: Vec::new(),
             sum: vec![0.0; dims],
-            count: 0,
             own: 0.0,
             all: 0.0,
             first: date,
@@ -170,21 +202,33 @@ impl Group {
         }
     }
 
-    fn add(&mut self, vector: &[f32], date: NaiveDate, usual: &Usual) {
+    fn add(&mut self, id: &str, vector: &[f32], date: NaiveDate, usual: &Usual) {
         for (s, x) in self.sum.iter_mut().zip(vector) {
             *s += x;
         }
-        self.count += 1;
+        self.notes.push(id.to_string());
         self.own = dot(&self.sum, &self.sum);
         self.all = dot(&self.sum, &usual.sum);
         self.first = self.first.min(date);
         self.last = self.last.max(date);
     }
 
+    /// Take in the notes of `other`.
+    fn absorb(&mut self, other: Group, usual: &Usual) {
+        for (s, x) in self.sum.iter_mut().zip(&other.sum) {
+            *s += x;
+        }
+        self.notes.extend(other.notes);
+        self.own = dot(&self.sum, &self.sum);
+        self.all = dot(&self.sum, &usual.sum);
+        self.first = self.first.min(other.first);
+        self.last = self.last.max(other.last);
+    }
+
     fn part(&self) -> Part<'_> {
         Part {
             sum: &self.sum,
-            count: self.count,
+            count: self.notes.len(),
             own: self.own,
             all: self.all,
         }
@@ -193,6 +237,12 @@ impl Group {
     /// Whether a note of `date` lies within `window` days of this thread's.
     fn near(&self, date: NaiveDate, window: u64) -> bool {
         earliest(self.first, window) <= date && date <= latest(self.last, window)
+    }
+
+    /// Whether some note of `other` lies within `window` days of this
+    /// thread's.
+    fn meets(&self, other: &Group, window: u64) -> bool {
+        earliest(self.first, window) <= other.last && other.first <= latest(self.last, window)
     }
 }
 
@@ -260,33 +310,40 @@ impl Usual {
         }
     }
 
-    /// The cosine between note `a` and the average of the notes of `group`,
-    /// once the mean of every other note is taken off both: what
-    /// `Vectors::similar` gives for two notes, `group` being one. `a` and
-    /// the group's notes are counted in the space's sum. Below any threshold
-    /// when too few notes are left to say what is usual.
-    fn score(&self, a: &Part, group: &Part) -> f32 {
-        let rest = self.count as f32 - 1.0 - group.count as f32;
+    /// The cosine between the averages of `a` and `b`, a note or a thread
+    /// each, once the mean of every other note is taken off both: what
+    /// `Vectors::similar` gives for two notes. `None` unless each also
+    /// scores the other `lead` above its average cosine with every other
+    /// note, or when too few notes are left to say what is usual. The notes
+    /// of `a` and `b` are counted in the space's sum.
+    fn score(&self, a: &Part, b: &Part, lead: f32) -> Option<f32> {
+        let rest = self.count as f32 - (a.count + b.count) as f32;
         if rest < 1.0 {
-            return f32::NEG_INFINITY;
+            return None;
         }
-        let k = group.count as f32;
-        let (aa, a_s, a_g) = (a.own, a.all, dot(a.sum, group.sum));
-        let (g_s, gg) = (group.all, group.own);
+        let (ka, kb) = (a.count as f32, b.count as f32);
+        let (aa, bb, ab) = (a.own, b.own, dot(a.sum, b.sum));
+
+        // Each side's average cosine with the other notes, S - A - B, and
+        // how far above it each scores the other. A mean that is mostly one
+        // thing sways neither.
+        let (na, nb) = (aa.sqrt(), bb.sqrt());
+        let cos = ab / (na * nb);
+        let usual_a = (a.all - aa - ab) / (na * rest);
+        let usual_b = (b.all - ab - bb) / (nb * rest);
+        if cos - usual_a.max(usual_b) < lead {
+            return None;
+        }
 
         // As in `Vectors::closest`, expanded rather than centred copies,
-        // with m = (S - a - G) / rest and the group's average c = G / k.
-        let ac = a_g / k;
-        let cc = gg / (k * k);
-        let am = (a_s - aa - a_g) / rest;
-        let cm = (g_s - a_g - gg) / (k * rest);
-        let mm = (self.ss + aa + gg - 2.0 * a_s - 2.0 * g_s + 2.0 * a_g) / (rest * rest);
-        let norm = (aa - 2.0 * am + mm).max(0.0).sqrt() * (cc - 2.0 * cm + mm).max(0.0).sqrt();
-        if norm > 0.0 {
-            (ac - am - cm + mm) / norm
-        } else {
-            f32::NEG_INFINITY
-        }
+        // with m = (S - A - B) / rest and the averages A / ka and B / kb.
+        let am = (a.all - aa - ab) / rest;
+        let bm = (b.all - ab - bb) / rest;
+        let mm = (self.ss + aa + bb - 2.0 * a.all - 2.0 * b.all + 2.0 * ab) / (rest * rest);
+        let xx = aa / (ka * ka) - 2.0 * am / ka + mm;
+        let yy = bb / (kb * kb) - 2.0 * bm / kb + mm;
+        let norm = xx.max(0.0).sqrt() * yy.max(0.0).sqrt();
+        (norm > 0.0).then(|| (ab / (ka * kb) - am / ka - bm / kb + mm) / norm)
     }
 }
 
@@ -294,6 +351,8 @@ impl Usual {
 enum Choice {
     Join(String),
     Pair(String),
+    /// Where the user put it, which need not exist yet.
+    Put(String),
 }
 
 impl Threads {
@@ -322,23 +381,24 @@ impl Threads {
     }
 
     /// The thread a note is in, if any.
-    #[cfg(test)]
     pub fn of(&self, id: &str) -> Option<&str> {
         self.notes.get(id)?.thread.as_deref()
     }
 
     /// Place every note of `vectors` not placed yet, oldest first, and place
     /// again those written again since, and those the user took out of
-    /// threads, in `alone`, or let back in. Notes gone are forgotten. A note
-    /// `when` does not know is left for a later pass. True when anything
-    /// changed.
+    /// threads, let back in or put in a thread. A note the user put in a
+    /// thread goes there first, whatever it scores, so the notes like it
+    /// join. Notes gone are forgotten. A note `when` does not know is left
+    /// for a later pass. Two threads of the user's never become one. True
+    /// when anything changed.
     pub fn reconcile(
         &mut self,
         vectors: &Vectors,
         when: &HashMap<String, When>,
-        alone: &HashSet<String>,
+        edits: &Edits,
     ) -> bool {
-        self.reconcile_with(vectors, when, alone, CUTS)
+        self.reconcile_with(vectors, when, edits, CUTS)
     }
 
     /// `reconcile`, with the lines drawn at `cuts`.
@@ -346,9 +406,10 @@ impl Threads {
         &mut self,
         vectors: &Vectors,
         when: &HashMap<String, When>,
-        alone: &HashSet<String>,
+        edits: &Edits,
         cuts: Cuts,
     ) -> bool {
+        let alone = &edits.alone;
         let mut changed = false;
         if self.version != VERSION || self.model != vectors.model_id() {
             *self = Threads {
@@ -363,6 +424,10 @@ impl Threads {
         self.notes.retain(|id, placed| {
             vectors.get(id).is_some_and(|(hash, _)| hash == placed.hash)
                 && placed.out == alone.contains(id)
+                && edits
+                    .pinned
+                    .get(id)
+                    .is_none_or(|thread| placed.thread.as_ref() == Some(thread))
         });
         // A thread down to one note is no thread: that note is placed again.
         let mut sizes: HashMap<String, usize> = HashMap::new();
@@ -389,7 +454,8 @@ impl Threads {
         if todo.is_empty() || vectors.len() < MIN_NOTES {
             return changed;
         }
-        todo.sort();
+        // Notes put in a thread by the user first, so the others can join.
+        todo.sort_by_key(|(written, id)| (!edits.pinned.contains_key(*id), *written, *id));
 
         let usual = Usual::of(vectors);
         // Ordered, so equal scores always pick the same thread.
@@ -404,7 +470,7 @@ impl Threads {
                 Some(thread) => groups
                     .entry(thread.clone())
                     .or_insert_with(|| Group::new(vectors.dims(), written.date))
-                    .add(vector, written.date, &usual),
+                    .add(id, vector, written.date, &usual),
                 None if !alone.contains(id) => {
                     single.insert((written.date, id.clone()));
                 }
@@ -418,14 +484,24 @@ impl Threads {
             let (hash, vector) = vectors.get(id).expect("listed from the vectors");
             let choice = if alone.contains(id) {
                 None
+            } else if let Some(thread) = edits.pinned.get(id) {
+                Some(Choice::Put(thread.clone()))
             } else {
                 let note = usual.note(id, vector);
                 best(&note, written.date, &usual, &groups, &single, vectors, cuts)
             };
             let thread = match choice {
+                Some(Choice::Put(thread)) => {
+                    groups
+                        .entry(thread.clone())
+                        .or_insert_with(|| Group::new(vectors.dims(), written.date))
+                        .add(id, vector, written.date, &usual);
+                    touched.insert(thread.clone());
+                    Some(thread)
+                }
                 Some(Choice::Join(thread)) => {
                     if let Some(group) = groups.get_mut(&thread) {
-                        group.add(vector, written.date, &usual);
+                        group.add(id, vector, written.date, &usual);
                     }
                     touched.insert(thread.clone());
                     Some(thread)
@@ -448,8 +524,8 @@ impl Threads {
                         .find(|name| !groups.contains_key(name))
                         .expect("a free name");
                     let mut group = Group::new(vectors.dims(), their.date);
-                    group.add(theirs, their.date, &usual);
-                    group.add(vector, written.date, &usual);
+                    group.add(&other, theirs, their.date, &usual);
+                    group.add(id, vector, written.date, &usual);
                     groups.insert(thread.clone(), group);
                     single.remove(&(their.date, other.clone()));
                     if let Some(placed) = self.notes.get_mut(&other) {
@@ -473,9 +549,12 @@ impl Threads {
             self.notes.insert(id.to_string(), placed);
         }
 
+        let kept = edits.kept();
+
         // A note on its own was placed before the thread it fits formed, or
-        // before the thread grew towards it: it joins now, which may draw
-        // the thread nearer others in turn.
+        // before the thread grew towards it: it joins now. A thread that
+        // grew towards another becomes one with it. Either may draw a
+        // thread nearer others in turn.
         while !touched.is_empty() {
             let near: BTreeSet<(NaiveDate, String)> = touched
                 .iter()
@@ -488,7 +567,7 @@ impl Threads {
                         .cloned()
                 })
                 .collect();
-            touched.clear();
+            let grown = std::mem::take(&mut touched);
             for (day, id) in near {
                 let Some((_, vector)) = vectors.get(&id) else {
                     continue;
@@ -498,7 +577,7 @@ impl Threads {
                     continue;
                 };
                 if let Some(group) = groups.get_mut(&thread) {
-                    group.add(vector, day, &usual);
+                    group.add(&id, vector, day, &usual);
                 }
                 single.remove(&(day, id.clone()));
                 if let Some(placed) = self.notes.get_mut(&id) {
@@ -506,16 +585,39 @@ impl Threads {
                 }
                 touched.insert(thread);
             }
+            for thread in grown {
+                let Some(other) = closest_thread(&thread, &usual, &groups, vectors, &kept, cuts)
+                else {
+                    continue;
+                };
+                // The user's goes on, else the older one.
+                let older = |a: &str, b: &str| (groups[a].first, a) < (groups[b].first, b);
+                let (keep, gone) = if kept.contains(other.as_str())
+                    || (!kept.contains(thread.as_str()) && older(&other, &thread))
+                {
+                    (other, thread)
+                } else {
+                    (thread, other)
+                };
+                let absorbed = groups.remove(&gone).expect("a thread just scored");
+                if let Some(group) = groups.get_mut(&keep) {
+                    group.absorb(absorbed, &usual);
+                }
+                for placed in self.notes.values_mut() {
+                    if placed.thread.as_deref() == Some(gone.as_str()) {
+                        placed.thread = Some(keep.clone());
+                    }
+                }
+                touched.remove(&gone);
+                touched.insert(keep);
+            }
         }
         true
     }
 
-    /// Every thread, its notes oldest first, with the titles the user gave.
-    pub fn list(
-        &self,
-        when: &HashMap<String, When>,
-        titles: &BTreeMap<String, String>,
-    ) -> Vec<Thread> {
+    /// Every thread, its notes oldest first, with the titles the user gave,
+    /// but for suggestions the user dismissed that hold no other note since.
+    pub fn list(&self, when: &HashMap<String, When>, edits: &Edits) -> Vec<Thread> {
         let mut members: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for (id, placed) in &self.notes {
             if let (Some(thread), true) = (&placed.thread, when.contains_key(id)) {
@@ -525,20 +627,71 @@ impl Threads {
                     .push(id.as_str());
             }
         }
+        let kept = edits.kept();
         members
             .into_iter()
-            .filter_map(|(id, notes)| shown(id, notes, when, titles))
+            .filter_map(|(id, notes)| shown(id, notes, when, edits, &kept))
+            .filter(|thread| {
+                thread.kept
+                    || edits
+                        .dismissed
+                        .get(&thread.id)
+                        .is_none_or(|then| thread.notes.iter().any(|note| !then.contains(note)))
+            })
+            .collect()
+    }
+
+    /// The ids of every thread, those of one note included.
+    pub fn names(&self) -> HashSet<String> {
+        self.notes
+            .values()
+            .filter_map(|placed| placed.thread.clone())
+            .collect()
+    }
+
+    /// The threads a note could be put in, the one it fits best first,
+    /// whatever their days and however low it scores: the user chooses.
+    /// Not the one it is in.
+    pub fn ranked_for(&self, id: &str, vectors: &Vectors) -> Vec<String> {
+        let Some((_, vector)) = vectors.get(id) else {
+            return Vec::new();
+        };
+        let usual = Usual::of(vectors);
+        let mut groups: BTreeMap<&str, Group> = BTreeMap::new();
+        let mine = self.of(id);
+        for (note, placed) in &self.notes {
+            let (Some(thread), Some((_, theirs))) = (placed.thread.as_deref(), vectors.get(note))
+            else {
+                continue;
+            };
+            if note != id && Some(thread) != mine {
+                groups
+                    .entry(thread)
+                    .or_insert_with(|| Group::new(vectors.dims(), NaiveDate::MIN))
+                    .add(note, theirs, NaiveDate::MIN, &usual);
+            }
+        }
+        let note = usual.note(id, vector);
+        let mut ranked: Vec<(f32, &str)> = groups
+            .iter()
+            .filter(|(_, group)| group.notes.len() > 1)
+            .map(|(thread, group)| {
+                let score = usual
+                    .score(&note, &group.part(), f32::NEG_INFINITY)
+                    .unwrap_or(f32::NEG_INFINITY);
+                (score, *thread)
+            })
+            .collect();
+        ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(b.1)));
+        ranked
+            .into_iter()
+            .map(|(_, thread)| thread.to_string())
             .collect()
     }
 
     /// One thread as `list` gives it, without gathering every other, or
-    /// `None` once it is gone.
-    pub fn get(
-        &self,
-        id: &str,
-        when: &HashMap<String, When>,
-        titles: &BTreeMap<String, String>,
-    ) -> Option<Thread> {
+    /// `None` once it is gone. A dismissed suggestion is still got.
+    pub fn get(&self, id: &str, when: &HashMap<String, When>, edits: &Edits) -> Option<Thread> {
         let notes: Vec<&str> = self
             .notes
             .iter()
@@ -547,7 +700,7 @@ impl Threads {
             })
             .map(|(note, _)| note.as_str())
             .collect();
-        shown(id, notes, when, titles)
+        shown(id, notes, when, edits, &edits.kept())
     }
 }
 
@@ -557,21 +710,26 @@ fn shown(
     id: &str,
     mut notes: Vec<&str>,
     when: &HashMap<String, When>,
-    titles: &BTreeMap<String, String>,
+    edits: &Edits,
+    kept: &HashSet<&str>,
 ) -> Option<Thread> {
     if notes.len() < 2 {
         return None;
     }
     notes.sort_by(|a, b| (&when[*a], a).cmp(&(&when[*b], b)));
-    let title = titles
+    let title = edits
+        .titles
         .get(id)
         .filter(|title| !title.trim().is_empty())
         .cloned();
+    let day = |note: &str| when[note].date.format("%Y-%m-%d").to_string();
     Some(Thread {
         id: id.to_string(),
         named: title.is_some(),
         title,
-        since: when[notes[0]].date.format("%Y-%m-%d").to_string(),
+        kept: kept.contains(id),
+        since: day(notes[0]),
+        until: day(notes[notes.len() - 1]),
         notes: notes.into_iter().map(str::to_string).collect(),
     })
 }
@@ -598,7 +756,9 @@ fn best(
         let Some((_, theirs)) = vectors.get(other) else {
             continue;
         };
-        let score = usual.score(note, &usual.note(other, theirs));
+        let Some(score) = usual.score(note, &usual.note(other, theirs), cuts.lead) else {
+            continue;
+        };
         if score >= cuts.pair && best.as_ref().is_none_or(|(top, _)| score > *top) {
             best = Some((score, Choice::Pair(other.clone())));
         }
@@ -620,12 +780,59 @@ fn best_thread(
         .iter()
         .filter(|(_, group)| group.near(date, cuts.window));
     for (thread, group) in near {
-        let score = usual.score(note, &group.part());
+        let Some(score) = usual.score(note, &group.part(), cuts.lead) else {
+            continue;
+        };
         if score >= cuts.join && best.as_ref().is_none_or(|(top, _)| score > *top) {
             best = Some((score, thread.clone()));
         }
     }
     best
+}
+
+/// The thread near `thread` in time that it would become one with, unless
+/// both are the user's: of the two, every note of the smaller
+/// clears the cut to join the larger, as it would have had it come after.
+/// Two threads' averages are not compared: averaging smooths away what
+/// sets each apart, and threads would chain into one.
+fn closest_thread(
+    thread: &str,
+    usual: &Usual,
+    groups: &BTreeMap<String, Group>,
+    vectors: &Vectors,
+    kept: &HashSet<&str>,
+    cuts: Cuts,
+) -> Option<String> {
+    let group = groups.get(thread)?;
+    let mut best: Option<(f32, &String)> = None;
+    let near = groups
+        .iter()
+        .filter(|(other, theirs)| *other != thread && group.meets(theirs, cuts.window))
+        .filter(|(other, _)| !(kept.contains(thread) && kept.contains(other.as_str())));
+    for (other, theirs) in near {
+        let (smaller, larger) = if group.notes.len() <= theirs.notes.len() {
+            (group, theirs)
+        } else {
+            (theirs, group)
+        };
+        let mut lowest = f32::INFINITY;
+        for id in &smaller.notes {
+            let score = vectors
+                .get(id)
+                .and_then(|(_, vector)| {
+                    usual.score(&usual.note(id, vector), &larger.part(), cuts.lead)
+                })
+                .unwrap_or(f32::NEG_INFINITY);
+            lowest = lowest.min(score);
+            if lowest < cuts.join {
+                break;
+            }
+        }
+        if lowest >= cuts.join && best.is_none_or(|(top, _)| lowest > top) {
+            best = Some((lowest, other));
+        }
+    }
+    best.map(|(_, other)| other.clone())
 }
 
 #[cfg(test)]
@@ -679,9 +886,16 @@ mod tests {
         notes.iter().chain(OTHERS.iter()).copied().collect()
     }
 
+    fn titled(thread: &str, title: &str) -> Edits {
+        Edits {
+            titles: [(thread.to_string(), title.to_string())].into(),
+            ..Edits::default()
+        }
+    }
+
     fn threads_of(threads: &Threads, when: &HashMap<String, When>) -> Vec<Vec<String>> {
         threads
-            .list(when, &BTreeMap::new())
+            .list(when, &Edits::default())
             .into_iter()
             .map(|thread| thread.notes)
             .collect()
@@ -697,14 +911,14 @@ mod tests {
         ]);
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
-        assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
+        assert!(threads.reconcile(&vectors, &when, &Edits::default()));
         assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B", "01C"]]);
         // Named after the note it started with.
         assert_eq!(threads.of("01C"), Some("01A"));
         assert_eq!(threads.of("01D"), None);
 
         // Nothing new, nothing changes.
-        assert!(!threads.reconcile(&vectors, &when, &HashSet::new()));
+        assert!(!threads.reconcile(&vectors, &when, &Edits::default()));
     }
 
     #[test]
@@ -718,7 +932,7 @@ mod tests {
         ]);
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
+        threads.reconcile(&vectors, &when, &Edits::default());
         assert_eq!(
             threads_of(&threads, &when),
             vec![vec!["01A", "01B"], vec!["01C", "01D"]]
@@ -734,13 +948,13 @@ mod tests {
         ]);
         let (mut vectors, when) = space(&notes);
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
+        threads.reconcile(&vectors, &when, &Edits::default());
 
         // 01C now says something else.
         vectors
             .insert("01C".into(), "edited".into(), vector(3, 16))
             .unwrap();
-        assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
+        assert!(threads.reconcile(&vectors, &when, &Edits::default()));
         assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B"]]);
         assert_eq!(threads.of("01C"), None);
 
@@ -751,7 +965,7 @@ mod tests {
             .filter(|id| id != "01B")
             .collect();
         vectors.retain(&present);
-        assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
+        assert!(threads.reconcile(&vectors, &when, &Edits::default()));
         assert!(threads_of(&threads, &when).is_empty());
         assert_eq!(threads.of("01A"), None);
     }
@@ -765,19 +979,25 @@ mod tests {
         ]);
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
+        threads.reconcile(&vectors, &when, &Edits::default());
 
-        let alone: HashSet<String> = ["01B".to_string()].into();
+        let alone = Edits {
+            alone: ["01B".to_string()].into(),
+            ..Edits::default()
+        };
         assert!(threads.reconcile(&vectors, &when, &alone));
         assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01C"]]);
 
         // Taken out with the thread down to two, the other is left alone too.
-        let alone: HashSet<String> = ["01B".to_string(), "01C".to_string()].into();
+        let alone = Edits {
+            alone: ["01B".to_string(), "01C".to_string()].into(),
+            ..Edits::default()
+        };
         threads.reconcile(&vectors, &when, &alone);
         assert!(threads_of(&threads, &when).is_empty());
 
         // Let back in, they gather again.
-        assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
+        assert!(threads.reconcile(&vectors, &when, &Edits::default()));
         assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B", "01C"]]);
     }
 
@@ -789,7 +1009,7 @@ mod tests {
         let notes = with_others(&[("01A", "2026-09-10", 1), ("01B", "2026-09-12", 1)]);
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
+        threads.reconcile(&vectors, &when, &Edits::default());
         threads.save(&path).unwrap();
         assert_eq!(Threads::load(&path), threads);
         assert!(!path.with_extension("json.tmp").exists());
@@ -801,7 +1021,7 @@ mod tests {
                 .unwrap();
         }
         let mut loaded = Threads::load(&path);
-        assert!(loaded.reconcile(&other, &when, &HashSet::new()));
+        assert!(loaded.reconcile(&other, &when, &Edits::default()));
         assert_eq!(loaded.model, "other");
         assert_eq!(threads_of(&loaded, &when), vec![vec!["01A", "01B"]]);
 
@@ -820,18 +1040,18 @@ mod tests {
         ]);
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
+        threads.reconcile(&vectors, &when, &Edits::default());
 
-        let listed = threads.list(&when, &BTreeMap::new());
+        let listed = threads.list(&when, &Edits::default());
         assert_eq!(listed.len(), 1);
         assert_eq!((listed[0].title.as_deref(), listed[0].named), (None, false));
+        assert!(!listed[0].kept, "only suggested");
 
-        let blank: BTreeMap<String, String> = [("01A".to_string(), "  ".to_string())].into();
-        assert_eq!(threads.list(&when, &blank)[0].title, None);
-        let titles: BTreeMap<String, String> = [("01A".to_string(), "Kitchen".to_string())].into();
-        let named = threads.list(&when, &titles);
+        assert_eq!(threads.list(&when, &titled("01A", "  "))[0].title, None);
+        let named = threads.list(&when, &titled("01A", "Kitchen"));
         assert_eq!(named[0].title.as_deref(), Some("Kitchen"));
         assert!(named[0].named);
+        assert!(named[0].kept, "a titled thread is the user's");
     }
 
     #[test]
@@ -844,39 +1064,208 @@ mod tests {
         ]);
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
-        let titles: BTreeMap<String, String> = [("01C".to_string(), "Mine".to_string())].into();
+        threads.reconcile(&vectors, &when, &Edits::default());
+        let edits = titled("01C", "Mine");
 
-        let listed = threads.list(&when, &titles);
+        let listed = threads.list(&when, &edits);
         assert_eq!(listed.len(), 2);
         for thread in &listed {
-            let got = threads.get(&thread.id, &when, &titles);
+            let got = threads.get(&thread.id, &when, &edits);
             assert_eq!(got.as_ref(), Some(thread));
         }
         // A note on its own is no thread.
-        assert_eq!(threads.get("01Z1", &when, &titles), None);
+        assert_eq!(threads.get("01Z1", &when, &edits), None);
     }
 
     #[test]
-    fn a_space_too_small_to_say_what_is_usual_waits() {
-        let few = [
+    fn a_note_put_in_a_thread_stays_there_and_makes_it_the_users() {
+        let notes = with_others(&[
             ("01A", "2026-09-10", 1),
             ("01B", "2026-09-12", 1),
-            ("01Z1", "2026-09-01", 9),
-            ("01Z2", "2026-09-02", 10),
-        ];
-        let (vectors, when) = space(&few);
+            ("01C", "2026-09-14", 2),
+            ("01D", "2026-09-15", 3),
+            ("01E", "2026-09-16", 4),
+        ]);
+        let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
-        assert!(threads_of(&threads, &when).is_empty());
+        threads.reconcile(&vectors, &when, &Edits::default());
+        assert_eq!(threads.of("01C"), None);
+
+        // Into a thread, and two notes into a new one named after the first.
+        let edits = Edits {
+            pinned: [
+                ("01C".to_string(), "01A".to_string()),
+                ("01D".to_string(), "01D".to_string()),
+                ("01E".to_string(), "01D".to_string()),
+            ]
+            .into(),
+            ..Edits::default()
+        };
+        assert!(threads.reconcile(&vectors, &when, &edits));
+        let listed = threads.list(&when, &edits);
+        let notes: Vec<&Vec<String>> = listed.iter().map(|thread| &thread.notes).collect();
+        assert_eq!(notes, [&vec!["01A", "01B", "01C"], &vec!["01D", "01E"]]);
+        assert!(listed.iter().all(|thread| thread.kept));
+
+        // Edited, it stays where it was put.
+        let mut vectors = vectors;
+        vectors
+            .insert("01C".into(), "edited".into(), vector(5, 16))
+            .unwrap();
+        threads.reconcile(&vectors, &when, &edits);
+        assert_eq!(threads.of("01C"), Some("01A"));
+    }
+
+    #[test]
+    fn a_dismissed_suggestion_comes_back_once_it_grows() {
+        let edits = Edits {
+            dismissed: [(
+                "01A".to_string(),
+                ["01A".to_string(), "01B".to_string()].into(),
+            )]
+            .into(),
+            ..Edits::default()
+        };
+        let two = with_others(&[("01A", "2026-09-10", 1), ("01B", "2026-09-12", 1)]);
+        let (vectors, when) = space(&two);
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &edits);
+        assert!(threads.list(&when, &edits).is_empty());
+        assert!(threads.get("01A", &when, &edits).is_some(), "still got");
+
+        let mut three = two.clone();
+        three.push(("01C", "2026-09-14", 1));
+        let (vectors, when) = space(&three);
+        threads.reconcile(&vectors, &when, &edits);
+        assert_eq!(threads.list(&when, &edits).len(), 1);
+    }
+
+    #[test]
+    fn the_threads_a_note_could_go_in_are_ranked_by_fit() {
+        let notes = with_others(&[
+            ("01A", "2026-01-10", 1),
+            ("01B", "2026-01-12", 1),
+            ("01C", "2026-09-14", 2),
+            ("01D", "2026-09-15", 2),
+            // Far from both in time, closer to the first in meaning.
+            ("01E", "2027-06-01", 1),
+        ]);
+        let (vectors, when) = space(&notes);
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &Edits::default());
+        assert_eq!(threads.ranked_for("01E", &vectors), ["01A", "01C"]);
+        assert_eq!(threads.ranked_for("01A", &vectors), ["01C"], "not its own");
+    }
+
+    #[test]
+    fn two_notes_wait_for_a_third_to_say_what_is_usual() {
+        let two = [("01A", "2026-09-10", 1), ("01B", "2026-09-12", 1)];
+        let (vectors, when) = space(&two);
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &Edits::default());
         assert!(threads.notes.is_empty(), "nothing placed yet");
 
-        let (vectors, when) = space(&with_others(&[
-            ("01A", "2026-09-10", 1),
-            ("01B", "2026-09-12", 1),
-        ]));
-        assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
+        let (vectors, when) = space(&[two[0], two[1], ("01Z1", "2026-09-01", 9)]);
+        assert!(threads.reconcile(&vectors, &when, &Edits::default()));
         assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B"]]);
+    }
+
+    /// Five notes about one thing make the mean mostly that thing; with it
+    /// taken off, two notes about anything else share not being about it.
+    #[test]
+    fn a_space_mostly_about_one_thing_does_not_tie_the_rest_together() {
+        let notes = [
+            ("01A", "2026-09-10", 1),
+            ("01B", "2026-09-11", 1),
+            ("01C", "2026-09-12", 1),
+            ("01D", "2026-09-13", 1),
+            ("01E", "2026-09-14", 1),
+            // An apple, then Angular.
+            ("01P", "2026-09-15", 2),
+            ("01Q", "2026-09-16", 3),
+        ];
+        let (vectors, when) = space(&notes);
+
+        let mut mean_only = Threads::default();
+        let cuts = Cuts {
+            lead: f32::NEG_INFINITY,
+            ..CUTS
+        };
+        mean_only.reconcile_with(&vectors, &when, &Edits::default(), cuts);
+        assert!(mean_only.of("01P").is_some(), "the old mistake");
+
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &Edits::default());
+        assert_eq!(
+            threads_of(&threads, &when),
+            vec![vec!["01A", "01B", "01C", "01D", "01E"]]
+        );
+    }
+
+    /// Two threads of one thing, apart by more than the window, until a
+    /// note between them draws one towards the other.
+    fn bridged() -> (
+        Vec<(&'static str, &'static str, usize)>,
+        Vec<(&'static str, &'static str, usize)>,
+    ) {
+        let apart = with_others(&[
+            ("01A", "2026-01-01", 1),
+            ("01B", "2026-01-02", 1),
+            ("01C", "2026-04-01", 1),
+            ("01D", "2026-04-02", 1),
+        ]);
+        let mut between = apart.clone();
+        between.push(("01E", "2026-02-15", 1));
+        (apart, between)
+    }
+
+    #[test]
+    fn threads_that_grow_towards_each_other_become_one() {
+        let (apart, between) = bridged();
+        let (vectors, when) = space(&apart);
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &Edits::default());
+        assert_eq!(
+            threads_of(&threads, &when),
+            vec![vec!["01A", "01B"], vec!["01C", "01D"]]
+        );
+
+        let (vectors, when) = space(&between);
+        assert!(threads.reconcile(&vectors, &when, &Edits::default()));
+        assert_eq!(
+            threads_of(&threads, &when),
+            vec![vec!["01A", "01B", "01E", "01C", "01D"]]
+        );
+        assert_eq!(threads.of("01D"), Some("01A"), "the older one goes on");
+    }
+
+    #[test]
+    fn a_titled_thread_keeps_its_name_and_two_never_become_one() {
+        let (apart, between) = bridged();
+        let titled = |threads: &[&str]| Edits {
+            titles: threads
+                .iter()
+                .map(|thread| (thread.to_string(), "Mine".to_string()))
+                .collect(),
+            ..Edits::default()
+        };
+
+        let one = titled(&["01C"]);
+        let (vectors, when) = space(&apart);
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &one);
+        let (vectors, when) = space(&between);
+        threads.reconcile(&vectors, &when, &one);
+        assert_eq!(threads_of(&threads, &when).len(), 1);
+        assert_eq!(threads.of("01A"), Some("01C"));
+
+        let both = titled(&["01A", "01C"]);
+        let (vectors, when) = space(&apart);
+        let mut threads = Threads::default();
+        threads.reconcile(&vectors, &when, &both);
+        let (vectors, when) = space(&between);
+        threads.reconcile(&vectors, &when, &both);
+        assert_eq!(threads_of(&threads, &when).len(), 2);
     }
 
     #[test]
@@ -885,11 +1274,11 @@ mod tests {
         let (vectors, mut when) = space(&notes);
         when.remove("01B");
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
+        threads.reconcile(&vectors, &when, &Edits::default());
         assert!(threads_of(&threads, &when).is_empty());
 
         let (_, when) = space(&notes);
-        assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
+        assert!(threads.reconcile(&vectors, &when, &Edits::default()));
         assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B"]]);
     }
 
@@ -932,8 +1321,8 @@ mod tests {
             .collect();
 
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
-        let listed = threads.list(&when, &BTreeMap::new());
+        threads.reconcile(&vectors, &when, &Edits::default());
+        let listed = threads.list(&when, &Edits::default());
 
         let mut threaded = 0;
         for thread in &listed {
@@ -1000,7 +1389,7 @@ mod speed {
 
         let started = std::time::Instant::now();
         let mut threads = Threads::default();
-        threads.reconcile(&vectors, &when, &HashSet::new());
+        threads.reconcile(&vectors, &when, &Edits::default());
         let took = started.elapsed();
         eprintln!("placed {count} notes in {took:?}");
         if !cfg!(debug_assertions) {

@@ -7,12 +7,16 @@ import {
 	clearDayAhead,
 	deleteNote,
 	deletePage,
+	dismissThread,
 	isPage,
 	keepOutOfThreads,
+	keepThread,
 	listThreads,
+	mergeThreads,
 	moveNote,
 	movePage,
 	noteToPage,
+	putInThread,
 	updateNote,
 	type Note,
 	type SpacesView,
@@ -26,6 +30,15 @@ import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
 export interface ThreadPlace {
 	thread: Thread;
 	index: number;
+}
+
+/** Notes waiting on the thread picker to say where they go (SPEC 6.4). */
+export interface ThreadPick {
+	/** One note added to a thread, notes moved from one, or a whole thread merged. */
+	kind: 'add' | 'move' | 'merge';
+	notes: string[];
+	/** The thread they come from, which is not on offer. */
+	from?: string;
 }
 
 /** A view's title row, which the top bar shows a copy of once it scrolls away. */
@@ -52,8 +65,11 @@ export class Shell implements WorkspaceHost {
 	/** Similar notes come from the embedding model's vectors. */
 	embeddingInstalled = $state(false);
 	canSimilar = $derived(this.embeddingInstalled);
-	/** The thread each note of the open space is in, by note (SPEC 6.4). */
+	/** The thread of the user's each note of the open space is in, by note
+	 *  (SPEC 6.4). A note in a thread only suggested has none. */
 	threads = $state.raw<Record<string, ThreadPlace>>({});
+	/** How many threads are only suggested. */
+	suggested = $state(0);
 	/** The notes taken out of threads. */
 	alone = $state.raw<string[]>([]);
 	/** The text size setting, in pixels: the rem the day's columns are sized in. */
@@ -70,6 +86,8 @@ export class Shell implements WorkspaceHost {
 	turning = $state<Note | null>(null);
 	/** The note or page waiting on the space it moves to. */
 	moving = $state<Note | null>(null);
+	/** Notes waiting on the thread picker. */
+	picking = $state<ThreadPick | null>(null);
 	/** Every space and the open one, as the app layout last listed them. */
 	spaces = $state.raw<SpacesView | null>(null);
 	/** A note can move only with another space to go to. */
@@ -171,9 +189,10 @@ export class Shell implements WorkspaceHost {
 			const places: Record<string, ThreadPlace> = {};
 
 			for (const thread of view.threads)
-				thread.notes.forEach((id, index) => (places[id] = { thread, index }));
+				if (thread.kept) thread.notes.forEach((id, index) => (places[id] = { thread, index }));
 
 			this.threads = places;
+			this.suggested = view.threads.filter((thread) => !thread.kept).length;
 			this.alone = view.alone;
 			// The view of a thread lists its notes itself.
 			await invalidate('app:threads');
@@ -202,6 +221,41 @@ export class Shell implements WorkspaceHost {
 			this.error = String(e);
 		}
 	};
+
+	/** Make a suggested thread the user's, or stop suggesting it. */
+	keepThread = async (id: string, keep: boolean) => {
+		try {
+			await (keep ? keepThread(id) : dismissThread(id));
+		} catch (e) {
+			this.error = String(e);
+		}
+	};
+
+	/** A note asks for a thread; the picker asks which. */
+	askThread = (note: Pick<Note, 'id'>) => {
+		const from = this.threadOf(note.id)?.thread.id;
+		this.picking = { kind: from ? 'move' : 'add', notes: [note.id], from };
+	};
+
+	/**
+	 * Put the picked notes in thread `into`, or a new one when null, and
+	 * open it when they came from the thread on view. Resolves to an error
+	 * for the picker to show, or null once done.
+	 */
+	pickThread = async (pick: ThreadPick, into: string | null): Promise<string | null> => {
+		try {
+			let thread = into;
+			if (pick.kind === 'merge' && pick.from && into) await mergeThreads(pick.from, into);
+			else thread = await putInThread(pick.notes, into);
+			if (pick.kind === 'merge' && thread && page.params.id === pick.from)
+				await this.showThread(thread);
+			return null;
+		} catch (e) {
+			return String(e);
+		}
+	};
+
+	showThreads = () => goto(resolve('threads/'));
 
 	showPages = () => goto(resolve('pages/'));
 

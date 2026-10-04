@@ -102,7 +102,7 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
         Ok(index) if !index.is_closed() => threads::when_written(&index),
         _ => return false,
     };
-    let alone: HashSet<String> = Edits::load(&space.root).alone.into_iter().collect();
+    let edits = Edits::load(&space.root);
     let path = threads_path(&space.root);
     let Ok(vectors) = space.vectors.lock() else {
         return false;
@@ -115,7 +115,7 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
     };
     let read = slot.is_none();
     let threads = slot.get_or_insert_with(|| Threads::load(&path));
-    let changed = threads.reconcile(vectors, &when, &alone);
+    let changed = threads.reconcile(vectors, &when, &edits);
     if changed && !space.is_retired() {
         if let Err(e) = threads.save(&path) {
             log::warn!("could not save the threads of {}: {e}", space.name);

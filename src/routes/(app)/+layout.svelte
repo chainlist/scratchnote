@@ -29,6 +29,7 @@
 	import PluginPanel from '#lib/components/PluginPanel.svelte';
 	import Ribbon from '#lib/components/Ribbon.svelte';
 	import Settings from '#lib/components/settings/Settings.svelte';
+	import ThreadPicker from '#lib/components/ThreadPicker.svelte';
 	import ViewHeader from '#lib/components/ViewHeader.svelte';
 	import WhatsNew from '#lib/components/WhatsNew.svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -233,6 +234,7 @@
 	ontoday={async () => void shell.openDay(await today())}
 	onnewpage={shell.newPage}
 	onpages={() => void shell.showPages()}
+	onthreads={shell.canSimilar ? () => void shell.showThreads() : undefined}
 	onsettings={() => (shell.settingsOpen = true)}
 />
 
@@ -247,6 +249,7 @@
 <NoteToPageDialog bind:note={shell.turning} onconfirm={shell.turnIntoPage} />
 
 <MoveDialog bind:note={shell.moving} spaces={shell.spaces} onconfirm={shell.moveTo} />
+<ThreadPicker bind:pick={shell.picking} onconfirm={shell.pickThread} />
 
 <WhatsNew bind:releases={releaseNotes} />
 

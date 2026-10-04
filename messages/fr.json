@@ -123,6 +123,7 @@
 	"threads_suggested_hint": "Des notes qui semblent parler d'une même chose. Gardez un fil pour que les nouvelles notes le rejoignent, ou écartez-le.",
 	"threads_yours": "Vos fils",
 	"threads_none": "Pas encore de fil : les notes sur une même chose se rassemblent ici au fil de l'écriture.",
+	"view_loading": "Chargement",
 	"map_title": "Carte",
 	"map_empty": "La carte apparaît une fois vos notes analysées : les notes sur une même chose s'y rapprochent.",
 	"map_fit": "Voir toutes les notes",

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount, untrack } from 'svelte';
+	import { fade } from 'svelte/transition';
+	import { navigating } from '$app/state';
 	import { getVersion } from '@tauri-apps/api/app';
 	import {
 		embeddingModelInfo,
@@ -34,6 +36,7 @@
 	import WhatsNew from '#lib/components/WhatsNew.svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Resizable from '#lib/components/ui/resizable/index.js';
+	import { Spinner } from '#lib/components/ui/spinner/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
 	import { DOCK_MAX, DOCK_MIN } from '#lib/dock.js';
@@ -55,6 +58,18 @@
 	// or deleted.
 	$effect(() => {
 		shell.spaces = data.spaces;
+	});
+
+	/** A view still loading, once it has taken long enough to say so: a quick
+	 *  one never flashes the overlay. */
+	let loading = $state(false);
+	$effect(() => {
+		if (!navigating.to) {
+			loading = false;
+			return;
+		}
+		const timer = setTimeout(() => (loading = true), 150);
+		return () => clearTimeout(timer);
 	});
 
 	/** Release notes waiting to be read after an update. */
@@ -180,6 +195,15 @@
 				<main bind:offsetWidth={shell.width} class="h-full overflow-y-auto px-6 pb-16">
 					{@render children()}
 				</main>
+				{#if loading}
+					<!-- Over the view being left, until the next one is ready. -->
+					<div
+						class="absolute inset-0 z-20 flex items-center justify-center bg-background/60"
+						transition:fade={{ duration: 120 }}
+					>
+						<Spinner class="size-6 text-muted-foreground" aria-label={m.view_loading()} />
+					</div>
+				{/if}
 			</Resizable.Pane>
 			{#if shell.dockOpen && shell.dockSide === 'right'}
 				<Resizable.Handle class="z-10 after:w-2" />

@@ -251,6 +251,8 @@ Opened from tray icon or app launch. Three areas:
 2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Pages show as cards among them (3.5). A note or page in a thread has a line under its text naming the thread, which opens it (6.4), and one that looks forward to a later day names that day, which opens it (5.3). A day that earlier notes looked forward to lists them at its top. Edit and delete appear on hover.
 3. **Search bar** at the top: full-text over bodies and page titles, with the notes close in meaning under the matches (6.1). Results are note cards across all days.
 
+A view that takes more than 150 ms to load, such as the map of a large space, shows a spinner over the view being left until the new one is ready; a quicker one shows nothing.
+
 Note actions (on hover): edit body inline, similar notes (with the embedding model, see 6.2), move to another space (4.6), add to a thread or move to another, and take out of its thread (6.4), delete.
 
 ### 3.3 Tray

@@ -123,6 +123,7 @@
 	"threads_suggested_hint": "Notas que parecen tratar de una misma cosa. Guarda un hilo para que las notas nuevas se unan, o descártalo.",
 	"threads_yours": "Tus hilos",
 	"threads_none": "Aún no hay hilos: las notas sobre una misma cosa se reúnen aquí mientras escribes.",
+	"view_loading": "Cargando",
 	"map_title": "Mapa",
 	"map_empty": "El mapa aparece cuando tus notas están analizadas: las notas sobre una misma cosa quedan juntas.",
 	"map_fit": "Ver todas las notas",

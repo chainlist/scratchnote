@@ -43,7 +43,7 @@ pub struct ThreadNotes {
 /// The open space's threads, empty until the embed task has placed its
 /// notes, which it never does without the embedding model.
 #[tauri::command]
-pub fn list_threads(state: State<'_, AppState>) -> Result<ThreadsView, String> {
+pub async fn list_threads(state: State<'_, AppState>) -> Result<ThreadsView, String> {
     let space = state.space()?;
     Ok(view(&space))
 }
@@ -76,7 +76,7 @@ fn placed<T>(space: &Space, show: impl FnOnce(&Threads) -> Option<T>) -> Option<
 
 /// A thread and its notes, or `None` once it is gone.
 #[tauri::command]
-pub fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option<ThreadNotes>, String> {
+pub async fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option<ThreadNotes>, String> {
     let space = state.space()?;
     let Some(when) = dates(&space) else {
         return Ok(None);
@@ -290,7 +290,7 @@ pub async fn merge_threads(
 
 /// Every thread of the open space with its first notes, newest first.
 #[tauri::command]
-pub fn thread_cards(state: State<'_, AppState>) -> Result<Vec<ThreadCard>, String> {
+pub async fn thread_cards(state: State<'_, AppState>) -> Result<Vec<ThreadCard>, String> {
     let space = state.space()?;
     let mut threads = view(&space).threads;
     threads.sort_by(|a, b| (&b.until, &b.id).cmp(&(&a.until, &a.id)));
@@ -329,7 +329,7 @@ fn cards(space: &Space, threads: Vec<Thread>) -> Result<Vec<ThreadCard>, String>
 
 /// The threads a note could be put in, the one it fits best first.
 #[tauri::command]
-pub fn threads_for_note(state: State<'_, AppState>, id: String) -> Result<Vec<ThreadCard>, String> {
+pub async fn threads_for_note(state: State<'_, AppState>, id: String) -> Result<Vec<ThreadCard>, String> {
     let space = state.space()?;
     let Some(when) = dates(&space) else {
         return Ok(Vec::new());

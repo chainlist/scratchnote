@@ -97,7 +97,7 @@ const MIN_SIMILARITY: f32 = 0.28;
 /// The notes closest in meaning to this one, best first. Empty while the note
 /// has no vector yet, or without the embedding model.
 #[tauri::command]
-pub fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec<Note>, String> {
+pub async fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec<Note>, String> {
     let space = state.space()?;
     let hits = space.similar(&id, SIMILAR_NOTES, MIN_SIMILARITY);
     notes_of(&space, &hits)

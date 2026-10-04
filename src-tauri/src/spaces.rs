@@ -210,6 +210,9 @@ pub struct Space {
     /// `None` until the embed task first runs with a model, which loads it
     /// from `db`. Taken after `vectors` when both are needed.
     pub threads: Mutex<Option<Threads>>,
+    /// Held through a placement in threads, so that two never run at once.
+    /// The threads themselves are held only to copy and to swap.
+    pub placing: Mutex<()>,
     /// Where each note sits on the map of the space, laid out from the
     /// vectors. `None` until the embed task first runs with a model, which
     /// loads it from `db`. Taken after `vectors`, and never with `threads`.
@@ -239,6 +242,7 @@ impl Space {
             search: Mutex::new(None),
             vectors: Mutex::new(None),
             threads: Mutex::new(None),
+            placing: Mutex::new(()),
             map: Mutex::new(None),
             db: Mutex::new(None),
             watcher: Mutex::new(None),

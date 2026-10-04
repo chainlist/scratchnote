@@ -1,30 +1,31 @@
-import {
-	forceLink,
-	forceManyBody,
-	forceSimulation,
-	forceX,
-	forceY,
-	type Simulation,
-	type SimulationLinkDatum,
-	type SimulationNodeDatum
-} from 'd3-force';
 import type { MapLinks, MapNote } from '#lib/api.js';
+import type { GraphReply, GraphRequest } from './graph.worker.js';
 
-/** A note in the graph, where the simulation has it. */
-export interface GraphNode extends SimulationNodeDatum {
+/** A note in the graph, where the simulation last put it. */
+export interface GraphNode {
 	note: MapNote;
 	x: number;
 	y: number;
 }
 
-export type GraphLink = SimulationLinkDatum<GraphNode> & { source: GraphNode; target: GraphNode };
+export interface GraphLink {
+	source: GraphNode;
+	target: GraphNode;
+}
 
 export interface Graph {
 	/** The notes it was made from, to tell when they are read again. */
 	notes: MapNote[];
 	nodes: Map<string, GraphNode>;
 	links: GraphLink[];
-	simulation: Simulation<GraphNode, GraphLink>;
+	/** Keep the notes where they are, or let them go on settling. */
+	pause(): void;
+	resume(): void;
+	/** Hold a note at a place, the notes linked to it following, then let it go. */
+	drag(node: GraphNode, x: number, y: number): void;
+	release(node: GraphNode): void;
+	/** Stop it for good. */
+	close(): void;
 }
 
 /** Whether two readings of the map hold the same notes in the same places,
@@ -40,17 +41,13 @@ export function samePlaces(a: MapNote[], b: MapNote[]) {
 
 /** How long a link between two notes settles to. */
 const LENGTH = 30;
-/** How hard every note pushes the others away. d3's own. */
-const CHARGE = -30;
-/** How hard every note is pulled to the middle, so that groups linked to
- *  nothing else stay in view. */
-const GRAVITY = 0.04;
 
 /** Every note linked to its closest notes, pulled together along its links
- *  and pushed apart from the rest until it settles, calling `tick` at each
- *  step. A note starts where it was in `before`, else at its place on the
- *  map, spread so that a link is about `LENGTH` long, so it settles in a
- *  few seconds rather than from a tangle. */
+ *  and pushed apart from the rest until it settles, in a worker, calling
+ *  `tick` at most once a frame with the notes' new places. A note starts
+ *  where it was in `before`, else at its place on the map, spread so that a
+ *  link is about `LENGTH` long, so it settles in a few seconds rather than
+ *  from a tangle. */
 export function graph(
 	notes: MapNote[],
 	links: MapLinks,
@@ -72,25 +69,82 @@ export function graph(
 		(sum, note) => [sum[0] + note.x / notes.length, sum[1] + note.y / notes.length],
 		[0, 0]
 	);
-	const nodes = new Map<string, GraphNode>(
-		notes.map((note) => {
-			const was = before?.get(note.id);
-			const x = was?.x ?? (note.x - middle[0]) * scale;
-			const y = was?.y ?? (note.y - middle[1]) * scale;
-			return [note.id, { note, x, y }];
-		})
-	);
+	const list: GraphNode[] = notes.map((note) => {
+		const was = before?.get(note.id);
+		const x = was?.x ?? (note.x - middle[0]) * scale;
+		const y = was?.y ?? (note.y - middle[1]) * scale;
+		return { note, x, y };
+	});
+	const nodes = new Map(list.map((node) => [node.note.id, node]));
+	const index = new Map(list.map((node, i) => [node, i]));
 	const graphLinks: GraphLink[] = pairs.map(([a, b]) => ({
 		source: nodes.get(a.id)!,
 		target: nodes.get(b.id)!
 	}));
-	const simulation = forceSimulation<GraphNode, GraphLink>([...nodes.values()])
-		.force('link', forceLink<GraphNode, GraphLink>(graphLinks).distance(LENGTH))
-		.force('charge', forceManyBody<GraphNode>().strength(CHARGE))
-		.force('x', forceX<GraphNode>(0).strength(GRAVITY))
-		.force('y', forceY<GraphNode>(0).strength(GRAVITY))
-		// Notes read again move only a little from where they were.
-		.alpha(before ? 0.1 : 0.5)
-		.on('tick', tick);
-	return { notes, nodes, links: graphLinks, simulation };
+
+	const places = new Float64Array(list.length * 2);
+	list.forEach((node, i) => {
+		places[2 * i] = node.x;
+		places[2 * i + 1] = node.y;
+	});
+	const ends = new Uint32Array(graphLinks.length * 2);
+	graphLinks.forEach((link, i) => {
+		ends[2 * i] = index.get(link.source)!;
+		ends[2 * i + 1] = index.get(link.target)!;
+	});
+
+	const worker = new Worker(new URL('./graph.worker.ts', import.meta.url), { type: 'module' });
+	const ask = (request: GraphRequest, transfer: Transferable[] = []) =>
+		worker.postMessage(request, transfer);
+	let closed = false;
+	// The newest places, taken in once a frame however often they come.
+	let latest: Float64Array | null = null;
+	let frame = 0;
+	const apply = () => {
+		frame = 0;
+		if (closed || !latest) return;
+		const at = latest;
+		latest = null;
+		list.forEach((node, i) => {
+			node.x = at[2 * i];
+			node.y = at[2 * i + 1];
+		});
+		tick();
+	};
+	worker.onmessage = ({ data }: MessageEvent<GraphReply>) => {
+		if (closed) return;
+		latest = data.places;
+		frame ||= requestAnimationFrame(apply);
+	};
+	ask(
+		{
+			type: 'start',
+			places,
+			links: ends,
+			length: LENGTH,
+			// Notes read again move only a little from where they were.
+			alpha: before ? 0.1 : 0.5
+		},
+		[places.buffer, ends.buffer]
+	);
+
+	return {
+		notes,
+		nodes,
+		links: graphLinks,
+		pause: () => ask({ type: 'pause' }),
+		resume: () => ask({ type: 'resume' }),
+		drag(node, x, y) {
+			// Drawn there at once, rather than a step later.
+			node.x = x;
+			node.y = y;
+			ask({ type: 'drag', index: index.get(node)!, x, y });
+		},
+		release: (node) => ask({ type: 'release', index: index.get(node)! }),
+		close() {
+			closed = true;
+			cancelAnimationFrame(frame);
+			worker.terminate();
+		}
+	};
 }

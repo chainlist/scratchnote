@@ -356,12 +356,15 @@
 			if (!drag.moved && Math.hypot(dx, dy) > 3) {
 				drag.moved = dragging = true;
 				hovered = null;
-				if (drag.node) graphed?.simulation.alphaTarget(0.3).restart();
 			}
 			if (drag.moved && drag.node) {
 				const point = at(event);
-				drag.node.fx = (point.x - view.left) / view.scale;
-				drag.node.fy = (point.y - view.top) / view.scale;
+				graphed?.drag(
+					drag.node,
+					(point.x - view.left) / view.scale,
+					(point.y - view.top) / view.scale
+				);
+				steps++;
 				return;
 			}
 			if (drag.moved) {
@@ -379,10 +382,7 @@
 			const point = at(event);
 			selectedId = nearest(point.x, point.y)?.id ?? null;
 		}
-		if (drag?.node) {
-			drag.node.fx = drag.node.fy = null;
-			graphed?.simulation.alphaTarget(0);
-		}
+		if (drag?.node) graphed?.release(drag.node);
 		drag = null;
 		dragging = false;
 	}
@@ -421,19 +421,19 @@
 	// changed. It only runs while shown.
 	$effect(() => {
 		if (mode !== 'graph') {
-			untrack(() => graphed?.simulation.stop());
+			untrack(() => graphed?.pause());
 			return;
 		}
 		const notes = data.notes;
 		const current = untrack(() => graphed);
 		if (current && samePlaces(current.notes, notes)) {
-			if (current.simulation.alpha() > current.simulation.alphaMin()) current.simulation.restart();
+			current.resume();
 			return;
 		}
 		let live = true;
 		void mapLinks().then((links) => {
 			if (!live) return;
-			current?.simulation.stop();
+			current?.close();
 			graphed = graph(notes, links, current?.nodes, () => {
 				steps++;
 				if (following) fit();
@@ -459,7 +459,7 @@
 		themes.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 		return () => {
 			themes.disconnect();
-			graphed?.simulation.stop();
+			graphed?.close();
 			void off.then((unlisten) => unlisten());
 		};
 	});

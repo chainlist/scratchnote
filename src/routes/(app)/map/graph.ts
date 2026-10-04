@@ -27,6 +27,17 @@ export interface Graph {
 	simulation: Simulation<GraphNode, GraphLink>;
 }
 
+/** Whether two readings of the map hold the same notes in the same places,
+ *  as after only the threads changed: a graph made from one goes on as it is
+ *  for the other. */
+export function samePlaces(a: MapNote[], b: MapNote[]) {
+	return (
+		a === b ||
+		(a.length === b.length &&
+			a.every((note, i) => note.id === b[i].id && note.x === b[i].x && note.y === b[i].y))
+	);
+}
+
 /** How long a link between two notes settles to. */
 const LENGTH = 30;
 /** How hard every note pushes the others away. d3's own. */

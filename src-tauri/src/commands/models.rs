@@ -5,7 +5,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::embed::download;
-use crate::embed::model::{models_dir, EmbeddingModel, LEGACY_EMBEDDING_FILE};
+use crate::embed::model::{self, models_dir, EmbeddingModel, LEGACY_EMBEDDING_FILE};
 use crate::state::AppState;
 
 /// What the settings screen shows about the embedding model.
@@ -79,6 +79,26 @@ async fn fetch_embedding_model(app: &AppHandle) -> Result<(), String> {
     };
     let _ = app.emit("embedding-status", serde_json::json!({ "state": status }));
     result
+}
+
+/// The chat models a version before 0.5.0 left in `models/`, which nothing
+/// reads any more, and how much room they take.
+#[derive(Debug, Serialize)]
+pub struct OldChatModel {
+    pub bytes: u64,
+}
+
+/// The old chat models still on disk, if any, for the main window to offer
+/// removing them.
+#[tauri::command]
+pub async fn old_chat_model(state: State<'_, AppState>) -> Result<Option<OldChatModel>, String> {
+    Ok(model::old_chat_bytes(&state.root).map(|bytes| OldChatModel { bytes }))
+}
+
+/// Remove the old chat models, once the user said so.
+#[tauri::command]
+pub async fn remove_old_chat_model(state: State<'_, AppState>) -> Result<(), String> {
+    model::remove_old_chat_models(&state.root)
 }
 
 /// An install from before EmbeddingGemma still has Qwen3-Embedding on disk.

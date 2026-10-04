@@ -101,6 +101,8 @@ pub fn run() {
             commands::notes::move_note,
             commands::models::embedding_model_info,
             commands::models::download_embedding_model,
+            commands::models::old_chat_model,
+            commands::models::remove_old_chat_model,
             commands::notes::today,
             commands::settings::get_settings,
             commands::settings::set_settings,

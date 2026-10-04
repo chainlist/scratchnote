@@ -181,6 +181,22 @@ export const mergeThreads = (from: string, into: string) =>
 export const onThreadsChanged = (handler: () => void): Promise<UnlistenFn> =>
 	listen('threads-changed', () => handler());
 
+/** A note's place on the map of the space by meaning (SPEC 6.5). */
+export interface MapNote extends Pick<Note, 'id' | 'date' | 'kind'> {
+	x: number;
+	y: number;
+}
+
+/** Every note placed on the map. Empty until the embed task has placed them. */
+export const noteMap = () => invoke<MapNote[]>('note_map');
+
+/** One note or page with its text, or null once it is gone. */
+export const getNote = (id: string) => invoke<Note | null>('get_note', { id });
+
+/** Fired when notes moved on the map, or joined or left it. */
+export const onMapChanged = (handler: () => void): Promise<UnlistenFn> =>
+	listen('map-changed', () => handler());
+
 /**
  * From the capture window: hide it, keeping its draft, and show the note in
  * the main window.

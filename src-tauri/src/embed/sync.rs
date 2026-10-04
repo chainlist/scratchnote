@@ -41,14 +41,19 @@ pub fn spawn(app: AppHandle, wake: Wake) {
                     .state::<AppState>()
                     .all_spaces()
                     .iter()
-                    .filter(|space| sync_space(space, embedder.as_ref()))
-                    .map(|space| space.name.clone())
-                    .collect::<Vec<String>>()
+                    .map(|space| (space.name.clone(), sync_space(space, embedder.as_ref())))
+                    .collect::<Vec<(String, Synced)>>()
             });
             match pass.await {
-                Ok(threaded) => {
-                    for name in threaded {
-                        let _ = app.emit("threads-changed", serde_json::json!({ "space": name }));
+                Ok(spaces) => {
+                    for (name, synced) in spaces {
+                        let space = serde_json::json!({ "space": name });
+                        if synced.threads {
+                            let _ = app.emit("threads-changed", space.clone());
+                        }
+                        if synced.map {
+                            let _ = app.emit("map-changed", space);
+                        }
                     }
                 }
                 Err(e) => log::warn!("embedding notes failed: {e}"),
@@ -57,13 +62,19 @@ pub fn spawn(app: AppHandle, wake: Wake) {
     });
 }
 
+/// What a pass changed in a space, for the views to show.
+#[derive(Default)]
+struct Synced {
+    threads: bool,
+    map: bool,
+}
+
 /// Only the open space is embedded: the vectors serve its searches and
 /// similar notes, and another space catches up when it opens (SPEC 4.6). Its
-/// notes are then placed in threads and on its map. True when its threads
-/// changed.
-fn sync_space(space: &Space, embedder: &dyn Embedder) -> bool {
+/// notes are then placed in threads and on its map.
+fn sync_space(space: &Space, embedder: &dyn Embedder) -> Synced {
     if space.is_retired() || !space.is_open() {
-        return false;
+        return Synced::default();
     }
     let keep_going = || !space.is_retired() && space.is_open();
     let held = space.held();
@@ -90,13 +101,13 @@ fn sync_space(space: &Space, embedder: &dyn Embedder) -> bool {
         Ok(_) => {}
         Err(e) => log::warn!("could not embed the notes of {}: {e}", space.name),
     }
-    let threaded = sync_threads(space);
-    if !space.is_retired() {
-        if let Err(e) = super::map::reconcile(&space.vectors, &space.map, &space.db) {
+    let threads = sync_threads(space);
+    let map = !space.is_retired()
+        && super::map::reconcile(&space.vectors, &space.map, &space.db).unwrap_or_else(|e| {
             log::warn!("could not place the notes of {} on its map: {e}", space.name);
-        }
-    }
-    threaded
+            false
+        });
+    Synced { threads, map }
 }
 
 /// Place the open space's notes in threads from its vectors as they are

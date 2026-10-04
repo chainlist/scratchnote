@@ -1,6 +1,7 @@
 //! Tauri commands, SPEC 8.
 
 pub mod attachments;
+pub mod map;
 pub mod models;
 pub mod notes;
 pub mod pages;

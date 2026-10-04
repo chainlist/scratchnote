@@ -4,6 +4,7 @@
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import FilesIcon from '@lucide/svelte/icons/files';
+	import MapIcon from '@lucide/svelte/icons/map';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import { m } from '#lib/paraglide/messages.js';
@@ -12,8 +13,8 @@
 	import { getShell } from '#lib/shell.svelte.js';
 
 	/** Down the left edge of every view: the calendar, All pages, Threads
-	 *  with how many are suggested (SPEC 6.4) and the core plugins' buttons,
-	 *  then the community plugins' own (SPEC 3.9). */
+	 *  with how many are suggested (SPEC 6.4), the map (SPEC 6.5) and the
+	 *  core plugins' buttons, then the community plugins' own (SPEC 3.9). */
 	const shell = getShell();
 
 	const core = $derived(registry.ribbon.filter((item) => coreIds.has(item.plugin)));
@@ -72,6 +73,16 @@
 					{shell.suggested > 9 ? '9+' : shell.suggested}
 				</span>
 			{/if}
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			href={resolve('map/')}
+			aria-label={m.map_title()}
+			title={m.map_title()}
+			class="text-muted-foreground hover:text-foreground"
+		>
+			<MapIcon />
 		</Button>
 	{/if}
 	{#each core as item (item)}{@render pluginButton(item)}{/each}

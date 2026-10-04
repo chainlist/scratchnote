@@ -120,27 +120,53 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
         _ => return false,
     };
     let edits = space.edits();
-    let Ok(vectors) = space.vectors.lock() else {
+    // One placement at a time, as the embed task and a thread command may
+    // both place: each saves only what changed since what it copied.
+    let Ok(_placing) = space.placing.lock() else {
         return false;
     };
-    let Some(vectors) = vectors.as_ref() else {
-        return false;
+    // Placed on a copy, which then takes the threads' place: the threads
+    // are held only for an instant, so the views never wait on a placement.
+    let (mut working, read) = {
+        let Ok(mut slot) = space.threads.lock() else {
+            return false;
+        };
+        let read = slot.is_none();
+        if read {
+            let Ok(db) = space.db.lock() else {
+                return false;
+            };
+            let Some(db) = db.as_ref() else {
+                return false;
+            };
+            *slot = Some(Threads::load(db));
+        }
+        (slot.as_ref().expect("loaded just above").clone(), read)
     };
-    let Ok(mut slot) = space.threads.lock() else {
-        return false;
+    let changed = {
+        let Ok(vectors) = space.vectors.lock() else {
+            return false;
+        };
+        let Some(vectors) = vectors.as_ref() else {
+            return false;
+        };
+        working.reconcile(vectors, &when, &edits)
     };
-    let Ok(mut db) = space.db.lock() else {
-        return false;
-    };
-    let Some(db) = db.as_mut() else {
-        return false;
-    };
-    let read = slot.is_none();
-    let threads = slot.get_or_insert_with(|| Threads::load(db));
-    let changed = threads.reconcile(vectors, &when, &edits);
     if changed && !space.is_retired() {
-        if let Err(e) = threads.save(db) {
-            log::warn!("could not save the threads of {}: {e}", space.name);
+        if let Ok(mut db) = space.db.lock() {
+            if let Some(db) = db.as_mut() {
+                if let Err(e) = working.save(db) {
+                    log::warn!("could not save the threads of {}: {e}", space.name);
+                }
+            }
+        }
+    }
+    if changed {
+        if let Ok(mut slot) = space.threads.lock() {
+            // A space closed meanwhile has none.
+            if slot.is_some() {
+                *slot = Some(working);
+            }
         }
     }
     read || changed

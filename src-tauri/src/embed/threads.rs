@@ -105,7 +105,7 @@ struct Placed {
 
 /// Where every note of the space was placed. The fields are those of
 /// `threads.json`, which is read in once.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Threads {
     version: u32,

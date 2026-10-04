@@ -123,6 +123,7 @@
 	"threads_suggested_hint": "Notes that look like one thing. Keep a thread to have new notes join it, or dismiss it.",
 	"threads_yours": "Your threads",
 	"threads_none": "No threads yet: notes about one thing gather here as you write.",
+	"view_loading": "Loading",
 	"map_title": "Map",
 	"map_empty": "The map appears once your notes are embedded: notes about the same thing sit close together.",
 	"map_fit": "Fit every note in view",

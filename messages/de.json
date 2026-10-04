@@ -123,6 +123,7 @@
 	"threads_suggested_hint": "Notizen, die nach einer Sache aussehen. Behalte einen Faden, damit neue Notizen dazukommen, oder verwirf ihn.",
 	"threads_yours": "Deine Fäden",
 	"threads_none": "Noch keine Fäden: Notizen über eine Sache sammeln sich hier, während du schreibst.",
+	"view_loading": "Wird geladen",
 	"map_title": "Karte",
 	"map_empty": "Die Karte erscheint, sobald deine Notizen erfasst sind: Notizen über dieselbe Sache liegen nah beieinander.",
 	"map_fit": "Alle Notizen zeigen",

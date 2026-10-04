@@ -123,6 +123,7 @@
 	"threads_suggested_hint": "Note che sembrano parlare di una stessa cosa. Tieni un filo perché le nuove note vi entrino, oppure scartalo.",
 	"threads_yours": "I tuoi fili",
 	"threads_none": "Ancora nessun filo: le note su una stessa cosa si raccolgono qui mentre scrivi.",
+	"view_loading": "Caricamento",
 	"map_title": "Mappa",
 	"map_empty": "La mappa appare quando le tue note sono analizzate: le note su una stessa cosa stanno vicine.",
 	"map_fit": "Mostra tutte le note",

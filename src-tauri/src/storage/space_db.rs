@@ -1,10 +1,11 @@
 //! `space.db`, what a space keeps beside its notes other than their text:
-//! the note embeddings, the thread each note was placed in, and what the
-//! user decided about threads (SPEC 6). Its text is in `search.db`, which
+//! the note embeddings, the thread each note was placed in, where each note
+//! sits on the map of the space, and what the user decided about threads
+//! (SPEC 6). Its text is in `search.db`, which
 //! serves search alone.
 //!
 //! SQLite, so a change writes its own rows rather than a whole file. The
-//! vectors and placements are derived: made with another model or version,
+//! vectors, placements and positions are derived: made with another model or version,
 //! they are replaced, and every note is embedded or placed again. The thread
 //! edits are the user's, so nothing here drops them.
 //!
@@ -45,6 +46,13 @@ const TABLES: &str = "
         hash TEXT NOT NULL,
         thread TEXT,
         out INTEGER NOT NULL
+    );
+    -- Where each note sits on the map of the space, and from which body.
+    CREATE TABLE positions (
+        id TEXT PRIMARY KEY,
+        hash TEXT NOT NULL,
+        x REAL NOT NULL,
+        y REAL NOT NULL
     );
     -- The thread edits: titles, notes kept out of threads, notes put in one,
     -- and the notes a dismissed suggestion held.

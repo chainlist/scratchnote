@@ -8,6 +8,7 @@
 mod bench;
 pub mod download;
 pub mod llama;
+pub mod map;
 pub mod model;
 #[cfg(test)]
 pub mod samples;

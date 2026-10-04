@@ -12,6 +12,7 @@ use std::sync::{Mutex, RwLock, RwLockWriteGuard};
 use serde::{Deserialize, Serialize};
 
 use crate::embed::sync::Wake;
+use crate::embed::map::Map;
 use crate::embed::threads::{Edits, Threads};
 use crate::embed::vectors::Vectors;
 use crate::storage::day_path;
@@ -209,9 +210,13 @@ pub struct Space {
     /// `None` until the embed task first runs with a model, which loads it
     /// from `db`. Taken after `vectors` when both are needed.
     pub threads: Mutex<Option<Threads>>,
-    /// Where the vectors, the placements and the thread edits are saved,
-    /// `None` while the space is not open. Taken after `vectors` and
-    /// `threads` when held with either.
+    /// Where each note sits on the map of the space, laid out from the
+    /// vectors. `None` until the embed task first runs with a model, which
+    /// loads it from `db`. Taken after `vectors`, and never with `threads`.
+    pub map: Mutex<Option<Map>>,
+    /// Where the vectors, the placements, the map and the thread edits are
+    /// saved, `None` while the space is not open. Taken after `vectors`,
+    /// `threads` and `map` when held with any.
     pub db: Mutex<Option<SpaceDb>>,
     /// Nudges the embed task whenever the index changes.
     embed_wake: Wake,
@@ -234,6 +239,7 @@ impl Space {
             search: Mutex::new(None),
             vectors: Mutex::new(None),
             threads: Mutex::new(None),
+            map: Mutex::new(None),
             db: Mutex::new(None),
             watcher: Mutex::new(None),
             retired: AtomicBool::new(false),
@@ -309,6 +315,9 @@ impl Space {
         }
         if let Ok(mut threads) = self.threads.lock() {
             *threads = None;
+        }
+        if let Ok(mut map) = self.map.lock() {
+            *map = None;
         }
         if let Ok(mut db) = self.db.lock() {
             *db = None;

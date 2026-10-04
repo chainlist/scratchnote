@@ -59,7 +59,8 @@ pub fn spawn(app: AppHandle, wake: Wake) {
 
 /// Only the open space is embedded: the vectors serve its searches and
 /// similar notes, and another space catches up when it opens (SPEC 4.6). Its
-/// notes are then placed in threads. True when its threads changed.
+/// notes are then placed in threads and on its map. True when its threads
+/// changed.
 fn sync_space(space: &Space, embedder: &dyn Embedder) -> bool {
     if space.is_retired() || !space.is_open() {
         return false;
@@ -89,7 +90,13 @@ fn sync_space(space: &Space, embedder: &dyn Embedder) -> bool {
         Ok(_) => {}
         Err(e) => log::warn!("could not embed the notes of {}: {e}", space.name),
     }
-    sync_threads(space)
+    let threaded = sync_threads(space);
+    if !space.is_retired() {
+        if let Err(e) = super::map::reconcile(&space.vectors, &space.map, &space.db) {
+            log::warn!("could not place the notes of {} on its map: {e}", space.name);
+        }
+    }
+    threaded
 }
 
 /// Place the open space's notes in threads from its vectors as they are

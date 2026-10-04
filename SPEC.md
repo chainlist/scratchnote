@@ -490,7 +490,8 @@ Talked with the team, the auto-sync broke staging again.
 - A page file whose marker has a `status` has a category line under its title the same way.
 - A marker without a `status` is read as written, so a body that starts with a heading or a quoted `#tag` keeps it.
 - Rebuild index (7) writes every such block and page of the open space as they are written now, leaving the rest of each file as it is. Until then they are read as they are, and written anew only when the app edits that note.
-- `queue.json`, `categories.json` and `days-ahead.json` in a space's `.scratchnote/`, and the chat models in `models/`, are no longer read, and are left for the user to delete.
+- `queue.json`, `categories.json` and `days-ahead.json` in a space's `.scratchnote/` are no longer read, and are left for the user to delete.
+- Nor are the chat models in `models/` (Qwen3-4B-Instruct-2507 and Qwen3-1.7B, each with a download not finished, `.gguf.part`, and the record of its download, `.gguf.json`). When one is still there, the main window asks at launch whether to remove it, saying how much room it takes, once What's new (3.6), if shown, is closed: Remove it deletes those files, Keep it is remembered on that computer and the question is not asked again, and closing it any other way asks again at the next launch. Nothing is removed unasked.
 
 ### 4.6 Spaces
 
@@ -719,6 +720,8 @@ map_search(query) -> Vec<String>            // the ids of the notes whose text h
 get_settings() / set_settings(...)
 embedding_model_info() -> { installed, downloading(pct)? }
 download_embedding_model()
+old_chat_model() -> { bytes }?                // the chat models of versions before 0.5.0 still in models/ (4.5)
+remove_old_chat_model()                       // deletes them, their unfinished downloads and their records
 rebuild_index()                               // drops the labels of earlier versions (4.5), reparses, embeds again
 set_tray_labels(labels)                      // the tray menu's wording, sent by the main window in its language
 list_spaces() -> SpacesView                   // open space + every space with its note count, the last one known for a space not open

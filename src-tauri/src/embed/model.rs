@@ -41,6 +41,51 @@ pub fn model_file(root: &std::path::Path, model: impl Catalogued) -> PathBuf {
     models_dir(root).join(model.file())
 }
 
+/// The chat models versions before 0.5.0 downloaded, which nothing reads
+/// any more (SPEC 4.5).
+const OLD_CHAT_FILES: [&str; 2] = [
+    "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    "Qwen3-1.7B-Q4_K_M.gguf",
+];
+
+/// Each old chat model in `models/` and a download of it not finished.
+fn old_chat_models(root: &std::path::Path) -> impl Iterator<Item = PathBuf> + '_ {
+    OLD_CHAT_FILES.iter().flat_map(move |file| {
+        let model = models_dir(root).join(file);
+        [model.with_extension("gguf.part"), model]
+    })
+}
+
+/// How many bytes the old chat models left in `models/` take, `None` when
+/// none is there, whatever records of their downloads are left.
+pub fn old_chat_bytes(root: &std::path::Path) -> Option<u64> {
+    let sizes: Vec<u64> = old_chat_models(root)
+        .filter_map(|path| std::fs::metadata(path).ok())
+        .map(|meta| meta.len())
+        .collect();
+    (!sizes.is_empty()).then(|| sizes.iter().sum())
+}
+
+/// Remove the old chat models, the downloads of them not finished and the
+/// records of their downloads. A file already gone is no matter; the first
+/// that cannot be removed says why, once every other was tried.
+pub fn remove_old_chat_models(root: &std::path::Path) -> Result<(), String> {
+    let records = OLD_CHAT_FILES
+        .iter()
+        .map(|file| models_dir(root).join(format!("{file}.json")));
+    let mut failed = None;
+    for path in old_chat_models(root).chain(records) {
+        match std::fs::remove_file(&path) {
+            Ok(()) => log::info!("removed {}", path.display()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                failed.get_or_insert(format!("could not remove {}: {e}", path.display()));
+            }
+        }
+    }
+    failed.map_or(Ok(()), Err)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +105,40 @@ mod tests {
         let file = model_file(root, EmbeddingModel);
         assert!(file.starts_with(root.join("models")));
         assert!(!file.starts_with(root.join("notes")));
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("scratchnote-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(models_dir(&root)).unwrap();
+        root
+    }
+
+    #[test]
+    fn the_old_chat_models_are_found_and_removed_and_nothing_else() {
+        let root = scratch("old-chat-models");
+        let models = models_dir(&root);
+        let chat = models.join("Qwen3-4B-Instruct-2507-Q4_K_M.gguf");
+        std::fs::write(&chat, [0u8; 300]).unwrap();
+        std::fs::write(chat.with_extension("gguf.json"), b"{}").unwrap();
+        std::fs::write(models.join("Qwen3-1.7B-Q4_K_M.gguf.part"), [0u8; 20]).unwrap();
+        std::fs::write(model_file(&root, EmbeddingModel), b"kept").unwrap();
+
+        assert_eq!(old_chat_bytes(&root), Some(320));
+        remove_old_chat_models(&root).unwrap();
+        assert_eq!(old_chat_bytes(&root), None);
+        let left: Vec<String> = std::fs::read_dir(&models)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(left, vec![EmbeddingModel.file()]);
+    }
+
+    #[test]
+    fn only_the_records_of_old_downloads_count_as_no_chat_model() {
+        let root = scratch("old-chat-records");
+        let models = models_dir(&root);
+        std::fs::write(models.join("Qwen3-1.7B-Q4_K_M.gguf.json"), b"{}").unwrap();
+        assert_eq!(old_chat_bytes(&root), None);
     }
 }

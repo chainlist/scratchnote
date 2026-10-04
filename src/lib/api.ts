@@ -309,6 +309,12 @@ export const embeddingModelInfo = () => invoke<EmbeddingModelInfo>('embedding_mo
 
 export const downloadEmbeddingModel = () => invoke<void>('download_embedding_model');
 
+/** The chat model a version before 0.5.0 downloaded, which nothing reads any
+ *  more: how many bytes it takes, or null when none is left. */
+export const oldChatModel = () => invoke<{ bytes: number } | null>('old_chat_model');
+
+export const removeOldChatModel = () => invoke<void>('remove_old_chat_model');
+
 export type EmbeddingStatus =
 	{ state: 'downloading'; percent: number } | { state: 'installed' } | { state: 'absent' };
 

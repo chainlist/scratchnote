@@ -27,6 +27,7 @@
 	import MoveDialog from '#lib/components/MoveDialog.svelte';
 	import NoteEditor from '#lib/components/NoteEditor.svelte';
 	import NoteToPageDialog from '#lib/components/NoteToPageDialog.svelte';
+	import OldChatModelDialog from '#lib/components/OldChatModelDialog.svelte';
 	import PageView from '#lib/components/PageView.svelte';
 	import PluginPanel from '#lib/components/PluginPanel.svelte';
 	import Ribbon from '#lib/components/Ribbon.svelte';
@@ -75,6 +76,8 @@
 
 	/** Release notes waiting to be read after an update. */
 	let releaseNotes = $state<Release[] | null>(null);
+	/** Until it is known whether they show, any other dialog at launch waits. */
+	let checkingNews = $state(true);
 
 	const mac = navigator.userAgent.includes('Mac');
 
@@ -128,7 +131,9 @@
 		const off: Promise<() => void>[] = [];
 		void (async () => {
 			const settings = await getSettings();
-			void showReleaseNotes(settings).catch((e) => shell.showError(String(e)));
+			void showReleaseNotes(settings)
+				.catch((e) => shell.showError(String(e)))
+				.finally(() => (checkingNews = false));
 
 			shell.textSize = settings.fontSize;
 			shell.threadOrder = settings.threadOrder;
@@ -285,6 +290,7 @@
 <ThreadPicker bind:pick={shell.picking} onconfirm={shell.pickThread} />
 
 <WhatsNew bind:releases={releaseNotes} />
+<OldChatModelDialog waiting={checkingNews || releaseNotes !== null} onerror={shell.showError} />
 
 <Dialog.Root bind:open={shell.settingsOpen}>
 	<Dialog.Content

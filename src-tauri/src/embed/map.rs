@@ -175,8 +175,12 @@ impl Map {
         Ok(map)
     }
 
-    /// Where a note is, `None` until it is placed. Nothing shows the map
-    /// yet, so only tests read it.
+    /// Every note on the map and its place, for the map view.
+    pub fn places(&self) -> impl Iterator<Item = (&str, [f32; 2])> {
+        self.taken().map(|(slot, id, _)| (id, self.at[slot]))
+    }
+
+    /// Where a note is, `None` until it is placed. Only tests look up one.
     #[cfg(test)]
     pub fn get(&self, id: &str) -> Option<[f32; 2]> {
         self.slots.get(id).map(|&slot| self.at[slot])

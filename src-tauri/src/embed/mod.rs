@@ -4,6 +4,8 @@
 //! Only the body is embedded, so a vector is tied to the body hash: editing a
 //! note's text embeds it again, renaming a page does not.
 
+#[cfg(test)]
+mod bench;
 pub mod download;
 pub mod llama;
 pub mod model;

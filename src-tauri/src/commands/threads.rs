@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::embed::threads::{edits_path, when_written, Edits, Thread, Threads, When};
+use crate::embed::threads::{when_written, Thread, Threads, When};
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
@@ -49,7 +49,7 @@ pub fn list_threads(state: State<'_, AppState>) -> Result<ThreadsView, String> {
 }
 
 fn view(space: &Space) -> ThreadsView {
-    let edits = Edits::load(&space.root);
+    let edits = space.edits();
     let Some(when) = dates(space) else {
         return ThreadsView::default();
     };
@@ -81,7 +81,7 @@ pub fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option<Threa
     let Some(when) = dates(&space) else {
         return Ok(None);
     };
-    let edits = Edits::load(&space.root);
+    let edits = space.edits();
     let Some(thread) = placed(&space, |threads| threads.get(&id, &when, &edits)) else {
         return Ok(None);
     };
@@ -116,16 +116,14 @@ pub async fn rename_thread(
         .chars()
         .take(MAX_TITLE)
         .collect();
-    let mut edits = Edits::load(&space.root);
-    if title.is_empty() {
-        edits.titles.remove(&id);
-    } else {
-        edits.titles.insert(id, title);
-    }
-    state
-        .writer
-        .write_index(edits_path(&space.root), edits.to_json())
-        .await?;
+    space.change_edits(|edits| {
+        if title.is_empty() {
+            edits.titles.remove(&id);
+        } else {
+            edits.titles.insert(id, title);
+        }
+        true
+    })?;
     let _ = app.emit(
         "threads-changed",
         serde_json::json!({ "space": space.name }),
@@ -143,31 +141,23 @@ pub async fn keep_out_of_threads(
     out: bool,
 ) -> Result<(), String> {
     let space = state.space()?;
-    let mut edits = Edits::load(&space.root);
-    let changed = if out {
-        let pinned = edits.pinned.remove(&id).is_some();
-        edits.alone.insert(id) || pinned
-    } else {
-        edits.alone.remove(&id)
-    };
+    let changed = space.change_edits(|edits| {
+        if out {
+            let pinned = edits.pinned.remove(&id).is_some();
+            edits.alone.insert(id) || pinned
+        } else {
+            edits.alone.remove(&id)
+        }
+    })?;
     if !changed {
         return Ok(());
     }
-    place_again(&app, &state, &space, &edits).await
+    place_again(&app, &space).await
 }
 
-/// Save what the user decided and place the notes again at once, rather
+/// Place the notes again at once after the user decided something, rather
 /// than at the next change to the notes.
-async fn place_again(
-    app: &AppHandle,
-    state: &AppState,
-    space: &Arc<Space>,
-    edits: &Edits,
-) -> Result<(), String> {
-    state
-        .writer
-        .write_index(edits_path(&space.root), edits.to_json())
-        .await?;
+async fn place_again(app: &AppHandle, space: &Arc<Space>) -> Result<(), String> {
     let placing = space.clone();
     tauri::async_runtime::spawn_blocking(move || crate::embed::sync::sync_threads(&placing))
         .await
@@ -181,7 +171,7 @@ async fn place_again(
 
 /// The notes of thread `id` as the space has it now, empty once it is gone.
 fn notes_of(space: &Space, id: &str) -> Vec<String> {
-    let edits = Edits::load(&space.root);
+    let edits = space.edits();
     dates(space)
         .and_then(|when| placed(space, |threads| threads.get(id, &when, &edits)))
         .map(|thread| thread.notes)
@@ -201,12 +191,14 @@ pub async fn keep_thread(
     if notes.is_empty() {
         return Ok(());
     }
-    let mut edits = Edits::load(&space.root);
-    for note in notes {
-        edits.pinned.insert(note, id.clone());
-    }
-    edits.dismissed.remove(&id);
-    place_again(&app, &state, &space, &edits).await
+    space.change_edits(|edits| {
+        for note in notes {
+            edits.pinned.insert(note, id.clone());
+        }
+        edits.dismissed.remove(&id);
+        true
+    })?;
+    place_again(&app, &space).await
 }
 
 /// Stop suggesting a thread until it holds another note.
@@ -221,9 +213,11 @@ pub async fn dismiss_thread(
     if notes.is_empty() {
         return Ok(());
     }
-    let mut edits = Edits::load(&space.root);
-    edits.dismissed.insert(id, notes.into_iter().collect());
-    place_again(&app, &state, &space, &edits).await
+    space.change_edits(|edits| {
+        edits.dismissed.insert(id, notes.into_iter().collect());
+        true
+    })?;
+    place_again(&app, &space).await
 }
 
 /// Put notes in thread `into`, or a new thread when it is `None`, where
@@ -255,12 +249,14 @@ pub async fn put_in_thread(
                 .expect("a free name")
         }
     };
-    let mut edits = Edits::load(&space.root);
-    for note in notes {
-        edits.alone.remove(&note);
-        edits.pinned.insert(note, thread.clone());
-    }
-    place_again(&app, &state, &space, &edits).await?;
+    space.change_edits(|edits| {
+        for note in notes {
+            edits.alone.remove(&note);
+            edits.pinned.insert(note, thread.clone());
+        }
+        true
+    })?;
+    place_again(&app, &space).await?;
     Ok(thread)
 }
 
@@ -278,16 +274,18 @@ pub async fn merge_threads(
         return Ok(());
     }
     let notes = notes_of(&space, &from);
-    let mut edits = Edits::load(&space.root);
-    for note in notes {
-        edits.alone.remove(&note);
-        edits.pinned.insert(note, into.clone());
-    }
-    if let Some(title) = edits.titles.remove(&from) {
-        edits.titles.entry(into).or_insert(title);
-    }
-    edits.dismissed.remove(&from);
-    place_again(&app, &state, &space, &edits).await
+    space.change_edits(|edits| {
+        for note in notes {
+            edits.alone.remove(&note);
+            edits.pinned.insert(note, into.clone());
+        }
+        if let Some(title) = edits.titles.remove(&from) {
+            edits.titles.entry(into).or_insert(title);
+        }
+        edits.dismissed.remove(&from);
+        true
+    })?;
+    place_again(&app, &space).await
 }
 
 /// Every thread of the open space with its first notes, newest first.
@@ -336,7 +334,7 @@ pub fn threads_for_note(state: State<'_, AppState>, id: String) -> Result<Vec<Th
     let Some(when) = dates(&space) else {
         return Ok(Vec::new());
     };
-    let edits = Edits::load(&space.root);
+    let edits = space.edits();
     // The vectors are let go before the index is read for the notes' text.
     let ranked: Vec<Thread> = {
         let Ok(vectors) = space.vectors.lock() else {

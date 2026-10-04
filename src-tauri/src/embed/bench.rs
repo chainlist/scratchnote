@@ -9,7 +9,6 @@
 //! The space is copied first, never written to.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -17,76 +16,62 @@ use std::time::{Duration, Instant};
 use chrono::NaiveDate;
 use serde_json::{json, Value};
 
-use super::threads::{threads_path, when_written, Edits, Threads, When};
-use super::vectors::{vectors_path, Vectors};
+use super::threads::{when_written, Edits, Threads, When};
+use super::vectors::Vectors;
 use crate::spaces::Space;
+use crate::storage::space_db::{space_db_path, SpaceDb};
 
 /// Where the vectors, threads and edits are kept.
 struct Store {
     root: PathBuf,
+    db: SpaceDb,
 }
 
 impl Store {
     fn open(root: &Path) -> Self {
         Self {
             root: root.to_path_buf(),
+            db: SpaceDb::open(root).unwrap(),
         }
     }
 
     fn load_vectors(&self) -> Vectors {
-        let path = vectors_path(&self.root);
-        let (model, dims) = header(&path);
-        Vectors::load(&path, &model, dims)
+        let model = self.db.meta("vectors_model").unwrap();
+        let dims = self.db.meta("vectors_dims").unwrap().parse().unwrap();
+        Vectors::load(&self.db, &model, dims)
     }
 
     fn save_vectors(&mut self, vectors: &mut Vectors) {
-        vectors.save(&vectors_path(&self.root)).unwrap();
+        vectors.save(&mut self.db).unwrap();
     }
 
     fn load_threads(&self) -> Threads {
-        Threads::load(&threads_path(&self.root))
+        Threads::load(&self.db)
     }
 
     fn save_threads(&mut self, threads: &mut Threads) {
-        threads.save(&threads_path(&self.root)).unwrap();
+        threads.save(&mut self.db).unwrap();
     }
 
     fn load_edits(&self) -> Edits {
-        Edits::load(&self.root)
+        Edits::load(&self.db)
     }
 
-    /// As the writer writes it: temp file, fsync, rename.
     fn save_edits(&mut self, edits: &Edits) {
-        let path = super::threads::edits_path(&self.root);
-        let tmp = path.with_extension("json.tmp");
-        let mut file = std::fs::File::create(&tmp).unwrap();
-        file.write_all(edits.to_json().as_bytes()).unwrap();
-        file.sync_all().unwrap();
-        drop(file);
-        std::fs::rename(&tmp, &path).unwrap();
+        edits.save(&mut self.db).unwrap();
     }
 
-    /// Bytes on disk.
+    /// Bytes on disk, the write-ahead log included.
     fn size(&self) -> u64 {
-        [
-            vectors_path(&self.root),
-            threads_path(&self.root),
-            super::threads::edits_path(&self.root),
-        ]
-        .iter()
-        .filter_map(|path| std::fs::metadata(path).ok())
-        .map(|meta| meta.len())
-        .sum()
+        let path = space_db_path(&self.root);
+        let mut wal = path.clone().into_os_string();
+        wal.push("-wal");
+        [path, PathBuf::from(wal)]
+            .iter()
+            .filter_map(|path| std::fs::metadata(path).ok())
+            .map(|meta| meta.len())
+            .sum()
     }
-}
-
-/// The model id and dims `vectors.bin` was saved with.
-fn header(path: &Path) -> (String, usize) {
-    let bytes = std::fs::read(path).unwrap();
-    let u32_at = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
-    let len = u32_at(8);
-    let model = String::from_utf8(bytes[12..12 + len].to_vec()).unwrap();
-    (model, u32_at(12 + len))
 }
 
 // Nothing below knows where things are kept.
@@ -234,12 +219,16 @@ fn bench_storage() {
     let root = std::env::temp_dir().join(format!("scratchnote-bench-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     copy_dir(&source, &root);
+    let mut timings = Timings::default();
+
+    // Before the space opens, which would otherwise be first to read in
+    // whatever the store reads in when it is new.
+    let store = timed(&mut timings, "open store", || Store::open(&root));
+    drop(store);
+    let mut store = timed(&mut timings, "reopen store", || Store::open(&root));
+    let size_before = store.size();
     let (space, _) = Space::open("bench", root.clone(), Arc::new(tokio::sync::Notify::new()));
     let mut when = when_written(&space.index.read().unwrap());
-    let mut timings = Timings::default();
-    let size_before = Store::open(&root).size();
-
-    let mut store = timed(&mut timings, "open store", || Store::open(&root));
     for _ in 0..RUNS {
         timed(&mut timings, "load vectors", || store.load_vectors());
         timed(&mut timings, "load threads", || store.load_threads());

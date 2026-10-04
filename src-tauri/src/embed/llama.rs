@@ -195,7 +195,7 @@ fn spell_tasks(text: &str) -> String {
         .collect()
 }
 
-/// What `vectors.bin` records its vectors as: the model, their size, and how
+/// What `space.db` records its vectors as: the model, their size, and how
 /// a note is turned into one, its framing and the words its tasks become.
 /// Vectors made another way then load as none and every note is embedded
 /// again. Named after the file alone, notes embedded at the last token for

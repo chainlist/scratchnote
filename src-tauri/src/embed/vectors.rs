@@ -1,20 +1,24 @@
-//! `vectors.bin`, the note embeddings search by meaning reads.
+//! The note embeddings search by meaning reads, held in memory and saved in
+//! the `vectors` table of `space.db`.
 //!
 //! Derived like `index.jsonl`: every vector can be made again from the
-//! markdown, so a file that is missing, damaged or from another model loads
-//! as empty and the notes are simply embedded again.
+//! markdown, so vectors that are missing or from another model load as
+//! empty and the notes are simply embedded again.
 //!
-//! Little endian throughout. The header is `SNVB`, a u32 version, the model
-//! id, the dims as u32 and the count as u32. Each note follows, in id order,
-//! as its id, its body hash and `dims` f32 values. A string is a u32 byte
-//! length then UTF-8.
+//! `vectors.bin`, the file they were saved in before, is read once when
+//! `space.db` is made. Little endian throughout. The header is `SNVB`, a u32
+//! version, the model id, the dims as u32 and the count as u32. Each note
+//! follows, in id order, as its id, its body hash and `dims` f32 values. A
+//! string is a u32 byte length then UTF-8.
 
 use std::collections::{HashMap, HashSet};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+use rusqlite::Connection;
 
 use super::normalize;
 use crate::storage::index::IndexEntry;
+use crate::storage::space_db::{to_string, SpaceDb};
 
 const MAGIC: &[u8; 4] = b"SNVB";
 const VERSION: u32 = 1;
@@ -30,6 +34,17 @@ pub struct Vectors {
     /// a note's vector is taken off when it changes or goes, and the
     /// rounding of years of that must not build up.
     sum: Vec<f64>,
+    /// What a save has to write.
+    unsaved: Unsaved,
+}
+
+#[derive(Debug)]
+enum Unsaved {
+    /// Every note, in place of whatever is saved: the vectors are new, or
+    /// from another model.
+    All,
+    /// The notes stored or forgotten since the last save.
+    Notes(HashSet<String>),
 }
 
 /// The same notes from the same model. The sum follows from the notes, and
@@ -40,10 +55,6 @@ impl PartialEq for Vectors {
     }
 }
 
-pub fn vectors_path(root: &Path) -> PathBuf {
-    root.join(".scratchnote").join("vectors.bin")
-}
-
 impl Vectors {
     pub fn new(model_id: &str, dims: usize) -> Self {
         Self {
@@ -51,17 +62,102 @@ impl Vectors {
             dims,
             notes: HashMap::new(),
             sum: vec![0.0; dims],
+            unsaved: Unsaved::All,
         }
     }
 
     /// The saved vectors if they came from this model at this size, else an
-    /// empty store. Never an error: the file can always be rebuilt.
-    pub fn load(path: &Path, model_id: &str, dims: usize) -> Self {
-        std::fs::read(path)
-            .ok()
-            .and_then(|bytes| Self::decode(&bytes))
-            .filter(|saved| saved.is_from(model_id, dims))
-            .unwrap_or_else(|| Self::new(model_id, dims))
+    /// empty store. Never an error: the vectors can always be made again.
+    pub fn load(db: &SpaceDb, model_id: &str, dims: usize) -> Self {
+        let saved = db.meta("vectors_model").as_deref() == Some(model_id)
+            && db.meta("vectors_dims") == Some(dims.to_string());
+        let loaded = if saved {
+            Self::read(db.conn(), model_id, dims)
+        } else {
+            None
+        };
+        loaded.unwrap_or_else(|| Self::new(model_id, dims))
+    }
+
+    /// Every row, `None` if one is not a vector of this size. The sum is
+    /// added up in id order, as `vectors.bin` held them, so every score
+    /// comes out the same. Read in the table's own order, which is faster
+    /// than going through the id index row by row.
+    fn read(conn: &Connection, model_id: &str, dims: usize) -> Option<Self> {
+        let mut statement = conn.prepare("SELECT id, hash, vector FROM vectors").ok()?;
+        let mut rows = statement.query([]).ok()?;
+        let mut vectors = Self::new(model_id, dims);
+        while let Some(row) = rows.next().ok()? {
+            let bytes = row.get_ref(2).ok()?.as_blob().ok()?;
+            if bytes.len() != dims * 4 {
+                return None;
+            }
+            let vector: Vec<f32> = bytes
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                .collect();
+            vectors
+                .notes
+                .insert(row.get(0).ok()?, (row.get(1).ok()?, vector));
+        }
+        let mut ids: Vec<&String> = vectors.notes.keys().collect();
+        ids.sort();
+        for id in ids {
+            add(&mut vectors.sum, &vectors.notes[id].1, 1.0);
+        }
+        vectors.unsaved = Unsaved::Notes(HashSet::new());
+        Some(vectors)
+    }
+
+    /// Write what changed since the last save, all of it in one go.
+    pub fn save(&mut self, db: &mut SpaceDb) -> Result<(), String> {
+        db.transaction(|tx| self.write(tx))?;
+        self.unsaved = Unsaved::Notes(HashSet::new());
+        Ok(())
+    }
+
+    /// What `save` writes, in the caller's transaction.
+    pub(crate) fn write(&self, tx: &Connection) -> Result<(), String> {
+        let mut put = tx
+            .prepare_cached("INSERT OR REPLACE INTO vectors (id, hash, vector) VALUES (?1, ?2, ?3)")
+            .map_err(to_string)?;
+        let mut row = |id: &str| -> Result<(), String> {
+            let (hash, vector) = &self.notes[id];
+            let bytes: Vec<u8> = vector.iter().flat_map(|x| x.to_le_bytes()).collect();
+            put.execute(rusqlite::params![id, hash, bytes])
+                .map(|_| ())
+                .map_err(to_string)
+        };
+        match &self.unsaved {
+            Unsaved::All => {
+                tx.execute("DELETE FROM vectors", []).map_err(to_string)?;
+                SpaceDb::set_meta(tx, "vectors_model", &self.model_id)?;
+                SpaceDb::set_meta(tx, "vectors_dims", &self.dims.to_string())?;
+                self.notes.keys().try_for_each(|id| row(id))
+            }
+            Unsaved::Notes(ids) => ids.iter().try_for_each(|id| {
+                if self.notes.contains_key(id) {
+                    row(id)
+                } else {
+                    tx.execute("DELETE FROM vectors WHERE id = ?1", [id])
+                        .map(|_| ())
+                        .map_err(to_string)
+                }
+            }),
+        }
+    }
+
+    /// Note that `id` was stored or forgotten.
+    fn touch(&mut self, id: &str) {
+        if let Unsaved::Notes(ids) = &mut self.unsaved {
+            ids.insert(id.to_string());
+        }
+    }
+
+    /// The vectors `vectors.bin` holds, `None` for anything but a whole,
+    /// well-formed file.
+    pub fn read_bin(path: &Path) -> Option<Self> {
+        Self::decode(&std::fs::read(path).ok()?)
     }
 
     /// Whether these vectors came from this model at this size.
@@ -100,22 +196,6 @@ impl Vectors {
             .map(|(id, (hash, vector))| (id.as_str(), hash.as_str(), vector.as_slice()))
     }
 
-    /// Temp file, fsync, rename, as the writer does, so a crash mid-save
-    /// leaves the previous file whole. Written here rather than through the
-    /// writer because the watcher never looks at it and the writer only
-    /// takes text.
-    pub fn save(&self, path: &Path) -> io::Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let tmp = path.with_extension("bin.tmp");
-        let mut file = std::fs::File::create(&tmp)?;
-        file.write_all(&self.encode())?;
-        file.sync_all()?;
-        drop(file);
-        std::fs::rename(&tmp, path)
-    }
-
     /// Notes with no vector yet or one made from an older body, in the order
     /// given.
     pub fn stale<'a>(
@@ -134,13 +214,18 @@ impl Vectors {
     pub fn retain(&mut self, present: &HashSet<String>) -> bool {
         let before = self.notes.len();
         let sum = &mut self.sum;
+        let mut gone = Vec::new();
         self.notes.retain(|id, (_, vector)| {
             let keep = present.contains(id);
             if !keep {
                 add(sum, vector, -1.0);
+                gone.push(id.clone());
             }
             keep
         });
+        for id in gone {
+            self.touch(&id);
+        }
         self.settle();
         self.notes.len() != before
     }
@@ -155,6 +240,7 @@ impl Vectors {
         }
         normalize(&mut vector);
         add(&mut self.sum, &vector, 1.0);
+        self.touch(&id);
         if let Some((_, old)) = self.notes.insert(id, (hash, vector)) {
             add(&mut self.sum, &old, -1.0);
         }
@@ -294,6 +380,13 @@ impl Vectors {
         ranked(scored, k)
     }
 
+    /// The file `read_bin` reads, as the app saved it before `space.db`.
+    #[cfg(test)]
+    pub fn write_bin(&self, path: &Path) {
+        std::fs::write(path, self.encode()).unwrap();
+    }
+
+    #[cfg(test)]
     fn encode(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.notes.len() * (self.dims * 4 + 48));
         out.extend_from_slice(MAGIC);
@@ -301,8 +394,6 @@ impl Vectors {
         put_str(&mut out, &self.model_id);
         out.extend_from_slice(&(self.dims as u32).to_le_bytes());
         out.extend_from_slice(&(self.notes.len() as u32).to_le_bytes());
-        // In id order, so a save changes only the bytes of the notes that
-        // changed and a synced copy only sends those.
         let mut notes: Vec<_> = self.notes.iter().collect();
         notes.sort_by(|a, b| a.0.cmp(b.0));
         for (id, (hash, vector)) in notes {
@@ -348,6 +439,7 @@ impl Vectors {
             dims,
             notes,
             sum,
+            unsaved: Unsaved::All,
         })
     }
 }
@@ -390,6 +482,7 @@ pub(crate) fn dot(a: &[f32], b: &[f32]) -> f32 {
     lanes.iter().sum::<f32>() + tail
 }
 
+#[cfg(test)]
 fn put_str(out: &mut Vec<u8>, text: &str) {
     out.extend_from_slice(&(text.len() as u32).to_le_bytes());
     out.extend_from_slice(text.as_bytes());
@@ -440,12 +533,6 @@ mod tests {
         })
     }
 
-    fn scratch_root(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("scratchnote-vectors-{name}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        dir
-    }
-
     fn sample() -> Vectors {
         let mut vectors = Vectors::new("model-3", 3);
         vectors
@@ -463,15 +550,10 @@ mod tests {
 
     #[test]
     fn saves_and_loads_back_the_same_vectors() {
-        let root = scratch_root("round-trip");
-        let path = vectors_path(&root);
-        let vectors = sample();
-
-        vectors.save(&path).unwrap();
-        assert_eq!(Vectors::load(&path, "model-3", 3), vectors);
-        assert!(!path.with_extension("bin.tmp").exists());
-
-        let _ = std::fs::remove_dir_all(&root);
+        let mut db = SpaceDb::in_memory().unwrap();
+        let mut vectors = sample();
+        vectors.save(&mut db).unwrap();
+        assert_eq!(Vectors::load(&db, "model-3", 3), vectors);
     }
 
     #[test]
@@ -502,40 +584,41 @@ mod tests {
 
         let loaded = Vectors::decode(&vectors.encode()).unwrap();
         assert!(close(loaded.sum(), fresh(&vectors)));
+        let mut db = SpaceDb::in_memory().unwrap();
+        vectors.save(&mut db).unwrap();
+        assert!(close(
+            Vectors::load(&db, "model-3", 3).sum(),
+            fresh(&vectors)
+        ));
 
         vectors.retain(&HashSet::new());
         assert_eq!(vectors.sum(), vec![0.0; 3]);
     }
 
     #[test]
-    fn a_file_from_another_model_or_size_loads_empty() {
-        let root = scratch_root("other-model");
-        let path = vectors_path(&root);
-        sample().save(&path).unwrap();
+    fn vectors_from_another_model_or_size_load_empty() {
+        let mut db = SpaceDb::in_memory().unwrap();
+        assert_eq!(Vectors::load(&db, "model-3", 3), Vectors::new("model-3", 3));
+        sample().save(&mut db).unwrap();
 
-        assert_eq!(
-            Vectors::load(&path, "model-4", 3),
-            Vectors::new("model-4", 3)
-        );
-        assert_eq!(
-            Vectors::load(&path, "model-3", 4),
-            Vectors::new("model-3", 4)
-        );
-
-        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(Vectors::load(&db, "model-4", 3), Vectors::new("model-4", 3));
+        assert_eq!(Vectors::load(&db, "model-3", 4), Vectors::new("model-3", 4));
     }
 
     #[test]
-    fn a_missing_or_corrupt_file_loads_empty() {
-        let root = scratch_root("corrupt");
-        let path = vectors_path(&root);
-        assert_eq!(Vectors::load(&path, "m", 3), Vectors::new("m", 3));
+    fn a_missing_or_corrupt_vectors_bin_reads_as_none() {
+        let dir = std::env::temp_dir().join("scratchnote-vectors-corrupt");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("vectors.bin");
+        assert!(Vectors::read_bin(&path).is_none());
 
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, b"not vectors at all").unwrap();
-        assert_eq!(Vectors::load(&path, "m", 3), Vectors::new("m", 3));
+        assert!(Vectors::read_bin(&path).is_none());
 
-        let _ = std::fs::remove_dir_all(&root);
+        sample().write_bin(&path);
+        assert_eq!(Vectors::read_bin(&path), Some(sample()));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -551,25 +634,36 @@ mod tests {
     }
 
     #[test]
-    fn a_new_note_only_adds_to_the_end_of_the_file() {
-        // Ids start with their creation time, so a new note sorts last. Saved
-        // in id order, the notes already there keep their bytes, and a tool
-        // that syncs a file by blocks sends only the end again.
+    fn a_save_writes_only_the_notes_stored_or_forgotten_since() {
+        let mut db = SpaceDb::in_memory().unwrap();
         let mut vectors = Vectors::new("m", 2);
         for i in 0..100 {
             vectors
                 .insert(format!("01A{i:03}"), "h".into(), vec![1.0, i as f32])
                 .unwrap();
         }
-        let before = vectors.encode();
+        vectors.save(&mut db).unwrap();
+
+        let rows = |db: &SpaceDb| db.conn().total_changes();
+        let before = rows(&db);
+        vectors.save(&mut db).unwrap();
+        assert_eq!(rows(&db), before, "nothing to write");
+
+        vectors
+            .insert("01A007".into(), "h2".into(), vec![0.0, 1.0])
+            .unwrap();
         vectors
             .insert("01B000".into(), "h".into(), vec![0.0, 1.0])
             .unwrap();
-        let after = vectors.encode();
-
-        // Past the header, which holds the count.
-        let header = 4 + 4 + (4 + "m".len()) + 4 + 4;
-        assert!(after[header..].starts_with(&before[header..]));
+        let present = vectors
+            .iter()
+            .map(|(id, _, _)| id.to_string())
+            .filter(|id| id != "01A050")
+            .collect();
+        vectors.retain(&present);
+        vectors.save(&mut db).unwrap();
+        assert_eq!(rows(&db), before + 3, "one edited, one new, one gone");
+        assert_eq!(Vectors::load(&db, "m", 2), vectors);
     }
 
     #[test]

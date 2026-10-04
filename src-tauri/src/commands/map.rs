@@ -21,7 +21,7 @@ pub struct MapNote {
 /// Every note of the open space the embed task has placed on its map, none
 /// until it has. A note deleted since its last pass is left out.
 #[tauri::command]
-pub fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String> {
+pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String> {
     let space = state.space()?;
     let places: HashMap<String, [f32; 2]> = {
         let map = space.map.lock().map_err(|_| "map lock poisoned")?;

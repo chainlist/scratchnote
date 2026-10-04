@@ -143,7 +143,7 @@ pub async fn list_days(state: State<'_, AppState>) -> Result<Vec<DaySummary>, St
 /// One note or page of the open space with its text, `None` once it is
 /// gone, as the map shows a note pointed at (SPEC 6.5).
 #[tauri::command]
-pub fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<Note>, String> {
+pub async fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<Note>, String> {
     let space = state.space()?;
     let note = space.read(|idx, db| match idx.entries().find(|entry| entry.id == id) {
         Some(entry) => Ok(crate::search::with_bodies(db, [entry])?.pop()),

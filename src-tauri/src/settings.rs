@@ -34,6 +34,8 @@ pub struct Settings {
     /// The app version whose release notes were last shown. None from 0.1.0,
     /// which did not record it.
     pub last_seen_version: Option<String>,
+    /// "oldest" or "newest": which of a thread's notes it lists first.
+    pub thread_order: String,
 }
 
 impl Default for Settings {
@@ -50,6 +52,7 @@ impl Default for Settings {
             language: "system".to_string(),
             onboarded: false,
             last_seen_version: None,
+            thread_order: "oldest".to_string(),
         }
     }
 }
@@ -148,6 +151,7 @@ mod tests {
         assert_eq!(back.language, "system");
         assert!(!back.onboarded);
         assert_eq!(back.last_seen_version, None);
+        assert_eq!(back.thread_order, "oldest");
     }
 
     #[test]

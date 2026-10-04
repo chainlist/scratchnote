@@ -6,15 +6,14 @@
 //! nothing is ever read back from a stub but its id and time.
 //!
 //! A page open in the editor is held: the page view saves it every pause in
-//! typing, and neither model runs on it until `finish_page` says the view
+//! typing, and the model does not embed it until `finish_page` says the view
 //! closed (SPEC 3.5). The page view's commands are in `commands::pages`.
 
 use tauri::{AppHandle, Emitter, State};
 
-use crate::commands::notes::enqueue;
 use crate::spaces::Space;
 use crate::state::AppState;
-use crate::storage::daily_file::{self, Note, Status, Stub};
+use crate::storage::daily_file::{self, Note, Stub};
 use crate::storage::day_path;
 use crate::storage::index::{Index, IndexEntry};
 use crate::storage::page_file;
@@ -138,8 +137,8 @@ pub fn newest_first(index: &Index) -> Vec<Note> {
     pages
 }
 
-/// Forget the day ahead the model read in a page (SPEC 5.7), which leaves
-/// its labels as they are.
+/// Forget the day ahead read in a page (SPEC 5.3). No day is read in it
+/// again, even once its text changes.
 pub async fn clear_day_ahead(
     app: &AppHandle,
     state: &State<'_, AppState>,
@@ -147,56 +146,15 @@ pub async fn clear_day_ahead(
     id: &str,
 ) -> Result<(), String> {
     let page = read_page(space, id).await?;
-    let (file, category, status, lang) = (
-        page.file.clone(),
-        page.category.clone(),
-        page.status,
-        page.lang.clone(),
-    );
+    let file = page.file.clone();
     state
         .writer
         .rewrite(space.root.join(&page.file), move |existing| {
-            page_file::update_meta(existing?, &file, category, status, lang, None)
+            page_file::clear_day_ahead(existing?, &file)
         })
         .await?;
     reindex(space, &page.file)?;
     space.persist_index(&state.writer).await?;
-    emit_updated(app, id);
-    Ok(())
-}
-
-/// Put a page back in the queue by hand (SPEC 5.6). One whose category the
-/// user set is left alone, as a manual note is. Asked for from the page view
-/// too, so the page is released: the model runs now. Typing again holds it
-/// again, and the job is then dropped for the one `finish_page` queues.
-pub async fn retry(
-    app: &AppHandle,
-    state: &State<'_, AppState>,
-    space: &Space,
-    id: &str,
-) -> Result<(), String> {
-    let page = read_page(space, id).await?;
-    if page.status == Status::Manual {
-        return Ok(());
-    }
-    {
-        let (file, category, lang, on) = (
-            page.file.clone(),
-            page.category.clone(),
-            page.lang.clone(),
-            page.on.clone(),
-        );
-        state
-            .writer
-            .rewrite(space.root.join(&page.file), move |existing| {
-                page_file::update_meta(existing?, &file, category, Status::Pending, lang, on)
-            })
-            .await?;
-    }
-    reindex(space, &page.file)?;
-    space.release(id);
-    space.persist_index(&state.writer).await?;
-    enqueue(state, space, id.to_string(), page.date.clone()).await;
     emit_updated(app, id);
     Ok(())
 }
@@ -225,13 +183,11 @@ mod tests {
             time: "10:00".to_string(),
             file: page_file::relative_path(DATE, &page_file::file_name(DATE, title, 1)),
             subject: Some(title.to_string()),
-            category: None,
-            status: Status::Done,
             hash: body_hash(body),
-            lang: None,
+            on: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Page,
-            on: None,
             missing: false,
         }
     }

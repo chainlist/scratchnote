@@ -1,8 +1,7 @@
+mod ahead;
 mod attachments;
-mod chat;
 mod commands;
 mod embed;
-mod enrich;
 mod pages;
 mod plugins;
 mod search;
@@ -20,10 +19,8 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::ShortcutState;
 
-use enrich::download;
-use enrich::{idle, worker};
 use settings::Settings;
-use state::{resting_status, AppState};
+use state::AppState;
 use storage::writer::Writer;
 
 const CAPTURE: &str = "capture";
@@ -76,8 +73,6 @@ pub fn run() {
             commands::notes::list_days,
             commands::notes::notes_about,
             commands::notes::clear_day_ahead,
-            commands::search::list_categories,
-            commands::search::category_names,
             commands::search::search,
             commands::search::search_meaning,
             commands::search::similar_notes,
@@ -87,28 +82,12 @@ pub fn run() {
             commands::threads::rename_thread,
             commands::threads::keep_out_of_threads,
             commands::search::notes_containing,
-            commands::chat::chat,
-            commands::chat::stop_chat,
-            commands::chat::warm_chat,
             commands::notes::delete_note,
             commands::notes::update_note,
-            commands::notes::update_note_meta,
             commands::notes::rebuild_index,
-            commands::notes::regenerate_all,
-            commands::notes::retry_enrichment,
             commands::notes::move_note,
-            commands::models::model_status,
-            commands::models::enrich_busy,
-            commands::models::enrich_progress,
-            commands::models::model_info,
-            commands::models::benchmark_model,
-            commands::models::gpu_devices,
-            commands::models::system_profile,
-            commands::models::download_model,
             commands::models::embedding_model_info,
             commands::models::download_embedding_model,
-            commands::models::check_model_update,
-            commands::models::update_model,
             commands::notes::today,
             commands::settings::get_settings,
             commands::settings::set_settings,
@@ -160,20 +139,10 @@ pub fn run() {
             let hotkey = settings.capture_hotkey.clone();
             let root = settings.root.clone();
 
-            // A model on disk is not loaded until the first job needs it
-            // (SPEC 5.1), so "idle" rather than "loaded" at startup.
-            let active = download::active_model(
-                &root,
-                settings.model_variant,
-                settings.model_path.as_deref(),
-            );
-            let status = resting_status(settings.model_enabled, active.is_some());
-
             // Before spaces.json is read, since it may point it at a new folder.
             spaces::migrate_root(&root);
 
-            let wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
-            let embed_wake: worker::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
+            let embed_wake: embed::sync::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
             app.manage(AppState {
                 root: root.clone(),
                 settings: std::sync::RwLock::new(settings),
@@ -182,22 +151,13 @@ pub fn run() {
                 // needs the state to be managed already.
                 spaces: std::sync::RwLock::new(Vec::new()),
                 registry: std::sync::RwLock::new(spaces::Registry::load(&root)),
-                backend: std::sync::RwLock::new(None),
-                backend_loading: std::sync::Mutex::new(()),
-                model_status: std::sync::RwLock::new(status),
-                swapping: std::sync::atomic::AtomicBool::new(false),
-                last_used: std::sync::Mutex::new(std::time::Instant::now()),
-                busy: std::sync::atomic::AtomicBool::new(false),
-                batch_done: std::sync::atomic::AtomicUsize::new(0),
-                wake: wake.clone(),
                 embedder: std::sync::RwLock::new(None),
                 embedder_loading: std::sync::Mutex::new(()),
                 embed_wake: embed_wake.clone(),
                 embedding_download: std::sync::Mutex::new(None),
             });
 
-            // Every space is listed, so the notes left in any space's queue
-            // are still enriched, but only the open one is read and watched
+            // Every space is listed, but only the open one is read and watched
             // (SPEC 4.6). The others are read when they are opened.
             let state = app.state::<AppState>();
             let mut found = spaces::discover(&root);
@@ -220,14 +180,10 @@ pub fn run() {
                 commands::spaces::load_space(app.handle(), &open);
             }
 
-            worker::spawn(app.handle().clone(), wake.clone());
             // Opening the space above already woke it, so its notes are
             // backfilled.
             embed::sync::spawn(app.handle().clone(), embed_wake);
-            idle::spawn(app.handle().clone());
             commands::models::replace_legacy_embedding_model(app.handle());
-            // Kick the worker in case a queue came back non-empty.
-            wake.notify_one();
 
             build_capture_window(app.handle())?;
             build_tray(app.handle())?;

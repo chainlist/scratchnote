@@ -1,21 +1,22 @@
-//! EmbeddingGemma-300M through llama.cpp, in the same process as the chat
-//! model but always on the CPU.
+//! EmbeddingGemma-300M through llama.cpp, embedded in the app and always on
+//! the CPU.
 //!
 //! The model averages over every token and is trained on inputs that start
 //! and end with its special tokens, so a cut text keeps its end-of-text token.
 
 use std::num::NonZeroU32;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
 use llama_cpp_2::context::LlamaContext;
+use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
+use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaModel};
 use llama_cpp_2::token::LlamaToken;
 
 use super::{normalize, Embedder};
-use crate::enrich::llama::{llama_backend, load_model};
 
 /// The longest input, in tokens, and so the context and the batch too: one
 /// batch above n_batch aborts the process instead of returning an error, so
@@ -27,10 +28,34 @@ const MAX_TOKENS: u32 = 1024;
 /// is trained.
 const POOLING: LlamaPoolingType = LlamaPoolingType::Mean;
 
+/// llama.cpp allows one initialised backend per process, so it is made once
+/// and never dropped.
+static BACKEND: OnceLock<Result<LlamaBackend, String>> = OnceLock::new();
+
+/// The process's llama.cpp backend, started on first use.
+fn llama_backend() -> Result<&'static LlamaBackend, String> {
+    BACKEND
+        .get_or_init(|| LlamaBackend::init().map_err(|e| format!("llama.cpp would not start: {e}")))
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+/// Loads a GGUF on the CPU. No devices at all gets llama.cpp's plain CPU
+/// path, with its repacked CPU kernels.
+fn load_model(path: &Path) -> Result<LlamaModel, String> {
+    let backend = llama_backend()?;
+    let params = LlamaModelParams::default()
+        .with_n_gpu_layers(0)
+        .with_devices(&[])
+        .map_err(|e| format!("could not keep the model off the GPU: {e}"))?;
+    LlamaModel::load_from_file(backend, path, &params)
+        .map_err(|e| format!("could not load {}: {e}", path.display()))
+}
+
 pub struct LlamaEmbedder {
-    /// Made on first use. Contexts are not re-entrant, and a chat's question
-    /// can arrive while notes are being embedded in the background, hence
-    /// the lock. Declared first so it is dropped before the model it borrows.
+    /// Made on first use. Contexts are not re-entrant, and a search can
+    /// arrive while notes are being embedded in the background, hence the
+    /// lock. Declared first so it is dropped before the model it borrows.
     context: Mutex<Option<Context>>,
     /// Boxed so the context's reference to it survives `Self` moving.
     model: Box<LlamaModel>,
@@ -45,15 +70,14 @@ struct Context(LlamaContext<'static>);
 unsafe impl Send for Context {}
 
 impl LlamaEmbedder {
-    /// On the CPU whatever the GPU setting, which is the chat model's. The
-    /// model stays loaded, and on an integrated GPU, whose memory is the
-    /// system's, llama.cpp holds a copy of the weights there and a second
-    /// copy of the vocabulary on the host, none of it backed by the file:
-    /// about 900 MB against 260 MB on the CPU, where the file is mapped and
-    /// only the pages read count. A note takes 31 ms there against 13 ms on
-    /// the GPU, quick enough for a search or a draft.
+    /// On the CPU. The model stays loaded, and on an integrated GPU, whose
+    /// memory is the system's, llama.cpp holds a copy of the weights there
+    /// and a second copy of the vocabulary on the host, none of it backed by
+    /// the file: about 900 MB against 260 MB on the CPU, where the file is
+    /// mapped and only the pages read count. A note takes 31 ms there against
+    /// 13 ms on the GPU, quick enough for a search or a draft.
     pub fn load(path: &Path) -> Result<Self, String> {
-        let model = load_model(path, false)?;
+        let model = load_model(path)?;
         // The width llama.cpp reads pooled vectors out at.
         let dims = model.n_embd_out() as usize;
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
@@ -140,8 +164,7 @@ fn query_prompt(query: &str) -> String {
 }
 
 /// A note, framed as the model card has it for the documents searched. Notes
-/// have no title of their own: the subject is the model's work, and would tie
-/// the vector to the labels.
+/// have no title of their own.
 fn document_prompt(text: &str) -> String {
     format!("title: none | text: {}", spell_tasks(text))
 }
@@ -277,7 +300,7 @@ mod tests {
     #[test]
     #[ignore = "needs the downloaded embedding model"]
     fn ranks_the_note_that_answers_first_in_either_language() {
-        use crate::enrich::model::{model_file, EmbeddingModel};
+        use crate::embed::model::{model_file, EmbeddingModel};
 
         let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
         let root = std::path::PathBuf::from(home.unwrap()).join("Scratchnote");

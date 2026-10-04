@@ -7,14 +7,11 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use ulid::Ulid;
 
-use crate::enrich::normalize;
-use crate::enrich::queue::Job;
 use crate::spaces::Space;
 use crate::state::AppState;
-use crate::storage::categories;
-use crate::storage::daily_file::{self, Kind, Note, NotePatch, Status};
+use crate::storage::daily_file::{self, Kind, Note};
 use crate::storage::index::{self, IndexEntry};
-use crate::storage::{check_date, day_path, relative_day_path};
+use crate::storage::{check_date, day_path, page_file, relative_day_path};
 
 #[derive(Debug, Serialize)]
 pub struct DaySummary {
@@ -30,7 +27,7 @@ pub struct DaySummary {
 ///
 /// It goes into the open space unless another is named, as the capture
 /// window may (SPEC 3.1). A space not open takes it as an edit from outside:
-/// its queue has the note, and its index reads the day again when it opens.
+/// its index reads the day again when it opens.
 #[tauri::command]
 pub async fn save_note(
     app: AppHandle,
@@ -55,14 +52,12 @@ pub async fn save_note(
         time: now.format("%H:%M").to_string(),
         file: relative_day_path(&date),
         subject: None,
-        category: None,
-        status: Status::Pending,
         hash: daily_file::body_hash(&body),
-        lang: None,
+        on: crate::ahead::day_ahead(&body, &date),
+        ahead_off: false,
         body,
         date: date.clone(),
         kind: Kind::Note,
-        on: None,
         missing: false,
     };
 
@@ -73,28 +68,8 @@ pub async fn save_note(
 
     space.note_added(&state.writer, &note).await?;
 
-    enqueue(&state, &space, note.id.clone(), note.date.clone()).await;
-
     let _ = app.emit("note-updated", serde_json::json!({ "id": note.id }));
     Ok(Some(note))
-}
-
-/// Queue a note for enrichment and nudge the worker. Already-queued notes are
-/// left alone, so saving twice does not enrich twice.
-pub(crate) async fn enqueue(state: &State<'_, AppState>, space: &Space, id: String, date: String) {
-    let queued = match space.queue.lock() {
-        Ok(mut queue) => queue.push(Job::new(id, date)),
-        Err(_) => false,
-    };
-    if !queued {
-        return;
-    }
-    persist_queue(state, space).await;
-    state.wake.notify_one();
-}
-
-pub(crate) async fn persist_queue(state: &State<'_, AppState>, space: &Space) {
-    space.persist_queue(&state.writer).await;
 }
 
 /// Read straight from the markdown, because the index deliberately carries no
@@ -138,13 +113,11 @@ fn missing_page(date: &str, stub: daily_file::Stub) -> Note {
         time: stub.time,
         file: stub.target,
         subject: Some(stub.title).filter(|t| !t.is_empty()),
-        category: None,
-        status: Status::Done,
         hash: String::new(),
-        lang: None,
+        on: None,
+        ahead_off: false,
         body: String::new(),
         kind: Kind::Page,
-        on: None,
         missing: true,
     }
 }
@@ -191,18 +164,11 @@ pub async fn delete_note(
     space.day_changed(&date)?;
     space.persist_index(&state.writer).await?;
 
-    if let Ok(mut queue) = space.queue.lock() {
-        queue.remove(&id);
-    }
-    persist_queue(&state, &space).await;
-
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     Ok(())
 }
 
-/// Edit a note's body in the app. A changed body goes back to the model,
-/// unless the user has taken the note over (SPEC 4.2) or only ticked task
-/// boxes (SPEC 3.4).
+/// Edit a note's body in the app.
 #[tauri::command]
 pub async fn update_note(
     app: AppHandle,
@@ -222,93 +188,14 @@ pub async fn update_note(
         return Ok(current);
     }
 
-    let requeue =
-        current.status != Status::Manual && !daily_file::only_ticks_changed(&current.body, &body);
     let path = day_path(&space.root, &date);
     if !state.writer.replace_body(path, id.clone(), body).await? {
         return Err(format!("no note {id} in {date}"));
     }
-    if requeue {
-        mark_pending(&state, &space, &current).await?;
-    }
     reindex_day(&state, &space, &date).await?;
-    if requeue {
-        enqueue(&state, &space, id.clone(), date.clone()).await;
-    }
 
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     read_note(&space, &date, &id).await
-}
-
-/// Set a note's subject and category by hand. The note becomes `manual`,
-/// which enrichment never overwrites (SPEC 4.2). `None` keeps the current
-/// value, and an empty `category` takes the note out of every category.
-#[tauri::command]
-pub async fn update_note_meta(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    date: String,
-    id: String,
-    subject: Option<String>,
-    category: Option<String>,
-) -> Result<Note, String> {
-    check_date(&date)?;
-    let space = state.space()?;
-    let current = read_note(&space, &date, &id).await?;
-
-    let subject = match subject {
-        // The subject is the note's heading, so it has to stay on one line.
-        Some(raw) => {
-            Some(raw.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|s| !s.is_empty())
-        }
-        None => current.subject.clone(),
-    };
-    let category = match category {
-        Some(raw) => normalize::clean(&raw),
-        None => current.category.clone(),
-    };
-
-    // A category typed in by hand joins the list, so the model is offered it
-    // for later notes.
-    list_category(&state, &space, category.as_deref()).await?;
-
-    let patch = NotePatch {
-        subject,
-        category,
-        status: Status::Manual,
-        lang: current.lang.clone(),
-        on: current.on.clone(),
-    };
-    let path = day_path(&space.root, &date);
-    if !state.writer.update_note(path, id.clone(), patch).await? {
-        return Err(format!("no note {id} in {date}"));
-    }
-    reindex_day(&state, &space, &date).await?;
-
-    // Nothing left for the model to do with it.
-    if let Ok(mut queue) = space.queue.lock() {
-        queue.remove(&id);
-    }
-    persist_queue(&state, &space).await;
-
-    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
-    read_note(&space, &date, &id).await
-}
-
-/// Add `category` to the space's list when it is not there yet, so the model
-/// is offered it from then on.
-pub(crate) async fn list_category(
-    state: &State<'_, AppState>,
-    space: &Space,
-    category: Option<&str>,
-) -> Result<(), String> {
-    if let Some(contents) = category.and_then(|c| categories::with_added(&space.root, c)) {
-        state
-            .writer
-            .write_index(categories::categories_path(&space.root), contents)
-            .await?;
-    }
-    Ok(())
 }
 
 /// The space a note or a page of the open space moves to: any other.
@@ -341,10 +228,9 @@ pub(crate) async fn free_id(space: &Space, date: &str, id: &str) -> String {
 }
 
 /// Move a note of the open space to another, onto the same day at the same
-/// time, with its labels and the files it links (SPEC 3.2). It is written
-/// there before it leaves here, so a crash in between leaves it in both
-/// spaces, never in neither. Its category joins the other space's list, and
-/// a note still waiting on the model waits there.
+/// time, with the files it links (SPEC 3.2). It is written there before it
+/// leaves here, so a crash in between leaves it in both spaces, never in
+/// neither.
 #[tauri::command]
 pub async fn move_note(
     app: AppHandle,
@@ -371,25 +257,17 @@ pub async fn move_note(
         body,
         ..note
     };
-    list_category(&state, &to, moved.category.as_deref()).await?;
     state
         .writer
         .append_note(day_path(&to.root, &date), date.clone(), moved.clone())
         .await?;
     to.note_added(&state.writer, &moved).await?;
-    if moved.status == Status::Pending {
-        enqueue(&state, &to, moved.id.clone(), date.clone()).await;
-    }
 
     state
         .writer
         .delete_note(day_path(&from.root, &date), id.clone())
         .await?;
     reindex_day(&state, &from, &date).await?;
-    if let Ok(mut queue) = from.queue.lock() {
-        queue.remove(&id);
-    }
-    persist_queue(&state, &from).await;
     crate::attachments::drop_carried(&from, &carried);
 
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
@@ -410,39 +288,19 @@ pub(crate) async fn read_note(space: &Space, date: &str, id: &str) -> Result<Not
         .ok_or_else(|| format!("no note {id} in {date}"))
 }
 
-/// Set a note back to `pending` as it returns to the queue, so the day view
-/// shows it waiting. Its labels stay until the model replaces them.
-async fn mark_pending(
-    state: &State<'_, AppState>,
-    space: &Space,
-    note: &Note,
-) -> Result<(), String> {
-    let patch = NotePatch {
-        subject: note.subject.clone(),
-        category: note.category.clone(),
-        status: Status::Pending,
-        lang: note.lang.clone(),
-        on: note.on.clone(),
-    };
-    let path = day_path(&space.root, &note.date);
-    state
-        .writer
-        .update_note(path, note.id.clone(), patch)
-        .await?;
-    Ok(())
-}
-
 /// After rewriting a day file: reparse the day and write the index back.
 async fn reindex_day(state: &State<'_, AppState>, space: &Space, date: &str) -> Result<(), String> {
     space.day_changed(date)?;
     space.persist_index(&state.writer).await
 }
 
-/// Reparse every markdown file and replace the cache. Returns how many notes
+/// Write the notes and pages a model labelled as they are written now, then
+/// reparse every markdown file and replace the cache. Returns how many notes
 /// the rebuilt index holds.
 #[tauri::command]
 pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
     let space = state.space()?;
+    drop_labels(&state, &space).await?;
     let rebuilding = space.clone();
     let count = tauri::async_runtime::spawn_blocking(move || rebuilding.rebuild())
         .await
@@ -453,84 +311,28 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
     Ok(count)
 }
 
-/// Rebuild the index, then hand every note back to the model for a fresh
-/// subject and category. Every note is cleared to pending first, hand edits
-/// included. Returns how many notes were queued.
-#[tauri::command]
-pub async fn regenerate_all(app: AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
-    rebuild_index(app.clone(), state.clone()).await?;
-    let space = state.space()?;
-
-    let (notes, pages): (Vec<IndexEntry>, Vec<IndexEntry>) = space
-        .index
-        .read()
-        .map_err(|_| "index lock poisoned".to_string())?
-        .entries()
-        .cloned()
-        .partition(|e| e.kind == Kind::Note);
-
-    let cleared = NotePatch {
-        subject: None,
-        category: None,
-        status: Status::Pending,
-        lang: None,
-        on: None,
-    };
-    let mut touched_days = std::collections::BTreeSet::new();
-    for note in &notes {
+/// Write every block and page of the space that still carries the labels a
+/// model wrote as it is written now, without them (SPEC 4.3). The rest of
+/// each file is left as it is.
+async fn drop_labels(state: &State<'_, AppState>, space: &Space) -> Result<(), String> {
+    for (_, path) in index::daily_files(&space.root) {
         state
             .writer
-            .update_note(
-                day_path(&space.root, &note.date),
-                note.id.clone(),
-                cleared.clone(),
-            )
+            .rewrite(path, |existing| daily_file::drop_labels(existing?))
             .await?;
-        touched_days.insert(note.date.clone());
     }
-    // A page keeps its title, which is the user's; only its category goes.
-    for page in &pages {
-        let file = page.file.clone();
+    for path in index::page_files(&space.root) {
+        let Some(file) = index::relative(&space.root, &path) else {
+            continue;
+        };
         state
             .writer
-            .rewrite(space.root.join(&page.file), move |existing| {
-                crate::storage::page_file::update_meta(
-                    existing?,
-                    &file,
-                    None,
-                    Status::Pending,
-                    None,
-                    None,
-                )
+            .rewrite(path, move |existing| {
+                page_file::drop_labels(existing?, &file)
             })
             .await?;
     }
-    // One index write for the lot, not one per day.
-    for date in &touched_days {
-        space.day_changed(date)?;
-    }
-    for page in &pages {
-        if let Some(parsed) = index::parse_page(&space.root, &space.root.join(&page.file)) {
-            space.page_changed(&parsed)?;
-        }
-    }
-    let notes: Vec<(String, String)> = notes
-        .iter()
-        .chain(&pages)
-        .map(|e| (e.id.clone(), e.date.clone()))
-        .collect();
-    space.persist_index(&state.writer).await?;
-
-    if let Ok(mut queue) = space.queue.lock() {
-        for (id, date) in &notes {
-            queue.push(Job::new(id.clone(), date.clone()));
-        }
-    }
-    persist_queue(&state, &space).await;
-    state.wake.notify_one();
-
-    let _ = app.emit("index-rebuilt", ());
-    Ok(notes.len())
+    Ok(())
 }
 
 #[tauri::command]
@@ -539,7 +341,7 @@ pub fn today() -> String {
 }
 
 /// The notes and pages of the open space that look forward to `date`, oldest
-/// first, for its day to show what was written ahead of it (SPEC 5.7).
+/// first, for its day to show what was written ahead of it (SPEC 5.3).
 #[tauri::command]
 pub fn notes_about(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
     check_date(&date)?;
@@ -555,9 +357,8 @@ pub fn notes_about(state: State<'_, AppState>, date: String) -> Result<Vec<Note>
     Ok(found.unwrap_or_default())
 }
 
-/// Forget the day ahead the model read in a note (SPEC 5.7), for one it read
-/// wrong. Its labels stay as they are, and so does its status: the day comes
-/// back only if the note is labelled again.
+/// Forget the day ahead read in a note (SPEC 5.3), for one read wrong. No
+/// day is read in it again, even once its text changes.
 #[tauri::command]
 pub async fn clear_day_ahead(
     app: AppHandle,
@@ -570,45 +371,18 @@ pub async fn clear_day_ahead(
     if is_page(&space, &id) {
         return crate::pages::clear_day_ahead(&app, &state, &space, &id).await;
     }
-    let note = read_note(&space, &date, &id).await?;
-    let patch = NotePatch {
-        subject: note.subject,
-        category: note.category,
-        status: note.status,
-        lang: note.lang,
-        on: None,
-    };
     let path = day_path(&space.root, &date);
-    if !state.writer.update_note(path, id.clone(), patch).await? {
+    let cleared = id.clone();
+    if !state
+        .writer
+        .rewrite(path, move |existing| {
+            daily_file::clear_day_ahead(existing?, &cleared)
+        })
+        .await?
+    {
         return Err(format!("no note {id} in {date}"));
     }
     reindex_day(&state, &space, &date).await?;
-    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
-    Ok(())
-}
-
-/// Put a note back in the queue by hand, for the ones that ended up `failed`
-/// (SPEC 5.6).
-#[tauri::command]
-pub async fn retry_enrichment(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    date: String,
-    id: String,
-) -> Result<(), String> {
-    check_date(&date)?;
-    let space = state.space()?;
-    if is_page(&space, &id) {
-        return crate::pages::retry(&app, &state, &space, &id).await;
-    }
-    let note = read_note(&space, &date, &id).await?;
-    // A manual note is never re-enriched, so it must not be unlocked here.
-    if note.status == Status::Manual {
-        return Ok(());
-    }
-    mark_pending(&state, &space, &note).await?;
-    reindex_day(&state, &space, &date).await?;
-    enqueue(&state, &space, id.clone(), date).await;
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
     Ok(())
 }

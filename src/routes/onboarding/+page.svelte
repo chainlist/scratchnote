@@ -3,11 +3,10 @@
 	import { getVersion } from '@tauri-apps/api/app';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { EMBEDDING_SIZE, restartApp, systemProfile, type Hardware } from '#lib/api.js';
-	import MachineStep from '#lib/components/onboarding/MachineStep.svelte';
-	import ModelStep from '#lib/components/onboarding/ModelStep.svelte';
+	import { EMBEDDING_SIZE, restartApp } from '#lib/api.js';
 	import WelcomeStep from '#lib/components/onboarding/WelcomeStep.svelte';
 	import AppearanceTab from '#lib/components/settings/AppearanceTab.svelte';
+	import EmbeddingModel from '#lib/components/settings/EmbeddingModel.svelte';
 	import FolderPicker from '#lib/components/settings/FolderPicker.svelte';
 	import HotkeyInput from '#lib/components/settings/HotkeyInput.svelte';
 	import { SettingsState } from '#lib/components/settings/state.svelte.js';
@@ -17,7 +16,6 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import CpuIcon from '@lucide/svelte/icons/cpu';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import KeyboardIcon from '@lucide/svelte/icons/keyboard';
@@ -31,7 +29,7 @@
 	/**
 	 * The first-run walkthrough. The main page sends a fresh install here;
 	 * every choice is saved as it is made, so leaving part way loses nothing.
-	 * The folder comes before the model, which is downloaded into it.
+	 * The folder comes before the search model, which is downloaded into it.
 	 */
 	const STEPS = [
 		{
@@ -59,12 +57,6 @@
 			body: m.onboarding_hotkey_body
 		},
 		{
-			id: 'machine',
-			icon: CpuIcon,
-			title: m.onboarding_machine_title,
-			body: m.onboarding_machine_body
-		},
-		{
 			id: 'model',
 			icon: DownloadIcon,
 			title: m.onboarding_model_title,
@@ -82,7 +74,6 @@
 	let index = $state(0);
 	const step = $derived(STEPS[index]);
 	const last = $derived(index === STEPS.length - 1);
-	let hardware = $state<Hardware | null>(null);
 	let working = $state(false);
 
 	const view = $derived(settings.view);
@@ -90,20 +81,11 @@
 	const restartNeeded = $derived(
 		step.id === 'folder' && view !== null && settings.draft.root.trim() !== view.activeRoot
 	);
-	/** A model is in, on its way, or turned off. */
-	const modelChosen = $derived(
-		settings.info?.activePath != null ||
-			settings.model.state === 'downloading' ||
-			view?.modelEnabled === false
-	);
 
 	onMount(() => {
 		const stop = settings.start();
 		const saved = resumeStep();
 		if (saved !== null && saved < STEPS.length) index = saved;
-		systemProfile()
-			.then((h) => (hardware = h))
-			.catch((e) => settings.say(String(e), true));
 		return stop;
 	});
 
@@ -138,10 +120,6 @@
 		} finally {
 			working = false;
 		}
-	}
-
-	async function skipModel() {
-		if (await settings.apply({ modelEnabled: false })) go(index + 1);
 	}
 
 	/** Languages are named in their own tongue; only System follows the open one. */
@@ -229,10 +207,8 @@
 						/>
 						<p class={hint}>{m.onboarding_hotkey_try()}</p>
 					</div>
-				{:else if step.id === 'machine'}
-					<MachineStep {hardware} />
 				{:else if step.id === 'model'}
-					<ModelStep {settings} {hardware} onskip={skipModel} />
+					<EmbeddingModel {settings} />
 				{:else if step.id === 'appearance'}
 					<AppearanceTab {settings} withLanguage={false} />
 				{/if}
@@ -250,7 +226,7 @@
 			<p class="{hint} ml-auto">
 				{m.onboarding_step({ current: index + 1, total: STEPS.length })}
 			</p>
-			<Button onclick={next} disabled={working || !view || (step.id === 'model' && !modelChosen)}>
+			<Button onclick={next} disabled={working || !view}>
 				{#if restartNeeded}
 					{m.onboarding_folder_restart_button()}
 				{:else if last}

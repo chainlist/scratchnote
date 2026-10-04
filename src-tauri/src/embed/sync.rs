@@ -7,18 +7,21 @@
 
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::Notify;
 
 use super::threads::{self, threads_path, Edits, Threads};
 use super::vectors::{vectors_path, Vectors};
 use super::Embedder;
-use crate::enrich::worker::Wake;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::index::Index;
 use crate::storage::search_db::SearchDb;
+
+/// Woken when an index changes or the model becomes available.
+pub type Wake = Arc<Notify>;
 
 /// One task for every space, so only one ever saves a space's `vectors.bin`.
 pub fn spawn(app: AppHandle, wake: Wake) {
@@ -54,9 +57,9 @@ pub fn spawn(app: AppHandle, wake: Wake) {
     });
 }
 
-/// Only the open space is embedded: the vectors serve its chat and similar
-/// notes, and another space catches up when it opens (SPEC 4.6). Its notes
-/// are then placed in threads. True when its threads changed.
+/// Only the open space is embedded: the vectors serve its searches and
+/// similar notes, and another space catches up when it opens (SPEC 4.6). Its
+/// notes are then placed in threads. True when its threads changed.
 fn sync_space(space: &Space, embedder: &dyn Embedder) -> bool {
     if space.is_retired() || !space.is_open() {
         return false;
@@ -145,7 +148,7 @@ pub fn reconcile(
     let (model_id, dims) = (embedder.model_id(), embedder.dims());
 
     // The work is cloned out so that neither lock is held while the model
-    // runs: the index is wanted by every command, the vectors by the chat.
+    // runs: the index is wanted by every command, the vectors by search.
     let (mut changed, todo) = {
         let mut slot = vectors
             .lock()
@@ -229,7 +232,7 @@ pub fn reconcile(
 mod tests {
     use super::*;
     use crate::embed::StubEmbedder;
-    use crate::storage::daily_file::{body_hash, Kind, Note, Status};
+    use crate::storage::daily_file::{body_hash, Kind, Note};
     use crate::storage::index::IndexEntry;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -283,10 +286,8 @@ mod tests {
             time: "08:00".to_string(),
             file: "notes/2026/2026-09-22.md".to_string(),
             subject: None,
-            category: None,
-            status: Status::Done,
             hash: body_hash(body),
-            lang: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Note,
             on: None,

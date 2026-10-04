@@ -1,10 +1,9 @@
 use std::path::Path;
 
 /// DLLs the Windows exe imports that a fresh machine may lack (SPEC Step 0):
-/// the Vulkan loader, and the Visual C++ runtime llama.cpp's C++ and OpenMP
-/// code link. `tauri.windows.conf.json` bundles them next to the exe.
-const WINDOWS_DLLS: [&str; 5] = [
-    "vulkan-1.dll",
+/// the Visual C++ runtime llama.cpp's C++ and OpenMP code link.
+/// `tauri.windows.conf.json` bundles them next to the exe.
+const WINDOWS_DLLS: [&str; 4] = [
     "msvcp140.dll",
     "vcruntime140.dll",
     "vcruntime140_1.dll",
@@ -32,8 +31,7 @@ fn stage_windows_dlls() {
         println!("cargo:rerun-if-changed={}", from.display());
         let bytes = std::fs::read(&from).unwrap_or_else(|e| {
             panic!(
-                "{} is missing ({e}): install a GPU driver or the Vulkan runtime, \
-                 and the Visual C++ redistributable",
+                "{} is missing ({e}): install the Visual C++ redistributable",
                 from.display()
             )
         });

@@ -1,5 +1,4 @@
-//! Spaces: separate sets of notes, each with its own categories, index and
-//! queue.
+//! Spaces: separate sets of notes, each with its own index.
 //!
 //! Every space is a folder under `spaces/`, named after the space, so a folder
 //! made there by hand is a space too. `.scratchnote/spaces.json` at the root
@@ -12,16 +11,14 @@ use std::sync::{Mutex, RwLock, RwLockWriteGuard};
 
 use serde::{Deserialize, Serialize};
 
+use crate::embed::sync::Wake;
 use crate::embed::threads::Threads;
-use crate::embed::vectors::Vectors;
-use crate::enrich::queue::{queue_path, Job, Queue};
-use crate::enrich::worker::Wake;
+use crate::embed::vectors::{vectors_path, Vectors};
 use crate::storage::day_path;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{self, Index, IndexEntry};
 use crate::storage::search_db::{SearchDb, Stamp};
 use crate::storage::writer::Writer;
-use crate::storage::categories;
 
 /// Made on first launch, when there is no space yet.
 pub const FIRST_NAME: &str = "Personal";
@@ -113,21 +110,14 @@ pub fn migrate_root(root: &Path) {
         );
         return;
     }
-    let own: [fn(&Path) -> PathBuf; 3] = [
-        index::index_path,
-        queue_path,
-        categories::categories_path,
-    ];
-    for path in own {
-        let from = path(root);
-        if from.exists() {
-            if let Err(e) = std::fs::rename(&from, path(&to)) {
-                log::warn!(
-                    "could not move {} into {}: {e}",
-                    from.display(),
-                    to.display()
-                );
-            }
+    let from = index::index_path(root);
+    if from.exists() {
+        if let Err(e) = std::fs::rename(&from, index::index_path(&to)) {
+            log::warn!(
+                "could not move {} into {}: {e}",
+                from.display(),
+                to.display()
+            );
         }
     }
 
@@ -198,9 +188,8 @@ pub fn check_name(raw: &str) -> Result<String, String> {
     Ok(name)
 }
 
-/// One space: its queue always, and its cache while it is open. Only the
-/// open space is read into memory and watched (SPEC 4.6); the others keep
-/// their queue, which the worker goes on with.
+/// One space, and its cache while it is open. Only the open space is read
+/// into memory and watched (SPEC 4.6).
 pub struct Space {
     pub name: String,
     pub root: PathBuf,
@@ -212,9 +201,7 @@ pub struct Space {
     /// after `index` when both are needed, never the other way round, so a
     /// read holding both cannot meet a write holding them the other way.
     pub search: Mutex<Option<SearchDb>>,
-    /// Pending enrichment jobs (SPEC 5.6).
-    pub queue: Mutex<Queue>,
-    /// The note embeddings the chat searches. `None` until the embed task
+    /// The note embeddings search by meaning reads. `None` until the embed task
     /// first runs with a model, which loads them from `vectors.bin`.
     pub vectors: Mutex<Option<Vectors>>,
     /// The thread each note is in (SPEC 6.4), placed from the vectors.
@@ -223,25 +210,23 @@ pub struct Space {
     pub threads: Mutex<Option<Threads>>,
     /// Nudges the embed task whenever the index changes.
     embed_wake: Wake,
-    /// Pages open in the editor. Neither model touches them until the page
-    /// view closes, so autosaves do not run either one again (SPEC 3.5).
+    /// Pages open in the editor. The model does not embed them until the
+    /// page view closes, so autosaves do not run it again (SPEC 3.5).
     editing: Mutex<HashSet<String>>,
     /// Held only to keep it alive; dropping it stops watching.
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
-    /// Set once the space is deleted or renamed away, so a job still in hand
-    /// for it does not write files back into the old folder.
+    /// Set once the space is deleted or renamed away, so nothing still in
+    /// hand for it writes files back into the old folder.
     pub retired: AtomicBool,
 }
 
 impl Space {
-    /// A space as listed, not open: only its queue is read, which survives
-    /// restarts.
+    /// A space as listed, not open: nothing of it is read yet.
     pub fn new(name: &str, root: PathBuf, embed_wake: Wake) -> Self {
         Self {
             name: name.to_string(),
             index: RwLock::new(Index::closed()),
             search: Mutex::new(None),
-            queue: Mutex::new(Queue::load(&root)),
             vectors: Mutex::new(None),
             threads: Mutex::new(None),
             watcher: Mutex::new(None),
@@ -272,16 +257,8 @@ impl Space {
             SearchDb::in_memory().expect("an in-memory database")
         });
         let (loaded, stale) = index::load(&self.root, &mut db);
-        categories::ensure(&self.root);
         log::info!("space {} holds {} notes", self.name, loaded.len());
 
-        // Anything still pending in the markdown is queued again, in case the
-        // queue file was lost.
-        if let Ok(mut queue) = self.queue.lock() {
-            for (note, date) in loaded.pending() {
-                queue.push(Job::new(note, date));
-            }
-        }
         if let Ok(mut index) = self.index.write() {
             *index = loaded;
         }
@@ -294,9 +271,8 @@ impl Space {
     }
 
     /// Let go of the notes, the vectors and the watcher, as leaving the space
-    /// does. The queue stays for the worker. Returns how many notes the space
-    /// held, for the switcher to show meanwhile, and `None` if it was not
-    /// open.
+    /// does. Returns how many notes the space held, for the switcher to show
+    /// meanwhile, and `None` if it was not open.
     pub fn unload(&self) -> Option<usize> {
         let count = self.index.write().ok().and_then(|mut index| {
             let held = std::mem::replace(&mut *index, Index::closed());
@@ -339,7 +315,7 @@ impl Space {
         self.retired.load(Ordering::SeqCst)
     }
 
-    /// A page is being edited: the models leave it alone until `release`.
+    /// A page is being edited: the model leaves it alone until `release`.
     pub fn hold(&self, id: &str) {
         if let Ok(mut editing) = self.editing.lock() {
             editing.insert(id.to_string());
@@ -353,22 +329,12 @@ impl Space {
             .is_ok_and(|mut editing| editing.remove(id))
     }
 
-    pub fn is_held(&self, id: &str) -> bool {
-        self.editing
-            .lock()
-            .is_ok_and(|editing| editing.contains(id))
-    }
-
     /// The pages being edited, for the embed task to skip.
     pub fn held(&self) -> HashSet<String> {
         self.editing
             .lock()
             .map(|editing| editing.clone())
             .unwrap_or_default()
-    }
-
-    pub fn queued(&self) -> usize {
-        self.queue.lock().map(|queue| queue.len()).unwrap_or(0)
     }
 
     /// `None` while the space is not open, which holds no notes to count.
@@ -378,21 +344,6 @@ impl Space {
             .ok()
             .filter(|idx| !idx.is_closed())
             .map(|idx| idx.len())
-    }
-
-    /// The categories the model picks from, in whatever language it labels.
-    pub fn categories(&self) -> Vec<String> {
-        categories::load(&self.root)
-    }
-
-    /// The `k` notes closest to a query, best first, with their cosine. Empty
-    /// until the embed task has loaded the vectors.
-    pub fn nearest(&self, query: &[f32], k: usize) -> Vec<(String, f32)> {
-        self.vectors
-            .lock()
-            .ok()
-            .and_then(|vectors| Some(vectors.as_ref()?.top(query, k)))
-            .unwrap_or_default()
     }
 
     /// Notes that stand out for a query, best first, per `Vectors::related`.
@@ -543,9 +494,10 @@ impl Space {
         Ok(gone)
     }
 
-    /// Reparse every file of the space, into the index and search.db alike.
-    /// Blocks for as long as that takes. Returns how many notes and pages it
-    /// holds.
+    /// Reparse every file of the space, into the index and search.db alike,
+    /// and drop its vectors, which the embed task then makes again from every
+    /// note once the index is written. Blocks for as long as that takes.
+    /// Returns how many notes and pages it holds.
     pub fn rebuild(&self) -> Result<usize, String> {
         let rebuilt = {
             let mut search = self
@@ -560,6 +512,18 @@ impl Space {
         let count = rebuilt.len();
         if let Some(mut idx) = self.index_to_change()? {
             *idx = rebuilt;
+        }
+        // Under the lock, so a pass under way neither stores into the old
+        // vectors nor loads the file before it is gone.
+        let mut vectors = self
+            .vectors
+            .lock()
+            .map_err(|_| "vectors lock poisoned".to_string())?;
+        *vectors = None;
+        match std::fs::remove_file(vectors_path(&self.root)) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(format!("could not remove the vectors: {e}")),
         }
         Ok(count)
     }
@@ -630,19 +594,6 @@ impl Space {
             .write_index(index::index_path(&self.root), jsonl)
             .await
     }
-
-    pub async fn persist_queue(&self, writer: &Writer) {
-        if self.is_retired() {
-            return;
-        }
-        let contents = match self.queue.lock() {
-            Ok(queue) => queue.to_json(),
-            Err(_) => return,
-        };
-        if let Err(e) = writer.write_index(queue_path(&self.root), contents).await {
-            log::warn!("could not persist the queue of {}: {e}", self.name);
-        }
-    }
 }
 
 #[cfg(test)]
@@ -657,17 +608,15 @@ mod tests {
 
     /// A day of one note, written as the writer would.
     fn write_note(root: &Path, id: &str, date: &str) -> Note {
-        use crate::storage::daily_file::{append_note, body_hash, Kind, Status};
+        use crate::storage::daily_file::{append_note, body_hash, Kind};
         let note = Note {
             id: id.to_string(),
             date: date.to_string(),
             time: "08:00".to_string(),
             file: crate::storage::relative_day_path(date),
             subject: None,
-            category: None,
-            status: Status::Done,
             hash: body_hash("a note"),
-            lang: None,
+            ahead_off: false,
             body: "a note".to_string(),
             kind: Kind::Note,
             on: None,
@@ -731,6 +680,24 @@ mod tests {
     }
 
     #[test]
+    fn a_rebuild_drops_the_vectors_to_embed_every_note_again() {
+        let root = scratch("rebuild-vectors");
+        write_note(&root, "01AAA", "2026-09-22");
+        let (space, _) = Space::open("Test", root.clone(), wake());
+        let mut vectors = Vectors::new("m", 2);
+        vectors
+            .insert("01AAA".into(), "h".into(), vec![1.0, 0.0])
+            .unwrap();
+        vectors.save(&vectors_path(&root)).unwrap();
+        *space.vectors.lock().unwrap() = Some(vectors);
+
+        assert_eq!(space.rebuild(), Ok(1));
+        assert!(space.vectors.lock().unwrap().is_none());
+        assert!(!vectors_path(&root).exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn a_missing_file_opens_the_first_space() {
         let registry = Registry::load(&scratch("missing"));
         assert_eq!(registry.active, FIRST_NAME);
@@ -742,7 +709,7 @@ mod tests {
         std::fs::create_dir_all(root.join("notes").join("2026")).unwrap();
         std::fs::write(root.join("notes/2026/2026-09-22.md"), "x").unwrap();
         std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
-        std::fs::write(categories::categories_path(&root), "[]").unwrap();
+        std::fs::write(index::index_path(&root), "").unwrap();
         std::fs::write(
             registry_path(&root),
             r#"{"active":"Home","defaultName":"Home"}"#,
@@ -755,9 +722,9 @@ mod tests {
 
         let to = spaces_dir(&root).join("Home 2");
         assert!(to.join("notes/2026/2026-09-22.md").exists());
-        assert!(categories::categories_path(&to).exists());
+        assert!(index::index_path(&to).exists());
         assert!(!root.join("notes").exists());
-        assert!(!categories::categories_path(&root).exists());
+        assert!(!index::index_path(&root).exists());
         assert_eq!(Registry::load(&root).active, "Home 2");
 
         // Nothing left at the root, so a second launch changes nothing.

@@ -1,4 +1,4 @@
-//! `vectors.bin`, the note embeddings a chat searches to pick its notes.
+//! `vectors.bin`, the note embeddings search by meaning reads.
 //!
 //! Derived like `index.jsonl`: every vector can be made again from the
 //! markdown, so a file that is missing, damaged or from another model loads
@@ -19,12 +19,25 @@ use crate::storage::index::IndexEntry;
 const MAGIC: &[u8; 4] = b"SNVB";
 const VERSION: u32 = 1;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Vectors {
     model_id: String,
     dims: usize,
     /// Note id to the body hash it was embedded from, and its unit vector.
     notes: HashMap<String, (String, Vec<f32>)>,
+    /// Every note's vector added up, kept as notes come and go so that
+    /// scoring against what is usual never adds them all up again. In f64:
+    /// a note's vector is taken off when it changes or goes, and the
+    /// rounding of years of that must not build up.
+    sum: Vec<f64>,
+}
+
+/// The same notes from the same model. The sum follows from the notes, and
+/// adding them in another order can round it a hair differently.
+impl PartialEq for Vectors {
+    fn eq(&self, other: &Self) -> bool {
+        self.model_id == other.model_id && self.dims == other.dims && self.notes == other.notes
+    }
 }
 
 pub fn vectors_path(root: &Path) -> PathBuf {
@@ -37,6 +50,7 @@ impl Vectors {
             model_id: model_id.to_string(),
             dims,
             notes: HashMap::new(),
+            sum: vec![0.0; dims],
         }
     }
 
@@ -72,6 +86,11 @@ impl Vectors {
         self.notes
             .get(id)
             .map(|(hash, vector)| (hash.as_str(), vector.as_slice()))
+    }
+
+    /// Every note's vector added up, which says what is usual in the space.
+    pub fn sum(&self) -> Vec<f32> {
+        self.sum.iter().map(|&s| s as f32).collect()
     }
 
     /// Every note's id, body hash and unit vector, in no order.
@@ -114,7 +133,15 @@ impl Vectors {
     /// Forget notes that are gone. True when anything was dropped.
     pub fn retain(&mut self, present: &HashSet<String>) -> bool {
         let before = self.notes.len();
-        self.notes.retain(|id, _| present.contains(id));
+        let sum = &mut self.sum;
+        self.notes.retain(|id, (_, vector)| {
+            let keep = present.contains(id);
+            if !keep {
+                add(sum, vector, -1.0);
+            }
+            keep
+        });
+        self.settle();
         self.notes.len() != before
     }
 
@@ -127,12 +154,23 @@ impl Vectors {
             ));
         }
         normalize(&mut vector);
-        self.notes.insert(id, (hash, vector));
+        add(&mut self.sum, &vector, 1.0);
+        if let Some((_, old)) = self.notes.insert(id, (hash, vector)) {
+            add(&mut self.sum, &old, -1.0);
+        }
         Ok(())
+    }
+
+    /// An empty space adds up to nothing, whatever rounding was left over.
+    fn settle(&mut self) {
+        if self.notes.is_empty() {
+            self.sum.fill(0.0);
+        }
     }
 
     /// The `k` notes closest to the query with their cosine, best first.
     /// Equal scores go by id, so one question always picks the same notes.
+    #[cfg(test)]
     pub fn top(&self, query: &[f32], k: usize) -> Vec<(String, f32)> {
         if query.len() != self.dims {
             return Vec::new();
@@ -224,10 +262,10 @@ impl Vectors {
             return Vec::new();
         }
         let rest = (others.len() - 1) as f32;
-        let mut sum = vec![0.0; self.dims];
-        for (_, vector) in &others {
-            for (s, x) in sum.iter_mut().zip(vector.iter()) {
-                *s += x;
+        let mut sum = self.sum();
+        if let Some((_, left_out)) = exclude.and_then(|id| self.notes.get(id)) {
+            for (s, x) in sum.iter_mut().zip(left_out) {
+                *s -= x;
             }
         }
 
@@ -290,6 +328,7 @@ impl Vectors {
 
         // Not sized from `count`: a damaged count must not allocate.
         let mut notes = HashMap::new();
+        let mut sum = vec![0.0; dims];
         for _ in 0..count {
             let id = reader.string()?;
             let hash = reader.string()?;
@@ -297,14 +336,18 @@ impl Vectors {
                 .take(dims.checked_mul(4)?)?
                 .chunks_exact(4)
                 .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                .collect();
-            notes.insert(id, (hash, vector));
+                .collect::<Vec<f32>>();
+            add(&mut sum, &vector, 1.0);
+            if let Some((_, old)) = notes.insert(id, (hash, vector)) {
+                add(&mut sum, &old, -1.0);
+            }
         }
 
         reader.0.is_empty().then_some(Self {
             model_id,
             dims,
             notes,
+            sum,
         })
     }
 }
@@ -317,6 +360,13 @@ fn ranked(mut scored: Vec<(&String, f32)>, k: usize) -> Vec<(String, f32)> {
         .into_iter()
         .map(|(id, score)| (id.clone(), score))
         .collect()
+}
+
+/// Adds `vector` times `sign` into `sum`.
+fn add(sum: &mut [f64], vector: &[f32], sign: f64) {
+    for (s, &x) in sum.iter_mut().zip(vector) {
+        *s += sign * x as f64;
+    }
 }
 
 /// Summed in eight lanes, which the compiler turns into vector
@@ -372,7 +422,7 @@ impl<'a> Reader<'a> {
 mod tests {
     use super::*;
     use crate::embed::{Embedder, StubEmbedder};
-    use crate::storage::daily_file::{body_hash, Kind, Note, Status};
+    use crate::storage::daily_file::{body_hash, Kind, Note};
 
     fn entry(id: &str, body: &str) -> IndexEntry {
         IndexEntry::from(&Note {
@@ -381,10 +431,8 @@ mod tests {
             time: "08:00".to_string(),
             file: "notes/2026/2026-09-22.md".to_string(),
             subject: None,
-            category: None,
-            status: Status::Done,
             hash: body_hash(body),
-            lang: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Note,
             on: None,
@@ -424,6 +472,39 @@ mod tests {
         assert!(!path.with_extension("bin.tmp").exists());
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_kept_sum_follows_notes_edited_removed_and_loaded() {
+        let fresh = |vectors: &Vectors| {
+            let mut sum = vec![0.0f32; vectors.dims()];
+            for (_, _, vector) in vectors.iter() {
+                for (s, x) in sum.iter_mut().zip(vector) {
+                    *s += x;
+                }
+            }
+            sum
+        };
+        let close = |a: Vec<f32>, b: Vec<f32>| a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1e-6);
+
+        let mut vectors = sample();
+        vectors
+            .insert("01C".into(), "cccc".into(), vec![3.0, 0.0, 4.0])
+            .unwrap();
+        // An edit replaces the old vector rather than adding to it.
+        vectors
+            .insert("01A".into(), "aaab".into(), vec![0.0, 1.0, 0.0])
+            .unwrap();
+        assert!(close(vectors.sum(), fresh(&vectors)));
+
+        vectors.retain(&["01A".to_string(), "01C".to_string()].into());
+        assert!(close(vectors.sum(), fresh(&vectors)));
+
+        let loaded = Vectors::decode(&vectors.encode()).unwrap();
+        assert!(close(loaded.sum(), fresh(&vectors)));
+
+        vectors.retain(&HashSet::new());
+        assert_eq!(vectors.sum(), vec![0.0; 3]);
     }
 
     #[test]

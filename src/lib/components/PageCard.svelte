@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { fade } from 'svelte/transition';
 	import type { Note } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import DayAhead from '#lib/components/DayAhead.svelte';
@@ -9,7 +8,6 @@
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FileXIcon from '@lucide/svelte/icons/file-x';
 	import PanelRightOpenIcon from '@lucide/svelte/icons/panel-right-open';
-	import { categoryLabel } from '#lib/categories.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
@@ -18,7 +16,6 @@
 		onopen,
 		ondock,
 		ondelete,
-		oncategory,
 		showDate = false,
 		threadLine = true,
 		blink = false
@@ -30,7 +27,6 @@
 		ondock: (page: Note) => void;
 		/** For a missing page, which takes its stub out of the day. */
 		ondelete: (page: Note) => void;
-		oncategory: (category: string) => void;
 		showDate?: boolean;
 		/** Name the thread the page is in, as everywhere but in that thread. */
 		threadLine?: boolean;
@@ -49,30 +45,21 @@
 			.join('\n')
 	);
 	const shell = getShell();
-	/** As a note's: only while the model is there to label it. */
-	const glowing = $derived(note.status === 'pending' && shell.modelAvailable);
-	const glowFade = { duration: 500 };
 </script>
 
 <!-- Laid out as a note card, so the page sits on the same rail at its time.
      The card is one big click target; its title is the button, for the
-     keyboard, and the category a button of its own. -->
+     keyboard. -->
 <TimelineItem
 	data-note-id={note.id}
 	time={note.time}
 	date={showDate ? note.date : undefined}
 	hover={false}
-	class={[blink && 'note-blink', glowing && 'z-10']}
+	class={[blink && 'note-blink']}
 >
 	{#snippet icon()}
 		{#if note.missing}<FileXIcon class="size-3" />{:else}<FileTextIcon class="size-3" />{/if}
 	{/snippet}
-	{#if glowing}
-		<span aria-hidden="true" class="note-aurora" transition:fade={glowFade}></span>
-	{:else if note.status === 'failed'}
-		<span aria-hidden="true" class="note-error-ring" transition:fade={glowFade}></span>
-	{/if}
-
 	<!-- The box rises into the item's padding, so its title, inside the box's
 	     own padding, comes about level with a note's first line. -->
 	<div class="-my-2 min-w-0">
@@ -135,19 +122,6 @@
 				<div class="mt-2 flex items-center gap-3 text-xs text-neutral-600">
 					<span>{m.pages_words({ count: words })}</span>
 					{#if words > 0}<span>{m.pages_read_time({ count: minutes })}</span>{/if}
-					{#if note.category}
-						{@const category = note.category}
-						<button
-							type="button"
-							onclick={(event) => {
-								event.stopPropagation();
-								oncategory(category);
-							}}
-							title={m.note_show_tag({ tag: categoryLabel(category) })}
-							class="cursor-pointer font-mono hover:text-neutral-200"
-							>#{categoryLabel(category)}</button
-						>
-					{/if}
 				</div>
 				{#if note.on || (threadLine && shell.threadOf(note.id))}
 					<div class="mt-1.5 flex min-w-0 items-center gap-3">

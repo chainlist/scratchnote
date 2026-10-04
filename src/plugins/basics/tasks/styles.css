@@ -34,9 +34,3 @@
 	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
 		center / 80% no-repeat;
 }
-/* The glowing copy of a waiting note draws letters only; the real text
-   below keeps the boxes. */
-.note-glow-text .md-task {
-	border-color: transparent;
-	background: none;
-}

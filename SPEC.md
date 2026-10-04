@@ -2,14 +2,13 @@
 
 ## 1. Overview
 
-Scratchnote is a local-first desktop app for frictionless capture. The user hits a global hotkey, types a quick note, presses a key to save, and the window disappears. Every note is appended to the current day's markdown file. In the background, a small local LLM writes a **subject** for each note and files it under a **category** from the user's list, and the app maintains an index across all days so notes can be browsed by day, category, or search. Longer writing, such as meeting notes, goes in a **page**: a note with a title and a markdown file of its own, shown on its day as a card (3.5).
+Scratchnote is a local-first desktop app for frictionless capture. The user hits a global hotkey, types a quick note, presses a key to save, and the window disappears. Every note is appended to the current day's markdown file. The app maintains an index across all days so notes can be browsed by day or found by search, by their words or by their meaning, through a small local embedding model. Longer writing, such as meeting notes, goes in a **page**: a note with a title and a markdown file of its own, shown on its day as a card (3.5).
 
 ### Goals
 
-- Capture in under 2 seconds from hotkey to saved. The LLM never blocks saving.
-- 100% local: the only network calls are downloading a model and, when the user explicitly clicks it, checking whether a newer revision of the installed model exists. Nothing contacts the network on a timer or at launch. Once the user turns community plugins on (3.9), browsing, installing and updating them fetches from their registry, each time asked for.
+- Capture in under 2 seconds from hotkey to saved. The embedding model never blocks saving.
+- 100% local: the only network call for notes is downloading the embedding model. Nothing about the notes contacts the network on a timer or at launch. Once the user turns community plugins on (3.9), browsing, installing and updating them fetches from their registry, each time asked for.
 - Plain markdown files as the source of truth. The user can open, edit, sync (git, Syncthing, iCloud) or grep them without the app.
-- Categories stay few and consistent over time: the model picks from the user's list and never invents one.
 
 ### Non-goals (v1)
 
@@ -25,9 +24,8 @@ Scratchnote is a local-first desktop app for frictionless capture. The user hits
 | Frontend           | SvelteKit (Svelte 5 runes) + TypeScript, SPA mode with `adapter-static` |
 | Styling            | Tailwind CSS 4 (installed via the `sv` add-on)                          |
 | Backend            | Rust (Tauri commands)                                                   |
-| LLM runtime        | llama.cpp embedded via the `llama-cpp-2` crate (no external server)     |
-| Default model      | Qwen3-4B-Instruct-2507, GGUF Q4_K_M                                     |
-| Light model option | Qwen3-1.7B, GGUF Q4_K_M (thinking disabled via chat template)           |
+| Embedding runtime  | llama.cpp embedded via the `llama-cpp-2` crate (no external server)     |
+| Embedding model    | EmbeddingGemma-300M, GGUF Q8_0                                          |
 | IDs                | ULID (`ulid` crate)                                                     |
 | Global hotkey      | `tauri-plugin-global-shortcut`                                          |
 | File watching      | `notify` crate                                                          |
@@ -59,15 +57,8 @@ Studio` even when another install has a perfectly good compiler. Either give
 `vswhere -all` lists every registered instance; without `-all` it hides Build
 Tools installs, which makes a working toolchain look absent.
 
-**GPU support.** Every build compiles llama.cpp's Vulkan backend (Metal on
-macOS), which runs on NVIDIA, AMD, Intel and Adreno GPUs with only the driver
-installed on the user's machine, and falls back to the CPU when no device is
-found. The dependency lines come from `cargo add`:
-
-```bash
-cargo add llama-cpp-2@0.1.156 --features vulkan --target 'cfg(any(windows, target_os = "linux"))'
-cargo add llama-cpp-2@0.1.156 --features metal --target 'cfg(target_os = "macos")'
-```
+**CPU only.** llama.cpp is built without a GPU backend: the one model the app
+runs, the embedding model, runs on the CPU (5.2).
 
 `src-tauri/.cargo/config.toml` is the one hand-written configuration file,
 allowed as an exception to the rule above because no installer produces it.
@@ -76,15 +67,14 @@ may be added to it without asking.
 
 Building needs, once per machine:
 
-- **The Vulkan SDK**, for the shader compiler: `winget install KhronosGroup.VulkanSDK`.
-  Its installer sets `VULKAN_SDK`; open a new shell afterwards.
 - **Ninja on `PATH`**: `winget install Ninja-build.Ninja`. The config file
-  above selects it, because the Visual Studio generator cannot install the
-  shader generator llama.cpp builds along the way. No developer shell is needed.
+  above selects it. It was chosen for the Vulkan shader generator, which the
+  Visual Studio generator could not install; the CPU build has not been tried
+  without it. No developer shell is needed.
 - **A short `CARGO_TARGET_DIR` on Windows**, such as `%USERPROFILE%\.snb`.
-  The shader generator is a nested CMake project deep inside the build
-  directory, and at the repository's own `target/` its paths pass the 260
-  character limit that `cl.exe` still enforces. 19 characters works; 47 does not.
+  The Vulkan shader generator's nested CMake project passed the 260 character
+  limit that `cl.exe` still enforces under the repository's own `target/`; the
+  CPU build has not been tried there.
 
 **Runtime libraries.** The binary links a few libraries that a fresh machine
 may lack, and without them it does not start at all, so the CPU fallback never
@@ -92,22 +82,21 @@ gets a chance. `tauri.windows.conf.json` and `tauri.linux.conf.json` are
 hand-written, like `tauri.macos.conf.json`, because no installer produces
 platform config files.
 
-- **Windows** imports `vulkan-1.dll`, which only a GPU driver installs, and the
-  Visual C++ runtime that llama.cpp's C++ and OpenMP code need (`msvcp140.dll`,
+- **Windows** imports the Visual C++ runtime that llama.cpp's C++ and OpenMP
+  code need (`msvcp140.dll`,
   `vcomp140.dll`, and the `vcruntime140*.dll` they load). Tauri links the rest
   of the runtime statically. `build.rs` copies the build machine's copies
   from `System32` into `src-tauri/redist/` (ignored by git), because the
   32-bit WiX and NSIS tools would be handed the 32-bit ones from `SysWOW64`,
   and `tauri.windows.conf.json` bundles them from there next to the exe. The
-  build machine therefore needs a GPU driver or the Vulkan runtime, and a
-  Visual C++ redistributable at least as new as the compiler.
-- **Linux** packages declare the Vulkan loader and OpenMP (`libvulkan1` and
-  `libgomp1` for the `.deb`, their sonames for the `.rpm`). Tauri already
+  build machine therefore needs a Visual C++ redistributable at least as new
+  as the compiler.
+- **Linux** packages declare OpenMP (`libgomp1` for the `.deb`, its soname for
+  the `.rpm`). Tauri already
   declares WebKitGTK, GTK and the tray library, and the AppImage carries all of
   them. The binary is named `scratchnote` there rather than the crate's `app`,
   which would clash in `/usr/bin`.
-- **macOS** needs nothing: Metal is part of the OS, llama.cpp embeds its
-  shaders, and Apple's compiler has no OpenMP to link. `tauri.macos.conf.json`
+- **macOS** needs nothing: Apple's compiler has no OpenMP to link. `tauri.macos.conf.json`
   sets the minimum system to 11, the first on Apple Silicon, because Tauri
   otherwise targets 10.13 and llama.cpp's `std::filesystem` code needs 10.15.
 
@@ -258,11 +247,11 @@ Milestone 0 is done when `pnpm tauri dev` runs, `pnpm tauri build` produces an a
 
 Opened from tray icon or app launch. Three areas:
 
-1. **Sidebar**: the space switcher (see 4.6), a day picker, and the categories in use with counts, sorted by count. In search, `#` completes category names, and a note's category filters on click.
-2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. The subject is not displayed; it exists for search and indexing. Pages show as cards among them (3.5). A note or page in a thread has a line under its text naming the thread, which opens it (6.4), and one that looks forward to a later day names that day, which opens it (5.7). A day that earlier notes looked forward to lists them at its top. The category shows on hover and filters on click. Edit, re-run and delete appear on hover. The enrichment status is not written out: a `pending` note has a slowly turning multicolour edge whose glow spills out onto the page while the model is there to label it (on and installed, loaded or not), a `failed` one has a faint turning red border, and the others look alike.
-3. **Search bar** at the top: full-text over body and subject; supports a `#category` token as a filter (e.g. `#infrastructure kubernetes`). Results are note cards across all days.
+1. **Sidebar**: the space switcher (see 4.6) and a day picker.
+2. **Day view** (default: today): all notes of the selected day in chronological order. Notes read like one continuous journal page: each entry shows only its time and body, one after another. Pages show as cards among them (3.5). A note or page in a thread has a line under its text naming the thread, which opens it (6.4), and one that looks forward to a later day names that day, which opens it (5.3). A day that earlier notes looked forward to lists them at its top. Edit and delete appear on hover.
+3. **Search bar** at the top: full-text over bodies and page titles, with the notes close in meaning under the matches (6.1). Results are note cards across all days.
 
-Note actions (on hover): edit body inline, edit subject and category manually, similar notes (with the embedding model, see 6.2), move to another space (4.6), take out of its thread (6.4), re-run enrichment, delete.
+Note actions (on hover): edit body inline, similar notes (with the embedding model, see 6.2), move to another space (4.6), take out of its thread (6.4), delete.
 
 ### 3.3 Tray
 
@@ -280,7 +269,7 @@ Note bodies are shown as markdown wherever they are read or written: the capture
 - A toolbar at the top of every editor writes the markup for those who do not know it: bold, italic, a highlight and a checklist (from Basics), a bulleted list, a link, and the paperclip (3.7), with the plugins' buttons in the group they name. Bold and italic go on the selection, else on the word the cursor is in, else on what is typed next; the lists on every selected line. A button shows pressed where its format already is, and a press there takes it away, except at the end of bold or italic text, where the cursor steps out of it so typing goes on plain. A link wraps the selection or the word as `[text](url)` with `url` selected, for the address to be pasted over it. `Ctrl+B`, `Ctrl+I` and `Ctrl+K` (`Cmd` on macOS) do bold, italic and link. On a page the toolbar stays in view while the text scrolls.
 - Enter carries a list or quote on to the next line; Enter on an empty item ends it.
 - A link opens in the system browser: a click on a card, Ctrl or Cmd and a click in the editor. Only `http`, `https` and `mailto` links open. Links in previews are drawn but do not open.
-- A task shows a checkbox in place of its bullet. A click on it in a card ticks or clears it and saves the note at once; in the editor it changes the text being edited. Only the `[ ]` or `[x]` changes, and a body that changed in nothing else keeps its subject and category: it does not go back to the model.
+- A task shows a checkbox in place of its bullet. A click on it in a card ticks or clears it and saves the note at once; in the editor it changes the text being edited. Only the `[ ]` or `[x]` changes.
 - Editor and cards read the syntax through the same code, so a note looks the same written and read.
 
 ### 3.5 Pages
@@ -288,14 +277,14 @@ Note bodies are shown as markdown wherever they are read or written: the capture
 A page is a note for longer writing, such as meeting notes. It has a title and a markdown file of its own (4.7), and the day it was created shows it as a card.
 
 - Start one with New page, under the day's notes or from the command center; with Turn into page in a note's menu; or with `Ctrl+Shift+Enter` (`Cmd+Shift+Enter` on macOS) in the capture window, which hides it and hands its draft to a new page in the main window. A draft for another space than the open one opens that space first, since a page is written into the open space.
-- A page is saved once it has a title. Turn into page offers the note's subject as a start. Until then the draft stays in memory, as the capture window's does, and New page brings it back.
-- The day view shows a page at its time as a card: its title, the first two lines of its text, its word count and its category. The card glows while the model works on it, as a note does. A click opens the page.
+- A page is saved once it has a title. Until then the draft stays in memory, as the capture window's does, and New page brings it back.
+- The day view shows a page at its time as a card: its title, the first two lines of its text and its word count. A click opens the page.
 - All pages lists every page of the space, newest first, as the same cards, each with its date. Its button, under the calendar's on the left edge of the window, opens it from any view, as does the command center. Its cards open and dock a page as a day's do.
-- A button on the card docks the page beside the timeline instead, so it can be written while the timeline goes through days, search and similar notes. The dock holds the page view, which works there as it does in the timeline, and its close button closes the view. It opens on the right; a button beside the close button moves it to the other side, as wide as it was. Dragging the line between the dock and the timeline makes it wider or narrower, from a fifth of the room beside the ribbon to seven tenths. Its side and width are kept between launches. The narrower timeline shows only the neighbouring days its width holds, and the chat floats clear of the dock. Opening the docked page in the timeline takes it out of the dock, so a page is never open twice.
-- The page view takes the timeline's place, with a way back. The title is edited in place and saved on Enter or when focus moves elsewhere in the window, not when another app takes it; an empty title goes back to the last one. The text saves itself a second after typing stops, and when the view closes. Saves leave the models alone: a page open in the view is held, and when the view closes it goes to the model, and to the embedding model, once, if its text changed. A page still pending when the app quits is queued at the next launch.
-- The page view's menu offers similar notes, move to another space (4.6), re-run and delete, as a note's does. Deleting asks first. Moving saves the text typed so far first.
+- A button on the card docks the page beside the timeline instead, so it can be written while the timeline goes through days, search and similar notes. The dock holds the page view, which works there as it does in the timeline, and its close button closes the view. It opens on the right; a button beside the close button moves it to the other side, as wide as it was. Dragging the line between the dock and the timeline makes it wider or narrower, from a fifth of the room beside the ribbon to seven tenths. Its side and width are kept between launches. The narrower timeline shows only the neighbouring days its width holds. Opening the docked page in the timeline takes it out of the dock, so a page is never open twice.
+- The page view takes the timeline's place, with a way back. The title is edited in place and saved on Enter or when focus moves elsewhere in the window, not when another app takes it; an empty title goes back to the last one. The text saves itself a second after typing stops, and when the view closes. Saves leave the embedding model alone: a page open in the view is held, and when the view closes it is embedded once, if its text changed.
+- The page view's menu offers similar notes, move to another space (4.6) and delete, as a note's does. Deleting asks first. Moving saves the text typed so far first.
 - A stub whose page file is gone shows as a card saying the page was not found. The stub stays: with a sync tool, the file may not have arrived yet.
-- Search, chat, similar notes and categories treat a page as a note whose subject is its title. The embedding model reads only the first 1,023 tokens of a long page, and chat sends the first 800 characters of a page it retrieves.
+- Search and similar notes treat a page as a note with its title. The embedding model reads only the first 1,023 tokens of a long page.
 
 ### 3.6 Updates
 
@@ -318,7 +307,7 @@ A note or a page can carry files: screenshots, photos, PDFs, anything. Each is c
 - Only attachments are drawn. An image link to anywhere else, such as the web, shows as typed: nothing is fetched (1).
 - Deleting a note, a page or a link leaves the file where it is. Files nothing links to are removed by hand.
 - Moving a note or a page to another space (4.6) takes the files it links along (4.8).
-- Search, chat, the models and the index see the link as part of the text. Nothing reads what is inside an attachment.
+- Search, the embedding model and the index see the link as part of the text. Nothing reads what is inside an attachment.
 
 ### 3.8 Basics
 
@@ -327,14 +316,14 @@ Basics is a core plugin (3.9), built on the plugin API in `src/plugins/basics/`:
 - Its settings tab has a section per part: the part's name, what it does, its switch, and its settings, which show while it is on. Both parts are on by default.
 - Its data, `core-plugins/basics.json`, holds each part's switch and settings (4.9).
 
-**Tasks**: the task syntax and its boxes (3.4), the checklist button, and Open tasks. Switched off, `- [ ]` shows as typed, the Bulleted list button treats the box as text, and the button, the view and its command go. The backend still knows the syntax: a body that changed only in its boxes keeps its labels (3.4), and the embedding model reads a box as words (5.2).
+**Tasks**: the task syntax and its boxes (3.4), the checklist button, and Open tasks. Switched off, `- [ ]` shows as typed, the Bulleted list button treats the box as text, and the button, the view and its command go. The embedding model still reads a box as words (5.2).
 
 Open tasks lists every task of the space not yet ticked, in notes and pages alike, so a `- [ ]` jotted in the capture window does not sink out of sight with its day.
 
 - Its button on the left edge of the window opens it from any view, as does the command center. It is the plugin's page, `/plugin/tasks/`.
 - Its section in the settings takes the button away, and orders the list newest or oldest first.
 - One item per note or page, on a timeline drawn as the day's, a page with its icon on the rail: its date and time on the left, which show the note on its day or open the page, and its open tasks on the right, each as the first line of its list item. A page's title shows above its tasks.
-- A click on a box ticks the task and saves the note or page at once, as on a card (3.4): only the box changes, so it keeps its subject and category. A task ticked here stays in the list, ticked, until the view closes, so a box ticked by mistake can be cleared again.
+- A click on a box ticks the task and saves the note or page at once, as on a card (3.4): only the box changes. A task ticked here stays in the list, ticked, until the view closes, so a box ticked by mistake can be cleared again.
 - The title counts the open tasks. With none, the view says how to write one.
 - The tasks are read from the markdown, through the same code as the cards: the backend hands over the notes whose text holds a box (`notes_containing`), and the plugin parses them. Search by meaning cannot do this: an open task and a done one embed almost alike.
 
@@ -354,7 +343,7 @@ Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, c
 - A plugin draws a list of notes, or of anything else at a time, on the day's own timeline: the app draws the time, the rail and its mark with the day's component, and the plugin the body, in any framework. So every timeline looks the same, and follows the day's when it changes.
 - A plugin's view docks where a page docks (3.5), one at a time: docking a page closes the view, and the other way round. A plugin's page takes the timeline's place, at `/plugin/<type>/` with its query string, with its title and a way back, as the app's own views have. It is drawn in the reading column, or, when it asks, fills the main area: its whole width and the height under its title.
 - The plugins load before the first view, so the first card is drawn with their syntax. The app waits two seconds at most on a plugin that loads asynchronously.
-- Each window times its startup: loading the app, the wait on the plugins (reading the plugin list, each plugin's load, listening for changes), and the first view, from when the window began loading until its first view is up. It logs them to its console, and Settings > General shows the main window's total under the version, with Details for every step.
+- Each window times its startup: loading the app, the wait on the plugins (reading the plugin list, each plugin's load, listening for changes), and the first view, from when the window began loading until its first view is up. It logs them to its console, and Settings > General shows the main window's total under the version, with Details for every step. A dev build shows more, with English labels: what the app did at launch before the main window began loading (each setup step, timed by the backend), how loading the app split between fetching the page, fetching the code and running it, and the first view's wait for its first command, each command it called and when, and drawing it.
 - A plugin that throws, while loading, drawing a widget, or running a command, is reported and the rest of the app carries on: a widget that fails leaves its text as typed.
 - PLUGINS.md is the guide for authors: the files, the API, and how to publish.
 
@@ -417,63 +406,48 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
         search.db        # the notes' text for search, SQLite, derived, rebuildable
-        vectors.bin      # note embeddings for chat and similar notes, derived, rebuildable
+        vectors.bin      # note embeddings for search by meaning, similar notes and threads, derived, rebuildable
         threads.json     # the thread each note was placed in, derived, rebuildable
         thread-edits.json  # thread titles and notes kept out of threads, the user's
-        queue.json       # pending enrichment jobs
-        days-ahead.json  # notes labelled before days ahead were looked for were looked at
-        categories.json  # the categories the model picks from, English names: ["development", ...]
     Work/
       notes/...
       .scratchnote/...
-  models/            # GGUF files (outside notes so sync tools can ignore it)
+  models/            # the embedding model's GGUF file (outside notes so sync tools can ignore it)
 ```
 
 Day boundaries use the **local timezone** at save time.
 
 ### 4.2 Daily file format (source of truth)
 
-The daily markdown file holds both the note body and its enrichment metadata. `index.jsonl` and `search.db` are purely derived caches and must be fully rebuildable from the markdown files.
+The daily markdown file holds the notes. `index.jsonl` and `search.db` are purely derived caches and must be fully rebuildable from the markdown files.
 
 ```markdown
 # 2026-09-22
 
-<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 status=done hash=a1b2c3d4 lang=en -->
-
-### Rollback plan for ArgoCD sync issue
-
-> #infrastructure
-
+<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 -->
 Talked with the team, the auto-sync broke staging again.
 We pin the chart version and roll back before Friday's release.
 <!-- sn:end -->
 
-<!-- sn:note id=01J8Z4P1M7T0 time=15:10 status=pending hash=e5f6a7b8 -->
-
-### (untitled)
-
+<!-- sn:note id=01J8Z4P1M7T0 time=15:10 ahead=off -->
 Buy a new USB-C hub for the homelab
 <!-- sn:end -->
 ```
 
 Rules:
 
-- Each note is delimited by `<!-- sn:note ... -->` and `<!-- sn:end -->`. Parsing relies only on these markers.
-- `hash` is the first 8 hex chars of SHA-256 of the body (trimmed). It is used to detect external edits.
-- Before enrichment: heading is `### (untitled)` and there is no category line.
-- After enrichment: the heading becomes the subject, followed by a `> #category` line and a blank line when the model found a category that fits. Written as a tag, other markdown tools see it as one.
-- Notes labelled before tags were dropped carry a summary line and then a line of tags, the category first. That first tag is read as the category; the summary and the other tags are dropped the next time the note is written.
-- `status` is one of `pending`, `done`, `failed`, `manual` (`manual` = user edited subject/category; never overwrite automatically). A note sent back to the model (body edited, re-run) returns to `pending`, keeping its subject and category until the model replaces them.
-- `lang` is the locale the model labelled the note in (`en`, `fr`, ...), written with its labels. A note without one was labelled before it was recorded and counts as English.
-- `on` is the later day the note looks forward to (5.7), such as `on=2026-10-06`, written with its labels. A value that is not a day reads as none.
+- Each note is delimited by `<!-- sn:note ... -->` and `<!-- sn:end -->`. Parsing relies only on these markers. Everything between them is the body, as typed.
+- `ahead=off` marks a note whose day ahead the user cleared (5.3). The day ahead itself is not written: it is read off the body each time the note is parsed.
+- A note's hash, the first 8 hex chars of SHA-256 of the body (trimmed), is worked out when it is parsed and never written. It ties a note's vector to its body (5.2).
+- Blocks written by earlier versions carry labels the app no longer writes (4.5).
 - Anything outside note blocks (user's own text) must be preserved untouched on rewrite.
 
 ### 4.3 Write safety
 
 - All file writes go through a **single writer task** in Rust (an mpsc channel). No concurrent writes to the same file.
 - Writes are atomic: write to `file.tmp`, fsync, rename.
-- A `notify` watcher detects external edits to note files. On change: reparse the file, update the index, and for any note whose body hash changed and status is `done`, re-queue enrichment. Ignore events caused by the app's own writes (track last-written hash per file).
-- It watches `pages/` too. A page file edited outside the app is reindexed and re-queued the same way, and its stub is rewritten when its title, file name, day or time changed. A page file that disappears leaves the index; its stub stays (3.5).
+- A `notify` watcher detects external edits to note files. On change: reparse the file and update the index, which wakes the embedding task for any body that changed. Ignore events caused by the app's own writes (track last-written hash per file).
+- It watches `pages/` too. A page file edited outside the app is reindexed the same way, and its stub is rewritten when its title, file name, day or time changed. A page file that disappears leaves the index; its stub stays (3.5).
 
 ### 4.4 index.jsonl
 
@@ -485,44 +459,52 @@ One JSON object per line, one line per note:
 	"date": "2026-09-22",
 	"time": "14:32",
 	"file": "notes/2026/2026-09-22.md",
-	"subject": "Rollback plan for ArgoCD sync issue",
-	"category": "infrastructure",
-	"status": "done",
+	"subject": null,
 	"hash": "a1b2c3d4",
+	"on": "2026-09-25",
 	"words": 42
 }
 ```
 
 - `words` counts the body's words once, so the day list and its stats never count every body again. A line without it, from before it was counted, gets its day reparsed.
-- A page (4.7) has a line too, with `"kind": "page"`, `file` pointing at the page file and `subject` holding its title. Notes have no `kind`.
+- A page (4.7) has a line too, with `"kind": "page"`, `file` pointing at the page file and `subject` holding its title. Notes have no `kind`, and no `subject`.
+- `on` is the day ahead read off the body (5.3), left out when there is none.
 - New notes are appended. Updates and deletes rewrite the file (it is small; atomic rewrite is fine).
-- On opening a space: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written before notes had a category instead of tags is rebuilt whole. `search.db` records each day file's mtime and length as it last read it, and a day read at another is read again; any other day is not read at all, so opening a space costs a look at each file's date, not a read of its notes. Page files are recorded the same way, by their path: a page new, edited or renamed is read, a page whose file is gone leaves, and a file under `pages/` that holds no page is recorded too, so it is not read again. A copy of a page made by hand is left out and not recorded, so it is taken once the page's own file goes.
-- Provide a "Rebuild index" button in settings that reparses everything.
+- On opening a space: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written by a version that labelled notes with a model (its lines carry a `status`) is rebuilt whole. `search.db` records each day file's mtime and length as it last read it, and a day read at another is read again; any other day is not read at all, so opening a space costs a look at each file's date, not a read of its notes. Page files are recorded the same way, by their path: a page new, edited or renamed is read, a page whose file is gone leaves, and a file under `pages/` that holds no page is recorded too, so it is not read again. A copy of a page made by hand is left out and not recorded, so it is taken once the page's own file goes.
+- Provide a "Rebuild index" button in settings that reparses everything, after writing the labelled blocks and pages of the space without their labels (4.5), and drops `vectors.bin`, so every note is embedded again (6).
 
-### 4.5 categories.json
+### 4.5 Labels from earlier versions
 
-```json
-["development", "infrastructure", "movie", "tv", "game", "music", "book", "food", "home"]
+Earlier versions ran a local LLM (Qwen3-4B or 1.7B) that wrote a subject and a category for each note. Their blocks look like this:
+
+```markdown
+<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 status=done hash=a1b2c3d4 lang=en on=2026-09-25 -->
+### Rollback plan for ArgoCD sync issue
+> #infrastructure
+
+Talked with the team, the auto-sync broke staging again.
+<!-- sn:end -->
 ```
 
-One list of English names per space, seeded with the defaults above, edited by hand, and added to when a category is typed in the note editor. The model only ever picks from it, whatever language it labels in, so notes and the markdown always carry the English name. Names are cleaned like a typed category (5.5). A file from when each language had its own list (`{"en": [...], "fr": [...]}`) is rewritten as its English list when the space opens.
-
-The interface shows each category in its own language through `src/lib/category-names.json`, a table of 807 categories in the six languages, row for row. A name the table does not know, such as one typed by hand, shows as written. A `#` token typed in the interface language (`#jeu`) is turned into the English name (`#game`) before a search reaches the backend, and completion matches either name.
+- A marker with a `status` is such a block. Its `### ` heading, its `> #category` line and the blank line after it (or a summary line and a line of tags, from before categories) are not part of the body, and are left out when it is read. Its `hash`, `lang` and `on` are ignored: the day ahead is read off the body as for any note.
+- A page file whose marker has a `status` has a category line under its title the same way.
+- A marker without a `status` is read as written, so a body that starts with a heading or a quoted `#tag` keeps it.
+- Rebuild index (7) writes every such block and page of the open space as they are written now, leaving the rest of each file as it is. Until then they are read as they are, and written anew only when the app edits that note.
+- `queue.json`, `categories.json` and `days-ahead.json` in a space's `.scratchnote/`, and the chat models in `models/`, are no longer read, and are left for the user to delete.
 
 ### 4.6 Spaces
 
-A space is a separate set of notes with its own categories, index and queue. Nothing is shared between spaces except settings and models.
+A space is a separate set of notes with its own index. Nothing is shared between spaces except settings and the embedding model.
 
 - Every space is a folder under `spaces/`, named after the space, holding its own `notes/` and `.scratchnote/`. Any folder there whose name is a valid space name is a space, including one made by hand. No space is special: the list is in name order, and any space can be deleted except the last one.
 - A first launch with no space makes `spaces/Personal/`. `spaces.json` records which space is open, and how many notes each space held when it was last left; if the open space is gone, the first one opens.
-- Data from before this layout, with `notes/` and the per-space files at the root, is moved once at startup into `spaces/<its old name>/` (with a number added if a folder already has that name).
+- Data from before this layout, with `notes/` and the index at the root, is moved once at startup into `spaces/<its old name>/` (with a number added if a folder already has that name).
 - Space names are folder names, so they must be valid on every platform: no `<>:"/\|?*`, no leading or trailing dot, no Windows reserved names, at most 40 characters, and unique ignoring case. Renaming a space renames its folder.
 - Deleting a space moves its folder to `.scratchnote/trash/<name> <timestamp>`; moving it back under `spaces/` restores it.
-- Only the open space is read into memory and watched. The others are listed with their queue alone, and are read when they are opened; the space left is let go of, index, vectors and watcher. Note commands act on the open space, except that the capture window's note and its attachments go into the space it picked (3.1), and that a note or a page moves to another. A note saved into a space not open is an edit from outside to it: queued there, and read into its index when it opens.
-- Move to, in a note's menu and the page view's, shows with more than one space. It opens a dialog with the note's first two lines, or the page's title and its first two, and a list of the other spaces, the first one picked. The note or page goes onto the same day there at the same time, with its subject or title, its category and its status, and its attachments (4.8); a page gets a file name free there (4.7). The open space stays open: the note leaves its views, a page its page view or the dock. A category the other space does not list joins its list (4.5), and a note or page still pending is queued there.
+- Only the open space is read into memory and watched. The others are listed, and are read when they are opened; the space left is let go of, index, vectors and watcher. Note commands act on the open space, except that the capture window's note and its attachments go into the space it picked (3.1), and that a note or a page moves to another. A note saved into a space not open is an edit from outside to it: read into its index when it opens.
+- Move to, in a note's menu and the page view's, shows with more than one space. It opens a dialog with the note's first two lines, or the page's title and its first two, and a list of the other spaces, the first one picked. The note or page goes onto the same day there at the same time, with a page's title, and its attachments (4.8); a page gets a file name free there (4.7). The open space stays open: the note leaves its views, a page its page view or the dock.
 - A move writes the note into the other space before it takes it out of this one, a page's file and stub before its stub and file here, so a crash in between leaves it in both spaces, never in neither. It keeps its id, unless its day there already holds that id, as such a crash leaves it.
-- The single enrichment worker drains every space's queue, the open space first. It needs no index for that: a job's note is read from its day's file, and for a space not open, from its page files when the day does not hold it. What it writes reaches that space's index when the space next opens, its files being newer than the cache.
-- An edit made outside the app to a space not open (a folder synced from elsewhere, say) is picked up when the space opens: its days are newer than the cache, and what they left pending is queued then.
+- An edit made outside the app to a space not open (a folder synced from elsewhere, say) is picked up when the space opens: its days are newer than the cache.
 - The switcher shows each space's note count: counted while it is open, and as it was when last left otherwise. A space never opened, such as a folder made by hand, shows none.
 
 ### 4.7 Pages
@@ -530,11 +512,8 @@ A space is a separate set of notes with its own categories, index and queue. Not
 A page (3.5) is a file of its own under the space's `pages/` folder:
 
 ```markdown
-<!-- sn:page id=01J9ABC0 day=2026-09-22 time=10:00 status=done hash=a1b2c3d4 lang=en -->
-
+<!-- sn:page id=01J9ABC0 day=2026-09-22 time=10:00 -->
 # Weekly sync, platform team
-
-> #infrastructure
 
 Attendees: Sara, Marc, Kevin.
 ```
@@ -551,8 +530,8 @@ The day's file holds a stub where the page belongs, so the day reads whole in ot
 Rules:
 
 - The page file is the source of truth for everything about the page, its day and time included. The stub carries the id and time, and a link for other editors; the app writes it and rewrites it when it goes stale. The note parser skips stubs, since they are not `sn:note` blocks.
-- The marker is the file's first line. Its attributes are a note's (4.2), `on` included, plus `day`, and `status` and `hash` mean what they do for a note, except that `manual` covers only the category: the title is always the user's.
-- Then come the `# Title` line, the category line and blank line as in a note, and the text. When the first line after the marker is not a `# ` heading, the title is the file name without its date.
+- The marker is the file's first line. Its attributes are a note's (4.2), `ahead=off` included, plus `day`. A page's day ahead is read off its title and its text.
+- Then come the `# Title` line, a blank line, and the text. When the first line after the marker is not a `# ` heading, the title is the file name without its date.
 - A markdown file under `pages/` without a marker is not a page and is left alone.
 - The file is named after the day and the title, `pages/<year>/<date> <title>.md`. Characters Windows forbids in a file name become spaces, whitespace is collapsed, trailing dots and spaces go, and the title part is cut to 80 characters. A name already taken gets ` 2`, ` 3` and so on. Renaming the title in the app renames the file and rewrites the stub.
 - Stub and page carry the same id, so a page renamed or moved outside the app is found again by its id, and while the app runs its stub is rewritten to point at it.
@@ -614,199 +593,119 @@ Community plugins come from GitHub, as Obsidian's do.
 - A local folder can stand in for GitHub: `SCRATCHNOTE_PLUGIN_REGISTRY` names one, and a dev build reads the repository's own `plugin-registry/`. It mirrors the URLs host first, `<folder>/raw.githubusercontent.com/<repo>/HEAD/manifest.json`, so a folder that works is a GitHub layout that works. Repositories and versions are checked before any of them becomes a path, so none reaches outside the folder.
 - Nothing is fetched until the user asks: the list when Browse opens, a plugin's details when it is picked, its release when it is installed or updated, and every installed plugin's manifest on Check for updates.
 
-## 5. Enrichment (LLM)
+## 5. The embedding model and the day ahead
 
 ### 5.1 Runtime
 
-- Load the model lazily, on the first job or chat, and keep it while they come. Unload it once it has sat unused for the idle time set (30 seconds to an hour, or never; default 10 minutes, since the default model takes seconds to load) to free RAM. A short time suits a small model, which reloads in a moment. The idle unload is the chat model's alone: the embedding model stays loaded (5.2).
-- Run inference on a dedicated thread, never on the Tauri main thread.
-- Use GPU offload when available (CUDA or Vulkan on Windows, Metal on macOS) if compiled in, else CPU. This is the chat model's: the embedding model always runs on the CPU (5.2). Set `n_ctx` to 4096. Notes longer than ~3000 tokens are truncated for enrichment only (keep head and tail).
-- Temperature 0.2, max output tokens 200.
+- The embedding model is the only model the app runs. It loads lazily, on the first note or search that needs it, then stays loaded: it is small, and every new note, search by meaning and recall needs it.
+- Loading and embedding run off the async runtime and never on the Tauri main thread.
+- It runs on the CPU: llama.cpp is built without a GPU backend (2.1).
 
 ### 5.2 Model management
 
-- Qwen publishes these models as safetensors, not GGUF, so the quantised builds come from `unsloth/Qwen3-4B-Instruct-2507-GGUF` and `unsloth/Qwen3-1.7B-GGUF`. Qwen's own `Qwen3-1.7B-GGUF` ships only a Q8_0. Hugging Face answers 401 for a repo that does not exist exactly as it does for a private one, so a wrong repo name surfaces as an authorization error rather than a missing one.
-- On first launch, if no model exists, show an onboarding screen: pick Default (4B, ~2.5 GB) or Light (1.7B, ~1.1 GB), then download from Hugging Face with a progress bar, resumable, with SHA-256 verification. Store in `models/`.
-- The app must be fully usable for capture while the model is downloading or absent; notes simply stay `pending`.
-- A "Use the model" switch turns the model off entirely, for machines too small to run it. Off, it is never loaded, notes stay `pending` in the queue until it is back on, the chat and its button are hidden (an open chat closes), and the status bar says the model is turned off. The embedding model is not covered by it. It defaults to off on Android and iOS. The onboarding screen offers the same choice as "Continue without a model".
+- The onboarding offers the embedding model, EmbeddingGemma-300M (Q8_0, ~330 MB, from `ggml-org/embeddinggemma-300M-GGUF`; Google's own repo is gated), downloaded from Hugging Face with a progress bar, resumable, with SHA-256 verification, into `models/`. Settings has its download row too. Hugging Face answers 401 for a repo that does not exist exactly as it does for a private one, so a wrong repo name surfaces as an authorization error rather than a missing one.
+- The app must be fully usable while the model is downloading or absent: capture, browsing, search by words and the day ahead need no model.
 - Record the resolved Hugging Face revision (commit SHA) alongside the downloaded file, so "which build of this model do I have" has an exact answer. Quant repos are re-uploaded in place, so a filename is not an identity.
-- Settings allow switching model or pointing to any local GGUF file.
-- An optional embedding model, EmbeddingGemma-300M (Q8_0, ~330 MB, from `ggml-org/embeddinggemma-300M-GGUF`; Google's own repo is gated), has its own download row in settings, fetched, verified and recorded like the others. It is not a chat model: downloading it changes no model setting. It loads lazily, on the first note or search that needs it, then stays loaded: it is small, and every new note, search by meaning and recall needs it, so the idle unload leaves it. It runs on the CPU whatever the GPU setting. On an integrated GPU, whose memory is the system's, llama.cpp holds a copy of the weights there and a second copy of the vocabulary on the host, none of it backed by the file: measured on an Intel iGPU, about 900 MB against 260 MB on the CPU, where the file is mapped and only the pages read count, for 13 ms a note against 31 ms. It does not follow the "Use the model" switch: it is light enough to run on a machine too small for the chat model, so similar notes, search by meaning, recall and threads stay with the model off, and its row shows in settings either way. Turning the switch, or choosing another chat model, unloads the chat model only. Once it is there, a background task embeds the open space's note bodies into `vectors.bin`, again whenever a body's hash changes; a space not open catches up when it opens. A task's box is embedded as words, `- [ ]` as `To do:` and `- [x]` as `Done:`, so a question about what is left to do finds the notes with tasks. An install that still has the earlier Qwen3-Embedding-0.6B fetches EmbeddingGemma on launch and deletes the old file once the new one is verified; `vectors.bin` records the model and how it embeds a note, and a change to either embeds every note again.
-- Settings has a "Check for updates" button. It is the only thing that triggers this check: never on launch, never on a timer. It compares the recorded revision against the current one on Hugging Face and, if they differ, offers to download the new one. The existing model file stays in place and in use until the replacement has finished downloading and passed SHA-256 verification.
-- A model pointed at by a custom GGUF path is not checked; the app did not fetch it and has no revision to compare against.
-- If the check fails (offline, rate limited), say so and carry on. It is never blocking, and a failed check must not affect enrichment.
+- On an integrated GPU, whose memory is the system's, llama.cpp holds a copy of the weights there and a second copy of the vocabulary on the host, none of it backed by the file: measured on an Intel iGPU, about 900 MB against 260 MB on the CPU, where the file is mapped and only the pages read count, for 13 ms a note against 31 ms, which is why it runs on the CPU. Once it is there, a background task embeds the open space's note bodies into `vectors.bin`, again whenever a body's hash changes; a space not open catches up when it opens. A task's box is embedded as words, `- [ ]` as `To do:` and `- [x]` as `Done:`, so a question about what is left to do finds the notes with tasks. An install that still has the earlier Qwen3-Embedding-0.6B fetches EmbeddingGemma on launch and deletes the old file once the new one is verified; `vectors.bin` records the model and how it embeds a note, and a change to either embeds every note again.
 
-### 5.3 Constrained output
+### 5.3 The day ahead
 
-Use llama.cpp grammar-constrained sampling so output is always valid JSON. The grammar (`enrichment.gbnf`) fixes the object and the subject's length; the category rule is appended per note and allows exactly the names in the list offered, or an empty string for none:
-
-```json
-{
-	"type": "object",
-	"properties": {
-		"subject": { "type": "string", "maxLength": 60 },
-		"category": { "enum": ["", "<each category of the list>"] }
-	},
-	"required": ["subject", "category"]
-}
-```
-
-### 5.4 Prompt
-
-Use the model's chat template. For Qwen3 hybrid models, disable thinking.
-
-System:
-
-```
-You label short personal notes. Return JSON only.
-Write the subject in {language}, whatever language the note is in: a note in
-another language gets a subject in {language}, translated. Names of projects,
-products, tools, people and places stay as they are.
-- subject: a title of 3 to 8 words naming what the note is about. Do not copy
-  the note's first sentence. No trailing punctuation.
-- category: the broad subject the note belongs to, such as its field,
-  technology, hobby or medium, so it sits next to related notes that name
-  other things. Not what kind of note it is. Pick it from CATEGORIES, spelled
-  exactly as listed. Leave it empty only when none of them is the subject of
-  the note.
-```
-
-User:
-
-```
-CATEGORIES: {the English categories of categories.json, comma-separated}
-
-NOTE:
-{note body}
-
-LABEL IN: {language}.
-```
-
-`{language}` is the language setting (section 7) in English, such as French: the OS language under System, English when that is not one of the six. The categories stay English whatever `{language}` is, while the subject follows it. Measured on 83 real notes, the 4B filed 78 as expected with English categories and 77 with French ones, where an embedding classifier fell to about half across languages, which is why the category is picked by the 4B and not by embeddings.
-
-### 5.5 Category names
-
-The grammar only lets the model write a listed category, so nothing it returns needs normalizing. Names read from `categories.json`, typed in the note editor, or typed after `#` in search are cleaned the same way: lowercase, trim, strip a leading `#`, spaces and underscores become `-`, anything but Unicode letters, digits and `-` goes, at most 30 characters.
-
-### 5.6 Queue
-
-- Persistent queue in `queue.json` (list of note ids + attempt count). Survives restarts.
-- Jobs are processed one at a time, FIFO.
-- On failure (model error, timeout of 30s), retry with backoff up to 3 attempts, then mark `failed`. Failed notes can be retried manually.
-- Before writing results, re-read the note: if its hash changed since the job started, discard the result and re-queue.
-- Never overwrite notes with status `manual`.
-- A page (4.7) is labelled from its `# Title` line and its text, and only its category is written back. Its title stays the user's.
-- A job for a page held in the page view (3.5) is dropped, as is one whose page changed while the model ran: closing the view, or the watcher for an edit made elsewhere, queues it again. Re-run, asked for by hand, releases the page and runs now.
-- A job asks for labels, which look for the day ahead too, or for the day ahead alone (5.7), written `"work": "day"`. A job for labels takes over one for the day alone of the same note.
-
-### 5.7 The day ahead
-
-- A note that looks forward to a later day, an appointment, a deadline, a plan, comes back on that day: "Dentist Tuesday 3pm", "rappeler le comptable dans 15 jours", "Abgabe am Freitag". Its card names the day, which opens it, and that day lists the notes that looked forward to it at its top, under Earlier notes about this day, each by the day it was written and its subject. Not about that day, in a note's menu and the page view's, forgets a day read wrong, until the note is labelled again.
-- Each note the model labels is looked at for a day ahead, after its labels and under a timeout of its own, so a failure keeps the day it had and costs no labels. A note that names no day is not put to the model at all: none of the words for a day, a week or a month in the six languages, no count of days, no date in figures such as `12/03` or `2026-10-06`.
-- The model does no arithmetic and looks nothing up. Under a grammar it copies the words of the note that name the day, then picks what they name: tomorrow, a count of days, weeks or months, a weekday, next week or next month, a day of a month, or today, a past day or none, which bring nothing back. The code checks that the words are the note's own, folded, and must back the kind picked: tomorrow needs a word for tomorrow, a count or next week a word for its unit. It reads off the words, in the six languages, the weekday they name, whether it is in the week after, the day after tomorrow, the month and the day of the month, over what the model picked, and works the date out from the day the note was written, which a job run later still knows. A weekday is the first to come after that day, unless the words put it in the next week; next week is its Monday and next month its 1st; a day of the month without a month is the next one to come. A day not after the note's, or more than two years on, is none.
-- On 37 notes in English, French, German, Spanish and Italian with Qwen3-4B, 11 of them written after the rules above were set, to check them, it found 28 of the 29 days there were and named no wrong one; the one missed came back as none.
-- A space's notes labelled before days ahead were looked for are looked at once, those of the last 60 days that name a day, as jobs for the day ahead alone, `days-ahead.json` recording it. Only with the model on, so the jobs run at once, and again when it is turned on: an older build would take one left in the queue for a job to label.
+- A note that looks forward to a later day, an appointment, a deadline, a plan, comes back on that day: "Dentist Tuesday 3pm", "rappeler le comptable dans 15 jours", "Abgabe am Freitag". Its card names the day, which opens it, and that day lists the notes that looked forward to it at its top, under Earlier notes about this day, each by the day it was written. Not about that day, in a note's menu and the page view's, forgets a day read wrong for good: the note's marker gets `ahead=off` (4.2), and no day is read in it again, even once its text changes.
+- The day is read off the note's words by rules (`ahead.rs`), in the six languages, each time the note is parsed, and worked out from the day the note was written. A page's is read off its title and its text. Nothing is stored but `ahead=off`, so a change to the rules applies to every note at the next rebuild.
+- The text is split into clauses at `.`, `!`, `?`, `;`, `:`, `,`, brackets and line ends. A clause holding a word that puts it in the past is passed over: "last", "yesterday", "ago", "since", "was", "met", "dernier", "hier", "depuis", "ayer", "pasado" (not in "pasado mañana"), "gestern", "letzte", "war", "ieri", "scorso", "ontem" and the like. The first day named in the first other clause wins.
+- Read as days: tomorrow (`manana` and `morgen` not after a word that makes them the morning, as in "por la mañana" or "heute Morgen"); the day after tomorrow; a count ahead after "in", "dans", "en", "tra", "fra", "em", "daqui a" or "dentro de", in figures or words up to 99, of days, weeks, fortnights or months; a weekday, the first to come after the note's day, a week on when it is the same, or that day of the following week when the clause says next week, and not after "every" or "chaque"; Portuguese `segunda` to `sexta` only before `feira`; a weekday followed by a date is the date; next week (its Monday) or next month (its 1st), "semaine prochaine", "nächste Woche", "la semana que viene", but not a weekend; a day and a month named, either way round, with "of" or "de" between or not, and a year after or not: "12th of October", "le 27 septembre", "October 3", "12. März"; figures `2026-10-06`, `12.03` and `12.03.2026` (day first), and `25/12` or `12/25/2026` only when one reading alone is a date; and a day of the month after "by", "before", "until", "on", "avant", "bis", "am", "entro", "hasta", "até" and the like, with an article or an ordinal between ("by the 5th", "avant le 5"), the next such day to come.
+- Left alone, as a wrong day is worse than none: `12/03`, which could be either, `24/7`, `1.2`, `3.50`, versions and addresses, figures without a year that no word leads to (`12.10` may be a price), "by 5" (a time), and a month without a day.
+- A date without a year is the first after the note's day. A day not after the note's, or more than two years on, is none.
+- The rules replaced the model's reading. On the 37 notes in English, French, German, Spanish and Italian the model was measured on (it found 28 of the 29 days there and named no wrong one), the rules find all 29 and name no wrong one; they are a unit test, with more cases. They were written against those cases, so real notes will hold cases they miss, such as a past told only by a verb ("Sara called on Monday").
 
 ## 6. Search
 
-- The index in memory holds no text. The text of the open space's notes and pages is in `.scratchnote/search.db`, a SQLite file: each body, its subject and body folded (lowercase, accents stripped), and an FTS5 index over the folded text with the trigram tokenizer. Memory does not grow with what is written.
-- Case-insensitive, accent-insensitive substring match over body and subject: every word must be in the folded text. A word of three characters or more is found through the trigram index and then checked as a plain substring; a shorter one is looked for by scanning `search.db` on disk. A `#category` token keeps the notes filed under that category, which the index in memory answers, as it does the order.
+- The index in memory holds no text. The text of the open space's notes and pages is in `.scratchnote/search.db`, a SQLite file: each body, a page's title and body folded (lowercase, accents stripped), and an FTS5 index over the folded text with the trigram tokenizer. Memory does not grow with what is written.
+- Case-insensitive, accent-insensitive substring match over bodies and page titles: every word must be in the folded text. A word of three characters or more is found through the trigram index and then checked as a plain substring; a shorter one is looked for by scanning `search.db` on disk. The index in memory gives the order.
 - `notes_containing` matches its needles as typed, case and all: a needle of three folded characters or more narrows through the index, and a shorter one (`@`) scans.
 - SQLite with trigrams rather than `tantivy`: tantivy matches whole words, and substring matching (`offe` finds `coffee`) would need an n-gram index several times larger.
 - Results sorted by date desc, then time desc.
 - The page asks for a stretch of the results and gets the total with it: the command center the first 50, the results view the first 100 and 100 more at each "Show more". Only that stretch leaves the backend, so a short query matching most of a space does not copy all of it to the page. A plugin's search still gets every match.
 - Must stay under 50ms for 10,000 notes, for the 50 results the command center asks.
 
-### 6.1 Chat
+### 6.1 Search by meaning
 
-- A chat talks with the model about the open space's notes. It reads `index.jsonl` and never the markdown: each note's number, date, weekday, subject and category, oldest first. Past a budget of about 20,000 characters only the most recent notes are shown, from a multiple of 10 on, so the start of the prompt, and the model's cache of it, holds while notes are added. Numbers stay those of the whole index.
-- With the embedding model, the last question is embedded and the 5 closest notes of the space are found in `vectors.bin`. Their text, read from `search.db` and cut to about 800 characters, goes with that question only, after the index, so it never breaks the cache.
-- The model cites notes by number, like `[12]`, and the page resolves a number against the whole index, shown or not.
-- The embedding model is optional. Without it, or when embedding fails, the chat answers from the index alone. When a prompt does not fit, the oldest turns go first, then the retrieved notes from the worst up.
+- With the embedding model, a search also lists, under the notes its words match, up to 5 notes close to the query in meaning that the words do not find, best first.
+- The query is embedded as a question and scored against the open space's vectors. A note is shown when its cosine sits 0.15 or more above the mean of the space's other notes, which holds from five notes up. Checked on 85 real notes and 31 short queries.
+- Nothing is added without the embedding model.
 
 ### 6.2 Similar notes
 
-- A note's menu offers "Similar notes" when the embedding model is installed, whether or not the model switch is on. The timeline then lists up to 8 notes of the space closest to it in meaning, best first, under the note itself.
+- A note's menu offers "Similar notes" when the embedding model is installed. The timeline then lists up to 8 notes of the space closest to it in meaning, best first, under the note itself.
 - No model runs: the note's vector is already in `vectors.bin`, so it costs one pass over the space's vectors. A note not embedded yet has no similar notes.
 - The score is a cosine taken after removing the mean of the space's vectors. Plain cosines between notes bunch up (two unrelated work notes score about as high as two notes on the same show), and a bland note comes up for everything. Notes under 0.28 are left out, so a note on its own subject lists none. The cutoff was set on 75 real notes and may need tuning as spaces grow.
-- Similar notes and search by meaning do what tags used to: find the few notes on the same thing. Categories stay for broad browsing that is exact, editable, lives in the markdown and works without the embedding model.
+- Similar notes and search by meaning do what tags and categories used to: find the few notes on the same thing.
 
 ### 6.3 Recall
 
-- While a note is written, recall names the old note it is about, once one stands out: one quiet line with that note's day and subject, or its first line when it has none. In the capture window it takes the hint's place in the footer; in New note and an inline edit, the hint's place under the editor; in the page view, the end of the line under the title.
+- While a note is written, recall names the old note it is about, once one stands out: one quiet line with that note's day and its first line, or a page's title. In the capture window it takes the hint's place in the footer; in New note and an inline edit, the hint's place under the editor; in the page view, the end of the line under the title.
 - It looks once typing has stopped for 0.7 seconds, at a draft of 12 characters or more. An edit looks only once its text differs from what it opened with, and leaves the note itself out.
-- A click shows the old note in a popover: its day and time, its subject and its text. Open shows it where it is, from the capture window, which hides and keeps its draft as Esc does, and from the page view, which saves as it closes. New note and an inline edit have no Open, since leaving them would lose the note being written.
+- A click shows the old note in a popover: its day and time, a page's title, and its text. Open shows it where it is, from the capture window, which hides and keeps its draft as Esc does, and from the page view, which saves as it closes. New note and an inline edit have no Open, since leaving them would lose the note being written.
 - The draft is embedded as a note is (5.2) and scored against the open space's vectors as Similar notes scores (6.2), the note being edited left out of the mean too. The best note shows when it scores 0.35 or more, stricter than Similar notes because recall speaks up unasked. On 45 made-up notes about a dozen things, no draft's best note about another thing scored over 0.33, while the first half of a note found one on the same thing 34 times in 37.
 - Nothing is looked for without the embedding model, or for a draft going into a space that is not open, whose vectors are not in memory.
 
 ### 6.4 Threads
 
 - A thread gathers the notes and pages about one thing across days: a bug chased for two weeks, a kitchen being redone, a book being read. Nothing is filed by hand: notes are placed from their vectors as they are embedded.
-- A note in a thread has a line under its text, a page one at the foot of its card: the thread's title and the note's place in it, such as 3 of 5. A click opens the thread, `/thread/<id>/`: its notes oldest first, each day under a heading of its own, under its title, how many notes it holds and since when, and Rename. Its title is the subject of its most typical note, the one closest to the rest once what every note shares is taken off, until the user gives it one; renamed empty, it goes back to that.
+- A note in a thread has a line under its text, a page one at the foot of its card: the thread's title and the note's place in it, such as 3 of 5. A click opens the thread, `/thread/<id>/`: its notes oldest first, each day under a heading of its own, under its title, how many notes it holds and since when, and Rename. It has no title until the user gives it one, and shows a generic one meanwhile; renamed empty, it goes back to that.
 - A note joins the thread it scores best against, at 0.35 or more, scored as Similar notes scores two notes (6.2) but against the average of the thread's notes. A note close to no thread starts one with the note on its own it scores best against, at 0.40 or more, since two notes are a thinner sign than a thread. Only notes within 60 days of a thread's first or last note, or of each other, are compared, so a thread follows one stretch of something, and a pass stays short however many notes the space holds. A note on its own placed before a thread formed or grew near it joins it then, if it scores enough.
 - Threads form once the space holds 12 notes: in fewer, one thread's notes are most of what is usual, and once that is taken off every other note looks like every other.
 - Take out of the thread, in a note's menu and the page view's, keeps a note out of threads for good; Let it join a thread lets it back, and it is placed again at once. A thread down to one note is no thread, and that note is placed again.
 - `threads.json` is derived, like `vectors.bin`: where each note was placed and from which body. A note is placed once, and again only when its text changes; a file that is missing, damaged or made from another model's vectors places every note again, oldest first. A first pass over 10,000 notes takes under a second in a release build. `thread-edits.json` holds what the user decided, titles and notes kept out, which nothing derives.
 - On 45 made-up notes about a dozen things, every thread held notes about one thing only, every note about a thing was in its thread, and every note on its own stayed so. On the 40 distinct notes of a real space, two threads formed, each about one thing.
-- Threads follow the embedding model, not the model switch, as Similar notes does.
+- Threads follow the embedding model, as Similar notes does.
 
 ## 7. Settings
 
 - Notes root directory
 - Capture hotkey
-- Use the model (on/off)
-- Model choice / custom GGUF path
-- Check for model updates (manual, shows the installed revision)
-- Model idle unload timeout, for the chat model only (5.1)
-- Embedding model download (optional, for chat and similar notes)
+- Embedding model download (optional, for search by meaning, similar notes, recall and threads)
 - Hide immediately after save vs. show toast
-- Rebuild index
+- Rebuild index, which also writes labelled blocks and pages without their labels (4.5) and embeds every note again
 - Launch at login
 - General also shows the app's icon, name and version, Check for updates, and News for the release notes of every version (3.6), and how long the window took to start, with Details for each step and plugin (3.9)
 - Core plugins: each core plugin's switch (3.9)
 - Community plugins: on or off, browsed, installed, updated and removed (3.9)
 - Each plugin's own tab, under Core plugins or Community plugins in the sidebar (3.9)
-- Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload. It also sets the language new subjects are written in and the language categories are shown in (the OS language under System, English when that is not one of the six); note bodies are untouched, and chat replies follow the language the user writes in.
+- Interface language: follow the OS (default) or one of English, French, Spanish, German, Italian, Portuguese. It applies at once in both windows and the tray, without a reload; note bodies are untouched.
 
 ## 8. Tauri Commands (backend API)
 
 ```
-save_note(body: String, date?, space?) -> NoteMeta  // appends to the day's file of the open space or the one named, enqueues job
-update_note(id, body) -> NoteMeta             // re-enqueues if hash changed
-update_note_meta(id, subject?, category?) -> NoteMeta  // sets status=manual
+save_note(body: String, date?, space?) -> Note  // appends to the day's file of the open space or the one named
+update_note(id, body) -> Note
 delete_note(id)
 move_note(date, id, space)                    // into another space, same day: written there, then removed here, with its attachments
-retry_enrichment(id)
 get_day(date: String) -> Vec<Note>
-notes_about(date) -> Vec<Note>                // the notes that look forward to the day, oldest first (5.7)
-clear_day_ahead(date, id)                     // forgets the day ahead the model read in a note or page
+notes_about(date) -> Vec<Note>                // the notes that look forward to the day, oldest first (5.3)
+clear_day_ahead(date, id)                     // writes ahead=off on a note or page
 list_days() -> Vec<DaySummary>                // date + note and page count + words in its notes
-list_categories() -> Vec<(String, u32)>      // in use, most used first
-category_names() -> Vec<String>               // every listed category
 search(query, offset?, limit?) -> Found       // { notes, total }: the limit matches from offset, every one without a limit
+search_meaning(query) -> Vec<Note>            // up to 5 notes close in meaning the words do not find (6.1)
 similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
 recall(text, exclude?, space?) -> Note?     // the old note a draft is about, if one stands out (6.3)
 list_threads() -> { threads, alone }        // every thread, its notes oldest first, and the notes kept out (6.4)
 get_thread(id) -> { thread, notes }?        // a thread and its notes with their text
-rename_thread(id, title)                    // an empty title goes back to its most typical note's subject
+rename_thread(id, title)                    // an empty title takes the user's title off
 keep_out_of_threads(id, out)                // takes a note out of threads for good, or lets it back in
 notes_containing(needles) -> Vec<Note>      // every note and page whose body holds any needle as typed, newest first
 get_settings() / set_settings(...)
-model_status() -> ModelStatus                 // absent | downloading(pct) | loaded | idle | disabled
-download_model(variant)
 embedding_model_info() -> { installed, downloading(pct)? }
-download_embedding_model()                    // optional model for chat retrieval; changes no setting
-chat(messages, on_event) / stop_chat() / warm_chat()  // replies stream through a channel
-check_model_update() -> UpdateCheck           // user-initiated only; up-to-date | newer(revision) | failed(reason)
-rebuild_index()
+download_embedding_model()
+rebuild_index()                               // drops the labels of earlier versions (4.5), reparses, embeds again
 set_tray_labels(labels)                      // the tray menu's wording, sent by the main window in its language
 list_spaces() -> SpacesView                   // open space + every space with its note count, the last one known for a space not open
 create_space(name) / rename_space(name, new_name) / delete_space(name) / set_active_space(name)
 create_page(title, body, date?) -> Note       // file, then stub; held until finish_page
 list_pages() -> Vec<Note>                     // every page of the open space, newest first
 get_page(id) -> Note                          // read from its file
-update_page(id, body) -> Note                 // marks it pending unless manual; held until finish_page
-finish_page(id)                               // the page view closed: releases it, enqueues it if pending
+update_page(id, body) -> Note                 // held until finish_page
+finish_page(id)                               // the page view closed: releases it for the embedding model
 rename_page(id, title) -> Note                // renames the file, rewrites the stub
 delete_page(id)                               // stub, then file
 note_to_page(date, id, title) -> Note         // page with a new id, then the note's block becomes its stub; held
@@ -831,7 +730,7 @@ A page comes back as a `Note` with `kind: "page"` and its title as `subject`. `g
 
 An `Attachment` is `{ name, path }`: the name the file came with, and where it was copied from the space's folder (`attachments/2026/2026-09-28 image.png`). The webview loads attachments through the `attachment` protocol (4.8).
 
-Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `index-rebuilt`, `model-status { ... }`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` and `reveal-note { id, date, kind }` (to the main window), `plugins-changed { ...PluginsView }`, `plugin-data-changed { id, window }`, `threads-changed { space }`. The UI updates live when enrichment finishes.
+Events emitted to the frontend: `note-updated { id }`, `index-rebuilt`, `embedding-status { downloading(pct) | installed | absent }`, `spaces-changed { active, spaces }`, `new-page { body }` and `reveal-note { id, date, kind }` (to the main window), `plugins-changed { ...PluginsView }`, `plugin-data-changed { id, window }`, `threads-changed { space }`.
 
 ## 9. Project Structure
 
@@ -839,10 +738,11 @@ Events emitted to the frontend: `note-enriched { id }`, `note-updated { id }`, `
 src-tauri/src/
   main.rs
   lib.rs             # setup, windows, tray; their four commands (hide_capture, capture_to_page, reveal_note, set_tray_labels)
-  commands/ (notes.rs, pages.rs, search.rs, chat.rs, settings.rs, models.rs, spaces.rs,
+  commands/ (notes.rs, pages.rs, search.rs, settings.rs, models.rs, spaces.rs, threads.rs,
              attachments.rs, plugins.rs)   # every other Tauri command
-  storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, categories.rs, writer.rs)
-  enrich/  (model.rs, prompt.rs, grammar.rs, normalize.rs, queue.rs)
+  storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, search_db.rs, writer.rs)
+  embed/   (model.rs, download.rs, llama.rs, sync.rs, vectors.rs, threads.rs)
+  ahead.rs           # the day ahead, read off a note's words
   watcher.rs
   spaces.rs
   search.rs
@@ -861,7 +761,7 @@ src/
   lib/plugins/        # the plugin API (api.ts), its registry of contributions, the loader
   plugins/            # the core plugins, one folder each (basics/, mentions/, stats/)
 plugin-registry/      # a local stand-in for the GitHub registry (4.10)
-  lib/components/ (NoteCard, DayCalendar, CategoryList, SearchBar, SpaceSwitcher, Onboarding)
+  lib/components/ (NoteCard, CommandCenter, SpaceSwitcher, ...)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy
   lib/attachments.svelte.ts  # the open space, for the attachment protocol's URLs
@@ -873,27 +773,24 @@ plugin-registry/      # a local stand-in for the GitHub registry (4.10)
 Build in this order; each milestone should be usable on its own.
 
 0. **Scaffold**: follow section 2.1 exactly. No app code until this is committed.
-1. **Capture + storage**: tray, global hotkey, capture window, append to daily file with markers, main window day view, atomic single-writer. Notes are `pending` forever at this stage.
+1. **Capture + storage**: tray, global hotkey, capture window, append to daily file with markers, main window day view, atomic single-writer.
 2. **Parser + index**: robust daily file parser, index.jsonl, rebuild, file watcher for external edits.
-3. **Enrichment**: model download/onboarding, llama.cpp integration, grammar-constrained JSON, queue, write-back into markdown, live UI updates.
-4. **Tags + search**: tag vocabulary, normalization, aliases, tag sidebar, search with `#tag` filters.
-5. **Polish**: manual edit of subject/tags, retry, settings screen, manual model update check, launch at login, idle model unload.
+3. **Search**: search by words, then the embedding model: download, search by meaning, similar notes.
+4. **Polish**: settings screen, launch at login.
+
+Earlier versions also ran a local LLM for subjects, categories, the day ahead and a chat; it was taken out (4.5).
 
 ## 11. Acceptance Criteria
 
 - Hotkey to visible, focused capture window: < 150ms.
 - Save to file on disk: < 50ms, regardless of model state.
-- Enrichment of a 100-word note with the 4B model on a Windows laptop with GPU offload: < 3s. CPU-only is best effort and not a release gate.
-- Model output is always valid JSON (grammar-enforced); zero parse failures in tests.
 - Deleting `.scratchnote/` and relaunching fully restores the index from markdown.
-- Editing a daily file in an external editor updates the app within 1s and re-enriches changed notes.
+- Editing a daily file in an external editor updates the app within 1s and embeds changed notes again.
 - User text outside note markers survives every app write.
 - Renaming a page file in another program updates the app, and the stub's link, within 1s.
-- App works with no model installed (capture, browse, search on bodies).
+- App works with no model installed (capture, browse, search on bodies, the day ahead).
 
 ## 12. Testing
 
-- Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), category name cleaning, hash change detection, queue retry logic, page file round-trip, stubs next to note blocks, page file names, plugin ids, repositories and versions that cannot leave the registry folder, the registry's URLs mapped onto a folder, a plugin update that keeps its data, what counts as installed, version order.
-- Golden tests for enrichment: 20 sample notes (English and French) with a stub model returning fixed JSON, verifying write-back format.
-- Optional tests with the real models, skipped without them: recall and threads on 45 made-up notes about a dozen things (`embed/samples.rs`), the embedding model taken from `SCRATCHNOTE_EMBEDDING_MODEL` when set; the day ahead on notes in five languages.
-- An optional integration test that runs the real Light model on 5 notes and asserts schema validity (skipped in CI if no model present).
+- Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), labelled blocks read and rewritten without their labels, the day ahead in six languages, page file round-trip, stubs next to note blocks, page file names, plugin ids, repositories and versions that cannot leave the registry folder, the registry's URLs mapped onto a folder, a plugin update that keeps its data, what counts as installed, version order.
+- Optional tests with the real embedding model, skipped without it: recall and threads on 45 made-up notes about a dozen things (`embed/samples.rs`), the model taken from `SCRATCHNOTE_EMBEDDING_MODEL` when set.

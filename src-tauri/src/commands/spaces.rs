@@ -47,7 +47,7 @@ fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
     Ok(SpacesView { active, spaces })
 }
 
-/// A space as listed, not open yet: only its queue is read (SPEC 4.6).
+/// A space as listed, not open yet: nothing of it is read (SPEC 4.6).
 pub fn add_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
     let embed_wake = app.state::<AppState>().embed_wake.clone();
     Arc::new(Space::new(name, root, embed_wake))
@@ -60,7 +60,6 @@ pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
     if let Err(e) = crate::watcher::start(app.clone(), space) {
         log::error!("could not watch the notes of {}: {e}", space.name);
     }
-    look_back(app, space);
     if !refresh {
         return;
     }
@@ -71,41 +70,6 @@ pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
         if let Err(e) = opened.persist_index(&state.writer).await {
             log::warn!("could not write the index of {} back: {e}", opened.name);
         }
-    });
-}
-
-/// Notes labelled before days ahead were looked for are looked at once, those
-/// of the last weeks (SPEC 5.7). The queue is saved with their jobs before
-/// the space is marked as looked at, so a crash between loses none. Only
-/// with the model on, so they go through at once: an older build would take
-/// a job for the day alone left in the queue for one to label.
-pub(crate) fn look_back(app: &AppHandle, space: &Arc<Space>) {
-    let state = app.state::<AppState>();
-    if !state.model_enabled() || crate::enrich::dates::looked(&space.root) {
-        return;
-    }
-    let today = chrono::Local::now().date_naive();
-    let jobs = space
-        .read(|idx, db| Ok(crate::enrich::dates::look_back(idx, db, today)))
-        .ok()
-        .flatten()
-        .unwrap_or_default();
-    if let Ok(mut queue) = space.queue.lock() {
-        for job in jobs {
-            queue.push(job);
-        }
-    }
-    let (app, opened) = (app.clone(), space.clone());
-    tauri::async_runtime::spawn(async move {
-        let state = app.state::<AppState>();
-        opened.persist_queue(&state.writer).await;
-        if let Err(e) = crate::enrich::dates::mark_looked(&opened.root) {
-            log::warn!(
-                "could not mark {} as looked at for days ahead: {e}",
-                opened.name
-            );
-        }
-        state.wake.notify_one();
     });
 }
 
@@ -223,7 +187,7 @@ pub async fn create_space(
 
 /// Open another space. Every note command acts on it from then on, and the
 /// capture window saves into it. The space left is closed: its notes leave
-/// memory, and its queue stays with the worker.
+/// memory.
 #[tauri::command]
 pub async fn set_active_space(
     app: AppHandle,
@@ -246,8 +210,6 @@ pub async fn set_active_space(
         .map_err(|_| "spaces lock poisoned".to_string())?
         .active = name;
     close_space(&state, &left)?;
-    // Its notes are now first in line for the model.
-    state.wake.notify_one();
     spaces_changed(&app, &state).await
 }
 
@@ -298,9 +260,6 @@ pub async fn rename_space(
             registry.notes.insert(new_name, count);
         }
     }
-    // A job the old space had in hand was dropped; its note is still pending
-    // and is queued again when the space is next opened.
-    state.wake.notify_one();
     spaces_changed(&app, &state).await
 }
 

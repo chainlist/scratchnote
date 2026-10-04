@@ -24,8 +24,7 @@
 	}
 </script>
 
-<!-- The whole query, so a `#category` filter shows too. A query refined by a
-     category click stays the same view. -->
+<!-- The whole query, after the count. -->
 <View
 	back={shell.back}
 	title={m.page_results({ count: data.found.total })}

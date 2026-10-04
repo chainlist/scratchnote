@@ -146,7 +146,7 @@ body {
 	--radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* A note opened from a chat citation: two soft pulses of the accent, so the
+/* A note opened from a link to it: two soft pulses of the accent, so the
    eye finds it on the day. One slow fade when motion is reduced. */
 @keyframes note-blink {
 	0%,
@@ -227,106 +227,15 @@ body {
 	}
 }
 
-/* The angle both enrichment effects turn by. Registered so it can animate
-   inside the gradients; inherited so the aurora's two layers share it. */
-@property --note-spin {
-	syntax: '<angle>';
-	inherits: true;
-	initial-value: 0deg;
-}
-
-@keyframes note-spin {
-	to {
-		--note-spin: 360deg;
-	}
-}
-
-/* How bright the aurora is as it breathes. A property of its own rather
-   than opacity, which the fade in and out of the glow drives. */
-@property --note-glow {
-	syntax: '<number>';
-	inherits: true;
-	initial-value: 1;
-}
-
-@keyframes note-breathe {
-	from {
-		--note-glow: 0.55;
-	}
-	to {
-		--note-glow: 1;
-	}
-}
-
-/* A note waiting for the model: a turning rainbow edge whose light spills
-   out onto the page and a little way into the card, with no hard line
-   anywhere. The card is `isolate`, so z-index -1 keeps it under the text. */
-.note-aurora {
-	position: absolute;
-	inset: 0;
-	z-index: -1;
-	border-radius: inherit;
-	pointer-events: none;
-	/* Softens both layers together: the edge bleeds a few pixels inward and
-	   the halo's cut at the card's edge melts away. */
-	filter: blur(3px);
-	animation:
-		note-spin 6s linear infinite,
-		note-breathe 3s ease-in-out infinite alternate;
-}
-
-.note-aurora::before,
-.note-aurora::after {
-	content: '';
-	position: absolute;
-	background: conic-gradient(
-		from var(--note-spin),
-		#8b5cf6,
-		#3b82f6,
-		#06b6d4,
-		#10b981,
-		#f59e0b,
-		#ec4899,
-		#8b5cf6
-	);
-	/* Each mask keeps only a ring: the padding, with the content box cut out. */
-	mask:
-		linear-gradient(#000 0 0) content-box,
-		linear-gradient(#000 0 0);
-	mask-composite: exclude;
-}
-
-/* The edge: a 3px ring straddling the card's border, which the blur above
-   turns into a soft line of light. */
-.note-aurora::before {
-	inset: -1px;
-	padding: 3px;
-	border-radius: calc(var(--radius) + 1px);
-	opacity: calc(0.7 * var(--note-glow));
-}
-
-/* The halo. The colour is painted under the card alone and blurred outward;
-   its own filter runs before its mask, which then keeps only what spilled
-   past the card's edge: brightest there, gone 16px out. */
-.note-aurora::after {
-	inset: -16px;
-	padding: 16px;
-	border-radius: calc(var(--radius) + 16px);
-	background-clip: content-box;
-	filter: blur(7px);
-	opacity: calc(0.7 * var(--note-glow));
-}
-
 @keyframes note-flow {
 	to {
 		background-position: 200% 0;
 	}
 }
 
-/* The text of a waiting note: the edge's colours flowing through the
-   letters, with a blurred copy behind them as their glow. Deeper shades on
-   a light page and lighter ones on a dark page keep it readable. The card
-   lays it over the real text, which it positions. */
+/* Text at work, as a search by meaning: colours flowing through the
+   letters. Deeper shades on a light page and lighter ones on a dark page
+   keep it readable. */
 .note-glow-text {
 	color: transparent;
 	background: linear-gradient(90deg, #7c3aed, #2563eb, #0891b2, #059669, #d97706, #db2777, #7c3aed)
@@ -349,48 +258,9 @@ body {
 	);
 }
 
-/* Inherits the animated background, so the glow flows with the letters. */
-.note-glow-blur {
-	position: absolute;
-	inset: 0;
-	z-index: -1;
-	background: inherit;
-	-webkit-background-clip: text;
-	background-clip: text;
-	filter: blur(6px);
-	opacity: 0.5;
-	pointer-events: none;
-}
-
-/* A note the model failed on: a faint red ring with a brighter arc running
-   round it. The mask cuts the fill away and leaves a 1px border. */
-.note-error-ring {
-	position: absolute;
-	inset: 0;
-	padding: 1px;
-	border-radius: inherit;
-	pointer-events: none;
-	background: conic-gradient(
-		from var(--note-spin),
-		rgb(239 68 68 / 0.12) 0 55%,
-		rgb(239 68 68 / 0.55) 80%,
-		rgb(239 68 68 / 0.12)
-	);
-	mask:
-		linear-gradient(#000 0 0) content-box,
-		linear-gradient(#000 0 0);
-	mask-composite: exclude;
-	animation: note-spin 4s linear infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
-	.note-aurora,
-	.note-glow-text,
-	.note-error-ring {
+	.note-glow-text {
 		animation: none;
-	}
-	.note-aurora {
-		--note-glow: 0.8;
 	}
 }
 
@@ -410,10 +280,6 @@ body {
 .md-em {
 	font-style: italic;
 	color: var(--primary);
-}
-/* A waiting note's text turns transparent under its glow, accent and all. */
-:is(.text-transparent, .note-glow-text) :is(.md-strong, .md-em, .md-file-type) {
-	color: inherit;
 }
 .md-strike {
 	text-decoration: line-through;
@@ -566,16 +432,6 @@ button.md-file:hover .md-file-type {
 .md-drop {
 	outline: 1px dashed var(--color-neutral-500);
 	outline-offset: 2px;
-}
-/* The glowing copy draws letters only; the real text below keeps the boxes. */
-.note-glow-text :is(.md-code, .md-codeblock, .md-chip, .md-file, .md-file-type) {
-	background: none;
-}
-.note-glow-text :is(.md-quote, .md-file) {
-	border-color: transparent;
-}
-.note-glow-text .md-image {
-	visibility: hidden;
 }
 
 @layer base {

@@ -70,7 +70,6 @@
 		clicked.add(`${note.id}:${at}`);
 		saving = saving.then(async () => {
 			try {
-				// Only ticks changed, so the note keeps its subject and category.
 				await app.notes.setBody(note, next);
 			} catch (e) {
 				error = String(e);

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import Onboarding from '#lib/components/Onboarding.svelte';
 	import ViewHeader from '#lib/components/ViewHeader.svelte';
 	import { getShell, type ViewTitle } from '#lib/shell.svelte.js';
 
@@ -30,10 +29,6 @@
 <!-- A view's column: its title, what the app has to say, and the view. -->
 <div class={fill ? 'flex h-full w-full flex-col' : 'mx-auto w-full max-w-3xl'}>
 	<ViewHeader {...header} />
-
-	{#if shell.model.state === 'absent' || shell.model.state === 'downloading'}
-		<Onboarding status={shell.model} />
-	{/if}
 
 	{#if shell.error}
 		<p

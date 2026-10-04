@@ -3,7 +3,6 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use super::models::unload_chat_model;
 use crate::settings::Settings;
 use crate::state::AppState;
 
@@ -25,8 +24,8 @@ pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> 
     })
 }
 
-/// Save settings (SPEC 7). The hotkey and the model switch straight away; a
-/// new notes root is saved but only used from the next launch.
+/// Save settings (SPEC 7). The hotkey switches straight away; a new notes
+/// root is saved but only used from the next launch.
 #[tauri::command]
 pub async fn set_settings(
     app: AppHandle,
@@ -47,26 +46,7 @@ pub async fn set_settings(
         let _ = shortcuts.unregister(old.capture_hotkey.as_str());
     }
 
-    // A different model, or the same one on different hardware, takes a
-    // reload either way. The embedding model runs on the CPU, so neither
-    // reaches it.
-    let reload = settings.use_gpu != old.use_gpu
-        || settings.model_enabled != old.model_enabled
-        || settings.model_variant != old.model_variant
-        || settings.model_path != old.model_path;
-    let switched_on = settings.model_enabled && !old.model_enabled;
     save_settings(&app, &state, settings.clone()).await?;
-    if reload {
-        unload_chat_model(&app, &state);
-        state.wake.notify_one();
-    }
-    // What was put off while the model was off (SPEC 5.7).
-    if switched_on {
-        if let Ok(space) = state.space() {
-            super::spaces::look_back(&app, &space);
-        }
-    }
-
     Ok(SettingsView {
         settings,
         active_root: state.root.clone(),

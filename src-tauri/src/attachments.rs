@@ -609,7 +609,7 @@ mod tests {
 
     #[test]
     fn a_carried_file_leaves_once_no_other_note_links_it() {
-        use crate::storage::daily_file::{append_note, body_hash, Kind, Note, Status};
+        use crate::storage::daily_file::{append_note, body_hash, Kind, Note};
         let root = scratch("drop-carried");
         let shared = store(&root, "2026-09-28", "shared shot.png", |f| {
             f.write_all(b"x")
@@ -624,10 +624,8 @@ mod tests {
             time: "09:00".to_string(),
             file: crate::storage::relative_day_path("2026-09-28"),
             subject: None,
-            category: None,
-            status: Status::Done,
             hash: body_hash(&body),
-            lang: None,
+            ahead_off: false,
             body,
             kind: Kind::Note,
             on: None,

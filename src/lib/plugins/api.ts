@@ -48,7 +48,7 @@ export interface App {
 	readonly markdown: MarkdownRenderer;
 	/**
 	 * Call `listener` on an event; returns what stops it, for `registerEvent`.
-	 * `notes-changed`: a note or page was saved, labelled, or deleted, here
+	 * `notes-changed`: a note or page was saved or deleted, here
 	 * or on disk, or another space opened.
 	 */
 	on(event: 'notes-changed', listener: () => void): () => void;
@@ -65,14 +65,11 @@ export interface Notes {
 	days(): Promise<{ date: string; count: number; words: number }[]>;
 	/** Every page, newest first. */
 	pages(): Promise<Note[]>;
-	/** As the command center searches: words, and `#category` filters. Newest first. */
+	/** As the command center searches, by words. Newest first. */
 	search(query: string): Promise<Note[]>;
 	/** Every note and page whose text holds any of `needles` as typed, newest first. */
 	containing(needles: string[]): Promise<Note[]>;
-	/**
-	 * Save a new text for a note or a page. A text that changed only in
-	 * task boxes keeps its subject and category.
-	 */
+	/** Save a new text for a note or a page. */
 	setBody(note: Note, body: string): Promise<void>;
 	/** Add a note to a day, today by default. Null for an empty body. */
 	create(body: string, date?: string): Promise<Note | null>;

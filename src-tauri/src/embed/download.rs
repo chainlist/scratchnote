@@ -2,8 +2,6 @@
 //!
 //! Resumable, verified against the hash the registry reports, and recording
 //! the exact repo revision so "which build do I have" has an answer later.
-//! This and the user-initiated update check are the only network calls the
-//! app ever makes.
 
 use std::path::{Path, PathBuf};
 
@@ -12,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 
-use super::model::{model_file, models_dir, Catalogued, Variant};
+use super::model::{model_file, models_dir, Catalogued};
 
 /// What the registry says about the file we are about to fetch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,13 +65,6 @@ pub fn installed(root: &Path, model: impl Catalogued) -> Option<InstalledModel> 
 /// what they are exist.
 pub fn is_installed(root: &Path, model: impl Catalogued) -> bool {
     model_file(root, model).exists() && installed(root, model).is_some()
-}
-
-/// The first variant with both weights and a record on disk.
-pub fn installed_variant(root: &Path) -> Option<Variant> {
-    [Variant::Default, Variant::Light]
-        .into_iter()
-        .find(|variant| is_installed(root, *variant))
 }
 
 /// Ask the registry which revision is current and what the file should hash to.
@@ -145,10 +136,9 @@ fn part_path(root: &Path, model: impl Catalogued) -> PathBuf {
 }
 
 /// Download to `<file>.part`, resuming whatever is already there, and verify
-/// the hash. The current file is not touched, so the old model stays in use
-/// until `install` swaps the new one in (SPEC 5.2). A `.part` that is already
-/// complete is only re-hashed, which makes a retried install cheap.
-pub async fn download_verified<F>(
+/// the hash. A `.part` that is already complete is only re-hashed, which
+/// makes a retried install cheap.
+async fn download_verified<F>(
     root: &Path,
     model: impl Catalogued,
     remote: &RemoteModel,
@@ -223,14 +213,8 @@ where
     Ok(())
 }
 
-/// Move a verified `.part` over the model and record its revision. On Windows
-/// this fails while the old file is still memory-mapped by a loaded model, so
-/// the caller unloads first.
-pub async fn install(
-    root: &Path,
-    model: impl Catalogued,
-    remote: &RemoteModel,
-) -> Result<(), String> {
+/// Move a verified `.part` over the model and record its revision.
+async fn install(root: &Path, model: impl Catalogued, remote: &RemoteModel) -> Result<(), String> {
     let part = part_path(root, model);
     let target = model_file(root, model);
     tokio::fs::rename(&part, &target)
@@ -248,57 +232,6 @@ pub async fn install(
         .await
         .map_err(|e| format!("could not record which model this is: {e}"))?;
     Ok(())
-}
-
-/// The file enrichment should load, and the variant it is when the app
-/// fetched it. `None` for a custom GGUF, which has no revision to check.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ActiveModel {
-    pub path: PathBuf,
-    pub variant: Option<Variant>,
-}
-
-/// SPEC 5.2: a custom GGUF path wins when set, then the chosen variant, then
-/// whichever variant is on disk. A custom path that has gone missing is not
-/// papered over with another model; notes wait until it is fixed.
-pub fn active_model(root: &Path, chosen: Variant, custom: Option<&Path>) -> Option<ActiveModel> {
-    if let Some(path) = custom {
-        return path.is_file().then(|| ActiveModel {
-            path: path.to_path_buf(),
-            variant: None,
-        });
-    }
-    let variant = if is_installed(root, chosen) {
-        chosen
-    } else {
-        installed_variant(root)?
-    };
-    Some(ActiveModel {
-        path: model_file(root, variant),
-        variant: Some(variant),
-    })
-}
-
-/// SPEC 8: `up-to-date | newer(revision) | failed(reason)`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "state", rename_all = "camelCase")]
-pub enum UpdateCheck {
-    UpToDate { revision: String },
-    Newer { installed: String, latest: String },
-    Failed { reason: String },
-}
-
-pub fn compare(installed: &InstalledModel, remote: &RemoteModel) -> UpdateCheck {
-    if installed.revision == remote.revision {
-        UpdateCheck::UpToDate {
-            revision: installed.revision.clone(),
-        }
-    } else {
-        UpdateCheck::Newer {
-            installed: installed.revision.clone(),
-            latest: remote.revision.clone(),
-        }
-    }
 }
 
 pub fn percent_of(done: u64, total: u64) -> u8 {
@@ -336,7 +269,7 @@ async fn hash_file(path: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrich::model::EmbeddingModel;
+    use crate::embed::model::EmbeddingModel;
 
     #[test]
     fn progress_is_a_percentage_that_cannot_overshoot() {
@@ -354,8 +287,8 @@ mod tests {
     #[test]
     fn the_sidecar_sits_next_to_the_weights() {
         let root = Path::new("/root");
-        let sidecar = sidecar_path(root, Variant::Light);
-        assert_eq!(sidecar.parent(), model_file(root, Variant::Light).parent());
+        let sidecar = sidecar_path(root, EmbeddingModel);
+        assert_eq!(sidecar.parent(), model_file(root, EmbeddingModel).parent());
         assert!(sidecar.to_string_lossy().ends_with(".gguf.json"));
     }
 
@@ -364,45 +297,39 @@ mod tests {
         let root = std::env::temp_dir().join("scratchnote-model-record");
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(models_dir(&root)).unwrap();
-        std::fs::write(model_file(&root, Variant::Light), b"weights").unwrap();
+        std::fs::write(model_file(&root, EmbeddingModel), b"weights").unwrap();
 
         assert!(
-            !is_installed(&root, Variant::Light),
+            !is_installed(&root, EmbeddingModel),
             "weights alone say nothing about which revision they are"
         );
 
         std::fs::write(
-            sidecar_path(&root, Variant::Light),
-            serde_json::to_string(&InstalledModel {
-                repo: Variant::Light.repo().to_string(),
-                file: Variant::Light.file().to_string(),
-                revision: "abc123".to_string(),
-                sha256: "deadbeef".to_string(),
-            })
-            .unwrap(),
+            sidecar_path(&root, EmbeddingModel),
+            serde_json::to_string(&record("abc123")).unwrap(),
         )
         .unwrap();
-        assert!(is_installed(&root, Variant::Light));
-        assert_eq!(installed(&root, Variant::Light).unwrap().revision, "abc123");
+        assert!(is_installed(&root, EmbeddingModel));
+        assert_eq!(installed(&root, EmbeddingModel).unwrap().revision, "abc123");
 
         let _ = std::fs::remove_dir_all(&root);
     }
 
-    fn record(variant: Variant, revision: &str) -> InstalledModel {
+    fn record(revision: &str) -> InstalledModel {
         InstalledModel {
-            repo: variant.repo().to_string(),
-            file: variant.file().to_string(),
+            repo: EmbeddingModel.repo().to_string(),
+            file: EmbeddingModel.file().to_string(),
             revision: revision.to_string(),
             sha256: "deadbeef".to_string(),
         }
     }
 
-    fn fake_install(root: &Path, variant: Variant) {
+    fn fake_install(root: &Path) {
         std::fs::create_dir_all(models_dir(root)).unwrap();
-        std::fs::write(model_file(root, variant), b"weights").unwrap();
+        std::fs::write(model_file(root, EmbeddingModel), b"weights").unwrap();
         std::fs::write(
-            sidecar_path(root, variant),
-            serde_json::to_string(&record(variant, "abc123")).unwrap(),
+            sidecar_path(root, EmbeddingModel),
+            serde_json::to_string(&record("abc123")).unwrap(),
         )
         .unwrap();
     }
@@ -413,77 +340,14 @@ mod tests {
         root
     }
 
-    #[test]
-    fn the_chosen_variant_is_used_when_it_is_installed() {
-        let root = scratch("active-chosen");
-        fake_install(&root, Variant::Default);
-        fake_install(&root, Variant::Light);
-        let active = active_model(&root, Variant::Light, None).unwrap();
-        assert_eq!(active.variant, Some(Variant::Light));
-        assert_eq!(active.path, model_file(&root, Variant::Light));
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn falls_back_to_whatever_variant_is_on_disk() {
-        let root = scratch("active-fallback");
-        assert_eq!(active_model(&root, Variant::Default, None), None);
-        fake_install(&root, Variant::Light);
-        let active = active_model(&root, Variant::Default, None).unwrap();
-        assert_eq!(active.variant, Some(Variant::Light));
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn a_custom_file_wins_and_is_never_swapped_for_another_when_missing() {
-        let root = scratch("active-custom");
-        fake_install(&root, Variant::Default);
-        let custom = root.join("mine.gguf");
-
-        assert_eq!(
-            active_model(&root, Variant::Default, Some(&custom)),
-            None,
-            "a missing custom file must not silently fall back"
-        );
-        std::fs::write(&custom, b"weights").unwrap();
-        let active = active_model(&root, Variant::Default, Some(&custom)).unwrap();
-        assert_eq!(active.path, custom);
-        assert_eq!(active.variant, None);
-        let _ = std::fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn compares_revisions_not_files() {
-        let remote = |revision: &str| RemoteModel {
-            revision: revision.to_string(),
-            sha256: "x".to_string(),
-            size: 1,
-            url: String::new(),
-        };
-        let installed = record(Variant::Light, "abc123");
-        assert_eq!(
-            compare(&installed, &remote("abc123")),
-            UpdateCheck::UpToDate {
-                revision: "abc123".into()
-            }
-        );
-        assert_eq!(
-            compare(&installed, &remote("def456")),
-            UpdateCheck::Newer {
-                installed: "abc123".into(),
-                latest: "def456".into()
-            }
-        );
-    }
-
     /// A finished `.part` is verified and installed without the network, so
     /// retrying an install that failed on a locked file costs a hash, not a
     /// second download.
     #[tokio::test]
     async fn a_complete_part_file_installs_without_downloading_again() {
         let root = scratch("install-part");
-        fake_install(&root, Variant::Light);
-        std::fs::write(part_path(&root, Variant::Light), b"hello").unwrap();
+        fake_install(&root);
+        std::fs::write(part_path(&root, EmbeddingModel), b"hello").unwrap();
         let remote = RemoteModel {
             revision: "def456".to_string(),
             sha256: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824".to_string(),
@@ -491,22 +355,22 @@ mod tests {
             url: "http://unreachable.invalid/never".to_string(),
         };
 
-        download_verified(&root, Variant::Light, &remote, |_| {})
+        download_verified(&root, EmbeddingModel, &remote, |_| {})
             .await
             .expect("no request should be made");
         assert_eq!(
-            std::fs::read(model_file(&root, Variant::Light)).unwrap(),
+            std::fs::read(model_file(&root, EmbeddingModel)).unwrap(),
             b"weights",
             "the old model stays until install"
         );
 
-        install(&root, Variant::Light, &remote).await.unwrap();
+        install(&root, EmbeddingModel, &remote).await.unwrap();
         assert_eq!(
-            std::fs::read(model_file(&root, Variant::Light)).unwrap(),
+            std::fs::read(model_file(&root, EmbeddingModel)).unwrap(),
             b"hello"
         );
-        assert_eq!(installed(&root, Variant::Light).unwrap().revision, "def456");
-        assert!(!part_path(&root, Variant::Light).exists());
+        assert_eq!(installed(&root, EmbeddingModel).unwrap().revision, "def456");
+        assert!(!part_path(&root, EmbeddingModel).exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -515,10 +379,7 @@ mod tests {
     /// being dropped, which otherwise shows up as a 401 in front of the user.
     #[tokio::test]
     #[ignore = "reaches Hugging Face"]
-    async fn every_model_resolves_on_hugging_face() {
-        for variant in [Variant::Default, Variant::Light] {
-            resolves(variant).await;
-        }
+    async fn the_model_resolves_on_hugging_face() {
         resolves(EmbeddingModel).await;
     }
 

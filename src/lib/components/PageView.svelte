@@ -5,7 +5,6 @@
 		finishPage,
 		getPage,
 		onIndexRebuilt,
-		onNoteEnriched,
 		onNoteUpdated,
 		renamePage,
 		updatePage,
@@ -18,12 +17,10 @@
 	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import RouteOffIcon from '@lucide/svelte/icons/route-off';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
-	import { categoryLabel } from '#lib/categories.js';
 	import { joinText, pageDraft } from '#lib/page-draft.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -33,8 +30,6 @@
 		date,
 		oncreated,
 		ondelete,
-		onretry,
-		oncategory,
 		onsimilar,
 		onmove,
 		onopennote
@@ -47,8 +42,6 @@
 		oncreated: (page: Note) => void;
 		/** Ask to delete; the page confirms. */
 		ondelete: (page: Note) => void;
-		onretry: (page: Note) => void;
-		oncategory: (category: string) => void;
 		/** Left out without the embedding model. */
 		onsimilar?: (page: Note) => void;
 		/** Ask to move it to another space, once its text is saved. Left out with one space. */
@@ -112,9 +105,8 @@
 			editor?.focus();
 		})();
 
-		// The model filing the page, or an edit in another editor.
+		// An edit in another editor.
 		const off = [
-			onNoteEnriched((changed) => void refresh(changed)),
 			onNoteUpdated((changed) => void refresh(changed)),
 			onIndexRebuilt(() => void refresh())
 		];
@@ -129,7 +121,7 @@
 			keepDraft();
 			return;
 		}
-		// The last save first, then the models get the page, once (SPEC 3.5).
+		// The last save first, then the embedding model gets the page, once (SPEC 3.5).
 		void queue(async () => {
 			await saveBody();
 			if (page) await finishPage(page.id).catch(() => {});
@@ -319,11 +311,6 @@
 							<WaypointsIcon />{m.note_similar()}
 						</DropdownMenu.Item>
 					{/if}
-					{#if current.status === 'done' || current.status === 'failed'}
-						<DropdownMenu.Item onSelect={() => onretry(current)}>
-							<RefreshCwIcon />{m.note_rerun()}
-						</DropdownMenu.Item>
-					{/if}
 					{#if onmove}
 						<DropdownMenu.Item onSelect={() => void move(onmove)}>
 							<FolderInputIcon />{m.move_to()}
@@ -357,15 +344,6 @@
 		{#if page}<span class="font-mono">{page.date} {page.time}</span>{/if}
 		<span>{m.pages_words({ count: words })}</span>
 		{#if page?.on}<DayAhead on={page.on} />{/if}
-		{#if page?.category}
-			{@const category = page.category}
-			<button
-				type="button"
-				onclick={() => oncategory(category)}
-				title={m.note_show_tag({ tag: categoryLabel(category) })}
-				class="cursor-pointer font-mono hover:text-neutral-200">#{categoryLabel(category)}</button
-			>
-		{/if}
 		<span class={error ? 'text-red-400' : ''} aria-live="polite">{status}</span>
 		{#if !loading}
 			<Recall

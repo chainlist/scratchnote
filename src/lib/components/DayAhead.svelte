@@ -25,7 +25,7 @@
 		on,
 		class: className
 	}: {
-		/** The later day the note looks forward to (SPEC 5.7). */
+		/** The later day the note looks forward to (SPEC 5.3). */
 		on: string;
 		class?: string;
 	} = $props();

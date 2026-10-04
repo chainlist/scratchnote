@@ -408,7 +408,7 @@ new Setting(section.contentEl).setName('Colour').addDropdown(/* ... */);
 | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `version`, `window`, `locale`                                             | the app's version, this copy's window, the interface language  |
 | `notes.day(date)`, `notes.days()`, `notes.pages()`                        | the open space's notes                                         |
-| `notes.search(query)`                                                     | as the command center searches: words and `#category`          |
+| `notes.search(query)`                                                     | as the command center searches: words                          |
 | `notes.containing(needles)`                                               | every note and page whose text holds any of `needles`          |
 | `notes.setBody(note, body)`                                               | save a note's or a page's new text                             |
 | `notes.create(body, date?)`                                               | add a note to a day                                            |
@@ -417,7 +417,7 @@ new Setting(section.contentEl).setName('Colour').addDropdown(/* ... */);
 | `markdown.parse(text)`                                                    | the syntax tree, every plugin's syntax included                |
 | `markdown.render(el, text, options?)`                                     | draw markdown as a card does; `onchange` lets widgets save     |
 | `markdown.images(text)`                                                   | the attached images a text shows: where, name, and `url`       |
-| `on('notes-changed', listener)`                                           | a note was saved, labelled or deleted, or another space opened |
+| `on('notes-changed', listener)`                                           | a note was saved or deleted, or another space opened           |
 
 ### Icons
 
@@ -437,10 +437,6 @@ and the app's CSS variables, which follow the theme and the accent colour:
 | `--color-neutral-50` to `--color-neutral-950` | the greys, which turn over in light mode, so `--color-neutral-200` is the text in both |
 | `--border`, `--card`, `--muted-foreground`    | borders, card backgrounds, dim text                                                    |
 | `--font-mono`                                 | the monospace font                                                                     |
-
-A note waiting for the model draws a glowing copy of its text, inside
-`.note-glow-text`; a plugin's backgrounds and borders there should go
-(`background: none`).
 
 ## Publishing
 

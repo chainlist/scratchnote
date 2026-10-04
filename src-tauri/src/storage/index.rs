@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::daily_file::{self, Kind, Note, Status};
+use super::daily_file::{self, Kind, Note};
 use super::search_db::{SearchDb, Stamp};
 use super::{check_date, page_file, relative_day_path};
 
@@ -24,12 +24,8 @@ pub struct IndexEntry {
     pub time: String,
     pub file: String,
     pub subject: Option<String>,
-    pub category: Option<String>,
-    pub status: Status,
     pub hash: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lang: Option<String>,
-    /// The later day the note looks forward to (SPEC 5.7), which brings it
+    /// The later day the note looks forward to (SPEC 5.3), which brings it
     /// back on that day's view.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on: Option<String>,
@@ -41,8 +37,8 @@ pub struct IndexEntry {
     /// written before words were counted, whose day `load` reparses.
     #[serde(default)]
     pub words: Option<usize>,
-    /// Always empty in the index. A chat fills it in for the few notes it
-    /// retrieves (SPEC 6.1).
+    /// Always empty in the index. Search fills it in for the notes it
+    /// returns.
     #[serde(skip)]
     pub body: String,
 }
@@ -55,10 +51,7 @@ impl From<&Note> for IndexEntry {
             time: note.time.clone(),
             file: note.file.clone(),
             subject: note.subject.clone(),
-            category: note.category.clone(),
-            status: note.status,
             hash: note.hash.clone(),
-            lang: note.lang.clone(),
             on: note.on.clone(),
             kind: note.kind,
             words: Some(words(&note.body)),
@@ -75,11 +68,9 @@ impl IndexEntry {
             time: self.time.clone(),
             file: self.file.clone(),
             subject: self.subject.clone(),
-            category: self.category.clone(),
-            status: self.status,
             hash: self.hash.clone(),
-            lang: self.lang.clone(),
             on: self.on.clone(),
+            ahead_off: false,
             body: self.body.clone(),
             kind: self.kind,
             missing: false,
@@ -219,27 +210,9 @@ impl Index {
         self.by_date.values().map(Vec::len).sum::<usize>() + self.pages.len()
     }
 
-    /// How many notes each category holds. Derived, like everything else here.
-    pub fn category_counts(&self) -> HashMap<String, u32> {
-        let mut counts = HashMap::new();
-        for category in self.entries().filter_map(|entry| entry.category.as_ref()) {
-            *counts.entry(category.clone()).or_insert(0) += 1;
-        }
-        counts
-    }
-
     /// Notes day by day, then pages.
     pub fn entries(&self) -> impl Iterator<Item = &IndexEntry> {
         self.by_date.values().flatten().chain(self.pages.values())
-    }
-
-    /// Notes still waiting on enrichment, oldest day first, so the queue can
-    /// be refilled at startup from what the markdown actually says.
-    pub fn pending(&self) -> Vec<(String, String)> {
-        self.entries()
-            .filter(|entry| entry.status == Status::Pending)
-            .map(|entry| (entry.id.clone(), entry.date.clone()))
-            .collect()
     }
 
     pub fn to_jsonl(&self) -> String {
@@ -479,9 +452,9 @@ pub fn load(root: &Path, db: &mut SearchDb) -> (Index, bool) {
         return (rebuild(root, db), true);
     };
 
-    // A cache from before notes had a category instead of tags would read
-    // as notes with none.
-    if raw.contains("\"tags\":") {
+    // A cache from before the model was dropped holds the labels it wrote,
+    // and the days ahead it read.
+    if raw.contains("\"status\":") {
         return (rebuild(root, db), true);
     }
 
@@ -556,10 +529,8 @@ mod tests {
             time: time.to_string(),
             file: relative_day_path(date),
             subject: None,
-            category: None,
-            status: Status::Pending,
             hash: body_hash(body),
-            lang: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Note,
             on: None,
@@ -645,9 +616,7 @@ mod tests {
         let line = index.to_jsonl();
         let value: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
 
-        for key in [
-            "id", "date", "time", "file", "subject", "category", "status", "hash",
-        ] {
+        for key in ["id", "date", "time", "file", "subject", "hash"] {
             assert!(value.get(key).is_some(), "missing {key} in {line}");
         }
         assert!(
@@ -655,7 +624,6 @@ mod tests {
             "the index must not carry bodies"
         );
         assert_eq!(value["file"], "notes/2026/2026-09-22.md");
-        assert_eq!(value["status"], "pending");
     }
 
     #[test]
@@ -700,54 +668,26 @@ mod tests {
     }
 
     #[test]
-    fn counts_the_notes_in_each_category() {
-        let mut index = Index::default();
-        let mut a = note("01AAA", "2026-09-22", "08:00", "a");
-        a.category = Some("infra".into());
-        let mut b = note("01BBB", "2026-09-23", "08:00", "b");
-        b.category = Some("infra".into());
-        let mut c = note("01CCC", "2026-09-23", "09:00", "c");
-        c.category = Some("movie".into());
-        for entry in [&a, &b, &c, &note("01DDD", "2026-09-23", "10:00", "d")] {
-            index.push(IndexEntry::from(entry));
-        }
-
-        let counts = index.category_counts();
-        assert_eq!(counts.len(), 2);
-        assert_eq!(counts["infra"], 2);
-        assert_eq!(counts["movie"], 1);
-    }
-
-    #[test]
-    fn the_label_language_survives_the_cache() {
-        let mut index = Index::default();
-        let mut french = note("01BBB", "2026-09-23", "08:00", "b");
-        french.lang = Some("fr".into());
-        index.push(IndexEntry::from(&french));
-        let back = Index::from_jsonl(&index.to_jsonl());
-        assert_eq!(back.entries().next().unwrap().lang.as_deref(), Some("fr"));
-    }
-
-    #[test]
-    fn a_cache_written_with_tags_is_rebuilt_from_the_markdown() {
-        let root = scratch_root("tags-cache");
-        let mut labelled = note("01AAA", "2026-09-22", "08:00", "the body");
-        labelled.category = Some("movie".into());
-        write_day(&root, "2026-09-22", &[labelled]);
+    fn a_cache_written_with_labels_is_rebuilt_from_the_markdown() {
+        let root = scratch_root("labels-cache");
+        write_day(
+            &root,
+            "2026-09-22",
+            &[note("01AAA", "2026-09-22", "08:00", "Dentist on Friday")],
+        );
         let cache = index_path(&root);
         std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
         std::fs::write(
             &cache,
-            r#"{"id":"01AAA","date":"2026-09-22","time":"08:00","file":"notes/2026/2026-09-22.md","subject":null,"summary":null,"tags":["movie"],"status":"pending","hash":"x"}"#,
+            r#"{"id":"01AAA","date":"2026-09-22","time":"08:00","file":"notes/2026/2026-09-22.md","subject":"Dentist","category":"health","status":"done","hash":"x","on":"2026-10-02"}"#,
         )
         .unwrap();
 
         let (index, changed) = load(&root, &mut db());
         assert!(changed);
-        assert_eq!(
-            index.entries().next().unwrap().category.as_deref(),
-            Some("movie")
-        );
+        let entry = index.entries().next().unwrap();
+        assert_eq!(entry.subject, None);
+        assert_eq!(entry.on.as_deref(), Some("2026-09-25"));
 
         let _ = std::fs::remove_dir_all(&root);
     }

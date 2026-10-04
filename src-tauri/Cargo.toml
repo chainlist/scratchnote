@@ -46,11 +46,5 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 
-[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
-llama-cpp-2 = { version = "0.1.156", features = ["vulkan"] }
-
-[target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-2 = { version = "0.1.156", features = ["metal"] }
-
 [dev-dependencies]
 filetime = "0.2.29"

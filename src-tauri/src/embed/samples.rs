@@ -3,7 +3,7 @@
 //! names and what threads gather can be checked against the thing each note
 //! is about. A note whose thing starts with `-` is the only one about it.
 
-use crate::storage::daily_file::{body_hash, Kind, Note, Status};
+use crate::storage::daily_file::{body_hash, Kind, Note};
 use crate::storage::relative_day_path;
 
 /// The thing a note is about, its day and time, and its text.
@@ -67,10 +67,8 @@ pub fn notes() -> Vec<(&'static str, Note)> {
                 time: time.to_string(),
                 file: relative_day_path(date),
                 subject: Some(body.chars().take(48).collect()),
-                category: None,
-                status: Status::Done,
                 hash: body_hash(body),
-                lang: None,
+                ahead_off: false,
                 body: body.to_string(),
                 kind: Kind::Note,
                 on: None,

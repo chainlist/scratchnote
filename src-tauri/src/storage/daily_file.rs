@@ -4,6 +4,11 @@
 //! Parsing relies only on those markers, so anything the user writes between
 //! blocks is never interpreted and never touched. A page's stub (SPEC 4.7)
 //! opens with `<!-- sn:page ... -->` instead, so the note parser skips it.
+//!
+//! Blocks written while a model labelled the notes carry a `status` in their
+//! marker and the labels above the text: a `### subject` heading and a
+//! `> #category` line. They are still read, without the labels, and
+//! rebuilding the index writes them as blocks are written now.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,7 +17,8 @@ const NOTE_OPEN: &str = "<!-- sn:note ";
 /// Opens a page's stub here, and the marker line of a page file.
 pub const PAGE_OPEN: &str = "<!-- sn:page ";
 const NOTE_END: &str = "<!-- sn:end -->";
-const UNTITLED: &str = "(untitled)";
+/// In a marker, the user cleared the day ahead (SPEC 5.3).
+pub(crate) const AHEAD_OFF: &str = "ahead=off";
 
 /// A note in a day's file, or a page with a file of its own (SPEC 4.7).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,55 +36,23 @@ impl Kind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Status {
-    Pending,
-    Done,
-    Failed,
-    Manual,
-}
-
-impl Status {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Status::Pending => "pending",
-            Status::Done => "done",
-            Status::Failed => "failed",
-            Status::Manual => "manual",
-        }
-    }
-
-    pub(crate) fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            "pending" => Some(Status::Pending),
-            "done" => Some(Status::Done),
-            "failed" => Some(Status::Failed),
-            "manual" => Some(Status::Manual),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Note {
     pub id: String,
     pub date: String,
     pub time: String,
     pub file: String,
+    /// A page's title. Notes have none.
     pub subject: Option<String>,
-    /// The broad subject the note is filed under, one of `categories.json`.
-    pub category: Option<String>,
-    pub status: Status,
     pub hash: String,
-    /// The locale the model labelled the note in, such as "fr". `None` on a
-    /// note it has not labelled, or labelled before this was recorded.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lang: Option<String>,
-    /// The later day the note looks forward to, as the model read it (SPEC
-    /// 5.7), such as "2026-10-06". `None` when it names none.
+    /// The later day the note looks forward to (SPEC 5.3), such as
+    /// "2026-10-06", read off its text each time it is parsed. `None` when
+    /// it names none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on: Option<String>,
+    /// The user cleared the day ahead, so none is read off the text.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ahead_off: bool,
     pub body: String,
     /// A page's subject is its title, and `file` its own file.
     #[serde(default, skip_serializing_if = "Kind::is_note")]
@@ -95,50 +69,13 @@ pub fn body_hash(body: &str) -> String {
     digest[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The two bodies differ only in task boxes ticked or cleared, `[ ]` against
-/// `[x]`: what the note says is the same, so its labels still fit (SPEC 3.4).
-pub fn only_ticks_changed(old: &str, new: &str) -> bool {
-    let tick = |b: u8| matches!(b, b' ' | b'x' | b'X');
-    let (old, new) = (old.as_bytes(), new.as_bytes());
-    old.len() == new.len()
-        && (0..old.len()).all(|i| {
-            old[i] == new[i]
-                || (i > 0
-                    && old[i - 1] == b'['
-                    && old.get(i + 1) == Some(&b']')
-                    && tick(old[i])
-                    && tick(new[i]))
-        })
-}
-
 pub fn render_note(note: &Note) -> String {
-    let lang = note
-        .lang
-        .as_deref()
-        .map(|lang| format!(" lang={lang}"))
-        .unwrap_or_default();
-    let on = note
-        .on
-        .as_deref()
-        .map(|on| format!(" on={on}"))
-        .unwrap_or_default();
-    let mut out = format!(
-        "{}id={} time={} status={} hash={}{lang}{on} -->\n",
-        NOTE_OPEN,
-        note.id,
-        note.time,
-        note.status.as_str(),
-        note.hash
-    );
-    out.push_str("### ");
-    out.push_str(note.subject.as_deref().unwrap_or(UNTITLED));
-    out.push('\n');
-    // Written as a tag, so other markdown tools see it as one too.
-    if let Some(category) = &note.category {
-        out.push_str("> #");
-        out.push_str(category);
-        out.push_str("\n\n");
-    }
+    let off = if note.ahead_off {
+        format!(" {AHEAD_OFF}")
+    } else {
+        String::new()
+    };
+    let mut out = format!("{NOTE_OPEN}id={} time={}{off} -->\n", note.id, note.time);
     out.push_str(note.body.trim_end());
     out.push('\n');
     out.push_str(NOTE_END);
@@ -239,30 +176,42 @@ fn remove_block(content: &str, open: &str, id: &str) -> Option<String> {
     Some(out)
 }
 
-/// What enrichment, or a manual edit, changes about a note. The body is never
-/// touched here, so the hash stays valid.
-#[derive(Debug, Clone)]
-pub struct NotePatch {
-    pub subject: Option<String>,
-    pub category: Option<String>,
-    pub status: Status,
-    pub lang: Option<String>,
-    pub on: Option<String>,
+/// Clear one note's day ahead for good, keeping its body and every byte of
+/// the file outside its block. Returns `None` when the id is not in this file.
+pub fn clear_day_ahead(content: &str, id: &str) -> Option<String> {
+    rewrite_block(content, id, |note| note.ahead_off = true)
 }
 
-/// Rewrite one note's block in place, keeping its body and every byte of the
-/// file outside that block. Returns `None` when the id is not in this file.
-pub fn update_note(content: &str, id: &str, patch: &NotePatch) -> Option<String> {
-    rewrite_block(content, id, |note| {
-        note.subject = patch.subject.clone();
-        note.category = patch.category.clone();
-        note.status = patch.status;
-        note.lang = patch.lang.clone();
-        note.on = patch.on.clone();
-    })
+/// The file with every labelled block written as blocks are now, without its
+/// labels. `None` when it holds none.
+pub fn drop_labels(content: &str) -> Option<String> {
+    let labelled: Vec<String> = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with(NOTE_OPEN) && line.ends_with("-->") && is_labelled(line))
+        .filter_map(|line| header_id(line, NOTE_OPEN).map(str::to_string))
+        .collect();
+    if labelled.is_empty() {
+        return None;
+    }
+    let mut out = content.to_string();
+    for id in labelled {
+        if let Some(rewritten) = rewrite_block(&out, &id, |_| {}) {
+            out = rewritten;
+        }
+    }
+    Some(out)
 }
 
-/// Swap one note's body, and its hash with it, leaving the metadata and every
+/// A marker written while a model labelled the notes: those all carried a
+/// `status`.
+pub(crate) fn is_labelled(marker: &str) -> bool {
+    marker
+        .split_whitespace()
+        .any(|pair| pair.starts_with("status="))
+}
+
+/// Swap one note's body, and its hash with it, leaving the rest and every
 /// byte outside the block alone. Returns `None` when the id is not in this file.
 pub fn replace_body(content: &str, id: &str, body: &str) -> Option<String> {
     rewrite_block(content, id, |note| {
@@ -472,31 +421,20 @@ pub fn note_to_stub(content: &str, note_id: &str, stub: &Stub) -> Option<String>
 fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<Note> {
     let attrs = header.strip_prefix(NOTE_OPEN)?.strip_suffix("-->")?.trim();
 
-    let (mut id, mut time, mut status, mut hash, mut lang, mut on) =
-        (None, None, None, None, None, None);
+    let (mut id, mut time) = (None, None);
     for pair in attrs.split_whitespace() {
         match pair.split_once('=') {
             Some(("id", v)) => id = Some(v.to_string()),
             Some(("time", v)) => time = Some(v.to_string()),
-            Some(("status", v)) => status = Status::parse(v),
-            Some(("hash", v)) => hash = Some(v.to_string()),
-            Some(("lang", v)) => lang = Some(v.to_string()),
-            // A day edited out of shape is no day.
-            Some(("on", v)) => on = super::check_date(v).ok().map(|_| v.to_string()),
             _ => {}
         }
     }
+    let ahead_off = attrs.split_whitespace().any(|pair| pair == AHEAD_OFF);
 
-    let (subject, category, body) = parse_block(block);
-
-    // A body that no longer matches the hash written with it was edited in
-    // another editor (SPEC 4.3). Labels the model wrote describe the old text,
-    // so the note is pending again; labels set by hand are the user's to keep.
-    let actual = body_hash(&body);
-    let edited = hash.is_some_and(|stored| stored != actual);
-    let status = match status.unwrap_or(Status::Pending) {
-        Status::Done | Status::Failed if edited => Status::Pending,
-        status => status,
+    let body = if is_labelled(header) {
+        unlabelled_body(block)
+    } else {
+        block.join("\n").trim_end().to_string()
     };
 
     Some(Note {
@@ -504,62 +442,43 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
         date: date.to_string(),
         time: time?,
         file: file.to_string(),
-        subject,
-        category,
-        status,
-        hash: actual,
-        lang,
-        on,
+        subject: None,
+        hash: body_hash(&body),
+        on: (!ahead_off)
+            .then(|| crate::ahead::day_ahead(&body, date))
+            .flatten(),
+        ahead_off,
         body,
         kind: Kind::Note,
         missing: false,
     })
 }
 
-fn parse_block(block: &[&str]) -> (Option<String>, Option<String>, String) {
-    let mut rest = block;
-
-    let subject = match rest.first().and_then(|l| l.strip_prefix("### ")) {
-        Some(raw) => {
-            let raw = raw.trim();
-            rest = &rest[1..];
-            if raw == UNTITLED {
-                None
-            } else {
-                Some(raw.to_string())
-            }
-        }
-        None => None,
+/// The text of a labelled block, under its `### subject` heading and its
+/// category line.
+fn unlabelled_body(block: &[&str]) -> String {
+    let rest = match block.first() {
+        Some(line) if line.starts_with("### ") => &block[1..],
+        _ => block,
     };
-
-    let (category, body) = split_category(rest);
-    (subject, category, body)
+    strip_category(rest)
 }
 
-/// The category line and the text under a note's heading, or a page's.
-pub(crate) fn split_category(block: &[&str]) -> (Option<String>, String) {
+/// The text under a labelled note's heading, or a labelled page's, without
+/// its category line.
+pub(crate) fn strip_category(block: &[&str]) -> String {
     let mut rest = block;
 
     // The category is one `> #category` line and then a blank one. Requiring
     // that shape keeps a body that merely starts with a quote from being
     // swallowed. Notes labelled before tags were dropped carry a summary line
-    // and then a line of tags, the category first; the other tags are let go.
-    let first_tag = |line: &str| {
-        line[2..]
-            .split_whitespace()
-            .map(|t| t.trim_start_matches('#'))
-            .find(|t| !t.is_empty())
-            .map(str::to_string)
-    };
+    // and then a line of tags.
     let quote = |line: &str| line.starts_with("> ") || line.trim_end() == ">";
-    let mut category = None;
     if rest.first().is_some_and(|l| l.starts_with("> #"))
         && rest.get(1).is_none_or(|l| l.trim().is_empty())
     {
-        category = first_tag(rest[0]);
         rest = &rest[1..];
     } else if rest.len() >= 2 && quote(rest[0]) && rest[1].starts_with("> #") {
-        category = first_tag(rest[1]);
         rest = &rest[2..];
     }
 
@@ -567,7 +486,7 @@ pub(crate) fn split_category(block: &[&str]) -> (Option<String>, String) {
         rest = &rest[1..];
     }
 
-    (category, rest.join("\n").trim_end().to_string())
+    rest.join("\n").trim_end().to_string()
 }
 
 #[cfg(test)]
@@ -577,36 +496,32 @@ mod tests {
     const FILE: &str = "notes/2026/2026-09-22.md";
     const DATE: &str = "2026-09-22";
 
-    fn pending(id: &str, time: &str, body: &str) -> Note {
+    fn note(id: &str, time: &str, body: &str) -> Note {
         Note {
             id: id.to_string(),
             date: DATE.to_string(),
             time: time.to_string(),
             file: FILE.to_string(),
             subject: None,
-            category: None,
-            status: Status::Pending,
             hash: body_hash(body),
-            lang: None,
+            on: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Note,
-            on: None,
             missing: false,
         }
     }
 
-    fn enriched() -> Note {
-        Note {
-            subject: Some("Rollback plan for ArgoCD sync issue".to_string()),
-            category: Some("infrastructure".to_string()),
-            status: Status::Done,
-            ..pending(
-                "01J8Z3K6Q9X2",
-                "14:32",
-                "Talked with the team, the auto-sync broke staging again.\nWe pin the chart version and roll back before Friday release.",
-            )
-        }
-    }
+    /// A block as it was written while a model labelled the notes.
+    const LABELLED: &str = concat!(
+        "<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 status=done hash=0badc0de lang=fr on=2026-09-25 -->\n",
+        "### Rollback plan for ArgoCD sync issue\n",
+        "> #infrastructure\n",
+        "\n",
+        "Talked with the team, the auto-sync broke staging again.\n",
+        "We pin the chart version and roll back.\n",
+        "<!-- sn:end -->\n",
+    );
 
     fn parse_one(content: &str) -> Note {
         let notes = parse_notes(content, DATE, FILE);
@@ -623,18 +538,8 @@ mod tests {
     }
 
     #[test]
-    fn a_ticked_task_box_is_not_a_change_of_text() {
-        let body = "- [ ] milk\n- [x] eggs";
-        assert!(only_ticks_changed(body, "- [x] milk\n- [ ] eggs"));
-        assert!(only_ticks_changed(body, "- [X] milk\n- [x] eggs"));
-        assert!(!only_ticks_changed(body, "- [ ] milk\n- [x] bread"));
-        assert!(!only_ticks_changed(body, "- [ ] milk\n- [x] eggs!"));
-        assert!(!only_ticks_changed("a b", "a x"));
-    }
-
-    #[test]
-    fn round_trips_a_pending_note() {
-        let note = pending(
+    fn round_trips_a_note() {
+        let note = note(
             "01J8Z4P1M7T0",
             "15:10",
             "Buy a new USB-C hub for the homelab",
@@ -643,14 +548,8 @@ mod tests {
     }
 
     #[test]
-    fn round_trips_an_enriched_note() {
-        let note = enriched();
-        assert_eq!(parse_one(&render_note(&note)), note);
-    }
-
-    #[test]
     fn round_trips_a_multiline_body() {
-        let note = pending(
+        let note = note(
             "01J8Z4P1M7T1",
             "09:01",
             "line one\n\nline three\n### not a heading",
@@ -660,35 +559,19 @@ mod tests {
 
     #[test]
     fn renders_the_layout_given_in_the_spec() {
-        let note = enriched();
-        let expected = format!(
-            concat!(
-                "<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 status=done hash={} -->\n",
-                "### Rollback plan for ArgoCD sync issue\n",
-                "> #infrastructure\n",
-                "\n",
-                "Talked with the team, the auto-sync broke staging again.\n",
-                "We pin the chart version and roll back before Friday release.\n",
-                "<!-- sn:end -->\n",
-            ),
-            note.hash
+        let note = note("01J8Z3K6Q9X2", "14:32", "Buy a USB-C hub");
+        assert_eq!(
+            render_note(&note),
+            "<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 -->\nBuy a USB-C hub\n<!-- sn:end -->\n"
         );
-        assert_eq!(render_note(&note), expected);
-    }
-
-    #[test]
-    fn renders_a_pending_note_without_a_category_line() {
-        let rendered = render_note(&pending("01J8Z4P1M7T0", "15:10", "Buy a USB-C hub"));
-        assert!(rendered.contains("### (untitled)\nBuy a USB-C hub\n"));
-        assert!(!rendered.lines().any(|l| l.starts_with("> ")));
     }
 
     #[test]
     fn preserves_user_text_between_blocks() {
         let mut doc = String::from("# 2026-09-22\n\nmy own notes here\n\n");
-        doc.push_str(&render_note(&pending("01AAA", "08:00", "first")));
+        doc.push_str(&render_note(&note("01AAA", "08:00", "first")));
         doc.push_str("\nstray prose the user typed\n\n");
-        doc.push_str(&render_note(&pending("01BBB", "09:00", "second")));
+        doc.push_str(&render_note(&note("01BBB", "09:00", "second")));
 
         let notes = parse_notes(&doc, DATE, FILE);
         assert_eq!(notes.len(), 2);
@@ -696,32 +579,24 @@ mod tests {
         assert_eq!(notes[1].body, "second");
 
         // Appending must leave every earlier byte alone.
-        let appended = append_note(&doc, &pending("01CCC", "10:00", "third"), DATE);
+        let appended = append_note(&doc, &note("01CCC", "10:00", "third"), DATE);
         assert!(appended.starts_with(&doc));
         assert!(appended.contains("stray prose the user typed"));
     }
 
     #[test]
-    fn a_body_starting_with_a_blockquote_is_not_read_as_enrichment() {
-        let note = pending("01DDD", "11:00", "> quoted thought\n> and more");
-        let parsed = parse_one(&render_note(&note));
-        assert_eq!(parsed.category, None);
-        assert_eq!(parsed, note);
-    }
-
-    #[test]
-    fn a_body_starting_with_a_quoted_hashtag_is_not_read_as_a_category() {
-        let note = pending("01DDD", "11:00", "> #1 priority\n> ship it");
-        let parsed = parse_one(&render_note(&note));
-        assert_eq!(parsed.category, None);
-        assert_eq!(parsed, note);
+    fn a_body_starting_with_a_heading_or_a_quoted_hashtag_is_kept_whole() {
+        for body in ["### My heading\ntext", "> #1 priority\n> ship it"] {
+            let note = note("01DDD", "11:00", body);
+            assert_eq!(parse_one(&render_note(&note)), note);
+        }
     }
 
     #[test]
     fn skips_a_block_with_no_end_marker() {
         let doc = format!(
-            "# 2026-09-22\n\n<!-- sn:note id=01EEE time=08:00 status=pending hash=deadbeef -->\n### (untitled)\ndangling\n\n{}",
-            render_note(&pending("01FFF", "09:00", "intact"))
+            "# 2026-09-22\n\n<!-- sn:note id=01EEE time=08:00 -->\ndangling\n\n{}",
+            render_note(&note("01FFF", "09:00", "intact"))
         );
         let notes = parse_notes(&doc, DATE, FILE);
         assert_eq!(notes.len(), 1);
@@ -730,42 +605,67 @@ mod tests {
 
     #[test]
     fn skips_a_block_missing_required_attributes() {
-        let doc =
-            "<!-- sn:note time=08:00 status=pending -->\n### (untitled)\nno id\n<!-- sn:end -->\n";
+        let doc = "<!-- sn:note time=08:00 -->\nno id\n<!-- sn:end -->\n";
         assert!(parse_notes(doc, DATE, FILE).is_empty());
     }
 
     #[test]
-    fn defaults_unknown_status_to_pending_and_recomputes_a_missing_hash() {
-        let doc = "<!-- sn:note id=01GGG time=08:00 status=wat -->\n### (untitled)\nbody text\n<!-- sn:end -->\n";
-        let note = parse_one(doc);
-        assert_eq!(note.status, Status::Pending);
-        assert_eq!(note.hash, body_hash("body text"));
-    }
-
-    #[test]
-    fn a_labelled_note_edited_elsewhere_is_pending_again() {
-        let rendered = render_note(&enriched());
-        let edited = rendered.replace("Friday release", "Monday release");
-        let note = parse_one(&edited);
-        assert_eq!(note.status, Status::Pending);
-        assert_eq!(note.hash, body_hash(&note.body));
-
-        let failed = rendered.replace("status=done", "status=failed");
-        let note = parse_one(&failed.replace("Friday release", "Monday release"));
-        assert_eq!(note.status, Status::Pending);
-    }
-
-    #[test]
-    fn a_manual_note_edited_elsewhere_keeps_its_labels() {
-        let rendered = render_note(&enriched()).replace("status=done", "status=manual");
-        let note = parse_one(&rendered.replace("Friday release", "Monday release"));
-        assert_eq!(note.status, Status::Manual);
+    fn a_labelled_block_is_read_without_its_labels() {
+        let note = parse_one(LABELLED);
+        assert_eq!(note.subject, None);
         assert_eq!(
-            note.hash,
-            body_hash(&note.body),
-            "the hash describes the new body"
+            note.body,
+            "Talked with the team, the auto-sync broke staging again.\nWe pin the chart version and roll back."
         );
+        assert_eq!(note.hash, body_hash(&note.body));
+        // The day the model wrote is not taken: this text names none.
+        assert_eq!(note.on, None);
+    }
+
+    #[test]
+    fn a_note_labelled_with_a_summary_and_tags_loses_them_all() {
+        let doc = "<!-- sn:note id=01AAA time=08:00 status=done hash=dead -->\n### s\n> A summary.\n> #infra #argocd #staging\n\nbody\n<!-- sn:end -->\n";
+        assert_eq!(parse_one(doc).body, "body");
+        let bare = "<!-- sn:note id=01AAA time=08:00 status=manual hash=dead -->\n### s\n>   \n> #infra\n\nbody\n<!-- sn:end -->\n";
+        assert_eq!(parse_one(bare).body, "body");
+    }
+
+    #[test]
+    fn dropping_labels_rewrites_only_the_labelled_blocks() {
+        let mut doc = String::from("# 2026-09-22\n\nmy prose\n\n");
+        doc.push_str(&render_note(&note("01AAA", "08:00", "### kept heading")));
+        doc.push('\n');
+        doc.push_str(LABELLED);
+        doc.push_str("\ntrailing prose\n");
+
+        let out = drop_labels(&doc).expect("one block is labelled");
+        assert!(out.starts_with(
+            "# 2026-09-22\n\nmy prose\n\n<!-- sn:note id=01AAA time=08:00 -->\n### kept heading\n"
+        ));
+        assert!(out.contains("<!-- sn:note id=01J8Z3K6Q9X2 time=14:32 -->\nTalked with the team"));
+        assert!(out.ends_with("\ntrailing prose\n"));
+        assert!(!out.contains("status=") && !out.contains("> #infrastructure"));
+        assert_eq!(parse_notes(&out, DATE, FILE), parse_notes(&doc, DATE, FILE));
+        assert_eq!(drop_labels(&out), None, "nothing left to drop");
+
+        let crlf = drop_labels(&doc.replace('\n', "\r\n")).unwrap();
+        assert!(!crlf.replace("\r\n", "").contains('\n'));
+    }
+
+    #[test]
+    fn the_day_ahead_is_read_off_the_text_unless_cleared() {
+        let doc = append_note("", &note("01AAA", "08:00", "Dentist on Friday"), DATE);
+        assert_eq!(parse_one(&doc).on.as_deref(), Some("2026-09-25"));
+
+        let out = clear_day_ahead(&doc, "01AAA").unwrap();
+        assert!(out.contains("time=08:00 ahead=off -->"), "{out}");
+        let cleared = parse_one(&out);
+        assert_eq!(cleared.on, None);
+        assert!(cleared.ahead_off);
+        // Still off once the text changes.
+        let edited = replace_body(&out, "01AAA", "Dentist on Monday").unwrap();
+        assert_eq!(parse_one(&edited).on, None);
+        assert!(clear_day_ahead(&doc, "01ZZZ").is_none());
     }
 
     #[test]
@@ -777,11 +677,11 @@ mod tests {
     /// Three notes with the user's own prose wrapped around them.
     fn day_with_prose() -> String {
         let mut doc = String::from("# 2026-09-22\n\nmy own notes here\n\n");
-        doc.push_str(&render_note(&pending("01AAA", "08:00", "first")));
+        doc.push_str(&render_note(&note("01AAA", "08:00", "first")));
         doc.push('\n');
-        doc.push_str(&render_note(&pending("01BBB", "09:00", "second")));
+        doc.push_str(&render_note(&note("01BBB", "09:00", "second")));
         doc.push_str("\nstray prose the user typed\n\n");
-        doc.push_str(&render_note(&pending("01CCC", "10:00", "third")));
+        doc.push_str(&render_note(&note("01CCC", "10:00", "third")));
         doc
     }
 
@@ -817,7 +717,7 @@ mod tests {
 
     #[test]
     fn removes_the_only_block() {
-        let doc = append_note("", &pending("01AAA", "08:00", "alone"), DATE);
+        let doc = append_note("", &note("01AAA", "08:00", "alone"), DATE);
         let out = remove_note(&doc, "01AAA").expect("id is present");
         assert_eq!(out, "# 2026-09-22\n");
         assert!(parse_notes(&out, DATE, FILE).is_empty());
@@ -846,131 +746,12 @@ mod tests {
         assert!(remove_note(doc, "01AAA").is_none());
     }
 
-    fn enrich_patch() -> NotePatch {
-        NotePatch {
-            subject: Some("Rollback plan for ArgoCD sync issue".to_string()),
-            category: Some("infrastructure".to_string()),
-            status: Status::Done,
-            lang: Some("fr".to_string()),
-            on: None,
-        }
-    }
-
     #[test]
-    fn the_label_language_is_written_in_the_marker_and_read_back() {
-        let doc = append_note("", &pending("01AAA", "08:00", "body"), DATE);
-        assert!(!doc.contains("lang="), "a pending note has no language");
-
-        let out = update_note(&doc, "01AAA", &enrich_patch()).unwrap();
-        assert!(out.contains(" lang=fr -->"), "{out}");
-        assert_eq!(parse_one(&out).lang.as_deref(), Some("fr"));
-        // Notes labelled before the language was recorded have none.
-        assert_eq!(parse_one(&doc).lang, None);
-    }
-
-    #[test]
-    fn the_day_ahead_is_written_in_the_marker_and_read_back() {
-        let doc = append_note("", &pending("01AAA", "08:00", "dentist friday"), DATE);
-        assert!(!doc.contains("on="), "no day yet");
-
-        let patch = NotePatch {
-            on: Some("2026-09-25".to_string()),
-            ..enrich_patch()
+    fn replacing_the_body_rehashes_and_keeps_the_rest() {
+        let before = Note {
+            ahead_off: true,
+            ..note("01BBB", "09:00", "the body")
         };
-        let out = update_note(&doc, "01AAA", &patch).unwrap();
-        assert!(out.contains(" lang=fr on=2026-09-25 -->"), "{out}");
-        assert_eq!(parse_one(&out).on.as_deref(), Some("2026-09-25"));
-
-        // A day edited out of shape by hand is no day.
-        let broken = out.replace("on=2026-09-25", "on=friday");
-        assert_eq!(parse_one(&broken).on, None);
-        // Forgotten, it leaves the marker.
-        let cleared = update_note(&out, "01AAA", &enrich_patch()).unwrap();
-        assert!(!cleared.contains("on="), "{cleared}");
-    }
-
-    #[test]
-    fn enrichment_replaces_the_metadata_and_keeps_the_body() {
-        let before = pending("01BBB", "09:00", "the body\nover two lines");
-        let doc = append_note("", &before, DATE);
-
-        let out = update_note(&doc, "01BBB", &enrich_patch()).expect("id is present");
-        let after = parse_one(&out);
-
-        assert_eq!(after.body, before.body, "the body must be untouched");
-        assert_eq!(after.hash, before.hash, "the hash describes the body");
-        assert_eq!(after.id, before.id);
-        assert_eq!(after.time, before.time);
-        assert_eq!(after.status, Status::Done);
-        assert_eq!(
-            after.subject.as_deref(),
-            Some("Rollback plan for ArgoCD sync issue")
-        );
-        assert_eq!(after.category.as_deref(), Some("infrastructure"));
-    }
-
-    #[test]
-    fn enrichment_leaves_other_notes_and_user_prose_alone() {
-        let doc = day_with_prose();
-        let out = update_note(&doc, "01BBB", &enrich_patch()).expect("id is present");
-
-        assert!(out.starts_with("# 2026-09-22\n\nmy own notes here\n"));
-        assert!(out.contains("stray prose the user typed"));
-
-        let notes = parse_notes(&out, DATE, FILE);
-        assert_eq!(notes.len(), 3);
-        assert_eq!(notes[0].subject, None, "01AAA should be untouched");
-        assert_eq!(notes[2].subject, None, "01CCC should be untouched");
-        assert_eq!(notes[1].status, Status::Done);
-    }
-
-    #[test]
-    fn enrichment_round_trips_through_the_parser() {
-        let doc = append_note("", &pending("01BBB", "09:00", "body"), DATE);
-        let out = update_note(&doc, "01BBB", &enrich_patch()).unwrap();
-
-        // Rendering what we parsed back must produce the same bytes.
-        assert_eq!(
-            render_note(&parse_one(&out)),
-            out.trim_start_matches("# 2026-09-22\n\n")
-        );
-    }
-
-    #[test]
-    fn enrichment_keeps_crlf() {
-        let doc = append_note("", &pending("01BBB", "09:00", "body"), DATE).replace('\n', "\r\n");
-        let out = update_note(&doc, "01BBB", &enrich_patch()).unwrap();
-        assert!(!out.replace("\r\n", "").contains('\n'));
-        assert_eq!(parse_one(&out).status, Status::Done);
-    }
-
-    #[test]
-    fn updating_an_unknown_id_changes_nothing() {
-        let doc = day_with_prose();
-        assert!(update_note(&doc, "01ZZZ", &enrich_patch()).is_none());
-    }
-
-    #[test]
-    fn a_note_labelled_with_a_summary_and_tags_keeps_its_first_tag_as_category() {
-        let doc = "<!-- sn:note id=01AAA time=08:00 status=done hash=dead -->\n### s\n> A summary.\n> #infra #argocd #staging\n\nbody\n<!-- sn:end -->\n";
-        let note = parse_one(doc);
-        assert_eq!(note.category.as_deref(), Some("infra"));
-        assert_eq!(note.body, "body");
-        // Written back, the summary and the other tags are gone.
-        assert!(render_note(&note).contains("### s\n> #infra\n\nbody\n"));
-    }
-
-    #[test]
-    fn a_bare_summary_line_with_trailing_spaces_still_parses() {
-        let doc = "<!-- sn:note id=01AAA time=08:00 status=manual hash=dead -->\n### s\n>   \n> #infra\n\nbody\n<!-- sn:end -->\n";
-        let note = parse_one(doc);
-        assert_eq!(note.category.as_deref(), Some("infra"));
-        assert_eq!(note.body, "body");
-    }
-
-    #[test]
-    fn replacing_the_body_rehashes_and_keeps_the_metadata() {
-        let before = enriched();
         let doc = format!("# {DATE}\n\nmy prose\n\n{}", render_note(&before));
 
         let out = replace_body(&doc, &before.id, "  a new body\n").expect("id is present");
@@ -979,9 +760,8 @@ mod tests {
         let after = parse_one(&out);
         assert_eq!(after.body, "a new body");
         assert_eq!(after.hash, body_hash("a new body"));
-        assert_eq!(after.subject, before.subject);
-        assert_eq!(after.category, before.category);
-        assert_eq!(after.status, before.status);
+        assert_eq!(after.time, before.time);
+        assert!(after.ahead_off);
     }
 
     #[test]
@@ -991,7 +771,7 @@ mod tests {
 
     #[test]
     fn appends_a_day_header_to_a_new_file() {
-        let out = append_note("", &pending("01HHH", "08:00", "first"), DATE);
+        let out = append_note("", &note("01HHH", "08:00", "first"), DATE);
         assert!(out.starts_with("# 2026-09-22\n\n<!-- sn:note "));
     }
 

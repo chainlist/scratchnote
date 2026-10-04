@@ -20,7 +20,7 @@
 	// reaches the capture window too, and both know whose attachments they show.
 	onMount(() => {
 		// After the first view's own mount work too, such as its editor.
-		setTimeout(recordStartup);
+		setTimeout(() => void recordStartup());
 		void getSettings().then(apply);
 		const off = [onSettingsChanged(apply), followSpace()];
 		return () => off.forEach((p) => void p.then((stop) => stop()));

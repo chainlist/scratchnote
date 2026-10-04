@@ -116,7 +116,7 @@
 			</svelte:element>
 		{/snippet}
 
-		<!-- What earlier notes said about this day (SPEC 5.7). -->
+		<!-- What earlier notes said about this day (SPEC 5.3). -->
 		{#if data.about.length}
 			<section class="mb-6 rounded-lg border border-neutral-800 px-3 py-2.5">
 				<h2 class="mb-1.5 flex items-center gap-1.5 px-1.5 text-xs font-medium text-neutral-500">

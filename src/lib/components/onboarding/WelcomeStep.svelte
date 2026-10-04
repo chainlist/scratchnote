@@ -1,9 +1,9 @@
 <script lang="ts">
 	import KeyboardIcon from '@lucide/svelte/icons/keyboard';
 	import LayersIcon from '@lucide/svelte/icons/layers';
-	import MessageCircleIcon from '@lucide/svelte/icons/message-circle';
+	import RouteIcon from '@lucide/svelte/icons/route';
+	import SearchIcon from '@lucide/svelte/icons/search';
 	import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
-	import TagIcon from '@lucide/svelte/icons/tag';
 	import { m } from '#lib/paraglide/messages.js';
 
 	const features = [
@@ -13,14 +13,14 @@
 			body: m.onboarding_feature_capture_body
 		},
 		{
-			icon: TagIcon,
-			title: m.onboarding_feature_labels_title,
-			body: m.onboarding_feature_labels_body
+			icon: SearchIcon,
+			title: m.onboarding_feature_search_title,
+			body: m.onboarding_feature_search_body
 		},
 		{
-			icon: MessageCircleIcon,
-			title: m.onboarding_feature_chat_title,
-			body: m.onboarding_feature_chat_body
+			icon: RouteIcon,
+			title: m.onboarding_feature_threads_title,
+			body: m.onboarding_feature_threads_body
 		},
 		{
 			icon: LayersIcon,

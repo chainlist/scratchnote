@@ -3,10 +3,10 @@
 	"bundle": {
 		"linux": {
 			"deb": {
-				"depends": ["libvulkan1", "libgomp1"]
+				"depends": ["libgomp1"]
 			},
 			"rpm": {
-				"depends": ["libvulkan.so.1()(64bit)", "libgomp.so.1()(64bit)"]
+				"depends": ["libgomp.so.1()(64bit)"]
 			}
 		}
 	}

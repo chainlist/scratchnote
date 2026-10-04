@@ -21,8 +21,3 @@
 	background: color-mix(in oklab, var(--hl-color) 32%, transparent);
 	box-decoration-break: clone;
 }
-
-/* A waiting note's glowing copy draws letters only. */
-.note-glow-text .hl-mark {
-	background: none;
-}

@@ -74,8 +74,6 @@
 		{date}
 		oncreated={(created) => void adopt(created)}
 		ondelete={(note) => (shell.deleting = note)}
-		onretry={shell.retry}
-		oncategory={shell.openCategory}
 		onsimilar={shell.canSimilar ? shell.showSimilar : undefined}
 		onmove={shell.canMove ? shell.askMove : undefined}
 		onopennote={(note) => void shell.openCited(note)}

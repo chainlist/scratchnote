@@ -5,13 +5,13 @@ use chrono::Local;
 use tauri::{AppHandle, State};
 use ulid::Ulid;
 
-use super::notes::{enqueue, free_id, list_category, move_target, persist_queue, read_note};
+use super::notes::{free_id, move_target, read_note};
 use crate::pages::{
     drop_stub, emit_updated, entry, free_path, newest_first, read_page, reindex, sync_stub,
     write_new,
 };
 use crate::state::AppState;
-use crate::storage::daily_file::{self, body_hash, Kind, Note, Status, Stub};
+use crate::storage::daily_file::{self, body_hash, Kind, Note, Stub};
 use crate::storage::page_file;
 use crate::storage::{check_date, day_path};
 
@@ -39,16 +39,14 @@ pub async fn create_page(
     let page = Note {
         id: Ulid::generate().to_string(),
         file: free_path(&space, &date, &title, None),
-        date,
         time: now.format("%H:%M").to_string(),
-        subject: Some(title),
-        category: None,
-        status: Status::Pending,
         hash: body_hash(&body),
-        lang: None,
+        on: page_file::day_ahead(&title, &body, &date),
+        ahead_off: false,
+        date,
+        subject: Some(title),
         body,
         kind: Kind::Page,
-        on: None,
         missing: false,
     };
 
@@ -83,12 +81,9 @@ pub async fn get_page(state: State<'_, AppState>, id: String) -> Result<Note, St
     read_page(&space, &id).await
 }
 
-/// Replace a page's text, as the page view autosaves it. A changed text
-/// marks the page pending, unless the user set the category by hand or only
-/// ticked task boxes, but it only goes to the model once the view closes
-/// (`finish_page`). Pending in the file, it is queued at the next launch
-/// should the app quit first. An empty text is allowed: the title is still
-/// there.
+/// Replace a page's text, as the page view autosaves it. It is embedded
+/// once the view closes (`finish_page`). An empty text is allowed: the title
+/// is still there.
 #[tauri::command]
 pub async fn update_page(
     app: AppHandle,
@@ -104,15 +99,13 @@ pub async fn update_page(
         return Ok(current);
     }
 
-    let relabel =
-        current.status != Status::Manual && !daily_file::only_ticks_changed(&current.body, &body);
     let file = current.file.clone();
     let written = {
         let file = file.clone();
         state
             .writer
             .rewrite(space.root.join(&file), move |existing| {
-                page_file::replace_body(existing?, &file, &body, relabel.then_some(Status::Pending))
+                page_file::replace_body(existing?, &file, &body)
             })
             .await?
     };
@@ -126,23 +119,14 @@ pub async fn update_page(
     Ok(page)
 }
 
-/// The page view closed: the page is released, and goes to the model when
-/// its text changed while it was open. The embed task is woken for it too.
-/// A page only read, or re-run by hand since its last change, was not held
-/// and needs nothing. A page deleted meanwhile is only released.
+/// The page view closed: the page is released, and the embed task is woken
+/// for it. A page only read was not held and needs nothing.
 #[tauri::command]
 pub async fn finish_page(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let space = state.space()?;
-    if !space.release(&id) {
-        return Ok(());
+    if space.release(&id) {
+        space.index_changed();
     }
-    let pending = entry(&space, &id)
-        .ok()
-        .filter(|page| page.status == Status::Pending);
-    if let Some(page) = pending {
-        enqueue(&state, &space, id, page.date).await;
-    }
-    space.index_changed();
     Ok(())
 }
 
@@ -211,10 +195,6 @@ pub async fn delete_page(
         state.writer.remove(space.root.join(&page.file)).await?;
         space.page_removed(&id)?;
         space.persist_index(&state.writer).await?;
-        if let Ok(mut queue) = space.queue.lock() {
-            queue.remove(&id);
-        }
-        persist_queue(&state, &space).await;
     }
 
     emit_updated(&app, &id);
@@ -222,11 +202,11 @@ pub async fn delete_page(
 }
 
 /// Move a page of the open space to another, onto the same day at the same
-/// time, with its title, labels and the files it links (SPEC 3.5). Its file
-/// and stub are written there before they leave here, stub first as for a
-/// delete, so a crash in between leaves it in both spaces, never in neither.
-/// `date` is the day showing it, as for `delete_page`. The page view closes
-/// on it, so it is released; one waiting on the model waits there.
+/// time, with its title and the files it links (SPEC 3.5). Its file and stub
+/// are written there before they leave here, stub first as for a delete, so
+/// a crash in between leaves it in both spaces, never in neither. `date` is
+/// the day showing it, as for `delete_page`. The page view closes on it, so
+/// it is released.
 #[tauri::command]
 pub async fn move_page(
     app: AppHandle,
@@ -255,14 +235,10 @@ pub async fn move_page(
         body,
         ..page.clone()
     };
-    list_category(&state, &to, moved.category.as_deref()).await?;
     write_new(&state.writer, &to, &moved).await?;
     to.page_changed(&moved)?;
     to.persist_index(&state.writer).await?;
     sync_stub(&state.writer, &to, &moved).await?;
-    if moved.status == Status::Pending {
-        enqueue(&state, &to, moved.id.clone(), moved.date.clone()).await;
-    }
 
     drop_stub(&state.writer, &from, &date, &id).await?;
     if page.date != date {
@@ -272,21 +248,16 @@ pub async fn move_page(
     from.page_removed(&id)?;
     from.persist_index(&state.writer).await?;
     from.release(&id);
-    if let Ok(mut queue) = from.queue.lock() {
-        queue.remove(&id);
-    }
-    persist_queue(&state, &from).await;
     crate::attachments::drop_carried(&from, &carried);
 
     emit_updated(&app, &id);
     Ok(())
 }
 
-/// Turn a note into a page with the same day, time, text and labels. The
-/// page gets a new id and is written first; then the note's block becomes
-/// its stub, so a crash between the two leaves the text twice rather than
-/// nowhere. The page view opens on it next, so it is held, and a note still
-/// waiting on the model goes to it when the view closes.
+/// Turn a note into a page with the same day, time and text. The page gets a
+/// new id and is written first; then the note's block becomes its stub, so a
+/// crash between the two leaves the text twice rather than nowhere. The page
+/// view opens on it next, so it is held.
 #[tauri::command]
 pub async fn note_to_page(
     app: AppHandle,
@@ -303,13 +274,10 @@ pub async fn note_to_page(
     let page = Note {
         id: Ulid::generate().to_string(),
         file: free_path(&space, &note.date, &title, None),
+        on: (!note.ahead_off)
+            .then(|| page_file::day_ahead(&title, &note.body, &note.date))
+            .flatten(),
         subject: Some(title),
-        // A failed note gets another go as a page.
-        status: match note.status {
-            Status::Done => Status::Done,
-            Status::Manual => Status::Manual,
-            Status::Pending | Status::Failed => Status::Pending,
-        },
         kind: Kind::Page,
         missing: false,
         ..note
@@ -332,10 +300,6 @@ pub async fn note_to_page(
     space.day_changed(&date)?;
     space.page_changed(&page)?;
     space.persist_index(&state.writer).await?;
-    if let Ok(mut queue) = space.queue.lock() {
-        queue.remove(&id);
-    }
-    persist_queue(&state, &space).await;
 
     emit_updated(&app, &id);
     emit_updated(&app, &page.id);

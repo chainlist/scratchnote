@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { fade } from 'svelte/transition';
 	import type { Note } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import TimelineItem from '#lib/components/TimelineItem.svelte';
@@ -15,13 +14,11 @@
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
-	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import RouteOffIcon from '@lucide/svelte/icons/route-off';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
-	import { categoryLabel } from '#lib/categories.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
@@ -30,8 +27,6 @@
 		onedit,
 		ondelete,
 		onsave,
-		onretry,
-		oncategory,
 		onsimilar,
 		onpage,
 		onmove,
@@ -41,15 +36,12 @@
 		blink = false
 	}: {
 		note: Note;
-		/** Open the full editor: body, subject and category. */
+		/** Open the full editor. */
 		onedit: (note: Note) => void;
 		/** Ask to delete; the page confirms before anything is removed. */
 		ondelete: (note: Note) => void;
 		/** Save a new body. Resolves true once saved; false keeps the editor open. */
 		onsave: (note: Note, body: string) => Promise<boolean>;
-		onretry: (note: Note) => void;
-		/** Filter on a category, as a click on it in the card does. */
-		oncategory: (category: string) => void;
 		/** List the notes closest in meaning. Left out without the embedding model. */
 		onsimilar?: (note: Note) => void;
 		/** Turn the note into a page; the page asks for its title. */
@@ -62,7 +54,7 @@
 		showDate?: boolean;
 		/** Name the thread the note is in, as everywhere but in that thread. */
 		threadLine?: boolean;
-		/** Blink once to show where a chat citation led. */
+		/** Blink once to show where a link to it led. */
 		blink?: boolean;
 	} = $props();
 
@@ -83,18 +75,9 @@
 	let ticking = Promise.resolve();
 	const body = $derived(ticked ?? note.body);
 
-	// Re-running a manual note would be skipped anyway, and a pending one is
-	// already in the queue.
-	let canRetry = $derived(note.status === 'done' || note.status === 'failed');
-
 	const shell = getShell();
-	// A pending note glows only while the model is there to label it. With
-	// the model off, missing or still downloading, it waits like any other.
-	let glowing = $derived(note.status === 'pending' && shell.modelAvailable);
 	const inThread = $derived(shell.threadOf(note.id) !== undefined);
 	const keptOut = $derived(shell.keptOut(note.id));
-	/** How long the glow takes to come and go, text and edge alike. */
-	const glowFade = { duration: 500 };
 
 	async function startEditing() {
 		if (editing) return;
@@ -160,26 +143,17 @@
 </script>
 
 <!-- The double click is a mouse shortcut; Edit in the menu opens the same
-     text from the keyboard. A glowing note sits above its neighbours: its
-     glow spills onto them, and their hover background would cover it. -->
+     text from the keyboard. -->
 <TimelineItem
 	data-note-id={note.id}
 	time={note.time}
 	date={showDate ? note.date : undefined}
-	class={[menuOpen && 'bg-neutral-900', blink && 'note-blink', glowing && 'z-10']}
+	class={[menuOpen && 'bg-neutral-900', blink && 'note-blink']}
 	ondblclick={onDoubleClick}
 	onmousedown={onMouseDown}
 	onpointerenter={arm}
 	onfocusin={arm}
 >
-	<!-- Enrichment shows only while it matters: a glowing rainbow edge while
-	     the note waits for the model, a faint red ring when it failed. -->
-	{#if glowing}
-		<span aria-hidden="true" class="note-aurora" transition:fade={glowFade}></span>
-	{:else if note.status === 'failed'}
-		<span aria-hidden="true" class="note-error-ring" transition:fade={glowFade}></span>
-	{/if}
-
 	<div class="relative min-w-0">
 		{#if editing}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -215,27 +189,7 @@
 				</div>
 			</div>
 		{:else}
-			<!-- While glowing, the text turns transparent and a glowing copy fades
-			     in over it, so the two cross-fade both ways. The copy lets clicks
-			     and selection through to the real text, and holds a blurred copy
-			     of its own as the glow behind its letters. -->
-			<Markdown
-				text={body}
-				onchange={saveTicks}
-				class="text-base leading-7 transition-colors duration-500 {glowing
-					? 'text-transparent'
-					: 'text-neutral-200'}"
-			/>
-			{#if glowing}
-				<div
-					aria-hidden="true"
-					transition:fade={glowFade}
-					class="note-glow-text pointer-events-none absolute inset-0 text-base leading-7"
-				>
-					<Markdown text={body} />
-					<Markdown text={body} class="note-glow-blur" />
-				</div>
-			{/if}
+			<Markdown text={body} onchange={saveTicks} class="text-base leading-7 text-neutral-200" />
 			<!-- The day the note looks forward to, and the thread it is in. -->
 			{#if note.on || (threadLine && inThread)}
 				<div class="mt-1.5 flex min-w-0 items-center gap-3">
@@ -311,11 +265,6 @@
 								<RouteIcon />{m.thread_rejoin()}
 							</DropdownMenu.Item>
 						{/if}
-						{#if canRetry}
-							<DropdownMenu.Item onSelect={() => onretry(note)}>
-								<RefreshCwIcon />{m.note_rerun()}
-							</DropdownMenu.Item>
-						{/if}
 						<DropdownMenu.Separator />
 						<DropdownMenu.Item variant="destructive" onSelect={() => ondelete(note)}>
 							<Trash2Icon />{m.common_delete()}
@@ -324,16 +273,5 @@
 				</DropdownMenu.Root>
 			{/if}
 		</div>
-
-		{#if note.category}
-			{@const category = note.category}
-			<button
-				type="button"
-				onclick={() => oncategory(category)}
-				title={m.note_show_tag({ tag: categoryLabel(category) })}
-				class="absolute right-3 bottom-0.5 cursor-pointer bg-neutral-900 pl-2 font-mono text-[0.625rem] text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100 hover:text-neutral-200"
-				>#{categoryLabel(category)}</button
-			>
-		{/if}
 	{/if}
 </TimelineItem>

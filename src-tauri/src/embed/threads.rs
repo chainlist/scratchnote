@@ -136,8 +136,7 @@ impl Edits {
 pub struct Thread {
     /// The id of the note it started with, which it keeps.
     pub id: String,
-    /// The user's title, else the subject of the note most like the rest of
-    /// the thread. `None` while no note of it has a subject.
+    /// The user's title. `None` until they give it one.
     pub title: Option<String>,
     /// The title is the user's.
     pub named: bool,
@@ -221,23 +220,6 @@ struct Part<'a> {
     all: f32,
 }
 
-/// What every note of the space adds up to.
-fn total(vectors: &Vectors) -> Vec<f32> {
-    let mut sum = vec![0.0; vectors.dims()];
-    for (_, _, vector) in vectors.iter() {
-        for (s, x) in sum.iter_mut().zip(vector) {
-            *s += x;
-        }
-    }
-    sum
-}
-
-/// The average note of the space, which says what is usual.
-fn mean(vectors: &Vectors) -> Vec<f32> {
-    let count = vectors.len().max(1) as f32;
-    total(vectors).into_iter().map(|s| s / count).collect()
-}
-
 /// What every note of the space adds up to, which says what is usual, and
 /// each note's dot products with itself and that sum.
 struct Usual {
@@ -250,7 +232,7 @@ struct Usual {
 
 impl Usual {
     fn of(vectors: &Vectors) -> Self {
-        let sum = total(vectors);
+        let sum = vectors.sum();
         let dots = vectors
             .iter()
             .map(|(id, _, vector)| (id.to_string(), (dot(vector, vector), dot(vector, &sum))))
@@ -528,13 +510,10 @@ impl Threads {
         true
     }
 
-    /// Every thread, its notes oldest first. `subjects` holds the notes'
-    /// subjects, for the thread's title when the user gave it none.
+    /// Every thread, its notes oldest first, with the titles the user gave.
     pub fn list(
         &self,
-        vectors: &Vectors,
         when: &HashMap<String, When>,
-        subjects: &HashMap<String, String>,
         titles: &BTreeMap<String, String>,
     ) -> Vec<Thread> {
         let mut members: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -546,21 +525,18 @@ impl Threads {
                     .push(id.as_str());
             }
         }
-        let mean = mean(vectors);
         members
             .into_iter()
-            .filter_map(|(id, notes)| shown(id, notes, vectors, &mean, when, subjects, titles))
+            .filter_map(|(id, notes)| shown(id, notes, when, titles))
             .collect()
     }
 
-    /// One thread as `list` gives it, without titling every other, or
+    /// One thread as `list` gives it, without gathering every other, or
     /// `None` once it is gone.
     pub fn get(
         &self,
         id: &str,
-        vectors: &Vectors,
         when: &HashMap<String, When>,
-        subjects: &HashMap<String, String>,
         titles: &BTreeMap<String, String>,
     ) -> Option<Thread> {
         let notes: Vec<&str> = self
@@ -571,7 +547,7 @@ impl Threads {
             })
             .map(|(note, _)| note.as_str())
             .collect();
-        shown(id, notes, vectors, &mean(vectors), when, subjects, titles)
+        shown(id, notes, when, titles)
     }
 }
 
@@ -580,24 +556,21 @@ impl Threads {
 fn shown(
     id: &str,
     mut notes: Vec<&str>,
-    vectors: &Vectors,
-    mean: &[f32],
     when: &HashMap<String, When>,
-    subjects: &HashMap<String, String>,
     titles: &BTreeMap<String, String>,
 ) -> Option<Thread> {
     if notes.len() < 2 {
         return None;
     }
     notes.sort_by(|a, b| (&when[*a], a).cmp(&(&when[*b], b)));
-    let custom = titles.get(id).filter(|title| !title.trim().is_empty());
-    let title = custom
-        .cloned()
-        .or_else(|| most_typical(&notes, vectors, mean, subjects));
+    let title = titles
+        .get(id)
+        .filter(|title| !title.trim().is_empty())
+        .cloned();
     Some(Thread {
         id: id.to_string(),
+        named: title.is_some(),
         title,
-        named: custom.is_some(),
         since: when[notes[0]].date.format("%Y-%m-%d").to_string(),
         notes: notes.into_iter().map(str::to_string).collect(),
     })
@@ -655,47 +628,6 @@ fn best_thread(
     best
 }
 
-/// The subject of the note most like the rest of its thread, once what
-/// every note shares is taken off: the one that best says what the thread
-/// is about. A note without a subject yet gives way to the next. `mean` is
-/// the space's average note.
-fn most_typical(
-    notes: &[&str],
-    vectors: &Vectors,
-    mean: &[f32],
-    subjects: &HashMap<String, String>,
-) -> Option<String> {
-    let dims = vectors.dims();
-    let centred =
-        |vector: &[f32]| -> Vec<f32> { vector.iter().zip(mean).map(|(x, m)| x - m).collect() };
-    let mut middle = vec![0.0; dims];
-    let found: Vec<(&str, Vec<f32>)> = notes
-        .iter()
-        .filter_map(|id| Some((*id, centred(vectors.get(id)?.1))))
-        .collect();
-    for (_, vector) in &found {
-        for (s, x) in middle.iter_mut().zip(vector) {
-            *s += x;
-        }
-    }
-    let mut ranked: Vec<(f32, &str)> = found
-        .iter()
-        .map(|(id, vector)| {
-            let norm = dot(vector, vector).sqrt();
-            let score = if norm > 0.0 {
-                dot(vector, &middle) / norm
-            } else {
-                f32::NEG_INFINITY
-            };
-            (score, *id)
-        })
-        .collect();
-    ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(b.1)));
-    ranked
-        .into_iter()
-        .find_map(|(_, id)| subjects.get(id).cloned())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -747,13 +679,9 @@ mod tests {
         notes.iter().chain(OTHERS.iter()).copied().collect()
     }
 
-    fn threads_of(
-        threads: &Threads,
-        vectors: &Vectors,
-        when: &HashMap<String, When>,
-    ) -> Vec<Vec<String>> {
+    fn threads_of(threads: &Threads, when: &HashMap<String, When>) -> Vec<Vec<String>> {
         threads
-            .list(vectors, when, &HashMap::new(), &BTreeMap::new())
+            .list(when, &BTreeMap::new())
             .into_iter()
             .map(|thread| thread.notes)
             .collect()
@@ -770,10 +698,7 @@ mod tests {
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
         assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
-        assert_eq!(
-            threads_of(&threads, &vectors, &when),
-            vec![vec!["01A", "01B", "01C"]]
-        );
+        assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B", "01C"]]);
         // Named after the note it started with.
         assert_eq!(threads.of("01C"), Some("01A"));
         assert_eq!(threads.of("01D"), None);
@@ -795,7 +720,7 @@ mod tests {
         let mut threads = Threads::default();
         threads.reconcile(&vectors, &when, &HashSet::new());
         assert_eq!(
-            threads_of(&threads, &vectors, &when),
+            threads_of(&threads, &when),
             vec![vec!["01A", "01B"], vec!["01C", "01D"]]
         );
     }
@@ -816,10 +741,7 @@ mod tests {
             .insert("01C".into(), "edited".into(), vector(3, 16))
             .unwrap();
         assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
-        assert_eq!(
-            threads_of(&threads, &vectors, &when),
-            vec![vec!["01A", "01B"]]
-        );
+        assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B"]]);
         assert_eq!(threads.of("01C"), None);
 
         // 01B deleted: 01A is left on its own.
@@ -830,7 +752,7 @@ mod tests {
             .collect();
         vectors.retain(&present);
         assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
-        assert!(threads_of(&threads, &vectors, &when).is_empty());
+        assert!(threads_of(&threads, &when).is_empty());
         assert_eq!(threads.of("01A"), None);
     }
 
@@ -847,22 +769,16 @@ mod tests {
 
         let alone: HashSet<String> = ["01B".to_string()].into();
         assert!(threads.reconcile(&vectors, &when, &alone));
-        assert_eq!(
-            threads_of(&threads, &vectors, &when),
-            vec![vec!["01A", "01C"]]
-        );
+        assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01C"]]);
 
         // Taken out with the thread down to two, the other is left alone too.
         let alone: HashSet<String> = ["01B".to_string(), "01C".to_string()].into();
         threads.reconcile(&vectors, &when, &alone);
-        assert!(threads_of(&threads, &vectors, &when).is_empty());
+        assert!(threads_of(&threads, &when).is_empty());
 
         // Let back in, they gather again.
         assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
-        assert_eq!(
-            threads_of(&threads, &vectors, &when),
-            vec![vec!["01A", "01B", "01C"]]
-        );
+        assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B", "01C"]]);
     }
 
     #[test]
@@ -887,7 +803,7 @@ mod tests {
         let mut loaded = Threads::load(&path);
         assert!(loaded.reconcile(&other, &when, &HashSet::new()));
         assert_eq!(loaded.model, "other");
-        assert_eq!(threads_of(&loaded, &other, &when), vec![vec!["01A", "01B"]]);
+        assert_eq!(threads_of(&loaded, &when), vec![vec!["01A", "01B"]]);
 
         // A broken file is no threads at all.
         std::fs::write(&path, "not json").unwrap();
@@ -896,40 +812,24 @@ mod tests {
     }
 
     #[test]
-    fn a_thread_is_titled_by_the_user_or_after_its_most_typical_note() {
+    fn a_thread_has_no_title_until_the_user_gives_it_one() {
         let notes = with_others(&[
             ("01A", "2026-09-10", 1),
             ("01B", "2026-09-12", 1),
             ("01C", "2026-09-14", 1),
         ]);
-        let (mut vectors, when) = space(&notes);
-        // 01B leans a little off the thread, so 01A or 01C says it best.
-        let mut off = vector(1, 16);
-        off[4] = 0.6;
-        vectors.insert("01B".into(), "h01B".into(), off).unwrap();
+        let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
         threads.reconcile(&vectors, &when, &HashSet::new());
 
-        let subjects: HashMap<String, String> = [
-            ("01A", "Kitchen quotes"),
-            ("01B", "Plumber and tiles"),
-            ("01C", "Kitchen finished"),
-        ]
-        .into_iter()
-        .map(|(id, s)| (id.to_string(), s.to_string()))
-        .collect();
-        let listed = threads.list(&vectors, &when, &subjects, &BTreeMap::new());
+        let listed = threads.list(&when, &BTreeMap::new());
         assert_eq!(listed.len(), 1);
-        assert!(!listed[0].named);
-        assert_ne!(listed[0].title.as_deref(), Some("Plumber and tiles"));
+        assert_eq!((listed[0].title.as_deref(), listed[0].named), (None, false));
 
-        // Without subjects yet, no title; the user's wins over everything.
-        assert_eq!(
-            threads.list(&vectors, &when, &HashMap::new(), &BTreeMap::new())[0].title,
-            None
-        );
+        let blank: BTreeMap<String, String> = [("01A".to_string(), "  ".to_string())].into();
+        assert_eq!(threads.list(&when, &blank)[0].title, None);
         let titles: BTreeMap<String, String> = [("01A".to_string(), "Kitchen".to_string())].into();
-        let named = threads.list(&vectors, &when, &subjects, &titles);
+        let named = threads.list(&when, &titles);
         assert_eq!(named[0].title.as_deref(), Some("Kitchen"));
         assert!(named[0].named);
     }
@@ -945,23 +845,16 @@ mod tests {
         let (vectors, when) = space(&notes);
         let mut threads = Threads::default();
         threads.reconcile(&vectors, &when, &HashSet::new());
-        let subjects: HashMap<String, String> = [("01A", "Kitchen"), ("01D", "Garden")]
-            .into_iter()
-            .map(|(id, s)| (id.to_string(), s.to_string()))
-            .collect();
         let titles: BTreeMap<String, String> = [("01C".to_string(), "Mine".to_string())].into();
 
-        let listed = threads.list(&vectors, &when, &subjects, &titles);
+        let listed = threads.list(&when, &titles);
         assert_eq!(listed.len(), 2);
         for thread in &listed {
-            let got = threads.get(&thread.id, &vectors, &when, &subjects, &titles);
+            let got = threads.get(&thread.id, &when, &titles);
             assert_eq!(got.as_ref(), Some(thread));
         }
         // A note on its own is no thread.
-        assert_eq!(
-            threads.get("01Z1", &vectors, &when, &subjects, &titles),
-            None
-        );
+        assert_eq!(threads.get("01Z1", &when, &titles), None);
     }
 
     #[test]
@@ -975,7 +868,7 @@ mod tests {
         let (vectors, when) = space(&few);
         let mut threads = Threads::default();
         threads.reconcile(&vectors, &when, &HashSet::new());
-        assert!(threads_of(&threads, &vectors, &when).is_empty());
+        assert!(threads_of(&threads, &when).is_empty());
         assert!(threads.notes.is_empty(), "nothing placed yet");
 
         let (vectors, when) = space(&with_others(&[
@@ -983,10 +876,7 @@ mod tests {
             ("01B", "2026-09-12", 1),
         ]));
         assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
-        assert_eq!(
-            threads_of(&threads, &vectors, &when),
-            vec![vec!["01A", "01B"]]
-        );
+        assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B"]]);
     }
 
     #[test]
@@ -996,14 +886,11 @@ mod tests {
         when.remove("01B");
         let mut threads = Threads::default();
         threads.reconcile(&vectors, &when, &HashSet::new());
-        assert!(threads_of(&threads, &vectors, &when).is_empty());
+        assert!(threads_of(&threads, &when).is_empty());
 
         let (_, when) = space(&notes);
         assert!(threads.reconcile(&vectors, &when, &HashSet::new()));
-        assert_eq!(
-            threads_of(&threads, &vectors, &when),
-            vec![vec!["01A", "01B"]]
-        );
+        assert_eq!(threads_of(&threads, &when), vec![vec!["01A", "01B"]]);
     }
 
     #[test]
@@ -1046,7 +933,7 @@ mod tests {
 
         let mut threads = Threads::default();
         threads.reconcile(&vectors, &when, &HashSet::new());
-        let listed = threads.list(&vectors, &when, &HashMap::new(), &BTreeMap::new());
+        let listed = threads.list(&when, &BTreeMap::new());
 
         let mut threaded = 0;
         for thread in &listed {

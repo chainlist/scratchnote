@@ -6,9 +6,7 @@
 		getSettings,
 		onEmbeddingStatus,
 		onIndexRebuilt,
-		onModelStatus,
 		onNewPage,
-		onNoteEnriched,
 		onNoteUpdated,
 		onOpenSettings,
 		onRevealNote,
@@ -21,11 +19,9 @@
 		type SettingsView
 	} from '#lib/api.js';
 	import AppHeader from '#lib/components/AppHeader.svelte';
-	import ChatPanel from '#lib/components/ChatPanel.svelte';
 	import CommandCenter from '#lib/components/CommandCenter.svelte';
 	import DeleteNoteDialog from '#lib/components/DeleteNoteDialog.svelte';
 	import Dock from '#lib/components/Dock.svelte';
-	import ModelStatusBar from '#lib/components/ModelStatusBar.svelte';
 	import MoveDialog from '#lib/components/MoveDialog.svelte';
 	import NoteEditor from '#lib/components/NoteEditor.svelte';
 	import NoteToPageDialog from '#lib/components/NoteToPageDialog.svelte';
@@ -47,14 +43,8 @@
 
 	let { data, children } = $props();
 
-	// Until a day is shown, the views go back to today. The model's state
-	// follows its events from here on.
-	const shell = setShell(
-		new Shell(
-			untrack(() => data.today),
-			untrack(() => data.model)
-		)
-	);
+	// Until a day is shown, the views go back to today.
+	const shell = setShell(new Shell(untrack(() => data.today)));
 
 	// The plugins reach the views through it from the start, their pages
 	// included, which mount before this layout does.
@@ -118,13 +108,7 @@
 	}
 
 	onMount(() => {
-		const off: Promise<() => void>[] = [
-			onModelStatus((status) => {
-				shell.model = status;
-				// Turning the model off takes an open chat with it.
-				if (status.state === 'disabled') shell.chatOpen = false;
-			})
-		];
+		const off: Promise<() => void>[] = [];
 		void (async () => {
 			const settings = await getSettings();
 			void showReleaseNotes(settings).catch((e) => shell.showError(String(e)));
@@ -135,8 +119,6 @@
 			off.push(onNoteUpdated(() => void shell.refresh()));
 			// The watcher fires this when a daily file is edited outside the app.
 			off.push(onIndexRebuilt(() => void shell.refresh()));
-			// Enrichment finishing rewrites the note, so the card has to reload.
-			off.push(onNoteEnriched(() => void shell.refresh()));
 			off.push(onOpenSettings(() => (shell.settingsOpen = true)));
 			off.push(onNewPage((body) => shell.takeCaptureDraft(body)));
 			// The capture window's recall, showing the old note a draft is about.
@@ -197,15 +179,6 @@
 				<main bind:offsetWidth={shell.width} class="h-full overflow-y-auto px-6 pb-16">
 					{@render children()}
 				</main>
-				<!-- With the model turned off in settings, chat is not on offer at all. -->
-				{#if shell.model.state !== 'disabled'}
-					<ChatPanel
-						bind:open={shell.chatOpen}
-						space={data.spaces.active}
-						canChat={shell.modelAvailable}
-						onopen={(entry) => void shell.openCited(entry)}
-					/>
-				{/if}
 			</Resizable.Pane>
 			{#if shell.dockOpen && shell.dockSide === 'right'}
 				<Resizable.Handle class="z-10 after:w-2" />
@@ -236,8 +209,6 @@
 							date={docked.date}
 							oncreated={() => void shell.refresh()}
 							ondelete={(p) => (shell.deleting = p)}
-							onretry={shell.retry}
-							oncategory={shell.openCategory}
 							onsimilar={shell.canSimilar ? shell.showSimilar : undefined}
 							onmove={shell.canMove ? shell.askMove : undefined}
 							onopennote={(note) => void shell.openCited(note)}
@@ -252,29 +223,21 @@
 	</Resizable.Pane>
 {/snippet}
 
-<div class="fixed bottom-3 left-3 z-30">
-	<ModelStatusBar status={shell.model} />
-</div>
-
 <CommandCenter
 	bind:open={shell.paletteOpen}
 	bind:query={shell.query}
 	editor={shell.paletteEditor}
-	categories={data.categories}
-	canChat={shell.modelAvailable}
 	canMeaning={shell.canSimilar}
 	onpick={(note) => void shell.openCited(note)}
 	onseeall={(q) => void shell.showResults(q)}
 	ontoday={async () => void shell.openDay(await today())}
 	onnewpage={shell.newPage}
 	onpages={() => void shell.showPages()}
-	onchat={() => (shell.chatOpen = true)}
 	onsettings={() => (shell.settingsOpen = true)}
 />
 
 <NoteEditor
 	bind:note={shell.editing}
-	categories={data.categoryList}
 	onsave={shell.saveEdit}
 	ondelete={(n) => (shell.deleting = n)}
 />

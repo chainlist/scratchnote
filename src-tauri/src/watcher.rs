@@ -14,10 +14,8 @@ use notify::{EventKind, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 
-use crate::enrich::queue::Job;
 use crate::spaces::Space;
 use crate::state::AppState;
-use crate::storage::daily_file::Status;
 use crate::storage::search_db::Stamp;
 use crate::storage::{check_date, fingerprint, index};
 
@@ -127,15 +125,6 @@ fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
             _ => return false,
         },
     };
-    // Edited text parses as pending, as in a daily file.
-    let queued = parsed.as_ref().is_some_and(|entry| {
-        entry.status == Status::Pending
-            && space
-                .queue
-                .lock()
-                .is_ok_and(|mut queue| queue.push(Job::new(entry.id.clone(), entry.date.clone())))
-    });
-
     // The stub follows the page's title, file, day and time.
     let moved = match (&before, &parsed) {
         (Some(before), Some(after)) => {
@@ -167,10 +156,6 @@ fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
         if let Err(e) = owned.persist_index(&state.writer).await {
             log::warn!("could not persist the index after an external edit: {e}");
         }
-        if queued {
-            owned.persist_queue(&state.writer).await;
-            state.wake.notify_one();
-        }
     });
 
     log::info!("reindexed {file} in {} after an external edit", space.name);
@@ -199,22 +184,9 @@ fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
     // look older than it is, and read again.
     let stamp = Stamp::of(path);
     let notes = index::parse_day(path, &date);
-    // A labelled note whose body was edited parses as pending, and so does a
-    // block typed in by hand: both go to the model.
-    let pending: Vec<String> = notes
-        .iter()
-        .filter(|entry| entry.status == Status::Pending)
-        .map(|entry| entry.id.clone())
-        .collect();
     if space.set_day(&date, &notes, stamp).is_err() {
         return false;
     }
-    let queued = match space.queue.lock() {
-        Ok(mut queue) => pending.into_iter().fold(false, |any, id| {
-            queue.push(Job::new(id, date.clone())) || any
-        }),
-        Err(_) => false,
-    };
 
     // Persist the refreshed cache. Failing to write it is not fatal: the file
     // is derived, and startup reparses anything newer than it.
@@ -224,10 +196,6 @@ fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
         let state = app.state::<AppState>();
         if let Err(e) = owned.persist_index(&state.writer).await {
             log::warn!("could not persist the index after an external edit: {e}");
-        }
-        if queued {
-            owned.persist_queue(&state.writer).await;
-            state.wake.notify_one();
         }
     });
 

@@ -6,15 +6,7 @@
 
 	type Actions = Pick<
 		ComponentProps<typeof NoteCard>,
-		| 'onedit'
-		| 'ondelete'
-		| 'onsave'
-		| 'onretry'
-		| 'oncategory'
-		| 'onsimilar'
-		| 'onpage'
-		| 'onmove'
-		| 'onerror'
+		'onedit' | 'ondelete' | 'onsave' | 'onsimilar' | 'onpage' | 'onmove' | 'onerror'
 	> &
 		Pick<ComponentProps<typeof PageCard>, 'onopen' | 'ondock'>;
 
@@ -31,7 +23,7 @@
 		empty: string;
 		/** Set when the list spans days, so each card says which one. */
 		showDate?: boolean;
-		/** The note to blink once, where a chat citation led. */
+		/** The note to blink once, where a link to it led. */
 		blinking?: string | null;
 		/** Off in a thread's own view, where every card is of the one thread. */
 		threadLine?: boolean;
@@ -50,7 +42,6 @@
 						onopen={actions.onopen}
 						ondock={actions.ondock}
 						ondelete={actions.ondelete}
-						oncategory={actions.oncategory}
 						{showDate}
 						{threadLine}
 						blink={note.id === blinking}

@@ -500,7 +500,7 @@ fn stamp_day(conn: &Connection, date: &str, stamp: Option<Stamp>) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::daily_file::{body_hash, Kind, Status};
+    use crate::storage::daily_file::{body_hash, Kind};
     use crate::storage::relative_day_path;
 
     fn note(id: &str, date: &str, body: &str) -> Note {
@@ -510,10 +510,8 @@ mod tests {
             time: "08:00".to_string(),
             file: relative_day_path(date),
             subject: None,
-            category: None,
-            status: Status::Done,
             hash: body_hash(body),
-            lang: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Note,
             on: None,

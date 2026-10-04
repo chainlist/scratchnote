@@ -13,21 +13,14 @@ import {
 	moveNote,
 	movePage,
 	noteToPage,
-	retryEnrichment,
 	updateNote,
-	updateNoteMeta,
-	type IndexEntry,
-	type ModelStatus,
 	type Note,
-	type NoteEdit,
 	type SpacesView,
 	type Thread
 } from '#lib/api.js';
-import { categoryLabel } from '#lib/categories.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { addToPageDraft } from '#lib/page-draft.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
-import { toggleCategory } from '#lib/query.js';
 
 /** Where a note sits in its thread: the thread, and its place in it from 0. */
 export interface ThreadPlace {
@@ -56,13 +49,7 @@ export class Shell implements WorkspaceHost {
 	/** The day last shown: the one the views go back to and a new page goes on. */
 	day = $state('');
 	error = $state<string | null>(null);
-	model = $state<ModelStatus>({ state: 'absent' });
-	/** On and on disk, loaded or loaded again when needed: the model labels
-	 *  pending notes and answers the chat. Off, missing or downloading, it
-	 *  does neither. */
-	modelAvailable = $derived(this.model.state === 'loaded' || this.model.state === 'idle');
-	/** Similar notes come from the embedding model's vectors, which the model
-	 *  switch leaves alone. */
+	/** Similar notes come from the embedding model's vectors. */
 	embeddingInstalled = $state(false);
 	canSimilar = $derived(this.embeddingInstalled);
 	/** The thread each note of the open space is in, by note (SPEC 6.4). */
@@ -104,8 +91,7 @@ export class Shell implements WorkspaceHost {
 	query = $state('');
 	paletteOpen = $state(false);
 	settingsOpen = $state(false);
-	chatOpen = $state(false);
-	/** The note a chat citation led to, blinking while it is set. */
+	/** The note a link to it led to, blinking while it is set. */
 	blinking = $state<string | null>(null);
 	#blinkTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -114,9 +100,8 @@ export class Shell implements WorkspaceHost {
 	/** The view's title has scrolled under the top bar, which shows it instead. */
 	titleCollapsed = $state(false);
 
-	constructor(today: string, model: ModelStatus) {
+	constructor(today: string) {
 		this.day = today;
-		this.model = model;
 	}
 
 	/** The day to go back to. */
@@ -199,7 +184,7 @@ export class Shell implements WorkspaceHost {
 
 	showThread = (id: string) => goto(resolve(`thread/${id}/`));
 
-	/** Forget the day ahead the model read in a note, for one it read wrong. */
+	/** Forget the day ahead read in a note, for one read wrong. */
 	clearDayAhead = async (note: Pick<Note, 'id' | 'date'>) => {
 		try {
 			await clearDayAhead(note.date, note.id);
@@ -277,7 +262,7 @@ export class Shell implements WorkspaceHost {
 	};
 
 	/** Open a note's day, bring the note into view and blink it. A page opens. */
-	openCited = async (entry: Pick<IndexEntry, 'id' | 'date' | 'kind'>) => {
+	openCited = async (entry: Pick<Note, 'id' | 'date' | 'kind'>) => {
 		if (isPage(entry)) return this.openPage(entry);
 		await this.openDay(entry.date);
 		// Cleared first so a second click on the same note blinks it again.
@@ -293,22 +278,7 @@ export class Shell implements WorkspaceHost {
 		this.#blinkTimer = setTimeout(() => (this.blinking = null), 1400);
 	};
 
-	/**
-	 * A category clicked on a card opens the command center filtered on it.
-	 * While the view lists results, it narrows them instead, see
-	 * `toggleCategory`.
-	 */
-	openCategory = (category: string) => {
-		if (page.route.id !== '/(app)/search') {
-			this.query = `#${categoryLabel(category)} `;
-			this.paletteOpen = true;
-			return;
-		}
-		const q = page.url.searchParams.get('q') ?? '';
-		void this.showResults(toggleCategory(q, categoryLabel(category)));
-	};
-
-	/** The inline editor: the body alone, which leaves the labels to the model. */
+	/** The inline editor. */
 	saveBody = async (note: Note, body: string): Promise<boolean> => {
 		try {
 			if (body.trim() !== note.body) await updateNote(note.date, note.id, body);
@@ -322,19 +292,9 @@ export class Shell implements WorkspaceHost {
 	};
 
 	/** The full editor. Resolves to an error for it to show, or null once saved. */
-	saveEdit = async (note: Note, edit: NoteEdit): Promise<string | null> => {
-		const bodyChanged = edit.body.trim() !== note.body;
-		// Only a real change to subject or category takes the note away from
-		// the model, so an edit to the body alone leaves it to be re-enriched.
-		const metaChanged =
-			edit.subject.trim() !== (note.subject ?? '') || edit.category !== (note.category ?? '');
+	saveEdit = async (note: Note, body: string): Promise<string | null> => {
 		try {
-			if (bodyChanged) await updateNote(note.date, note.id, edit.body);
-			if (metaChanged)
-				await updateNoteMeta(note.date, note.id, {
-					subject: edit.subject,
-					category: edit.category
-				});
+			if (body.trim() !== note.body) await updateNote(note.date, note.id, body);
 			this.error = null;
 			await this.refresh();
 			return null;
@@ -381,14 +341,6 @@ export class Shell implements WorkspaceHost {
 		}
 	};
 
-	retry = async (note: Note) => {
-		try {
-			await retryEnrichment(note.date, note.id);
-		} catch (e) {
-			this.error = String(e);
-		}
-	};
-
 	remove = async (note: Note) => {
 		try {
 			if (isPage(note)) await deletePage(note.date, note.id);
@@ -405,8 +357,8 @@ export class Shell implements WorkspaceHost {
 
 	/**
 	 * Another space has its own days and notes, so a search, similar notes or
-	 * a page from the last one would mean nothing there. Its categories and
-	 * days are listed afresh.
+	 * a page from the last one would mean nothing there. Its days are listed
+	 * afresh.
 	 */
 	switchSpace = () => {
 		this.switching = this.leaveSpace();
@@ -435,8 +387,6 @@ export class Shell implements WorkspaceHost {
 		onedit: (note: Note) => (this.editing = note),
 		ondelete: (note: Note) => (this.deleting = note),
 		onsave: this.saveBody,
-		onretry: this.retry,
-		oncategory: this.openCategory,
 		onsimilar: this.canSimilar ? this.showSimilar : undefined,
 		onopen: (note: Note) => void this.openPage(note),
 		ondock: this.dock,

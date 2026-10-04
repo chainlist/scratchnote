@@ -22,13 +22,13 @@
 	let working = $state(false);
 	let error = $state<string | null>(null);
 
-	// The model's subject is a fair start for a title.
+	// The title starts empty.
 	let loaded: string | null = null;
 	$effect(() => {
 		const id = note?.id ?? null;
 		if (id === loaded) return;
 		loaded = id;
-		title = note?.subject ?? '';
+		title = '';
 		error = null;
 	});
 
@@ -52,7 +52,7 @@
 		if (!open) note = null;
 	}}
 >
-	<!-- The title field takes the focus, with the subject selected to type over. -->
+	<!-- The title field takes the focus. -->
 	<Dialog.Content
 		class="sm:max-w-[min(28rem,calc(100%-2rem))]"
 		onOpenAutoFocus={(event) => {

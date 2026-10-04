@@ -1,10 +1,9 @@
 //! Search, SPEC 6.
 //!
-//! A query is words and `#category` tokens. Every word must appear somewhere
-//! in the subject or body, and the note must be filed under the category.
-//! Matching ignores case and accents, so `reunion` finds `Réunion`. The words
-//! are looked for in `search.db`, which holds the text; the categories, the
-//! order and the stretch asked for come from the index in memory.
+//! A query is words. Every word must appear somewhere in a page's title or a
+//! note's body. Matching ignores case and accents, so `reunion` finds
+//! `Réunion`. The words are looked for in `search.db`, which holds the text;
+//! the order and the stretch asked for come from the index in memory.
 
 use std::collections::{HashMap, HashSet};
 
@@ -12,7 +11,6 @@ use serde::Serialize;
 use unicode_normalization::char::is_combining_mark;
 use unicode_normalization::UnicodeNormalization;
 
-use crate::enrich::normalize;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{Index, IndexEntry};
 use crate::storage::search_db::SearchDb;
@@ -28,34 +26,17 @@ pub fn fold(text: &str) -> String {
 #[derive(Debug, Default, PartialEq, Eq)]
 struct Query {
     words: Vec<String>,
-    categories: Vec<String>,
 }
 
 impl Query {
-    /// Category tokens go through the same cleaning as a category typed in
-    /// the editor, so `#Home Lab` is not needed to find `home-lab`.
     fn parse(raw: &str) -> Self {
-        let mut query = Query::default();
-        for token in raw.split_whitespace() {
-            if token.starts_with('#') {
-                if let Some(category) = normalize::clean(token) {
-                    query.categories.push(fold(&category));
-                }
-            } else {
-                query.words.push(fold(token));
-            }
+        Query {
+            words: raw.split_whitespace().map(fold).collect(),
         }
-        query
     }
 
     fn is_empty(&self) -> bool {
-        self.words.is_empty() && self.categories.is_empty()
-    }
-
-    fn has_category(&self, entry: &IndexEntry) -> bool {
-        self.categories
-            .iter()
-            .all(|wanted| entry.category.as_deref().map(fold).as_ref() == Some(wanted))
+        self.words.is_empty()
     }
 
     /// The notes whose text holds every word, or `None` for a query without
@@ -93,18 +74,8 @@ fn newest_first(hits: &mut [&IndexEntry]) {
     hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
 }
 
-/// A query's words as typed, without its `#category` filter: what search by
-/// meaning embeds.
-pub fn words(raw: &str) -> String {
-    raw.split_whitespace()
-        .filter(|token| !token.starts_with('#'))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// Up to `k` notes of `hits`, best first, that pass the query's `#category`
-/// filter without matching its words: what search by meaning adds under the
-/// word matches.
+/// Up to `k` notes of `hits`, best first, that do not match the query's
+/// words: what search by meaning adds under the word matches.
 pub fn by_meaning(
     index: &Index,
     db: &SearchDb,
@@ -121,7 +92,7 @@ pub fn by_meaning(
     let found: Vec<&IndexEntry> = hits
         .iter()
         .filter_map(|(id, _)| entries.get(id.as_str()).copied())
-        .filter(|entry| query.has_category(entry) && !passes(&matched, entry))
+        .filter(|entry| !passes(&matched, entry))
         .take(k)
         .collect();
     with_bodies(db, found)
@@ -152,7 +123,7 @@ pub fn search(
     let matched = query.matched(db)?;
     let mut hits: Vec<&IndexEntry> = index
         .entries()
-        .filter(|entry| query.has_category(entry) && passes(&matched, entry))
+        .filter(|entry| passes(&matched, entry))
         .collect();
     newest_first(&mut hits);
     Ok(Found {
@@ -178,23 +149,21 @@ pub fn containing(index: &Index, db: &SearchDb, needles: &[String]) -> Result<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::daily_file::{body_hash, Kind, Status};
+    use crate::storage::daily_file::{body_hash, Kind};
     use crate::storage::relative_day_path;
 
-    fn note(id: &str, date: &str, time: &str, body: &str, category: Option<&str>) -> Note {
+    fn note(id: &str, date: &str, time: &str, body: &str) -> Note {
         Note {
             id: id.to_string(),
             date: date.to_string(),
             time: time.to_string(),
             file: relative_day_path(date),
             subject: None,
-            category: category.map(str::to_string),
-            status: Status::Done,
             hash: body_hash(body),
-            lang: None,
+            on: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Note,
-            on: None,
             missing: false,
         }
     }
@@ -240,10 +209,10 @@ mod tests {
     #[test]
     fn a_stretch_of_the_matches_comes_with_their_total() {
         let idx = index(&[
-            note("01A", "2026-09-21", "08:00", "x", None),
-            note("01B", "2026-09-22", "08:00", "x", None),
-            note("01C", "2026-09-22", "17:00", "x", None),
-            note("01D", "2026-09-23", "08:00", "y", None),
+            note("01A", "2026-09-21", "08:00", "x"),
+            note("01B", "2026-09-22", "08:00", "x"),
+            note("01C", "2026-09-22", "17:00", "x"),
+            note("01D", "2026-09-23", "08:00", "y"),
         ]);
         let first = search(&idx.index, &idx.db, "x", 0, 2).unwrap();
         assert_eq!((ids(&first.notes), first.total), (vec!["01C", "01B"], 3));
@@ -258,33 +227,32 @@ mod tests {
     }
 
     #[test]
-    fn splits_words_from_categories() {
-        let query = Query::parse("#Infra  kubernetes");
-        assert_eq!(query.words, vec!["kubernetes"]);
-        assert_eq!(query.categories, vec!["infra"]);
+    fn splits_the_query_into_folded_words() {
+        let query = Query::parse("Réunion  kubernetes");
+        assert_eq!(query.words, vec!["reunion", "kubernetes"]);
     }
 
     #[test]
     fn an_empty_query_finds_nothing() {
-        let idx = index(&[note("01A", "2026-09-22", "08:00", "anything", None)]);
+        let idx = index(&[note("01A", "2026-09-22", "08:00", "anything")]);
         assert!(all(&idx, "   ").is_empty());
-        assert!(all(&idx, "#").is_empty());
     }
 
     #[test]
     fn matches_substrings_ignoring_case_and_accents() {
         let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "Réunion demain", None),
-            note("01B", "2026-09-22", "09:00", "Buy coffee", None),
+            note("01A", "2026-09-22", "08:00", "Réunion demain"),
+            note("01B", "2026-09-22", "09:00", "Buy coffee"),
         ]);
         assert_eq!(ids(&all(&idx, "REUNION")), vec!["01A"]);
         assert_eq!(ids(&all(&idx, "offe")), vec!["01B"]);
     }
 
     #[test]
-    fn searches_the_subject_too() {
-        let mut n = note("01A", "2026-09-22", "08:00", "body text", None);
+    fn searches_a_page_s_title_too() {
+        let mut n = note("01A", "2026-09-22", "08:00", "body text");
         n.subject = Some("Rollback plan".into());
+        n.kind = Kind::Page;
         let idx = index(&[n]);
         assert_eq!(ids(&all(&idx, "rollback")), vec!["01A"]);
     }
@@ -292,78 +260,37 @@ mod tests {
     #[test]
     fn every_word_must_match() {
         let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "staging broke again", None),
-            note("01B", "2026-09-22", "09:00", "staging is fine", None),
+            note("01A", "2026-09-22", "08:00", "staging broke again"),
+            note("01B", "2026-09-22", "09:00", "staging is fine"),
         ]);
         assert_eq!(ids(&all(&idx, "staging broke")), vec!["01A"]);
     }
 
     #[test]
-    fn a_category_filters_on_the_notes_filed_under_it() {
+    fn by_meaning_adds_what_the_words_missed() {
         let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "a", Some("infra")),
-            note("01B", "2026-09-22", "09:00", "b", Some("infra")),
-            note("01C", "2026-09-22", "10:00", "c", Some("movie")),
-            note("01D", "2026-09-22", "11:00", "d", None),
-        ]);
-        assert_eq!(ids(&all(&idx, "#infra")), vec!["01B", "01A"]);
-        // A note has one category, so two never match together.
-        assert!(all(&idx, "#infra #movie").is_empty());
-    }
-
-    #[test]
-    fn a_category_must_match_whole_not_as_a_substring() {
-        let idx = index(&[note("01A", "2026-09-22", "08:00", "a", Some("infrastructure"))]);
-        assert!(all(&idx, "#infra").is_empty());
-    }
-
-    #[test]
-    fn meaning_embeds_the_words_as_typed_without_the_category() {
-        assert_eq!(words("#db  Slow queries"), "Slow queries");
-        assert_eq!(words("#db"), "");
-    }
-
-    #[test]
-    fn by_meaning_adds_what_the_words_missed_within_the_category() {
-        let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "postgres index tip", Some("db")),
-            note("01B", "2026-09-22", "09:00", "slow query plan", Some("db")),
-            note("01C", "2026-09-22", "10:00", "sql migration", Some("infra")),
+            note("01A", "2026-09-22", "08:00", "postgres index tip"),
+            note("01B", "2026-09-22", "09:00", "slow query plan"),
+            note("01C", "2026-09-22", "10:00", "sql migration"),
         ]);
         let hits: Vec<(String, f32)> = [("01C", 0.4), ("01Z", 0.35), ("01B", 0.3), ("01A", 0.2)]
             .into_iter()
             .map(|(id, score)| (id.to_string(), score))
             .collect();
-        // 01A already matches the words, 01C is filed elsewhere, 01Z is not a note.
-        assert_eq!(ids(&by_meaning_of(&idx, "postgres #db", &hits, 5)), vec!["01B"]);
+        // 01A already matches the words, 01Z is not a note.
+        assert_eq!(
+            ids(&by_meaning_of(&idx, "postgres", &hits, 5)),
+            vec!["01C", "01B"]
+        );
         assert_eq!(ids(&by_meaning_of(&idx, "postgres", &hits, 1)), vec!["01C"]);
-    }
-
-    #[test]
-    fn combines_a_category_and_words() {
-        let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "kubernetes upgrade", Some("infra")),
-            note("01B", "2026-09-22", "09:00", "kubernetes talk", Some("meetup")),
-        ]);
-        assert_eq!(ids(&all(&idx, "#infra kubernetes")), vec!["01A"]);
-    }
-
-    #[test]
-    fn category_tokens_are_cleaned_and_ignore_accents() {
-        let idx = index(&[
-            note("01A", "2026-09-22", "08:00", "a", Some("home-lab")),
-            note("01B", "2026-09-22", "09:00", "b", Some("série")),
-        ]);
-        assert_eq!(ids(&all(&idx, "#Home_Lab")), vec!["01A"]);
-        assert_eq!(ids(&all(&idx, "#serie")), vec!["01B"]);
     }
 
     #[test]
     fn newest_first_by_date_then_time() {
         let idx = index(&[
-            note("01A", "2026-09-21", "23:00", "x", None),
-            note("01B", "2026-09-22", "08:00", "x", None),
-            note("01C", "2026-09-22", "17:00", "x", None),
+            note("01A", "2026-09-21", "23:00", "x"),
+            note("01B", "2026-09-22", "08:00", "x"),
+            note("01C", "2026-09-22", "17:00", "x"),
         ]);
         assert_eq!(ids(&all(&idx, "x")), vec!["01C", "01B", "01A"]);
     }
@@ -371,9 +298,9 @@ mod tests {
     #[test]
     fn containing_keeps_notes_with_any_needle_newest_first() {
         let idx = index(&[
-            note("01A", "2026-09-21", "08:00", "- [ ] call the bank", None),
-            note("01B", "2026-09-22", "08:00", "no tasks here", None),
-            note("01C", "2026-09-22", "09:00", "Shopping\n- [X] milk", None),
+            note("01A", "2026-09-21", "08:00", "- [ ] call the bank"),
+            note("01B", "2026-09-22", "08:00", "no tasks here"),
+            note("01C", "2026-09-22", "09:00", "Shopping\n- [X] milk"),
         ]);
         let boxes = ["[ ]", "[x]", "[X]"].map(String::from);
         assert_eq!(ids(&containing_of(&idx, &boxes)), vec!["01C", "01A"]);
@@ -383,7 +310,7 @@ mod tests {
 
     #[test]
     fn results_carry_the_body_for_the_note_card() {
-        let idx = index(&[note("01A", "2026-09-22", "08:00", "the body", None)]);
+        let idx = index(&[note("01A", "2026-09-22", "08:00", "the body")]);
         assert_eq!(all(&idx, "body")[0].body, "the body");
     }
 
@@ -400,14 +327,14 @@ mod tests {
                      Réunion avec l'équipe infra pour le déploiement."
                 );
                 let date = format!("2026-{:02}-{:02}", 1 + i % 12, 1 + i % 28);
-                note(&format!("{i:05}"), &date, "12:00", &body, Some("infra"))
+                note(&format!("{i:05}"), &date, "12:00", &body)
             })
             .collect();
         let idx = index(&notes);
 
         // As the command center asks, keystroke after keystroke.
         let started = std::time::Instant::now();
-        let found = search(&idx.index, &idx.db, "#infra deploiement friday", 0, 50).unwrap();
+        let found = search(&idx.index, &idx.db, "deploiement friday", 0, 50).unwrap();
         let took = started.elapsed();
 
         assert_eq!((found.total, found.notes.len()), (10_000, 50));

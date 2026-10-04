@@ -1,4 +1,4 @@
-//! Search by words and by meaning, similar notes, and categories, SPEC 6.
+//! Search by words and by meaning, and similar notes, SPEC 6.
 
 use std::collections::HashMap;
 
@@ -7,31 +7,10 @@ use tauri::{AppHandle, State};
 use crate::search::Found;
 use crate::spaces::Space;
 use crate::state::AppState;
-use crate::storage::categories;
 use crate::storage::daily_file::Note;
 use crate::storage::index::IndexEntry;
 
-/// The categories notes are filed under, with how many carry each, most used
-/// first. Categories no note carries yet are left out.
-#[tauri::command]
-pub fn list_categories(state: State<'_, AppState>) -> Result<Vec<(String, u32)>, String> {
-    let space = state.space()?;
-    let counts = space
-        .index
-        .read()
-        .map_err(|_| "index lock poisoned".to_string())?
-        .category_counts();
-    Ok(categories::in_use(&categories::load(&space.root), &counts))
-}
-
-/// Every category on the list, in file order, used or not, for the note
-/// editor to offer.
-#[tauri::command]
-pub fn category_names(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-    Ok(categories::load(&state.space()?.root))
-}
-
-/// Words and a `#category` filter across every day (SPEC 6): the `limit`
+/// Words across every day (SPEC 6): the `limit`
 /// matches from `offset` on, and how many there are in all. Without a limit
 /// every match comes back, as a plugin's search asks for them.
 #[tauri::command]
@@ -72,15 +51,14 @@ const MEANING_NOTES: usize = 5;
 const MIN_LEAD: f32 = 0.15;
 
 /// Notes close in meaning to a query's words that the words themselves do
-/// not find, best first, within its `#category` filter. Empty without the
-/// embedding model, or for a query of `#` tokens only.
+/// not find, best first. Empty without the embedding model.
 #[tauri::command]
 pub async fn search_meaning(
     app: AppHandle,
     state: State<'_, AppState>,
     query: String,
 ) -> Result<Vec<Note>, String> {
-    let words = crate::search::words(&query);
+    let words = query.trim().to_string();
     if words.is_empty() {
         return Ok(Vec::new());
     }

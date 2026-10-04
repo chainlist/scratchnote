@@ -7,42 +7,30 @@
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
 	import FilesIcon from '@lucide/svelte/icons/files';
-	import HashIcon from '@lucide/svelte/icons/hash';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import { categoryLabel } from '#lib/categories.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { formatHotkey, runCommand } from '#lib/plugins/commands.js';
 	import { labelText, registry, type CommandEntry } from '#lib/plugins/registry.svelte.js';
-	import { queryCategories } from '#lib/query.js';
 
 	let {
 		open = $bindable(),
 		query = $bindable(),
 		editor,
-		categories,
-		canChat,
 		canMeaning,
 		onpick,
 		onseeall,
 		ontoday,
 		onnewpage,
 		onpages,
-		onchat,
 		onsettings
 	}: {
 		open: boolean;
-		/** Bound so a category clicked on a card can open the palette filtered on it. */
+		/** Bound so it is kept between openings. */
 		query: string;
 		/** The editor the palette was opened from, for the plugins' commands on text. */
 		editor: EditorView | null;
-		/**
-		 * Every category in use with its count, most used first. Offered as
-		 * filters while the query is empty, and as `#` completions.
-		 */
-		categories: [string, number][];
-		canChat: boolean;
 		/** Whether search by meaning can run: the embedding model is there and on. */
 		canMeaning: boolean;
 		/** Show a found note on its day. */
@@ -54,12 +42,10 @@
 		onnewpage: () => void;
 		/** List every page of the space. */
 		onpages: () => void;
-		onchat: () => void;
 		onsettings: () => void;
 	} = $props();
 
-	/** Completions and results shown at once. */
-	const CATEGORY_LIMIT = 6;
+	/** Results shown at once. */
 	const RESULT_LIMIT = 50;
 	/** Embedding the query costs a model run, so it waits for typing to pause. */
 	const MEANING_DELAY_MS = 300;
@@ -89,9 +75,6 @@
 		{ value: 'today', name: m.command_today(), icon: CalendarCheckIcon, run: ontoday },
 		{ value: 'new-page', name: m.pages_new(), icon: FilePlusIcon, run: onnewpage },
 		{ value: 'all-pages', name: m.pages_all(), icon: FilesIcon, run: onpages },
-		...(canChat
-			? [{ value: 'chat', name: m.search_chat_label(), icon: SparklesIcon, run: onchat }]
-			: []),
 		{ value: 'settings', name: m.common_settings(), icon: SettingsIcon, run: onsettings }
 	]);
 
@@ -117,39 +100,13 @@
 			.replace(/\p{Diacritic}/gu, '')
 			.toLowerCase();
 
-	/** The `#` token being typed at the end of the query, without the `#`. */
-	const prefix = $derived.by(() => {
-		if (query.endsWith(' ')) return null;
-		const last = query.split(' ').pop() ?? '';
-		return last.startsWith('#') ? last.slice(1).toLowerCase() : null;
-	});
-
 	/** While typing, the commands whose name has every word typed. */
 	const matchingActions = $derived.by(() => {
 		const words = fold(trimmed).split(/\s+/).filter(Boolean);
-		if (words.length === 0 || prefix !== null) return [];
+		if (words.length === 0) return [];
 		return [...builtIn, ...pluginActions].filter((action) =>
 			words.every((word) => fold(action.name).includes(word))
 		);
-	});
-
-	// Categories already in the query are not offered again. Names starting
-	// with the prefix come before names that only contain it, each most used
-	// first. The name in the interface language matches too, so `#jeu` offers
-	// `game`.
-	const completions = $derived.by(() => {
-		if (prefix === null) return [];
-		const used = new Set(queryCategories(query));
-		const starts: [string, number][] = [];
-		const contains: [string, number][] = [];
-		for (const entry of categories) {
-			// The token being typed is in `used` too, so a complete one drops out.
-			if (used.has(categoryLabel(entry[0]).toLowerCase())) continue;
-			const names = [entry[0], categoryLabel(entry[0]).toLowerCase()];
-			if (names.some((name) => name.startsWith(prefix))) starts.push(entry);
-			else if (names.some((name) => name.includes(prefix))) contains.push(entry);
-		}
-		return [...starts, ...contains].slice(0, CATEGORY_LIMIT);
 	});
 
 	// Only the latest query's answer is kept, so a slow reply to an earlier
@@ -204,19 +161,11 @@
 		return () => clearTimeout(timer);
 	});
 
-	// The caret goes after the query, so a filter opened from a category can be typed on.
+	// The caret goes after the query, so one kept from the last opening can be typed on.
 	$effect(() => {
 		if (!open) return;
 		void tick().then(() => input?.setSelectionRange(query.length, query.length));
 	});
-
-	/** Put a category filter in the query, completing the `#` token if one is being typed. */
-	function filter(name: string) {
-		const words = query.split(' ');
-		if (prefix !== null) words.pop();
-		query = [...words.filter(Boolean), `#${categoryLabel(name)}`, ''].join(' ');
-		input?.focus();
-	}
 
 	function run(action: () => void) {
 		open = false;
@@ -278,27 +227,7 @@
 					{/each}
 				</Command.Group>
 			{/if}
-			{#if categories.length > 0}
-				<Command.Group heading={m.categories_heading()}>
-					{#each categories as [name, count] (name)}
-						<Command.Item value="c:{name}" onSelect={() => filter(name)}>
-							<HashIcon />{categoryLabel(name)}
-							<Command.Shortcut class="font-mono">{count}</Command.Shortcut>
-						</Command.Item>
-					{/each}
-				</Command.Group>
-			{/if}
 		{:else}
-			{#if completions.length > 0}
-				<Command.Group heading={m.categories_heading()}>
-					{#each completions as [name, count] (name)}
-						<Command.Item value="c:{name}" onSelect={() => filter(name)}>
-							<HashIcon />{categoryLabel(name)}
-							<Command.Shortcut class="font-mono">{count}</Command.Shortcut>
-						</Command.Item>
-					{/each}
-				</Command.Group>
-			{/if}
 			{#if results.length > 0}
 				<Command.Group heading={m.page_results({ count: total })}>
 					<!-- First, so Enter right after typing lists the matches as the old search did. -->
@@ -326,8 +255,7 @@
 					{/each}
 				</Command.Group>
 			{:else if meaningPending}
-				<!-- The embedding model at work looks like a note waiting for the
-				     model: its words in the flowing colours of the glow. bits-ui
+				<!-- The embedding model at work: its words in flowing colours. bits-ui
 				     labels its loader "Loading..." in English; the label set after
 				     its props says what is loading, in the interface language. -->
 				<Command.Group heading={m.search_meaning_label()}>

@@ -6,7 +6,6 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::embed::threads::{edits_path, when_written, Edits, Thread, Threads, When};
-use crate::embed::vectors::Vectors;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
@@ -40,48 +39,39 @@ pub fn list_threads(state: State<'_, AppState>) -> Result<ThreadsView, String> {
 
 fn view(space: &Space) -> ThreadsView {
     let edits = Edits::load(&space.root);
-    let Some((when, subjects)) = dates_and_subjects(space) else {
+    let Some(when) = dates(space) else {
         return ThreadsView::default();
     };
-    let threads = placed(space, |threads, vectors| {
-        Some(threads.list(vectors, &when, &subjects, &edits.titles))
-    });
+    let threads = placed(space, |threads| Some(threads.list(&when, &edits.titles)));
     ThreadsView {
         threads: threads.unwrap_or_default(),
         alone: edits.alone.into_iter().collect(),
     }
 }
 
-/// When each note of the space was written, and the notes' subjects, which
-/// threads are shown with. `None` while the space is closed.
-fn dates_and_subjects(space: &Space) -> Option<(HashMap<String, When>, HashMap<String, String>)> {
+/// When each note of the space was written, which threads are shown with.
+/// `None` while the space is closed.
+fn dates(space: &Space) -> Option<HashMap<String, When>> {
     let index = space.index.read().ok().filter(|index| !index.is_closed())?;
-    let subjects = index
-        .entries()
-        .filter_map(|entry| Some((entry.id.clone(), entry.subject.clone()?)))
-        .collect();
-    Some((when_written(&index), subjects))
+    Some(when_written(&index))
 }
 
-/// What `show` makes of where the notes were placed and their vectors,
-/// `None` until the embed task has loaded them.
-fn placed<T>(space: &Space, show: impl FnOnce(&Threads, &Vectors) -> Option<T>) -> Option<T> {
-    let vectors = space.vectors.lock().ok()?;
+/// What `show` makes of where the notes were placed, `None` until the embed
+/// task has loaded it.
+fn placed<T>(space: &Space, show: impl FnOnce(&Threads) -> Option<T>) -> Option<T> {
     let threads = space.threads.lock().ok()?;
-    show(threads.as_ref()?, vectors.as_ref()?)
+    show(threads.as_ref()?)
 }
 
 /// A thread and its notes, or `None` once it is gone.
 #[tauri::command]
 pub fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option<ThreadNotes>, String> {
     let space = state.space()?;
-    let Some((when, subjects)) = dates_and_subjects(&space) else {
+    let Some(when) = dates(&space) else {
         return Ok(None);
     };
     let titles = Edits::load(&space.root).titles;
-    let Some(thread) = placed(&space, |threads, vectors| {
-        threads.get(&id, vectors, &when, &subjects, &titles)
-    }) else {
+    let Some(thread) = placed(&space, |threads| threads.get(&id, &when, &titles)) else {
         return Ok(None);
     };
     let notes = space.read(|idx, db| {
@@ -99,8 +89,7 @@ pub fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option<Threa
     }))
 }
 
-/// Give a thread a title of the user's, or an empty one to go back to the
-/// subject of its most typical note.
+/// Give a thread a title of the user's, or an empty one to take it off.
 #[tauri::command]
 pub async fn rename_thread(
     app: AppHandle,

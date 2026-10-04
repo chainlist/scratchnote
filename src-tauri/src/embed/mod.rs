@@ -1,10 +1,12 @@
-//! Embeddings for chat retrieval: one vector per note, so a chat can pick the
-//! few notes that matter out of thousands instead of reading the whole index.
+//! Embeddings: one vector per note, for search by meaning, similar notes,
+//! recall and threads.
 //!
 //! Only the body is embedded, so a vector is tied to the body hash: editing a
-//! note's text embeds it again, editing its subject or category does not.
+//! note's text embeds it again, renaming a page does not.
 
+pub mod download;
 pub mod llama;
+pub mod model;
 #[cfg(test)]
 pub mod samples;
 pub mod sync;
@@ -15,9 +17,8 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Manager};
 
-use crate::enrich::download;
-use crate::enrich::model::{model_file, EmbeddingModel};
 use crate::state::AppState;
+use model::{model_file, EmbeddingModel};
 
 /// A model that turns text into vectors.
 pub trait Embedder: Send + Sync {
@@ -33,17 +34,12 @@ pub trait Embedder: Send + Sync {
     fn embed_query(&self, text: &str) -> Result<Vec<f32>, String>;
 }
 
-/// The model that embeds notes, or `None` while there is none. The model
-/// switch leaves it alone: it is light enough to run where the chat model
-/// cannot, so similar notes, search by meaning, recall and threads stay with
-/// the model off. Loaded on first use, as `enrich::worker::backend` loads
-/// the chat model, then kept until the app quits: the idle unload leaves
-/// it, since it is small and every new note and search by meaning needs it,
-/// and it runs on the CPU, so the GPU setting does not reach it either. A
-/// load that fails is tried again on the next call, which comes with the
-/// next change to a note or the next chat message, never in a loop. One
-/// load runs at a time: a search that comes while the embed task loads the
-/// model waits for that one.
+/// The model that embeds notes, or `None` while there is none. Loaded on
+/// first use, then kept until the app quits, since it is small and every new
+/// note and search by meaning needs it. A load that fails is tried again on
+/// the next call, which comes with the next change to a note or the next
+/// search, never in a loop. One load runs at a time: a search that comes
+/// while the embed task loads the model waits for that one.
 pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
     let state = app.state::<AppState>();
     crate::state::load_once(&state.embedder, &state.embedder_loading, || {
@@ -82,8 +78,6 @@ pub fn normalize(vector: &mut [f32]) {
 /// `~/Scratchnote/models`. `None`, and the test skips, without either.
 #[cfg(test)]
 pub fn installed_embedder() -> Option<llama::LlamaEmbedder> {
-    use crate::enrich::model::{model_file, EmbeddingModel};
-
     let path = match std::env::var_os("SCRATCHNOTE_EMBEDDING_MODEL") {
         Some(path) => std::path::PathBuf::from(path),
         None => {

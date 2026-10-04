@@ -5,7 +5,6 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import BlocksIcon from '@lucide/svelte/icons/blocks';
-	import BrainIcon from '@lucide/svelte/icons/brain';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
@@ -21,7 +20,6 @@
 	import CorePluginsTab from './CorePluginsTab.svelte';
 	import GeneralTab from './GeneralTab.svelte';
 	import IndexTab from './IndexTab.svelte';
-	import ModelTab from './ModelTab.svelte';
 	import PluginSettingsHost from './PluginSettingsHost.svelte';
 	import { SettingsState } from './state.svelte';
 	import { hint, section } from './styles';
@@ -43,13 +41,6 @@
 			description: m.settings_appearance_description,
 			icon: PaletteIcon,
 			content: AppearanceTab
-		},
-		{
-			value: 'model',
-			label: m.settings_tab_model,
-			description: m.settings_model_description,
-			icon: BrainIcon,
-			content: ModelTab
 		},
 		{
 			value: 'index',

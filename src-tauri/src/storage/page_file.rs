@@ -1,12 +1,14 @@
 //! Page files, SPEC 4.7: a note with a title and a markdown file of its own.
 //!
 //! The first line is the marker, `<!-- sn:page ... -->`, with a note's
-//! attributes plus `day`. Then come the `# Title` line, the category line as
-//! in a note, and the text. The whole file is the page's, so unlike a day's
-//! file there is nothing of the user's around it to keep.
+//! attributes plus `day`. Then come the `# Title` line and the text. The
+//! whole file is the page's, so unlike a day's file there is nothing of the
+//! user's around it to keep. A page written while a model labelled the notes
+//! carries a `status` in its marker and a category line under its title, as
+//! a note does, which are read past.
 
 use super::check_date;
-use super::daily_file::{body_hash, split_category, Kind, Note, Status, PAGE_OPEN};
+use super::daily_file::{body_hash, is_labelled, strip_category, Kind, Note, AHEAD_OFF, PAGE_OPEN};
 
 /// The longest title part of a page's file name, in characters.
 const MAX_NAME_TITLE: usize = 80;
@@ -64,33 +66,18 @@ fn title_from_file(file: &str) -> String {
 }
 
 pub fn render_page(page: &Note) -> String {
-    let lang = page
-        .lang
-        .as_deref()
-        .map(|lang| format!(" lang={lang}"))
-        .unwrap_or_default();
-    let on = page
-        .on
-        .as_deref()
-        .map(|on| format!(" on={on}"))
-        .unwrap_or_default();
+    let off = if page.ahead_off {
+        format!(" {AHEAD_OFF}")
+    } else {
+        String::new()
+    };
     let mut out = format!(
-        "{PAGE_OPEN}id={} day={} time={} status={} hash={}{lang}{on} -->\n",
-        page.id,
-        page.date,
-        page.time,
-        page.status.as_str(),
-        page.hash
+        "{PAGE_OPEN}id={} day={} time={}{off} -->\n",
+        page.id, page.date, page.time
     );
     out.push_str("# ");
     out.push_str(page.subject.as_deref().unwrap_or_default());
     out.push('\n');
-    // Written as a tag, as in a note, so other markdown tools see it as one.
-    if let Some(category) = &page.category {
-        out.push_str("\n> #");
-        out.push_str(category);
-        out.push('\n');
-    }
     let body = page.body.trim_end();
     if !body.is_empty() {
         out.push('\n');
@@ -109,21 +96,17 @@ pub fn parse_page(content: &str, file: &str) -> Option<Note> {
     let header = lines.next()?.trim();
     let attrs = header.strip_prefix(PAGE_OPEN)?.strip_suffix("-->")?.trim();
 
-    let (mut id, mut day, mut time, mut status, mut hash, mut lang, mut on) =
-        (None, None, None, None, None, None, None);
+    let (mut id, mut day, mut time) = (None, None, None);
     for pair in attrs.split_whitespace() {
         match pair.split_once('=') {
             Some(("id", v)) => id = Some(v.to_string()),
             Some(("day", v)) => day = Some(v.to_string()),
             Some(("time", v)) => time = Some(v.to_string()),
-            Some(("status", v)) => status = Status::parse(v),
-            Some(("hash", v)) => hash = Some(v.to_string()),
-            Some(("lang", v)) => lang = Some(v.to_string()),
-            Some(("on", v)) => on = check_date(v).ok().map(|_| v.to_string()),
             _ => {}
         }
     }
     let day = day.filter(|d| check_date(d).is_ok())?;
+    let ahead_off = attrs.split_whitespace().any(|pair| pair == AHEAD_OFF);
 
     let all: Vec<&str> = lines.collect();
     let mut rest = skip_blank(&all);
@@ -134,16 +117,14 @@ pub fn parse_page(content: &str, file: &str) -> Option<Note> {
     let title = heading
         .and_then(clean_title)
         .unwrap_or_else(|| title_from_file(file));
-    let (category, body) = split_category(skip_blank(rest));
-
-    // As for a note (SPEC 4.2): text edited in another editor goes back to
-    // the model, unless the user has set the category by hand.
-    let actual = body_hash(&body);
-    let edited = hash.is_some_and(|stored| stored != actual);
-    let status = match status.unwrap_or(Status::Pending) {
-        Status::Done | Status::Failed if edited => Status::Pending,
-        status => status,
+    let body = if is_labelled(header) {
+        strip_category(skip_blank(rest))
+    } else {
+        skip_blank(rest).join("\n").trim_end().to_string()
     };
+    let on = (!ahead_off)
+        .then(|| day_ahead(&title, &body, &day))
+        .flatten();
 
     Some(Note {
         id: id?,
@@ -151,15 +132,19 @@ pub fn parse_page(content: &str, file: &str) -> Option<Note> {
         time: time?,
         file: file.to_string(),
         subject: Some(title),
-        category,
-        status,
-        hash: actual,
-        lang,
+        hash: body_hash(&body),
         on,
+        ahead_off,
         body,
         kind: Kind::Page,
         missing: false,
     })
+}
+
+/// The later day a page of `day` looks forward to (SPEC 5.3), in its title
+/// as much as in its text.
+pub fn day_ahead(title: &str, body: &str, day: &str) -> Option<String> {
+    crate::ahead::day_ahead(&format!("{title}\n{body}"), day)
 }
 
 fn skip_blank<'a, 'b>(mut lines: &'a [&'b str]) -> &'a [&'b str] {
@@ -183,38 +168,24 @@ fn rewrite(content: &str, file: &str, edit: impl FnOnce(&mut Note)) -> Option<St
     })
 }
 
-/// Set what enrichment, or a retry, changes: the category, the status, the
-/// language labelled in and the day ahead. The title and text stay.
-pub fn update_meta(
-    content: &str,
-    file: &str,
-    category: Option<String>,
-    status: Status,
-    lang: Option<String>,
-    on: Option<String>,
-) -> Option<String> {
-    rewrite(content, file, |page| {
-        page.category = category;
-        page.status = status;
-        page.lang = lang;
-        page.on = on;
-    })
+/// Clear the page's day ahead for good. The title and text stay.
+pub fn clear_day_ahead(content: &str, file: &str) -> Option<String> {
+    rewrite(content, file, |page| page.ahead_off = true)
 }
 
-/// Swap the text, and set the status when one is given, as a changed text
-/// sends the page back to the model.
-pub fn replace_body(
-    content: &str,
-    file: &str,
-    body: &str,
-    status: Option<Status>,
-) -> Option<String> {
-    rewrite(content, file, |page| {
-        page.body = body.trim().to_string();
-        if let Some(status) = status {
-            page.status = status;
-        }
-    })
+/// The page written as pages are now, without the category a model gave
+/// it. `None` when it is not a page, or carries no labels.
+pub fn drop_labels(content: &str, file: &str) -> Option<String> {
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let header = content.lines().next()?;
+    is_labelled(header)
+        .then(|| rewrite(content, file, |_| {}))
+        .flatten()
+}
+
+/// Swap the text. The title stays.
+pub fn replace_body(content: &str, file: &str, body: &str) -> Option<String> {
+    rewrite(content, file, |page| page.body = body.trim().to_string())
 }
 
 pub fn set_title(content: &str, file: &str, title: &str) -> Option<String> {
@@ -234,62 +205,54 @@ mod tests {
             time: "10:00".to_string(),
             file: FILE.to_string(),
             subject: Some("Weekly sync, platform team".to_string()),
-            category: None,
-            status: Status::Pending,
             hash: body_hash(body),
-            lang: None,
+            on: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Page,
-            on: None,
             missing: false,
         }
     }
 
-    fn labelled() -> Note {
-        Note {
-            category: Some("infrastructure".to_string()),
-            status: Status::Done,
-            lang: Some("en".to_string()),
-            ..page("Attendees: Sara, Marc, Kevin.\n\nStaging broke again.")
-        }
-    }
+    /// A page as it was written while a model labelled the notes.
+    const LABELLED: &str = concat!(
+        "<!-- sn:page id=01J9ABC0 day=2026-09-22 time=10:00 status=done hash=0badc0de lang=en -->\n",
+        "# Weekly sync, platform team\n",
+        "\n",
+        "> #infrastructure\n",
+        "\n",
+        "Attendees: Sara, Marc, Kevin.\n",
+        "\n",
+        "Staging broke again.\n",
+    );
 
     #[test]
     fn renders_the_layout_given_in_the_spec() {
-        let note = labelled();
         assert_eq!(
-            render_page(&note),
-            format!(
-                concat!(
-                    "<!-- sn:page id=01J9ABC0 day=2026-09-22 time=10:00 status=done hash={} lang=en -->\n",
-                    "# Weekly sync, platform team\n",
-                    "\n",
-                    "> #infrastructure\n",
-                    "\n",
-                    "Attendees: Sara, Marc, Kevin.\n",
-                    "\n",
-                    "Staging broke again.\n",
-                ),
-                note.hash
+            render_page(&page(
+                "Attendees: Sara, Marc, Kevin.\n\nStaging broke again."
+            )),
+            concat!(
+                "<!-- sn:page id=01J9ABC0 day=2026-09-22 time=10:00 -->\n",
+                "# Weekly sync, platform team\n",
+                "\n",
+                "Attendees: Sara, Marc, Kevin.\n",
+                "\n",
+                "Staging broke again.\n",
             )
         );
     }
 
     #[test]
-    fn round_trips_with_and_without_labels_or_text() {
+    fn round_trips_with_and_without_text() {
         for note in [
-            labelled(),
             page("just text"),
             page(""),
-            Note {
-                category: Some("work".into()),
-                ..page("")
-            },
             page("> #1 priority\n> ship it"),
             page("# a heading inside the text"),
             Note {
-                on: Some("2026-10-06".into()),
-                ..labelled()
+                ahead_off: true,
+                ..page("Review on Friday")
             },
         ] {
             assert_eq!(parse_page(&render_page(&note), FILE), Some(note));
@@ -300,14 +263,13 @@ mod tests {
     fn a_file_without_the_marker_is_not_a_page() {
         assert_eq!(parse_page("# Just some markdown\n\ntext\n", FILE), None);
         assert_eq!(parse_page("", FILE), None);
-        let no_day = "<!-- sn:page id=01A time=10:00 status=done hash=x -->\n# T\n";
+        let no_day = "<!-- sn:page id=01A time=10:00 -->\n# T\n";
         assert_eq!(parse_page(no_day, FILE), None);
     }
 
     #[test]
     fn a_page_without_its_heading_takes_its_title_from_the_file_name() {
-        let doc =
-            "<!-- sn:page id=01A day=2026-09-22 time=10:00 status=pending hash=x -->\nthe text\n";
+        let doc = "<!-- sn:page id=01A day=2026-09-22 time=10:00 -->\nthe text\n";
         let note = parse_page(doc, FILE).unwrap();
         assert_eq!(note.subject.as_deref(), Some("Weekly sync, platform team"));
         assert_eq!(note.body, "the text");
@@ -315,19 +277,43 @@ mod tests {
     }
 
     #[test]
-    fn a_labelled_page_edited_elsewhere_is_pending_again_unless_manual() {
-        let rendered = render_page(&labelled());
-        let edited = rendered.replace("broke again", "is fine");
-        assert_eq!(parse_page(&edited, FILE).unwrap().status, Status::Pending);
-        let manual = edited.replace("status=done", "status=manual");
-        assert_eq!(parse_page(&manual, FILE).unwrap().status, Status::Manual);
+    fn a_labelled_page_is_read_without_its_category_and_written_without_it() {
+        let read = parse_page(LABELLED, FILE).unwrap();
+        assert_eq!(
+            read,
+            page("Attendees: Sara, Marc, Kevin.\n\nStaging broke again.")
+        );
+
+        let out = drop_labels(LABELLED, FILE).unwrap();
+        assert_eq!(out, render_page(&read));
+        assert_eq!(drop_labels(&out, FILE), None, "nothing left to drop");
+    }
+
+    #[test]
+    fn the_day_ahead_is_read_off_the_title_and_the_text() {
+        let in_text = page("Review on Friday");
+        let read = parse_page(&render_page(&in_text), FILE).unwrap();
+        assert_eq!(read.on.as_deref(), Some("2026-09-25"));
+
+        let titled = Note {
+            subject: Some("Demo tomorrow".to_string()),
+            ..page("slides")
+        };
+        let read = parse_page(&render_page(&titled), FILE).unwrap();
+        assert_eq!(read.on.as_deref(), Some("2026-09-23"));
+
+        let out = clear_day_ahead(&render_page(&titled), FILE).unwrap();
+        assert!(
+            out.starts_with("<!-- sn:page id=01J9ABC0 day=2026-09-22 time=10:00 ahead=off -->\n")
+        );
+        assert_eq!(parse_page(&out, FILE).unwrap().on, None);
     }
 
     #[test]
     fn edits_keep_everything_else_and_the_line_endings() {
-        let doc = render_page(&labelled()).replace('\n', "\r\n");
+        let doc = render_page(&page("old text")).replace('\n', "\r\n");
 
-        let out = replace_body(&doc, FILE, "  new text \n", Some(Status::Pending)).unwrap();
+        let out = replace_body(&doc, FILE, "  new text \n").unwrap();
         assert!(
             !out.replace("\r\n", "").contains('\n'),
             "a bare LF in a CRLF file"
@@ -335,21 +321,11 @@ mod tests {
         let after = parse_page(&out, FILE).unwrap();
         assert_eq!(after.body, "new text");
         assert_eq!(after.hash, body_hash("new text"));
-        assert_eq!(after.status, Status::Pending);
-        assert_eq!(after.category.as_deref(), Some("infrastructure"));
 
         let out = set_title(&out, FILE, "Renamed").unwrap();
         let after = parse_page(&out, FILE).unwrap();
         assert_eq!(after.subject.as_deref(), Some("Renamed"));
         assert_eq!(after.body, "new text");
-
-        let out = update_meta(&out, FILE, None, Status::Done, Some("fr".into()), None).unwrap();
-        let after = parse_page(&out, FILE).unwrap();
-        assert_eq!(
-            (after.category, after.status, after.lang.as_deref()),
-            (None, Status::Done, Some("fr"))
-        );
-        assert_eq!(after.subject.as_deref(), Some("Renamed"));
     }
 
     #[test]

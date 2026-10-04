@@ -1,12 +1,7 @@
 import {
 	getSettings,
-	modelInfo,
-	modelStatus,
-	onModelStatus,
 	onSettingsChanged,
 	setSettings,
-	type ModelInfo,
-	type ModelStatus,
 	type Settings,
 	type SettingsView
 } from '#lib/api.js';
@@ -18,11 +13,6 @@ const editable = (s: Settings): Settings => ({
 	root: s.root,
 	captureHotkey: s.captureHotkey,
 	hideImmediately: s.hideImmediately,
-	modelEnabled: s.modelEnabled,
-	modelVariant: s.modelVariant,
-	modelPath: s.modelPath,
-	idleUnloadSeconds: s.idleUnloadSeconds,
-	useGpu: s.useGpu,
 	accentColor: s.accentColor,
 	fontFamily: s.fontFamily,
 	fontSize: s.fontSize,
@@ -35,7 +25,7 @@ const editable = (s: Settings): Settings => ({
 
 /**
  * What every settings tab shares: the saved settings, the draft behind the
- * Save button, the model in use, and the message shown above the tabs.
+ * Save button, and the message shown above the tabs.
  */
 export class SettingsState {
 	view = $state<SettingsView | null>(null);
@@ -43,18 +33,11 @@ export class SettingsState {
 		root: '',
 		captureHotkey: '',
 		hideImmediately: true,
-		modelEnabled: true,
-		modelVariant: 'default',
-		modelPath: null,
-		idleUnloadSeconds: 600,
-		useGpu: true,
 		...DEFAULT_APPEARANCE,
 		language: 'system',
 		onboarded: false,
 		lastSeenVersion: null
 	});
-	info = $state<ModelInfo | null>(null);
-	model = $state<ModelStatus>({ state: 'absent' });
 	message = $state<{ text: string; error: boolean } | null>(null);
 	/** The tab shown: one of the app's, or `plugin:<id>` for a plugin's own. */
 	tab = $state('general');
@@ -71,11 +54,6 @@ export class SettingsState {
 	/** Loads the settings and follows changes made elsewhere. Returns the teardown. */
 	start(): () => void {
 		const off = [
-			onModelStatus((status) => {
-				this.model = status;
-				if (status.state !== 'downloading') void this.refreshModels();
-			}),
-			// A finished download makes that model the one in use.
 			onSettingsChanged((settings) => {
 				if (!this.view) return;
 				this.view = { ...this.view, ...settings };
@@ -86,8 +64,6 @@ export class SettingsState {
 			try {
 				this.view = await getSettings();
 				this.draft = editable(this.view);
-				this.model = await modelStatus();
-				await this.refreshModels();
 			} catch (e) {
 				this.say(String(e), true);
 			}
@@ -97,10 +73,6 @@ export class SettingsState {
 
 	say(text: string, error = false) {
 		this.message = { text, error };
-	}
-
-	async refreshModels() {
-		this.info = await modelInfo();
 	}
 
 	/** Saves these at once, past the Save button, whose own edits stay pending. */

@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{mpsc, oneshot};
 
-use super::daily_file::{self, Note, NotePatch};
+use super::daily_file::{self, Note};
 use super::fingerprint;
 
 /// Fingerprint of the last content the app wrote to each path.
@@ -31,14 +31,6 @@ enum WriteRequest {
     DeleteNote {
         path: PathBuf,
         id: String,
-        /// False when the file or the id is not there.
-        reply: oneshot::Sender<io::Result<bool>>,
-    },
-    /// Rewrite one note's metadata in place, for enrichment and manual edits.
-    UpdateNote {
-        path: PathBuf,
-        id: String,
-        patch: Box<NotePatch>,
         /// False when the file or the id is not there.
         reply: oneshot::Sender<io::Result<bool>>,
     },
@@ -114,14 +106,6 @@ impl Writer {
                     WriteRequest::DeleteNote { path, id, reply } => {
                         let _ = reply.send(delete_note(&path, &id, &seen).await);
                     }
-                    WriteRequest::UpdateNote {
-                        path,
-                        id,
-                        patch,
-                        reply,
-                    } => {
-                        let _ = reply.send(update_note(&path, &id, &patch, &seen).await);
-                    }
                     WriteRequest::ReplaceBody {
                         path,
                         id,
@@ -180,26 +164,6 @@ impl Writer {
         let (reply, response) = oneshot::channel();
         self.send(WriteRequest::DeleteNote { path, id, reply }, response)
             .await
-    }
-
-    /// Returns false when the file or the id is not there.
-    pub async fn update_note(
-        &self,
-        path: PathBuf,
-        id: String,
-        patch: NotePatch,
-    ) -> Result<bool, String> {
-        let (reply, response) = oneshot::channel();
-        self.send(
-            WriteRequest::UpdateNote {
-                path,
-                id,
-                patch: Box::new(patch),
-                reply,
-            },
-            response,
-        )
-        .await
     }
 
     /// Returns false when the file or the id is not there.
@@ -310,18 +274,6 @@ async fn delete_note(path: &Path, id: &str, seen: &SelfWrites) -> io::Result<boo
         }
         None => Ok(false),
     }
-}
-
-async fn update_note(
-    path: &Path,
-    id: &str,
-    patch: &NotePatch,
-    seen: &SelfWrites,
-) -> io::Result<bool> {
-    rewrite_note(path, seen, |existing| {
-        daily_file::update_note(existing, id, patch)
-    })
-    .await
 }
 
 async fn replace_body(path: &Path, id: &str, body: &str, seen: &SelfWrites) -> io::Result<bool> {
@@ -455,7 +407,7 @@ async fn write_atomic(path: &Path, contents: &str, seen: &SelfWrites) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::daily_file::{body_hash, parse_notes, Kind, Status};
+    use crate::storage::daily_file::{body_hash, parse_notes, Kind};
 
     fn scratch_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("scratchnote-test-{name}"));
@@ -470,13 +422,11 @@ mod tests {
             time: time.to_string(),
             file: "notes/2026/2026-09-22.md".to_string(),
             subject: None,
-            category: None,
-            status: Status::Pending,
             hash: body_hash(body),
-            lang: None,
+            on: None,
+            ahead_off: false,
             body: body.to_string(),
             kind: Kind::Note,
-            on: None,
             missing: false,
         }
     }
@@ -554,7 +504,6 @@ mod tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].id, "01AAA");
         assert_eq!(parsed[1].body, "second note\nwith two lines");
-        assert!(parsed.iter().all(|n| n.status == Status::Pending));
 
         // The temp file must not survive a successful write.
         assert!(!path.with_file_name("2026-09-22.md.tmp").exists());

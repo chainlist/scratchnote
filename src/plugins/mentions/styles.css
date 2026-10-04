@@ -13,9 +13,6 @@ button.mention {
 button.mention:hover {
 	background: color-mix(in oklab, var(--primary) 30%, transparent);
 }
-.note-glow-text .mention {
-	background: none;
-}
 
 .mentions-empty {
 	color: var(--color-neutral-600);

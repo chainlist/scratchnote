@@ -6,6 +6,7 @@
 
 #[cfg(test)]
 mod bench;
+pub mod categories;
 pub mod download;
 pub mod llama;
 pub mod map;

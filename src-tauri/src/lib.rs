@@ -90,6 +90,8 @@ pub fn run() {
             commands::threads::threads_for_note,
             commands::threads::thread_cards,
             commands::map::note_map,
+            commands::map::map_categories,
+            commands::map::map_links,
             commands::notes::get_note,
             commands::search::notes_containing,
             commands::notes::delete_note,

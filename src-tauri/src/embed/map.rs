@@ -1,6 +1,7 @@
 //! Where each note sits on a 2D map of the space by meaning, saved in the
 //! `positions` table of `space.db` so that no view lays the space out
-//! itself, with each note's closest notes in `links`.
+//! itself, with each note's closest notes in `links`, and the categories
+//! the notes make on it (`categories.rs`), found again whenever it changes.
 //!
 //! The map is laid out whole only when a space has none yet, or its notes
 //! were embedded by another model: each note is pulled towards its closest
@@ -27,6 +28,7 @@ use std::sync::Mutex;
 
 use rusqlite::Connection;
 
+use super::categories::Categories;
 use super::vectors::{dot, Vectors};
 use crate::storage::space_db::{to_string, SpaceDb};
 
@@ -61,13 +63,17 @@ pub struct Map {
     near: Vec<Near>,
     /// Slots free for the next notes.
     free: Vec<usize>,
+    /// The categories of the notes in their places, `None` until found.
+    categories: Option<Categories>,
 }
 
-/// The same notes in the same places with the same closest notes, whatever
-/// their slots.
+/// The same notes in the same places with the same closest notes and
+/// categories, whatever their slots.
 impl PartialEq for Map {
     fn eq(&self, other: &Self) -> bool {
-        self.model == other.model && self.by_id() == other.by_id()
+        self.model == other.model
+            && self.by_id() == other.by_id()
+            && self.categories == other.categories
     }
 }
 
@@ -140,10 +146,12 @@ impl Map {
         let Some(model) = db.meta("map_model") else {
             return Self::default();
         };
-        Self::read(db.conn(), model).unwrap_or_else(|e| {
+        let mut map = Self::read(db.conn(), model).unwrap_or_else(|e| {
             log::warn!("could not read the map: {e}");
             Self::default()
-        })
+        });
+        map.categories = Categories::load(db);
+        map
     }
 
     fn read(conn: &Connection, model: String) -> rusqlite::Result<Self> {
@@ -178,6 +186,30 @@ impl Map {
     /// Every note on the map and its place, for the map view.
     pub fn places(&self) -> impl Iterator<Item = (&str, [f32; 2])> {
         self.taken().map(|(slot, id, _)| (id, self.at[slot]))
+    }
+
+    /// Each note linked to its `k` closest notes, each pair once, by id.
+    pub fn links(&self, k: usize) -> Vec<(&str, &str)> {
+        let mut pairs: Vec<(usize, usize)> = self
+            .taken()
+            .flat_map(|(slot, _, _)| {
+                self.near[slot]
+                    .iter()
+                    .take(k)
+                    .map(move |&(_, to)| (slot.min(to), slot.max(to)))
+            })
+            .collect();
+        pairs.sort_unstable();
+        pairs.dedup();
+        pairs
+            .into_iter()
+            .map(|(a, b)| (self.id(a), self.id(b)))
+            .collect()
+    }
+
+    /// The categories of the notes on the map, `None` until found.
+    pub fn categories(&self) -> Option<&Categories> {
+        self.categories.as_ref()
     }
 
     /// Where a note is, `None` until it is placed. Only tests look up one.
@@ -243,6 +275,7 @@ impl Map {
             at,
             near,
             free: Vec::new(),
+            categories: None,
         };
     }
 
@@ -427,15 +460,18 @@ impl Map {
     }
 }
 
-/// Bring the saved map in line with the vectors. The work is done on a copy
-/// of the map, which then takes its place: the vectors and the map are each
-/// held only for an instant, so search and the map view go on meanwhile,
-/// however long a full layout takes. The map is loaded from `db` first if
-/// it is not in memory yet. True when any note moved.
+/// Bring the saved map in line with the vectors, and find its categories
+/// again, named from `bodies`, the notes' text by id. The work is done on a
+/// copy of the map, which then takes its place: the vectors and the map are
+/// each held only for an instant, so search and the map view go on
+/// meanwhile, however long a full layout takes. The map is loaded from `db`
+/// first if it is not in memory yet. True when any note moved, or the
+/// categories were found for the first time.
 pub fn reconcile(
     vectors: &Mutex<Option<Vectors>>,
     map: &Mutex<Option<Map>>,
     db: &Mutex<Option<SpaceDb>>,
+    bodies: impl FnOnce() -> HashMap<String, String>,
 ) -> Result<bool, String> {
     let (mut working, snapshot) = {
         let held = vectors.lock().map_err(|_| "vectors lock poisoned")?;
@@ -451,19 +487,33 @@ pub fn reconcile(
             *slot = Some(Map::load(db));
         }
         let current = slot.as_ref().expect("loaded just above");
-        if !current.behind(store) {
+        let behind = current.behind(store);
+        if !behind && (current.categories.is_some() || current.slots.is_empty()) {
             return Ok(false);
         }
-        (current.clone(), Snapshot::of(store))
+        (current.clone(), behind.then(|| Snapshot::of(store)))
     };
 
     let started = std::time::Instant::now();
-    let afresh = working.model != snapshot.model || working.slots.is_empty();
-    let changes = if afresh {
-        working.lay_out(&snapshot);
-        None
-    } else {
-        Some(working.update(&snapshot))
+    // What an update changed. `None` after a full layout, or when the notes
+    // stay where they are and only the categories were never found.
+    let mut changes = None;
+    let mut whole = false;
+    if let Some(snapshot) = &snapshot {
+        if working.model != snapshot.model || working.slots.is_empty() {
+            working.lay_out(snapshot);
+            whole = true;
+        } else {
+            changes = Some(working.update(snapshot));
+        }
+    }
+    // After a full layout the levels are found again from the new places;
+    // otherwise they stay as they were, and so do the ids.
+    let before = working.categories.take();
+    let categories = {
+        let places: Vec<(&str, [f32; 2])> = working.places().collect();
+        let base = before.as_ref().map(|c| c.base);
+        Categories::find(&places, base, before.as_ref(), &bodies())
     };
 
     {
@@ -472,18 +522,23 @@ pub fn reconcile(
         let Some(db) = db.as_mut() else {
             return Ok(false);
         };
-        match &changes {
-            None => {
-                db.transaction(|tx| working.write_all(tx))?;
-                log::info!(
-                    "laid out {} notes in {:?}",
-                    snapshot.len(),
-                    started.elapsed()
-                );
+        db.transaction(|tx| {
+            if whole {
+                working.write_all(tx)?;
+            } else if let Some(changes) = &changes {
+                working.write_changes(tx, changes)?;
             }
-            Some(changes) => db.transaction(|tx| working.write_changes(tx, changes))?,
+            categories.write(tx, before.as_ref())
+        })?;
+        if whole {
+            log::info!(
+                "laid out {} notes in {:?}",
+                working.slots.len(),
+                started.elapsed()
+            );
         }
     }
+    working.categories = Some(categories);
     let mut slot = map.lock().map_err(|_| "map lock poisoned")?;
     // Only this task changes the map; a space closed meanwhile has none.
     if slot.is_some() {
@@ -793,7 +848,7 @@ mod tests {
     #[test]
     fn a_layout_gathers_each_topic_apart_from_the_others_and_is_saved() {
         let (vectors, map, db) = slots(topics(4, 12, 16));
-        assert!(reconcile(&vectors, &map, &db).unwrap());
+        assert!(reconcile(&vectors, &map, &db, HashMap::new).unwrap());
         {
             let laid = map.lock().unwrap();
             let laid = laid.as_ref().unwrap();
@@ -805,13 +860,16 @@ mod tests {
                 .all(|(slot, _, _)| laid.near[slot].len() == LINKS));
             assert_eq!(saved(&db), *laid);
         }
-        assert!(!reconcile(&vectors, &map, &db).unwrap(), "nothing to do");
+        assert!(
+            !reconcile(&vectors, &map, &db, HashMap::new).unwrap(),
+            "nothing to do"
+        );
     }
 
     #[test]
     fn a_new_note_joins_its_topic_and_only_the_notes_near_it_move() {
         let (vectors, map, db) = slots(topics(4, 12, 16));
-        reconcile(&vectors, &map, &db).unwrap();
+        reconcile(&vectors, &map, &db, HashMap::new).unwrap();
         let before = places(&map);
 
         // One more note about topic 2.
@@ -825,7 +883,7 @@ mod tests {
             .unwrap()
             .insert("99902".into(), "h".into(), v)
             .unwrap();
-        assert!(reconcile(&vectors, &map, &db).unwrap());
+        assert!(reconcile(&vectors, &map, &db, HashMap::new).unwrap());
 
         let after = places(&map);
         assert!(
@@ -847,7 +905,7 @@ mod tests {
     #[test]
     fn deleted_and_edited_notes_never_lay_the_space_out_again() {
         let (vectors, map, db) = slots(topics(4, 12, 16));
-        reconcile(&vectors, &map, &db).unwrap();
+        reconcile(&vectors, &map, &db, HashMap::new).unwrap();
 
         // A note deleted leaves every list, which takes the next closest.
         let present = (1..48)
@@ -855,7 +913,7 @@ mod tests {
             .collect();
         vectors.lock().unwrap().as_mut().unwrap().retain(&present);
         let before = places(&map);
-        assert!(reconcile(&vectors, &map, &db).unwrap());
+        assert!(reconcile(&vectors, &map, &db, HashMap::new).unwrap());
         {
             let map = map.lock().unwrap();
             let map = map.as_ref().unwrap();
@@ -883,7 +941,7 @@ mod tests {
                 let v = store.get(&id).unwrap().1.to_vec();
                 store.insert(id.clone(), "edited".into(), v).unwrap();
             }
-            assert!(reconcile(&vectors, &map, &db).unwrap());
+            assert!(reconcile(&vectors, &map, &db, HashMap::new).unwrap());
             assert!(unmoved(&before, &places(&map)) >= 47 - 2 * LINKS);
         }
         let map = map.lock().unwrap();
@@ -915,9 +973,28 @@ mod tests {
     }
 
     #[test]
+    fn each_note_links_to_its_closest_once() {
+        let (vectors, map, db) = slots(topics(4, 12, 16));
+        reconcile(&vectors, &map, &db, HashMap::new).unwrap();
+        let map = map.lock().unwrap();
+        let map = map.as_ref().unwrap();
+        let links = map.links(3);
+        let pairs: HashSet<(&str, &str)> = links.iter().copied().collect();
+        assert_eq!(pairs.len(), links.len(), "each pair once");
+        for (slot, id, _) in map.taken() {
+            for &(_, to) in &map.near[slot][..3] {
+                let other = map.id(to);
+                assert!(pairs.contains(&(id, other)) || pairs.contains(&(other, id)));
+            }
+        }
+        // Two notes about one topic, closest to each other, make one link.
+        assert!(links.len() < 48 * 3);
+    }
+
+    #[test]
     fn vectors_from_another_model_lay_the_space_out_again() {
         let (vectors, map, db) = slots(topics(2, 5, 8));
-        reconcile(&vectors, &map, &db).unwrap();
+        reconcile(&vectors, &map, &db, HashMap::new).unwrap();
         let mut other = Vectors::new("other", 8);
         for (id, hash, v) in vectors.lock().unwrap().as_ref().unwrap().iter() {
             other
@@ -925,7 +1002,7 @@ mod tests {
                 .unwrap();
         }
         *vectors.lock().unwrap() = Some(other);
-        assert!(reconcile(&vectors, &map, &db).unwrap());
+        assert!(reconcile(&vectors, &map, &db, HashMap::new).unwrap());
         assert_eq!(map.lock().unwrap().as_ref().unwrap().model, "other");
         assert_eq!(saved(&db).model, "other");
     }
@@ -933,7 +1010,7 @@ mod tests {
     #[test]
     fn one_note_or_none_is_placed_without_failing() {
         let (vectors, map, db) = slots(Vectors::new("m", 4));
-        assert!(!reconcile(&vectors, &map, &db).unwrap());
+        assert!(!reconcile(&vectors, &map, &db, HashMap::new).unwrap());
         for id in ["01A", "01B"] {
             vectors
                 .lock()
@@ -942,7 +1019,7 @@ mod tests {
                 .unwrap()
                 .insert(id.into(), "h".into(), vec![1.0, 0.0, 0.0, 0.0])
                 .unwrap();
-            assert!(reconcile(&vectors, &map, &db).unwrap());
+            assert!(reconcile(&vectors, &map, &db, HashMap::new).unwrap());
         }
         assert_eq!(map.lock().unwrap().as_ref().unwrap().len(), 2);
     }
@@ -1020,7 +1097,7 @@ mod tests {
         }
         let (vectors, map, db) = slots(copy);
         let started = Instant::now();
-        reconcile(&vectors, &map, &db).unwrap();
+        reconcile(&vectors, &map, &db, HashMap::new).unwrap();
         println!(
             "{n} notes: laid out and saved in {:?}, {:.0}% of closest notes kept",
             started.elapsed(),
@@ -1039,7 +1116,7 @@ mod tests {
                 .insert(format!("ZZ{run:02}"), "h".into(), v)
                 .unwrap();
             let started = Instant::now();
-            reconcile(&vectors, &map, &db).unwrap();
+            reconcile(&vectors, &map, &db, HashMap::new).unwrap();
             runs.push(started.elapsed());
         }
         runs.sort();

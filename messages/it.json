@@ -464,5 +464,28 @@
 	"journal_next": "Pagina successiva",
 	"journal_open_day": "Apri questo giorno",
 	"journal_empty": "Ancora niente di scritto. Le tue note riempiranno queste pagine.",
-	"journal_continued": "{date} (continua)"
+	"journal_continued": "{date} (continua)",
+	"slow_working": "Ancora in corso",
+	"slow_saving": "Salvataggio",
+	"slow_loading": "Caricamento",
+	"slow_searching": "Ricerca nelle note",
+	"slow_map": "Disegno della mappa",
+	"slow_rebuilding": "Ricostruzione dell'indice",
+	"slow_threads": "Aggiornamento dei fili",
+	"slow_moving": "Spostamento",
+	"slow_deleting": "Eliminazione",
+	"slow_attaching": "Aggiunta degli allegati",
+	"slow_plugins": "Aggiornamento dei plugin",
+	"slow_spaces": "Aggiornamento degli spazi",
+	"slow_taking": "Ci vuole un po’ più del solito ({seconds} s).",
+	"slow_more": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "Un’altra attività è ancora in corso.",
+				"countPlural=other": "Altre {count} attività sono ancora in corso."
+			}
+		}
+	]
 }

@@ -464,5 +464,28 @@
 	"journal_next": "Nächste Seite",
 	"journal_open_day": "Diesen Tag öffnen",
 	"journal_empty": "Noch nichts geschrieben. Deine Notizen werden diese Seiten füllen.",
-	"journal_continued": "{date}, Fortsetzung"
+	"journal_continued": "{date}, Fortsetzung",
+	"slow_working": "Läuft noch",
+	"slow_saving": "Wird gespeichert",
+	"slow_loading": "Wird geladen",
+	"slow_searching": "Notizen werden durchsucht",
+	"slow_map": "Karte wird gezeichnet",
+	"slow_rebuilding": "Index wird neu aufgebaut",
+	"slow_threads": "Fäden werden aktualisiert",
+	"slow_moving": "Wird verschoben",
+	"slow_deleting": "Wird gelöscht",
+	"slow_attaching": "Anhänge werden hinzugefügt",
+	"slow_plugins": "Plugins werden aktualisiert",
+	"slow_spaces": "Spaces werden aktualisiert",
+	"slow_taking": "Das dauert etwas länger als sonst ({seconds} s).",
+	"slow_more": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} weitere Aufgabe läuft noch.",
+				"countPlural=other": "{count} weitere Aufgaben laufen noch."
+			}
+		}
+	]
 }

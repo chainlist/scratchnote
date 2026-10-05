@@ -464,5 +464,28 @@
 	"journal_next": "Page suivante",
 	"journal_open_day": "Ouvrir ce jour",
 	"journal_empty": "Rien d'écrit pour l'instant. Vos notes rempliront ces pages.",
-	"journal_continued": "{date} (suite)"
+	"journal_continued": "{date} (suite)",
+	"slow_working": "Toujours en cours",
+	"slow_saving": "Enregistrement",
+	"slow_loading": "Chargement",
+	"slow_searching": "Recherche dans vos notes",
+	"slow_map": "Dessin de la carte",
+	"slow_rebuilding": "Reconstruction de l'index",
+	"slow_threads": "Mise à jour des fils",
+	"slow_moving": "Déplacement",
+	"slow_deleting": "Suppression",
+	"slow_attaching": "Ajout des pièces jointes",
+	"slow_plugins": "Mise à jour des plugins",
+	"slow_spaces": "Mise à jour des espaces",
+	"slow_taking": "Cela prend un peu plus de temps que d'habitude ({seconds} s).",
+	"slow_more": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} autre tâche est encore en cours.",
+				"countPlural=other": "{count} autres tâches sont encore en cours."
+			}
+		}
+	]
 }

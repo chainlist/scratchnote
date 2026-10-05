@@ -38,6 +38,7 @@
 	import WhatsNew from '#lib/components/WhatsNew.svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Resizable from '#lib/components/ui/resizable/index.js';
+	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import { Spinner } from '#lib/components/ui/spinner/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
@@ -299,3 +300,7 @@
 		<Settings />
 	</Dialog.Content>
 </Dialog.Root>
+
+<!-- Says when a command keeps the window waiting (#lib/slow-calls.js), under
+     the header (h-12) and its window controls. -->
+<Toaster position="top-right" offset={{ top: 56, right: 16 }} />

@@ -76,8 +76,9 @@ export const mentionRender: NodeRender = {
 const QUIET = new Set(['InlineCode', 'CodeText', 'FencedCode', 'CodeBlock', 'URL', 'Autolink']);
 
 /**
- * The names already mentioned, offered as `@` is typed, the most mentioned
- * first, so one project keeps one spelling. `space` is the space the text
+ * The names already mentioned, offered as `@` is typed, those pinned to the
+ * left edge first, then the most mentioned, so one project keeps one
+ * spelling. `space` is the space the text
  * goes into, which has to be the open one for its names to be known.
  */
 export function mentionCompletion(space: () => string | undefined): Extension {
@@ -97,8 +98,9 @@ export function mentionCompletion(space: () => string | undefined): Extension {
 		const options: Completion[] = known.map((mention, rank) => ({
 			label: mention.name,
 			detail: String(mention.notes),
-			// The most mentioned first, while what is typed still decides.
-			boost: -Math.min(rank, 20)
+			// The pinned first, the projects in hand, then the most
+			// mentioned, while what is typed still decides.
+			boost: (mention.pinned ? 30 : 0) - Math.min(rank, 20)
 		}));
 		return { from: typed.from + 1, options, validFor: /^[\p{L}\p{N}_-]*$/u };
 	}

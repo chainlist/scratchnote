@@ -165,6 +165,8 @@ pub struct MentionSummary {
     pub key: String,
     pub notes: usize,
     pub last: String,
+    /// Pinned to the left edge (SPEC 3.13), as a project in hand is.
+    pub pinned: bool,
 }
 
 /// Every name the notes of `index` mention, most mentioned first, then the
@@ -196,6 +198,7 @@ pub fn list(index: &Index, db: &SearchDb) -> Result<Vec<MentionSummary>, String>
             key,
             notes: notes.len(),
             last: last.to_string(),
+            pinned: false,
         })
         .collect();
     out.sort_by(|a, b| (b.notes, &b.last, &a.key).cmp(&(a.notes, &a.last, &b.key)));

@@ -355,9 +355,9 @@ A mention names a project, a person or anything else the notes come back to. Men
 
 - `@name` mentions it. A name is letters and digits of any script, with `_` and `-` inside it but not at its start or end: `@marie`, `@Zoë`, `@build-team`. An `@` right after a letter or digit is no mention, so an email address stays one, and nothing in code, after a backslash, in a link's target or in a bare link (`https://…`, `www.…`) is one. Case does not count: `@Marie` and `@marie` are one name.
 - A mention shows as a chip. On a card, a click on it opens `/mention/<name>/`: every note and page of the space that mentions the name, newest first, each day under its own heading, under `@name` as the newest of them types it, with how many and since when. A pin button after the title pins the name to the left edge (3.13).
-- Mentions, a button on the left edge under All pages, and Show every mention in the command center open `/mentions/`: every name used, most mentioned first, each with how many notes and pages mention it and the day of the last. A click on a name opens its notes.
+- Mentions, a button on the left edge under All pages, and Show every mention in the command center open `/mentions/`: every name used, those pinned first (3.13), then the most mentioned, each with how many threads of the user's it holds (6.4), how many notes and pages mention it and the day of the last, and a pin button, shown on pointing at a name not pinned. A click on a name opens its notes.
 - A draft that mentions no name is offered the name it looks like, under the editor (6.3).
-- Typing `@` in any editor offers the names already used in the space the text goes into, the most mentioned first, with how many notes mention each, so one project keeps one spelling. Not in code, nor in a link's target. Tab or Enter takes one, Esc closes the list and leaves the text as typed. The capture window offers the open space's names only, and none while it has another space picked, whose notes are not read.
+- Typing `@` in any editor offers the names already used in the space the text goes into, those pinned first, then the most mentioned, with how many notes mention each, so one project keeps one spelling. Not in code, nor in a link's target. Tab or Enter takes one, Esc closes the list and leaves the text as typed. The capture window offers the open space's names only, and none while it has another space picked, whose notes are not read.
 - The backend reads the names as each note and page is indexed, into `search.db` (4.1), by the same rules as the editor's parser: listing them, or the notes naming one, reads no text but those notes'. The views follow the notes as they change.
 
 ### 3.11 Stats
@@ -387,6 +387,7 @@ A space holds one stretch of life, such as work or home; the projects and subjec
 - A pin button after the title of a thread's view, a name's notes (3.10) and a plugin's page pins it to the left edge of the window, last, or unpins it. Pinning a thread only suggested keeps it.
 - Pins go under the left edge's buttons, after a line, each a square with two letters of its title, `@` and a letter for a name, coloured as its thread is on the map (6.5), a name's and a page's colour following from its key, or its type and query, the same way. The title shows on pointing at it. The pin of the view shown has a mark beside it. Right-clicking one offers Move up, Move down and Unpin.
 - A thread's pin reads the thread's title as it is, and shows while the thread is there and threads are on offer; a name's keeps the name as typed when pinned, and always shows; a page's keeps the title it had when pinned, and shows while its plugin is on. A name pinned as the Mentions plugin's page, before mentions were the app's own, comes back as that name. Pins that lead nowhere for now are kept, and show again once they do. A thread merged into another stays pinned as that one.
+- A pinned name is a project in hand, its threads (6.4) one level below it: right-clicking it lists its threads of the user's, up to eight, the one written in last first, each opening the thread, above Move up. Its mark shows beside it on the view of its notes and on any of its threads. A pinned thread of a name shows the name before its title on pointing at it. A name's notes list its threads, where a suggested one can be kept or dismissed.
 - Each space has its own pins, at most 24, in `space.db` with the thread edits, which nothing derives and nothing drops. The capture window shows none.
 
 ## 4. Storage
@@ -733,7 +734,7 @@ keep_out_of_threads(id, out)                // takes a note out of threads for g
 list_pins() -> Vec<Pin>                     // what the open space pinned to the left edge, in its order (3.13)
 set_pins(pins) -> Vec<Pin>                  // pins these in place of the pins before, tidied
 notes_containing(needles) -> Vec<Note>      // every note and page whose body holds any needle as typed, newest first
-list_mentions(space?) -> Vec<MentionSummary>  // every name mentioned, most first, with its notes and last day; none for a space not open (3.10)
+list_mentions(space?) -> Vec<MentionSummary>  // every name mentioned, most first, with its notes, last day and whether it is pinned; none for a space not open (3.10)
 notes_mentioning(name) -> { name?, notes }  // the notes and pages naming it, newest first, and the name as the newest types it
 map_search(query) -> Vec<String>            // the ids of the notes whose text holds every word, for the map (6.5)
 get_settings() / set_settings(...)

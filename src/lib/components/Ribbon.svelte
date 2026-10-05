@@ -18,6 +18,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { coreIds } from '#lib/plugins/loader.js';
 	import { colourOf, monogram, pinHref, pinPage } from '#lib/pins.js';
+	import { threadScope } from '#lib/threads.js';
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
@@ -31,20 +32,49 @@
 	const core = $derived(registry.ribbon.filter((item) => coreIds.has(item.plugin)));
 	const community = $derived(registry.ribbon.filter((item) => !coreIds.has(item.plugin)));
 
-	/** The pins that lead somewhere, with their titles: a thread still there
-	 *  while threads are on offer, a page whose plugin is on. */
+	/** The pins that lead somewhere, each with what its letters are made
+	 *  from and its title: a thread still there while threads are on offer,
+	 *  its name before a name's thread's title, a name, a page whose plugin
+	 *  is on. */
 	const pins = $derived(
 		shell.pins.flatMap((pin) => {
 			if (pin.kind === 'thread') {
 				const thread = shell.canSimilar && shell.threadList.find((t) => t.id === pin.target);
-				return thread ? [{ pin, label: thread.title ?? m.thread_untitled() }] : [];
+				if (!thread) return [];
+				const label = thread.title ?? m.thread_untitled();
+				const title = thread.mention ? `@${thread.mention} · ${label}` : label;
+				return [{ pin, label, title }];
 			}
-			if (pin.kind === 'mention') return [{ pin, label: `@${pin.label ?? pin.target}` }];
+			if (pin.kind === 'mention') {
+				const label = `@${pin.label ?? pin.target}`;
+				return [{ pin, label, title: label }];
+			}
 			const type = pinPage(pin);
 			const shown = registry.pages.some((entry) => entry.type === type);
-			return shown ? [{ pin, label: pin.label ?? type }] : [];
+			const label = pin.label ?? type;
+			return shown ? [{ pin, label, title: label }] : [];
 		})
 	);
+
+	/** A pinned name's threads of the user's, the one written in last first,
+	 *  one level below it (SPEC 3.13). */
+	function threadsOf(pin: Pin) {
+		if (pin.kind !== 'mention' || !shell.canSimilar) return [];
+		return shell.threadList
+			.filter((thread) => thread.kept && thread.scope === pin.target)
+			.toSorted((a, b) => b.until.localeCompare(a.until))
+			.slice(0, 8);
+	}
+
+	/** The view shown is the pin's, or for a name, one of its threads. */
+	function isHere(pin: Pin, href: string) {
+		if (here === href) return true;
+		return (
+			pin.kind === 'mention' &&
+			page.route.id === '/(app)/thread/[id]' &&
+			threadScope(page.params.id ?? '') === pin.target
+		);
+	}
 
 	const shownPins = $derived(pins.map(({ pin }) => pin));
 
@@ -142,15 +172,16 @@
 	{/if}
 	{#if pins.length}
 		<Separator class="my-1 w-5!" />
-		{#each pins as { pin, label }, index (`${pin.kind} ${pin.target}`)}
-			{@render pinButton(pin, label, index)}
+		{#each pins as { pin, label, title }, index (`${pin.kind} ${pin.target}`)}
+			{@render pinButton(pin, label, title, index)}
 		{/each}
 	{/if}
 </div>
 
-{#snippet pinButton(pin: Pin, label: string, index: number)}
+{#snippet pinButton(pin: Pin, label: string, title: string, index: number)}
 	{@const href = pinHref(pin)}
-	{@const active = here === href}
+	{@const active = isHere(pin, href)}
+	{@const below = threadsOf(pin)}
 	{@const colour = colourOf(pin.target)}
 	<ContextMenu.Root>
 		<ContextMenu.Trigger>
@@ -159,9 +190,9 @@
 				<a
 					{...props}
 					{href}
-					aria-label={label}
+					aria-label={title}
 					aria-current={active ? 'page' : undefined}
-					title={label}
+					{title}
 					class="relative flex size-8 items-center justify-center rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 				>
 					{#if active}
@@ -180,9 +211,17 @@
 				</a>
 			{/snippet}
 		</ContextMenu.Trigger>
-		<ContextMenu.Content class="w-48">
-			<ContextMenu.Label class="truncate">{label}</ContextMenu.Label>
+		<ContextMenu.Content class="w-56">
+			<ContextMenu.Label class="truncate">{title}</ContextMenu.Label>
 			<ContextMenu.Separator />
+			{#if below.length}
+				{#each below as thread (thread.id)}
+					<ContextMenu.Item onSelect={() => void shell.showThread(thread.id)}>
+						<RouteIcon /><span class="truncate">{thread.title ?? m.thread_untitled()}</span>
+					</ContextMenu.Item>
+				{/each}
+				<ContextMenu.Separator />
+			{/if}
 			<ContextMenu.Item
 				disabled={index === 0}
 				onSelect={() => void shell.movePin(pin, -1, shownPins)}

@@ -199,6 +199,8 @@ export interface MentionSummary {
 	notes: number;
 	/** The day of the last. */
 	last: string;
+	/** Pinned to the left edge, as a project in hand is (SPEC 3.13). */
+	pinned: boolean;
 }
 
 /** Every name the open space mentions, most mentioned first. None for

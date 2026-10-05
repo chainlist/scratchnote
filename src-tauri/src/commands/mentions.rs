@@ -4,10 +4,11 @@ use tauri::State;
 
 use crate::mentions::{self, MentionNotes, MentionSummary};
 use crate::state::AppState;
+use crate::storage::pins::PinKind;
 
-/// Every name the open space mentions, most mentioned first. Asked for
-/// another space, as the capture window does for the one it picked, none:
-/// only the open one is read.
+/// Every name the open space mentions, most mentioned first, those pinned
+/// to the left edge marked. Asked for another space, as the capture window
+/// does for the one it picked, none: only the open one is read.
 #[tauri::command]
 pub fn list_mentions(
     state: State<'_, AppState>,
@@ -17,7 +18,17 @@ pub fn list_mentions(
     if space.is_some_and(|name| name != open.name) {
         return Ok(Vec::new());
     }
-    Ok(open.read(mentions::list)?.unwrap_or_default())
+    let mut listed = open.read(mentions::list)?.unwrap_or_default();
+    let pinned: Vec<String> = open
+        .pins()
+        .into_iter()
+        .filter(|pin| pin.kind == PinKind::Mention)
+        .map(|pin| pin.target)
+        .collect();
+    for mention in &mut listed {
+        mention.pinned = pinned.contains(&mention.key);
+    }
+    Ok(listed)
 }
 
 /// The notes and pages that mention `name`, newest first. Case does not count.

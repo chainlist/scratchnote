@@ -2,17 +2,19 @@
 	import { resolve } from '$app/paths';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
+	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import MapIcon from '@lucide/svelte/icons/map';
 	import RouteIcon from '@lucide/svelte/icons/route';
+	import { today } from '#lib/api.js';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { coreIds } from '#lib/plugins/loader.js';
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
-	/** Down the left edge of every view: the calendar, All pages, Threads
+	/** Down the left edge of every view: today, the calendar, All pages, Threads
 	 *  with how many are suggested (SPEC 6.4), the map (SPEC 6.5) and the
 	 *  core plugins' buttons, then the community plugins' own (SPEC 3.9). */
 	const shell = getShell();
@@ -33,6 +35,16 @@
 </script>
 
 <div class="flex shrink-0 flex-col items-center gap-1 px-2 pt-3">
+	<Button
+		variant="ghost"
+		size="icon-sm"
+		onclick={async () => void shell.openDay(await today())}
+		aria-label={m.command_today()}
+		title={m.command_today()}
+		class="text-muted-foreground hover:text-foreground"
+	>
+		<CalendarCheckIcon />
+	</Button>
 	<Button
 		variant="ghost"
 		size="icon-sm"

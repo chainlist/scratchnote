@@ -80,6 +80,40 @@
 
 	const here = $derived(`${page.url.pathname}${page.url.search}`);
 
+	/** A pin's view is shown: the pin marks where the user is, rather than
+	 *  the button of that kind of view. */
+	const atPin = $derived(pins.some(({ pin }) => isHere(pin, pinHref(pin))));
+
+	/** The edge's own button whose kind of view is shown, if any: today's
+	 *  day, the calendar, a page or All pages, a name or Mentions, a thread
+	 *  or Threads, the map. */
+	const section = $derived.by(() => {
+		if (atPin) return null;
+		switch (page.route.id) {
+			case '/(app)/day/[date]':
+				return page.params.date === page.data.today ? 'today' : null;
+			case '/(app)/calendar':
+				return 'calendar';
+			case '/(app)/pages':
+			case '/(app)/page/[date]/[id]':
+				return 'pages';
+			case '/(app)/mentions':
+			case '/(app)/mention/[name]':
+				return 'mentions';
+			case '/(app)/threads':
+			case '/(app)/thread/[id]':
+				return 'threads';
+			case '/(app)/map':
+				return 'map';
+			default:
+				return null;
+		}
+	});
+
+	/** An edge button's look: brighter while its kind of view is shown. */
+	const tone = (button: string) =>
+		section === button ? 'text-foreground' : 'text-muted-foreground hover:text-foreground';
+
 	/** One that fails says so above the view. */
 	function run(item: RibbonEntry) {
 		const fail = (e: unknown) =>
@@ -99,8 +133,10 @@
 		onclick={async () => void shell.openDay(await today())}
 		aria-label={m.command_today()}
 		title={m.command_today()}
-		class="text-muted-foreground hover:text-foreground"
+		class={['relative', tone('today')]}
+		aria-current={section === 'today' ? 'page' : undefined}
 	>
+		{@render marker(section === 'today')}
 		<CalendarCheckIcon />
 	</Button>
 	<Button
@@ -109,8 +145,10 @@
 		href={resolve('calendar/')}
 		aria-label={m.calendar_pick()}
 		title={m.calendar_pick()}
-		class="text-muted-foreground hover:text-foreground"
+		class={['relative', tone('calendar')]}
+		aria-current={section === 'calendar' ? 'page' : undefined}
 	>
+		{@render marker(section === 'calendar')}
 		<CalendarIcon />
 	</Button>
 	<Button
@@ -119,8 +157,10 @@
 		href={resolve('pages/')}
 		aria-label={m.pages_all()}
 		title={m.pages_all()}
-		class="text-muted-foreground hover:text-foreground"
+		class={['relative', tone('pages')]}
+		aria-current={section === 'pages' ? 'page' : undefined}
 	>
+		{@render marker(section === 'pages')}
 		<FilesIcon />
 	</Button>
 	<Button
@@ -129,8 +169,10 @@
 		href={resolve('mentions/')}
 		aria-label={m.mentions_title()}
 		title={m.mentions_title()}
-		class="text-muted-foreground hover:text-foreground"
+		class={['relative', tone('mentions')]}
+		aria-current={section === 'mentions' ? 'page' : undefined}
 	>
+		{@render marker(section === 'mentions')}
 		<AtSignIcon />
 	</Button>
 	{#if shell.canSimilar}
@@ -143,8 +185,10 @@
 			href={resolve('threads/')}
 			aria-label={title}
 			{title}
-			class="relative text-muted-foreground hover:text-foreground"
+			class={['relative', tone('threads')]}
+			aria-current={section === 'threads' ? 'page' : undefined}
 		>
+			{@render marker(section === 'threads')}
 			<RouteIcon />
 			{#if shell.suggested}
 				<span
@@ -160,8 +204,10 @@
 			href={resolve('map/')}
 			aria-label={m.map_title()}
 			title={m.map_title()}
-			class="text-muted-foreground hover:text-foreground"
+			class={['relative', tone('map')]}
+			aria-current={section === 'map' ? 'page' : undefined}
 		>
+			{@render marker(section === 'map')}
 			<MapIcon />
 		</Button>
 	{/if}
@@ -178,6 +224,16 @@
 	{/if}
 </div>
 
+<!-- The bar beside a button whose view is shown, at the rail's edge. A
+     Button's border is left out of where it is placed from, so the bar
+     steps back over it to line up with a pin's. -->
+{#snippet marker(active: boolean, bordered = true)}
+	{#if active}
+		<span class={['absolute top-1 -left-2 h-5 w-1 rounded-r bg-foreground', bordered && '-m-px']}
+		></span>
+	{/if}
+{/snippet}
+
 {#snippet pinButton(pin: Pin, label: string, title: string, index: number)}
 	{@const href = pinHref(pin)}
 	{@const active = isHere(pin, href)}
@@ -193,11 +249,9 @@
 					aria-label={title}
 					aria-current={active ? 'page' : undefined}
 					{title}
-					class="relative flex size-8 items-center justify-center rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+					class="relative flex size-7 items-center justify-center rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 				>
-					{#if active}
-						<span class="absolute top-1.5 -left-2 h-5 w-1 rounded-r bg-foreground"></span>
-					{/if}
+					{@render marker(active, false)}
 					<span
 						class={[
 							'flex size-7 items-center justify-center rounded-md text-[0.7rem] leading-none font-semibold transition-opacity',

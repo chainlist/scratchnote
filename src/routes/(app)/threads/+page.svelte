@@ -6,9 +6,11 @@
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import View from '#lib/components/View.svelte';
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
+	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { threadHref } from '#lib/threads.js';
+	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
 
 	let { data } = $props();
 
@@ -45,25 +47,7 @@
 			</Tabs.List>
 			<Tabs.Content value="yours">
 				{#if yours.length}
-					<ul>
-						{#each yours as thread (thread.id)}
-							<li>
-								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
-								<a
-									href={threadHref(thread.id)}
-									class="-mx-2 flex items-baseline justify-between gap-4 rounded px-2 py-2 hover:bg-neutral-900"
-								>
-									<span class="truncate text-neutral-200">
-										{#if thread.mention}<span class="mention mr-1.5">@{thread.mention}</span
-											>{/if}{name(thread)}
-									</span>
-									<span class="shrink-0 text-xs text-neutral-500">
-										{m.thread_last({ count: thread.notes.length, date: shortDay(thread.until) })}
-									</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
+					<ThreadLanes threads={yours} {name} />
 				{:else}
 					<p class="text-sm text-neutral-500">{m.threads_yours_none()}</p>
 				{/if}
@@ -80,7 +64,11 @@
 									class="block rounded text-sm text-neutral-300 hover:text-neutral-100"
 								>
 									<span class="text-xs text-neutral-500">
-										{#if thread.mention}<span class="mention mr-1.5">@{thread.mention}</span>{/if}
+										{#if thread.mention}<span
+												class="name-tint mr-1.5 rounded-md px-1 font-medium"
+												style:--hue={thread.scope && mentionHue(thread.scope)}
+												>@{thread.mention}</span
+											>{/if}
 										{m.thread_detail({ count: thread.notes.length, date: shortDay(thread.since) })}
 									</span>
 									{#each thread.first as note (note.id)}

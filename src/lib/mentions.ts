@@ -10,6 +10,7 @@ import type { MarkdownConfig } from '@lezer/markdown';
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { listMentions } from '#lib/api.js';
+import { daysAgo } from '#lib/days.js';
 import type { NodeRender } from '#lib/plugins/api.js';
 import { m } from '#lib/paraglide/messages.js';
 
@@ -49,6 +50,29 @@ export const mentionSyntax: MarkdownConfig = {
 
 /** The key a name is found by: case does not count, `@Marie` is `@marie`. */
 export const mentionKey = (name: string) => name.replace(/^@/, '').toLowerCase();
+
+/** The hues a name's own colour takes on the lists (oklch), far enough
+ *  apart round the wheel to tell eight names apart. */
+const HUES = [25, 70, 110, 150, 195, 240, 285, 330];
+
+/** A name's hue on the lists of names and threads, the same every time:
+ *  its key, hashed onto `HUES`. */
+export function mentionHue(key: string) {
+	let hash = 0;
+	for (const char of key) hash = (Math.imul(hash, 31) + char.codePointAt(0)!) >>> 0;
+	return HUES[hash % HUES.length];
+}
+
+/** How many of `days` fall in each of the last `weeks` weeks, the oldest
+ *  first, the last of them ending today. */
+export function weekly(days: string[], weeks: number) {
+	const counts = Array<number>(weeks).fill(0);
+	for (const day of days) {
+		const week = Math.floor(daysAgo(day) / 7);
+		if (week >= 0 && week < weeks) counts[weeks - 1 - week]++;
+	}
+	return counts;
+}
 
 /** The view of the notes mentioning a name. */
 export const mentionHref = (name: string) =>

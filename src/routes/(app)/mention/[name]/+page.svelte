@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Note } from '#lib/api.js';
 	import NoteList from '#lib/components/NoteList.svelte';
+	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import View from '#lib/components/View.svelte';
@@ -8,7 +9,6 @@
 	import { mentionKey } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadHref } from '#lib/threads.js';
 
 	let { data, params } = $props();
 
@@ -80,42 +80,29 @@
 
 	{#if shown === 'threads'}
 		{#if threads.length}
-			<ul>
-				{#each threads as thread (thread.id)}
-					<li class="-mx-2 flex items-center gap-1 rounded hover:bg-neutral-900">
-						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
-						<a
-							href={threadHref(thread.id)}
-							class="flex min-w-0 flex-1 items-baseline justify-between gap-4 py-2 pl-2"
+			<ThreadLanes {threads} chips={false}>
+				{#snippet actions(thread)}
+					{#if !thread.kept}
+						<!-- A suggestion is kept or dismissed here, as in Threads. -->
+						<Button
+							variant="ghost"
+							size="sm"
+							class="h-7 px-2 text-xs"
+							onclick={() => void shell.keepThread(thread.id, false)}
 						>
-							<span class="truncate text-neutral-200">{thread.title ?? m.thread_untitled()}</span>
-							<span class="shrink-0 text-xs text-neutral-500">
-								{m.thread_last({ count: thread.notes.length, date: shortDay(thread.until) })}
-								{#if !thread.kept}· {m.threads_suggested()}{/if}
-							</span>
-						</a>
-						{#if !thread.kept}
-							<!-- A suggestion is kept or dismissed here, as in Threads. -->
-							<Button
-								variant="ghost"
-								size="sm"
-								class="h-7 px-2 text-xs"
-								onclick={() => void shell.keepThread(thread.id, false)}
-							>
-								{m.thread_dismiss()}
-							</Button>
-							<Button
-								variant="outline"
-								size="sm"
-								class="mr-1 h-7 px-2 text-xs"
-								onclick={() => void shell.keepThread(thread.id, true)}
-							>
-								{m.thread_keep()}
-							</Button>
-						{/if}
-					</li>
-				{/each}
-			</ul>
+							{m.thread_dismiss()}
+						</Button>
+						<Button
+							variant="outline"
+							size="sm"
+							class="mr-1 h-7 px-2 text-xs"
+							onclick={() => void shell.keepThread(thread.id, true)}
+						>
+							{m.thread_keep()}
+						</Button>
+					{/if}
+				{/snippet}
+			</ThreadLanes>
 		{:else}
 			<p class="text-base text-neutral-600">{m.mention_threads_none()}</p>
 		{/if}

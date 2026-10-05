@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { afterNavigate } from '$app/navigation';
 	import { navigating } from '$app/state';
 	import { getVersion } from '@tauri-apps/api/app';
 	import {
@@ -57,6 +58,9 @@
 	// The plugins reach the views through it from the start, their pages
 	// included, which mount before this layout does.
 	onDestroy(bindWorkspace(shell));
+
+	// The back arrow goes back no further than the view the app opened on.
+	afterNavigate(shell.markFirstEntry);
 
 	// Listed again with the notes whenever a space is opened, made, renamed
 	// or deleted.

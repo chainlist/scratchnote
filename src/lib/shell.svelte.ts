@@ -49,7 +49,8 @@ export interface ThreadPick {
 
 /** A view's title row, which the top bar shows a copy of once it scrolls away. */
 export interface ViewTitle {
-	/** Where the back arrow leads. Left out on a day, which has its own arrows. */
+	/** Where the back arrow leads when no view is behind this one in the
+	 *  history. Left out on a day, which has its own arrows. */
 	back?: string;
 	title?: string;
 	/** What the title row's pin button pins to the left edge (SPEC 3.13). */
@@ -147,6 +148,24 @@ export class Shell implements WorkspaceHost {
 	get back() {
 		return resolve(`day/${this.day}/`);
 	}
+
+	/** The history entry the views opened on: going back past it would leave
+	 *  them, for the onboarding or nothing. */
+	#firstEntry: number | undefined;
+
+	/** Note where the history stands, the first time the views are shown. */
+	markFirstEntry = () => {
+		if ('navigation' in window) this.#firstEntry ??= window.navigation.currentEntry?.index;
+	};
+
+	/** The back arrow returns to the view it was opened from. With none
+	 *  behind it, or no way to tell, it follows its link. */
+	goBack = (event: MouseEvent) => {
+		const index = 'navigation' in window ? window.navigation.currentEntry?.index : undefined;
+		if (index === undefined || this.#firstEntry === undefined || index <= this.#firstEntry) return;
+		event.preventDefault();
+		history.back();
+	};
 
 	/** Load what the views show again, after a change here or on disk. */
 	refresh = async () => {

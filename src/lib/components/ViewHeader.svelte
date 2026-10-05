@@ -90,6 +90,7 @@
 			variant="ghost"
 			size="icon-sm"
 			href={back}
+			onclick={shell.goBack}
 			aria-label={m.page_back()}
 			title={m.page_back()}
 			class="text-muted-foreground hover:text-foreground"

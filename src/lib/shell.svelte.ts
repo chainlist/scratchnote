@@ -29,6 +29,7 @@ import {
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { addToPageDraft } from '#lib/page-draft.js';
 import { samePin } from '#lib/pins.js';
+import { threadHref, threadScope } from '#lib/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
 
 /** Where a note sits in its thread: the thread, and its place in it from 0. */
@@ -72,9 +73,11 @@ export class Shell implements WorkspaceHost {
 	/** Similar notes come from the embedding model's vectors. */
 	embeddingInstalled = $state(false);
 	canSimilar = $derived(this.embeddingInstalled);
-	/** The thread of the user's each note of the open space is in, by note
-	 *  (SPEC 6.4). A note in a thread only suggested has none. */
-	threads = $state.raw<Record<string, ThreadPlace>>({});
+	/** The threads of the user's each note of the open space is in, by
+	 *  note (SPEC 6.4): one at most of the general scope, and one at most
+	 *  of each name it mentions, the general scope's first. A note in a
+	 *  thread only suggested has none. */
+	threads = $state.raw<Record<string, ThreadPlace[]>>({});
 	/** Every thread of the open space, kept or suggested. */
 	threadList = $state.raw<Thread[]>([]);
 	/** How many threads are only suggested. */
@@ -194,9 +197,11 @@ export class Shell implements WorkspaceHost {
 		void goto(resolve(`similar/${note.date}/${note.id}/`));
 	};
 
-	/** Where a note sits in its thread, while threads are on offer. */
-	threadOf = (id: string): ThreadPlace | undefined =>
-		this.canSimilar ? this.threads[id] : undefined;
+	/** Where a note sits in its first thread, while threads are on offer. */
+	threadOf = (id: string): ThreadPlace | undefined => this.threadsOf(id)[0];
+
+	/** Where a note sits in each of its threads, while threads are on offer. */
+	threadsOf = (id: string): ThreadPlace[] => (this.canSimilar ? (this.threads[id] ?? []) : []);
 
 	/** A note taken out of threads, which can be let back in while threads are on offer. */
 	keptOut = (id: string) => this.canSimilar && this.alone.includes(id);
@@ -205,10 +210,13 @@ export class Shell implements WorkspaceHost {
 	loadThreads = async () => {
 		try {
 			const view = await listThreads();
-			const places: Record<string, ThreadPlace> = {};
+			const places: Record<string, ThreadPlace[]> = {};
 
 			for (const thread of view.threads)
-				if (thread.kept) thread.notes.forEach((id, index) => (places[id] = { thread, index }));
+				if (thread.kept)
+					thread.notes.forEach((id, index) => (places[id] ??= []).push({ thread, index }));
+			for (const list of Object.values(places))
+				list.sort((a, b) => Number(a.thread.scope !== null) - Number(b.thread.scope !== null));
 
 			this.threads = places;
 			this.threadList = view.threads;
@@ -222,7 +230,7 @@ export class Shell implements WorkspaceHost {
 		}
 	};
 
-	showThread = (id: string) => goto(resolve(`thread/${id}/`));
+	showThread = (id: string) => goto(threadHref(id));
 
 	/** Read the open space's pins again. */
 	loadPins = async () => {
@@ -309,7 +317,8 @@ export class Shell implements WorkspaceHost {
 		try {
 			let thread = into;
 			if (pick.kind === 'merge' && pick.from && into) await mergeThreads(pick.from, into);
-			else thread = await putInThread(pick.notes, into);
+			// A new thread is made among the notes of the name they come from.
+			else thread = await putInThread(pick.notes, into, pick.from && threadScope(pick.from));
 			if (pick.kind === 'merge' && thread && this.dockedThread === pick.from)
 				this.dockedThread = thread;
 			if (pick.kind === 'merge' && thread && page.params.id === pick.from)

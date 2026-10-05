@@ -7,6 +7,7 @@
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import MergeIcon from '@lucide/svelte/icons/merge';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
+	import { mentionHref } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
@@ -96,6 +97,11 @@
 				{m.common_cancel()}
 			</Button>
 		{:else}
+			{#if thread.mention}
+				<!-- The name it was found among the notes of (SPEC 6.4). -->
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- mentionHref resolves it -->
+				<a href={mentionHref(thread.mention)} class="mention">@{thread.mention}</a>
+			{/if}
 			<button type="button" onclick={() => (renaming = thread)} class={action}>
 				<PencilIcon class="size-3.5" />{m.thread_rename()}
 			</button>

@@ -112,8 +112,14 @@ export const recall = (text: string, exclude?: string, space?: string) =>
 
 /** The notes about one thing, gathered across days (SPEC 6.4). */
 export interface Thread {
-	/** The id of the note it started with, which it keeps. */
+	/** The id of the note it started with, which it keeps, after `@key:`
+	 *  for a thread found among the notes of a name mentioned. */
 	id: string;
+	/** The key of that name, or null for a thread of the general scope,
+	 *  among the notes that mention no name. */
+	scope: string | null;
+	/** That name as typed. */
+	mention: string | null;
 	/** The user's; null until they name it. */
 	title: string | null;
 	/** The title is the user's. */
@@ -167,11 +173,12 @@ export const keepThread = (id: string) => invoke<void>('keep_thread', { id });
 export const dismissThread = (id: string) => invoke<void>('dismiss_thread', { id });
 
 /**
- * Put notes in a thread, or a new one when `into` is null, where they stay
- * whatever they score. Resolves to the thread's id.
+ * Put notes in a thread, or a new one when `into` is null, made among the
+ * notes of the name `scope` keys, or the general scope's without one. They
+ * stay there whatever they score. Resolves to the thread's id.
  */
-export const putInThread = (notes: string[], into: string | null) =>
-	invoke<string>('put_in_thread', { notes, into });
+export const putInThread = (notes: string[], into: string | null, scope?: string | null) =>
+	invoke<string>('put_in_thread', { notes, into, scope });
 
 /** Put every note of thread `from` in thread `into`. */
 export const mergeThreads = (from: string, into: string) =>

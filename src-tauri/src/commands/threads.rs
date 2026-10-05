@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::embed::threads::{when_written, Thread, Threads, When};
+use crate::embed::threads::{scope_of, thread_id, when_written, Thread, Threads, When};
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
@@ -55,9 +55,32 @@ fn view(space: &Space) -> ThreadsView {
     };
     let threads = placed(space, |threads| Some(threads.list(&when, &edits)));
     ThreadsView {
-        threads: threads.unwrap_or_default(),
+        threads: named(space, threads.unwrap_or_default()),
         alone: edits.alone.into_iter().collect(),
     }
+}
+
+/// `threads` with the names whose notes they were found among, as the
+/// newest note mentioning each types it.
+fn named(space: &Space, mut threads: Vec<Thread>) -> Vec<Thread> {
+    if threads.iter().all(|thread| thread.scope.is_none()) {
+        return threads;
+    }
+    let names: HashMap<String, String> = space
+        .read(crate::mentions::list)
+        .ok()
+        .flatten()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|mention| (mention.key, mention.name))
+        .collect();
+    for thread in &mut threads {
+        thread.mention = thread
+            .scope
+            .as_ref()
+            .map(|key| names.get(key).cloned().unwrap_or_else(|| key.clone()));
+    }
+    threads
 }
 
 /// When each note of the space was written, which threads are shown with.
@@ -85,6 +108,7 @@ pub async fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option
     let Some(thread) = placed(&space, |threads| threads.get(&id, &when, &edits)) else {
         return Ok(None);
     };
+    let thread = named(&space, vec![thread]).remove(0);
     let notes = space.read(|idx, db| {
         let entries: HashMap<&str, &IndexEntry> =
             idx.entries().map(|e| (e.id.as_str(), e)).collect();
@@ -143,8 +167,8 @@ pub async fn keep_out_of_threads(
     let space = state.space()?;
     let changed = space.change_edits(|edits| {
         if out {
-            let pinned = edits.pinned.remove(&id).is_some();
-            edits.alone.insert(id) || pinned
+            let put = edits.take_out(&id);
+            edits.alone.insert(id) || put
         } else {
             edits.alone.remove(&id)
         }
@@ -193,7 +217,7 @@ pub async fn keep_thread(
     }
     space.change_edits(|edits| {
         for note in notes {
-            edits.pinned.insert(note, id.clone());
+            edits.put_in(note, id.clone());
         }
         edits.dismissed.remove(&id);
         true
@@ -222,13 +246,15 @@ pub async fn dismiss_thread(
 
 /// Put notes in thread `into`, or a new thread when it is `None`, where
 /// they stay whatever they score. Gives the thread's id: a new one is
-/// named after the earliest of the notes.
+/// named after the earliest of the notes, among the notes of the name
+/// `scope` keys, or the general scope's without one.
 #[tauri::command]
 pub async fn put_in_thread(
     app: AppHandle,
     state: State<'_, AppState>,
     notes: Vec<String>,
     into: Option<String>,
+    scope: Option<String>,
 ) -> Result<String, String> {
     let space = state.space()?;
     let when = dates(&space).ok_or("the space is closed")?;
@@ -243,8 +269,9 @@ pub async fn put_in_thread(
         None => {
             let taken: std::collections::HashSet<String> =
                 placed(&space, |threads| Some(threads.names())).unwrap_or_default();
-            std::iter::once(first.clone())
-                .chain((2..).map(|n| format!("{first}-{n}")))
+            let scope = scope.as_deref().unwrap_or_default();
+            std::iter::once(thread_id(scope, &first))
+                .chain((2..).map(|n| thread_id(scope, &format!("{first}-{n}"))))
                 .find(|name| !taken.contains(name))
                 .expect("a free name")
         }
@@ -252,7 +279,7 @@ pub async fn put_in_thread(
     space.change_edits(|edits| {
         for note in notes {
             edits.alone.remove(&note);
-            edits.pinned.insert(note, thread.clone());
+            edits.put_in(note, thread.clone());
         }
         true
     })?;
@@ -273,6 +300,9 @@ pub async fn merge_threads(
     if from == into {
         return Ok(());
     }
+    if scope_of(&from) != scope_of(&into) {
+        return Err("threads of two different names cannot become one".to_string());
+    }
     // A thread pinned to the left edge stays pinned as the one it went into.
     if space
         .change_pins(|pins| crate::storage::pins::follow_merge(pins, &from, &into))?
@@ -284,7 +314,7 @@ pub async fn merge_threads(
     space.change_edits(|edits| {
         for note in notes {
             edits.alone.remove(&note);
-            edits.pinned.insert(note, into.clone());
+            edits.put_in(note, into.clone());
         }
         if let Some(title) = edits.titles.remove(&from) {
             edits.titles.entry(into).or_insert(title);
@@ -315,7 +345,7 @@ fn cards(space: &Space, threads: Vec<Thread>) -> Result<Vec<ThreadCard>, String>
             .filter_map(|id| entries.get(id.as_str()).copied());
         crate::search::with_bodies(db, shown)
     })?;
-    let mut first: HashMap<String, Note> = first
+    let first: HashMap<String, Note> = first
         .unwrap_or_default()
         .into_iter()
         .map(|note| (note.id.clone(), note))
@@ -323,11 +353,12 @@ fn cards(space: &Space, threads: Vec<Thread>) -> Result<Vec<ThreadCard>, String>
     Ok(threads
         .into_iter()
         .map(|thread| ThreadCard {
+            // Not taken: a note may lead threads of two names.
             first: thread
                 .notes
                 .iter()
                 .take(2)
-                .filter_map(|id| first.remove(id))
+                .filter_map(|id| first.get(id).cloned())
                 .collect(),
             thread,
         })
@@ -361,5 +392,5 @@ pub async fn threads_for_note(state: State<'_, AppState>, id: String) -> Result<
         })
         .unwrap_or_default()
     };
-    cards(&space, ranked)
+    cards(&space, named(&space, ranked))
 }

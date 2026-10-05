@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import type { ThreadCard } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -9,6 +8,7 @@
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
+	import { threadHref } from '#lib/threads.js';
 
 	let { data } = $props();
 
@@ -48,11 +48,15 @@
 					<ul>
 						{#each yours as thread (thread.id)}
 							<li>
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
 								<a
-									href={resolve(`thread/${thread.id}/`)}
+									href={threadHref(thread.id)}
 									class="-mx-2 flex items-baseline justify-between gap-4 rounded px-2 py-2 hover:bg-neutral-900"
 								>
-									<span class="truncate text-neutral-200">{name(thread)}</span>
+									<span class="truncate text-neutral-200">
+										{#if thread.mention}<span class="mention mr-1.5">@{thread.mention}</span
+											>{/if}{name(thread)}
+									</span>
 									<span class="shrink-0 text-xs text-neutral-500">
 										{m.thread_last({ count: thread.notes.length, date: shortDay(thread.until) })}
 									</span>
@@ -70,11 +74,13 @@
 					<ul class="flex flex-col gap-3">
 						{#each suggested as thread (thread.id)}
 							<li class="rounded-lg border border-neutral-800 px-4 py-3">
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
 								<a
-									href={resolve(`thread/${thread.id}/`)}
+									href={threadHref(thread.id)}
 									class="block rounded text-sm text-neutral-300 hover:text-neutral-100"
 								>
 									<span class="text-xs text-neutral-500">
+										{#if thread.mention}<span class="mention mr-1.5">@{thread.mention}</span>{/if}
 										{m.thread_detail({ count: thread.notes.length, date: shortDay(thread.since) })}
 									</span>
 									{#each thread.first as note (note.id)}

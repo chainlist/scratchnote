@@ -118,7 +118,8 @@ fn sync_space(space: &Space, embedder: &dyn Embedder) -> Synced {
 }
 
 /// Place the open space's notes in threads from its vectors as they are
-/// (SPEC 6.4), and save where they went. True when the threads changed, or
+/// (SPEC 6.4), each among the notes of every name it mentions (SPEC 3.10),
+/// and save where they went. True when the threads changed, or
 /// were read from disk, which the views have not seen either. Without
 /// vectors in memory, nothing is placed.
 pub(crate) fn sync_threads(space: &Space) -> bool {
@@ -127,6 +128,19 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
         _ => return false,
     };
     let edits = space.edits();
+    let mut mentioned = threads::Mentioned::new();
+    match space.read(|_, db| db.mention_rows()) {
+        Ok(Some(rows)) => {
+            for (id, key, _) in rows {
+                mentioned.entry(id).or_default().push(key);
+            }
+        }
+        Ok(None) => return false,
+        Err(e) => log::warn!(
+            "could not read what the notes of {} mention: {e}",
+            space.name
+        ),
+    }
     // One placement at a time, as the embed task and a thread command may
     // both place: each saves only what changed since what it copied.
     let Ok(_placing) = space.placing.lock() else {
@@ -157,7 +171,7 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
         let Some(vectors) = vectors.as_ref() else {
             return false;
         };
-        working.reconcile(vectors, &when, &edits)
+        working.reconcile_mentioned(vectors, &when, &edits, &mentioned)
     };
     if changed && !space.is_retired() {
         if let Ok(mut db) = space.db.lock() {

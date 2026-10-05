@@ -9,19 +9,19 @@
 		id,
 		class: className
 	}: {
-		/** The note or page whose thread to name, if it is in one. */
+		/** The note or page whose threads to name, if it is in any. */
 		id: string;
 		class?: string;
 	} = $props();
 
 	const shell = getShell();
-	const place = $derived(shell.threadOf(id));
+	const places = $derived(shell.threadsOf(id));
 </script>
 
-<!-- The thread a note is in (SPEC 6.4): its title and the note's place in
-     it, which dock the thread. Nothing for a note on its own. -->
-{#if place}
-	{@const { thread, index } = place}
+<!-- The threads a note is in (SPEC 6.4), one line each: the name it was
+     found among, if any, its title and the note's place in it, which dock
+     the thread. Nothing for a note on its own. -->
+{#each places as { thread, index } (thread.id)}
 	<button
 		type="button"
 		onclick={(event) => {
@@ -36,9 +36,10 @@
 		)}
 	>
 		<RouteIcon class="size-3 shrink-0" />
+		{#if thread.mention}<span class="shrink-0 text-neutral-400">@{thread.mention}</span>{/if}
 		<span class="truncate">{thread.title ?? m.thread_untitled()}</span>
 		<span class="shrink-0 text-neutral-600">
 			{m.thread_position({ n: index + 1, count: thread.notes.length })}
 		</span>
 	</button>
-{/if}
+{/each}

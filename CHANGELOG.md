@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0](https://github.com/chainlist/scratchnote/compare/v0.5.0...v0.6.0) (2026-10-05)
+
+
+### Features
+
+* a pinned name carries its threads one level below ([8749489](https://github.com/chainlist/scratchnote/commit/874948937fb9710f808783d4948af697d941aeec))
+* find threads among the notes of each name mentioned ([505755c](https://github.com/chainlist/scratchnote/commit/505755cb522efb32f71cfa55bb3cbc90ff9d5822))
+* give mentions and threads a pulse and a timeline ([1033759](https://github.com/chainlist/scratchnote/commit/103375910b6f8f1b03cfd7dec290906c25438c92))
+* go back to today from a button on the left edge ([bd035a1](https://github.com/chainlist/scratchnote/commit/bd035a1932f57d45a38b006c3da4b8be89832a58))
+* mentions become the app's own, read into search.db ([2b8657f](https://github.com/chainlist/scratchnote/commit/2b8657fef05d01fb721e9d0e9da47e53632fb1c9))
+* offer a draft the name it looks like ([ea9c8ad](https://github.com/chainlist/scratchnote/commit/ea9c8ad5104344cc901894e28f1f2a6bf495eb06))
+* pin threads and plugin pages to the left edge ([1765743](https://github.com/chainlist/scratchnote/commit/17657439090a0047a16dc07942ac44588aa525b8))
+* say when a command keeps the window waiting ([28fc26c](https://github.com/chainlist/scratchnote/commit/28fc26c93725c283421ec2051552ba23c2f957fe))
+* switch a name's page between its notes and its threads ([328252a](https://github.com/chainlist/scratchnote/commit/328252ac5d2d268fc0630396ead32a6bf5edff9e))
+* the back arrow returns to the view it came from ([e59918d](https://github.com/chainlist/scratchnote/commit/e59918d336ee7b4c267418c8f6df1885854e3c01))
+
+
+### Bug Fixes
+
+* mark the left edge's button for the view shown, at a steady width ([9adb80a](https://github.com/chainlist/scratchnote/commit/9adb80a574aa916fab570490c468be022bf627a6))
+
 ## [0.5.0](https://github.com/chainlist/scratchnote/compare/v0.4.0...v0.5.0) (2026-10-04)
 
 

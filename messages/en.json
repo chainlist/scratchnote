@@ -401,6 +401,8 @@
 	"mentions_chip_title": "Notes that mention {name}",
 	"mentions_show_all": "Show every mention",
 	"mentions_suggest_title": "Looks like {name}: add it to the note",
+	"mention_notes": "Notes",
+	"mention_threads_none": "No threads among these notes yet: they gather as more notes mention it.",
 	"mentions_none": "No mentions yet. Write @name in a note.",
 	"mentions_nothing": "Nothing mentions {name}.",
 	"stats_plugin_name": "Stats",

@@ -2,6 +2,7 @@
 	import type { Note } from '#lib/api.js';
 	import NoteList from '#lib/components/NoteList.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import View from '#lib/components/View.svelte';
 	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
 	import { mentionKey } from '#lib/mentions.js';
@@ -23,6 +24,12 @@
 			.toSorted((a, b) => Number(b.kept) - Number(a.kept) || b.until.localeCompare(a.until))
 	);
 
+	/** What is shown of the name: its notes, or the threads among them. Kept
+	 *  from one name to the next. */
+	let showing = $state<'notes' | 'threads'>('notes');
+	/** Threads only while they are on offer, with the embedding model. */
+	const shown = $derived(shell.canSimilar ? showing : 'notes');
+
 	/** The notes by day, newest first, as they come. */
 	const days = $derived.by(() => {
 		const days: { date: string; notes: Note[] }[] = [];
@@ -35,8 +42,9 @@
 	});
 </script>
 
-<!-- The notes and pages that mention a name, each day under its own heading
-     (SPEC 3.10). Keyed by the name, so another one rises into place. -->
+<!-- The notes and pages that mention a name, each day under its own heading,
+     or the threads found among them (SPEC 3.10). Keyed by the name, so
+     another one rises into place. -->
 <View
 	back={shell.back}
 	title={`@${name}`}
@@ -49,13 +57,30 @@
 	pin={{ kind: 'mention', target: mentionKey(name), label: name }}
 	key={mentionKey(params.name)}
 >
-	{#if threads.length && shell.canSimilar}
-		<!-- What the name's notes are about, before them all. -->
-		<section class="mb-8">
-			<h2 class="border-b border-neutral-800 pb-2 text-sm font-medium text-neutral-400">
+	{#if shell.canSimilar}
+		<!-- Its notes, or the threads among them, each with how many. -->
+		<ToggleGroup.Root
+			type="single"
+			variant="outline"
+			size="sm"
+			value={showing}
+			onValueChange={(value) => value && (showing = value as 'notes' | 'threads')}
+			class="-mt-4 mb-6"
+		>
+			<ToggleGroup.Item value="notes" class="gap-1.5 px-3">
+				{m.mention_notes()}
+				<span class="text-xs text-muted-foreground tabular-nums">{data.found.notes.length}</span>
+			</ToggleGroup.Item>
+			<ToggleGroup.Item value="threads" class="gap-1.5 px-3">
 				{m.threads_all()}
-			</h2>
-			<ul class="mt-1">
+				<span class="text-xs text-muted-foreground tabular-nums">{threads.length}</span>
+			</ToggleGroup.Item>
+		</ToggleGroup.Root>
+	{/if}
+
+	{#if shown === 'threads'}
+		{#if threads.length}
+			<ul>
 				{#each threads as thread (thread.id)}
 					<li class="-mx-2 flex items-center gap-1 rounded hover:bg-neutral-900">
 						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
@@ -91,16 +116,19 @@
 					</li>
 				{/each}
 			</ul>
-		</section>
-	{/if}
-	{#each days as day (day.date)}
-		<section class="mb-8 last:mb-0">
-			<h2 class="border-b border-neutral-800 pb-2 text-sm font-medium text-neutral-400">
-				{dayHeading(day.date)}
-			</h2>
-			<NoteList notes={day.notes} empty="" {...shell.cardActions} />
-		</section>
+		{:else}
+			<p class="text-base text-neutral-600">{m.mention_threads_none()}</p>
+		{/if}
 	{:else}
-		<p class="text-base text-neutral-600">{m.mentions_nothing({ name: `@${name}` })}</p>
-	{/each}
+		{#each days as day (day.date)}
+			<section class="mb-8 last:mb-0">
+				<h2 class="border-b border-neutral-800 pb-2 text-sm font-medium text-neutral-400">
+					{dayHeading(day.date)}
+				</h2>
+				<NoteList notes={day.notes} empty="" {...shell.cardActions} />
+			</section>
+		{:else}
+			<p class="text-base text-neutral-600">{m.mentions_nothing({ name: `@${name}` })}</p>
+		{/each}
+	{/if}
 </View>

@@ -11,6 +11,7 @@
 		onNewPage,
 		onNoteUpdated,
 		onOpenSettings,
+		onPinsChanged,
 		onRevealNote,
 		onSettingsChanged,
 		onSpacesChanged,
@@ -155,6 +156,8 @@
 			// The embed task placing notes in threads, or a thread renamed.
 			off.push(onThreadsChanged(() => void shell.loadThreads()));
 			void shell.loadThreads();
+			off.push(onPinsChanged(() => void shell.loadPins()));
+			void shell.loadPins();
 			off.push(
 				onSpacesChanged((view) =>
 					view.active !== data.spaces.active ? void shell.switchSpace() : void shell.refresh()

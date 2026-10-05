@@ -1,6 +1,7 @@
 pub mod daily_file;
 pub mod index;
 pub mod page_file;
+pub mod pins;
 pub mod search_db;
 pub mod space_db;
 pub mod writer;

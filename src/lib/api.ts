@@ -181,6 +181,25 @@ export const mergeThreads = (from: string, into: string) =>
 export const onThreadsChanged = (handler: () => void): Promise<UnlistenFn> =>
 	listen('threads-changed', () => handler());
 
+/** A thread or a plugin's page pinned to the left edge of a space (SPEC 3.13). */
+export interface Pin {
+	kind: 'thread' | 'view';
+	/** A thread's id, or a page's type and query: `mentions?name=bob`. */
+	target: string;
+	/** A page's title when it was pinned. A thread's is read live. */
+	label?: string | null;
+}
+
+/** What the open space has pinned, in its order. */
+export const listPins = () => invoke<Pin[]>('list_pins');
+
+/** Pin these in place of the pins before. Resolves to them as saved. */
+export const setPins = (pins: Pin[]) => invoke<Pin[]>('set_pins', { pins });
+
+/** Fired when the pins of a space changed, from either window. */
+export const onPinsChanged = (handler: () => void): Promise<UnlistenFn> =>
+	listen('pins-changed', () => handler());
+
 /** A note's place on the map of the space by meaning (SPEC 6.5), and the
  *  smallest category it is in there, if any. */
 export interface MapNote extends Pick<Note, 'id' | 'date' | 'kind'> {

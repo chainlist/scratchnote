@@ -273,6 +273,13 @@ pub async fn merge_threads(
     if from == into {
         return Ok(());
     }
+    // A thread pinned to the left edge stays pinned as the one it went into.
+    if space
+        .change_pins(|pins| crate::storage::pins::follow_merge(pins, &from, &into))?
+        .is_some()
+    {
+        super::pins::pins_changed(&app, &space.name);
+    }
     let notes = notes_of(&space, &from);
     space.change_edits(|edits| {
         for note in notes {

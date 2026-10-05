@@ -18,6 +18,7 @@
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
+	import { hasEvery, queryWords } from '#lib/matching.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { adopt, coreIds, older, plugins, setCommunityPlugin } from '#lib/plugins/loader.js';
 	import type { SettingsState } from './state.svelte';
@@ -50,19 +51,11 @@
 
 	onMount(() => void load());
 
-	/** Folded for matching: `é` finds `e`, and case does not count. */
-	const fold = (text: string) =>
-		text
-			.normalize('NFD')
-			.replace(/\p{Diacritic}/gu, '')
-			.toLowerCase();
-
 	const shown = $derived.by(() => {
-		const words = fold(query).split(/\s+/).filter(Boolean);
-		return (entries ?? []).filter((entry) => {
-			const text = fold(`${entry.name} ${entry.author} ${entry.description}`);
-			return words.every((word) => text.includes(word));
-		});
+		const words = queryWords(query);
+		return (entries ?? []).filter((entry) =>
+			hasEvery(`${entry.name} ${entry.author} ${entry.description}`, words)
+		);
 	});
 
 	const installedOf = (id: string) => plugins.view.installed.find((manifest) => manifest.id === id);

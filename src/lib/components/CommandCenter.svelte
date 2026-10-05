@@ -12,6 +12,7 @@
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
+	import { hasEvery, queryWords } from '#lib/matching.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { formatHotkey, runCommand } from '#lib/plugins/commands.js';
 	import { labelText, registry, type CommandEntry } from '#lib/plugins/registry.svelte.js';
@@ -105,20 +106,11 @@
 			}))
 	);
 
-	/** Folded for matching: `é` finds `e`, and case does not count. */
-	const fold = (text: string) =>
-		text
-			.normalize('NFD')
-			.replace(/\p{Diacritic}/gu, '')
-			.toLowerCase();
-
 	/** While typing, the commands whose name has every word typed. */
 	const matchingActions = $derived.by(() => {
-		const words = fold(trimmed).split(/\s+/).filter(Boolean);
+		const words = queryWords(trimmed);
 		if (words.length === 0) return [];
-		return [...builtIn, ...pluginActions].filter((action) =>
-			words.every((word) => fold(action.name).includes(word))
-		);
+		return [...builtIn, ...pluginActions].filter((action) => hasEvery(action.name, words));
 	});
 
 	// Only the latest query's answer is kept, so a slow reply to an earlier

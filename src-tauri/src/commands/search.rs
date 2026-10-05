@@ -1,7 +1,8 @@
 //! Search by words and by meaning, and similar notes, SPEC 6.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
+use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::search::Found;
@@ -123,26 +124,40 @@ const MIN_RECALL: f32 = 0.35;
 /// A draft shorter than this, in characters, says too little to go on.
 const MIN_RECALL_CHARS: usize = 12;
 
-/// The old note a draft is about, when one stands out (SPEC 6.3): the
-/// closest to it in meaning, if it is close enough. `exclude` is the note the
-/// draft is an edit of. None for a draft written into a space that is not
-/// open, whose vectors are not in memory, or without the embedding model.
+/// What an editor's footer says of a draft as it is written.
+#[derive(Debug, Default, Serialize)]
+pub struct DraftHints {
+    /// The old note the draft is about, when one stands out (SPEC 6.3).
+    pub note: Option<Note>,
+    /// For a draft that mentions no name, the name it looks like, as the
+    /// newest note mentioning it types it (SPEC 3.10).
+    pub mention: Option<String>,
+}
+
+/// What a draft calls to mind (SPEC 6.3, 3.10): the old note closest to it
+/// in meaning, if it is close enough, and for a draft that mentions no
+/// name, the name whose notes it fits, if one does as a note joins a
+/// thread. The draft is embedded once for both. `exclude` is the note the
+/// draft is an edit of. Nothing for a draft written into a space that is
+/// not open, whose vectors are not in memory, or without the embedding
+/// model.
 #[tauri::command]
-pub async fn recall(
+pub async fn draft_hints(
     app: AppHandle,
     state: State<'_, AppState>,
     text: String,
     exclude: Option<String>,
     space: Option<String>,
-) -> Result<Option<Note>, String> {
+) -> Result<DraftHints, String> {
     let open = state.space()?;
     if space.is_some_and(|name| name != open.name) {
-        return Ok(None);
+        return Ok(DraftHints::default());
     }
     let text = text.trim().to_string();
     if text.chars().count() < MIN_RECALL_CHARS {
-        return Ok(None);
+        return Ok(DraftHints::default());
     }
+    let unnamed = crate::mentions::mentions(&text).is_empty();
 
     // Loading and running the model both block.
     let embedder_app = app.clone();
@@ -156,11 +171,55 @@ pub async fn recall(
     .await
     .map_err(|e| e.to_string())?;
     let Some(vector) = vector else {
-        return Ok(None);
+        return Ok(DraftHints::default());
     };
 
     let hits = open.closest(&vector, exclude.as_deref(), 1, MIN_RECALL);
-    Ok(notes_of(&open, &hits)?.into_iter().next())
+    let note = notes_of(&open, &hits)?.into_iter().next();
+    let mention = if unnamed {
+        name_for(&open, &vector, exclude.as_deref())?
+    } else {
+        None
+    };
+    Ok(DraftHints { note, mention })
+}
+
+/// The name whose notes a draft's vector fits, as it is typed: scored as a
+/// note joins a thread, against every name with a few notes.
+fn name_for(
+    space: &Space,
+    vector: &[f32],
+    exclude: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some((rows, listed)) =
+        space.read(|idx, db| Ok((db.mention_rows()?, crate::mentions::list(idx, db)?)))?
+    else {
+        return Ok(None);
+    };
+    let mut names: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (id, key, _) in rows {
+        let notes = names.entry(key).or_default();
+        if !notes.contains(&id) {
+            notes.push(id);
+        }
+    }
+    let cuts = crate::embed::threads::CUTS;
+    let found = space.vectors.lock().ok().and_then(|vectors| {
+        crate::embed::threads::closest_name(
+            vectors.as_ref()?,
+            &names,
+            vector,
+            exclude,
+            cuts.join,
+            cuts.lead,
+        )
+    });
+    Ok(found.and_then(|(key, _)| {
+        listed
+            .into_iter()
+            .find(|mention| mention.key == key)
+            .map(|mention| mention.name)
+    }))
 }
 
 #[cfg(test)]

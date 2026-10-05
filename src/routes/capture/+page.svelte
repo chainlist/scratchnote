@@ -20,6 +20,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import { relink } from '#lib/markdown.js';
+	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { formatHotkey } from '#lib/plugins/commands.js';
 
@@ -206,6 +207,10 @@
 				text={draft}
 				space={target || undefined}
 				onopen={(note) => void revealNote(note)}
+				onmention={(name) => {
+					draft = withMention(draft, name);
+					input?.focus();
+				}}
 				returnFocus={() => input?.focus()}
 			>
 				<span class="min-w-0 truncate">{m.capture_hint()}</span>

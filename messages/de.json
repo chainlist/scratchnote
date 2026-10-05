@@ -400,6 +400,7 @@
 	"mentions_title": "Erwähnungen",
 	"mentions_chip_title": "Notizen, die {name} erwähnen",
 	"mentions_show_all": "Alle Erwähnungen anzeigen",
+	"mentions_suggest_title": "Sieht nach {name} aus: zur Notiz hinzufügen",
 	"mentions_none": "Noch keine Erwähnungen. Schreibe @Name in eine Notiz.",
 	"mentions_nothing": "Nichts erwähnt {name}.",
 	"stats_plugin_name": "Statistik",

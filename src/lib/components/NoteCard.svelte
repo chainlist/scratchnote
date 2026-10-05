@@ -19,6 +19,7 @@
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
+	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
@@ -170,6 +171,7 @@
 						text={draft}
 						initial={note.body}
 						exclude={note.id}
+						onmention={(name) => (draft = withMention(draft, name))}
 						class="mr-auto min-w-0 text-xs text-neutral-500"
 					>
 						<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>

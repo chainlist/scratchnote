@@ -54,6 +54,9 @@ export const mentionKey = (name: string) => name.replace(/^@/, '').toLowerCase()
 export const mentionHref = (name: string) =>
 	resolve(`mention/${encodeURIComponent(mentionKey(name))}/`);
 
+/** `text` with `@name` added at its end, as a suggested name is taken. */
+export const withMention = (text: string, name: string) => `${text.trimEnd()} @${name}`;
+
 /** A chip; on a card it opens the notes that mention the name. */
 export const mentionRender: NodeRender = {
 	widget(node) {

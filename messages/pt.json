@@ -400,6 +400,7 @@
 	"mentions_title": "Menções",
 	"mentions_chip_title": "Notas que mencionam {name}",
 	"mentions_show_all": "Mostrar todas as menções",
+	"mentions_suggest_title": "Parece {name}: adicioná-lo à nota",
 	"mentions_none": "Nenhuma menção ainda. Escreva @nome em uma nota.",
 	"mentions_nothing": "Nada menciona {name}.",
 	"stats_plugin_name": "Estatísticas",

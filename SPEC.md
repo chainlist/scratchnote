@@ -356,6 +356,7 @@ A mention names a project, a person or anything else the notes come back to. Men
 - `@name` mentions it. A name is letters and digits of any script, with `_` and `-` inside it but not at its start or end: `@marie`, `@Zoë`, `@build-team`. An `@` right after a letter or digit is no mention, so an email address stays one, and nothing in code, after a backslash, in a link's target or in a bare link (`https://…`, `www.…`) is one. Case does not count: `@Marie` and `@marie` are one name.
 - A mention shows as a chip. On a card, a click on it opens `/mention/<name>/`: every note and page of the space that mentions the name, newest first, each day under its own heading, under `@name` as the newest of them types it, with how many and since when. A pin button after the title pins the name to the left edge (3.13).
 - Mentions, a button on the left edge under All pages, and Show every mention in the command center open `/mentions/`: every name used, most mentioned first, each with how many notes and pages mention it and the day of the last. A click on a name opens its notes.
+- A draft that mentions no name is offered the name it looks like, under the editor (6.3).
 - Typing `@` in any editor offers the names already used in the space the text goes into, the most mentioned first, with how many notes mention each, so one project keeps one spelling. Not in code, nor in a link's target. Tab or Enter takes one, Esc closes the list and leaves the text as typed. The capture window offers the open space's names only, and none while it has another space picked, whose notes are not read.
 - The backend reads the names as each note and page is indexed, into `search.db` (4.1), by the same rules as the editor's parser: listing them, or the notes naming one, reads no text but those notes'. The views follow the notes as they change.
 
@@ -661,6 +662,8 @@ Community plugins come from GitHub, as Obsidian's do.
 - A click shows the old note in a popover: its day and time, a page's title, and its text. Open shows it where it is, from the capture window, which hides and keeps its draft as Esc does, and from the page view, which saves as it closes. New note and an inline edit have no Open, since leaving them would lose the note being written.
 - The draft is embedded as a note is (5.2) and scored against the open space's vectors as Similar notes scores (6.2), the note being edited left out of the mean too. The best note shows when it scores 0.35 or more, stricter than Similar notes because recall speaks up unasked. On 45 made-up notes about a dozen things, no draft's best note about another thing scored over 0.33, while the first half of a note found one on the same thing 34 times in 37.
 - Nothing is looked for without the embedding model, or for a draft going into a space that is not open, whose vectors are not in memory.
+- A draft that mentions no name is also offered the name it looks like (3.10), as a chip before the old note, `+ @Atlas`, which adds `@Atlas` at the end of the draft on a click and goes. The draft is scored against each name with three notes or more as a note against a thread (6.4): the space's mean taken off, and each standing out for the other by 0.14, the name shown when it scores 0.35 or more. Nothing is added without the click. On the made-up notes that mention names, each written with its name as a plain word and left out as if being written, 21 of 22 were offered their own name and none another; of the 45 that mention none, only planting tomatoes on a balcony was offered one, `@Garden`. With the name left out altogether it speaks up far less often, never wrongly.
+- Both come from one call, `draft_hints`, which embeds the draft once.
 
 ### 6.4 Threads
 
@@ -722,7 +725,7 @@ list_days() -> Vec<DaySummary>                // date + note and page count + wo
 search(query, offset?, limit?) -> Found       // { notes, total }: the limit matches from offset, every one without a limit
 search_meaning(query) -> Vec<Note>            // up to 5 notes close in meaning the words do not find (6.1)
 similar_notes(id) -> Vec<Note>              // closest in meaning, best first; empty without vectors
-recall(text, exclude?, space?) -> Note?     // the old note a draft is about, if one stands out (6.3)
+draft_hints(text, exclude?, space?) -> { note?, mention? }  // the old note a draft is about, and the name it looks like, if any (6.3)
 list_threads() -> { threads, alone }        // every thread, its notes oldest first, and the notes kept out (6.4)
 get_thread(id) -> { thread, notes }?        // a thread and its notes with their text
 rename_thread(id, title)                    // an empty title takes the user's title off
@@ -834,4 +837,4 @@ Earlier versions also ran a local LLM for subjects, categories, the day ahead an
 ## 12. Testing
 
 - Rust unit tests: daily file parser/writer round-trip (including user text between blocks, malformed markers, empty file), labelled blocks read and rewritten without their labels, the day ahead in six languages, page file round-trip, stubs next to note blocks, page file names, plugin ids, repositories and versions that cannot leave the registry folder, the registry's URLs mapped onto a folder, a plugin update that keeps its data, what counts as installed, version order.
-- Optional tests with the real embedding model, skipped without it: recall and threads on 45 made-up notes about a dozen things (`embed/samples.rs`), the model taken from `SCRATCHNOTE_EMBEDDING_MODEL` when set.
+- Optional tests with the real embedding model, skipped without it: recall and threads on 45 made-up notes about a dozen things, and threads within names and the name a draft looks like on 22 more that mention two projects and a person (`embed/samples.rs`), the model taken from `SCRATCHNOTE_EMBEDDING_MODEL` when set.

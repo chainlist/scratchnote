@@ -335,7 +335,7 @@ Open tasks lists every task of the space not yet ticked, in notes and pages alik
 
 Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, commands in the command center, buttons on the editor's toolbar and down the left edge of the window (below the app's own and the core plugins', past a line), panels in the dock beside the timeline, pages of their own, and settings tabs. They are trusted code, not sandboxed: a sandbox could not reach the editor, and Obsidian's model is the one users know.
 
-- **Core plugins** ship with the app. Each is a folder of `src/plugins/`, written against the same API a community plugin has, so what a core plugin does a community one can do too. Basics (3.8) is on unless switched off; Mentions (3.10), Stats (3.11) and Journal view (3.12) are off until switched on.
+- **Core plugins** ship with the app. Each is a folder of `src/plugins/`, written against the same API a community plugin has, so what a core plugin does a community one can do too. Basics (3.8) is on unless switched off; Stats (3.11) and Journal view (3.12) are off until switched on.
 - **Community plugins** are written by other people and installed from the registry (4.10). They are off as a whole until the user turns them on in Settings > Community plugins, past a warning that a plugin runs with the app's own access: it can read and change the notes, reach the internet and run programs. While they are off the backend hands out no plugin code, whatever the webview asks.
 - The two have a settings tab each, Core plugins above Community plugins, so the app's own features and other people's code are never managed in one list. Core plugins lists each core plugin with its switch. Community plugins has the switch for community plugins, then, once on, Browse and Check for updates, and the installed plugins, each with its version, author, description, a switch, and Uninstall, which asks first. A plugin that failed to load says why under its description.
 - Browse lists the registry's plugins, searched by name, author and description; one of them shows its details and its README, drawn as a note is, with Install, or Update to a newer version, and its switch once installed. Installing leaves the plugin off. Check for updates asks the registry for the latest version of each installed plugin and offers Update where it is newer.
@@ -351,12 +351,13 @@ Plugins add to the app, as Obsidian's do: syntax for the editor and the cards, c
 
 ### 3.10 Mentions
 
-Mentions is a core plugin (3.9), built on the plugin API in `src/plugins/mentions/`, off until switched on in Settings > Core plugins.
+A mention names a project, a person or anything else the notes come back to. Mentions are the app's own, always on: earlier versions had them as a core plugin, off by default.
 
-- `@name` mentions a person, a project or anything else. A name is letters and digits of any script, with `_` and `-` inside it but not at its end: `@marie`, `@Zoë`, `@build-team`. An `@` right after a letter or digit is no mention, so an email address stays one.
-- A mention shows as a chip. On a card, a click on it opens the plugin's page, `/plugin/mentions/?name=<name>`: every note and page of the space that mentions the name, newest first, on a timeline drawn as the day's, with their count after the title. Case does not count: `@Marie` and `@marie` are one name.
-- Show every mention, in the command center, opens the page without a name: every name used, most mentioned first, each with how many notes and pages mention it. A click on a name opens its notes.
-- The page redraws when the notes change. The notes come from the backend's `notes_containing`, as Open tasks' do (3.8), and the plugin reads the mentions from their markdown. Switched off, `@name` shows as typed.
+- `@name` mentions it. A name is letters and digits of any script, with `_` and `-` inside it but not at its start or end: `@marie`, `@Zoë`, `@build-team`. An `@` right after a letter or digit is no mention, so an email address stays one, and nothing in code, after a backslash, in a link's target or in a bare link (`https://…`, `www.…`) is one. Case does not count: `@Marie` and `@marie` are one name.
+- A mention shows as a chip. On a card, a click on it opens `/mention/<name>/`: every note and page of the space that mentions the name, newest first, each day under its own heading, under `@name` as the newest of them types it, with how many and since when. A pin button after the title pins the name to the left edge (3.13).
+- Mentions, a button on the left edge under All pages, and Show every mention in the command center open `/mentions/`: every name used, most mentioned first, each with how many notes and pages mention it and the day of the last. A click on a name opens its notes.
+- Typing `@` in any editor offers the names already used in the space the text goes into, the most mentioned first, with how many notes mention each, so one project keeps one spelling. Not in code, nor in a link's target. Tab or Enter takes one, Esc closes the list and leaves the text as typed. The capture window offers the open space's names only, and none while it has another space picked, whose notes are not read.
+- The backend reads the names as each note and page is indexed, into `search.db` (4.1), by the same rules as the editor's parser: listing them, or the notes naming one, reads no text but those notes'. The views follow the notes as they change.
 
 ### 3.11 Stats
 
@@ -382,9 +383,9 @@ Journal view is a core plugin (3.9), built on the plugin API in `src/plugins/jou
 
 A space holds one stretch of life, such as work or home; the projects and subjects inside it are threads (6.4) and mentions (3.10), not spaces of their own, so a note never waits on a choice before it is saved. Pins put the ones in use one click away.
 
-- A pin button after the title of a thread's view and of a plugin's page, such as the notes mentioning `@name`, pins it to the left edge of the window, last, or unpins it. Pinning a thread only suggested keeps it.
-- Pins go under the left edge's buttons, after a line, each a square with two letters of its title, coloured as its thread is on the map (6.5), a page's colour following from its type and query the same way. The title shows on pointing at it. The pin of the view shown has a mark beside it. Right-clicking one offers Move up, Move down and Unpin.
-- A thread's pin reads the thread's title as it is, and shows while the thread is there and threads are on offer; a page's keeps the title it had when pinned, and shows while its plugin is on. Pins that lead nowhere for now are kept, and show again once they do. A thread merged into another stays pinned as that one.
+- A pin button after the title of a thread's view, a name's notes (3.10) and a plugin's page pins it to the left edge of the window, last, or unpins it. Pinning a thread only suggested keeps it.
+- Pins go under the left edge's buttons, after a line, each a square with two letters of its title, `@` and a letter for a name, coloured as its thread is on the map (6.5), a name's and a page's colour following from its key, or its type and query, the same way. The title shows on pointing at it. The pin of the view shown has a mark beside it. Right-clicking one offers Move up, Move down and Unpin.
+- A thread's pin reads the thread's title as it is, and shows while the thread is there and threads are on offer; a name's keeps the name as typed when pinned, and always shows; a page's keeps the title it had when pinned, and shows while its plugin is on. A name pinned as the Mentions plugin's page, before mentions were the app's own, comes back as that name. Pins that lead nowhere for now are kept, and show again once they do. A thread merged into another stays pinned as that one.
 - Each space has its own pins, at most 24, in `space.db` with the thread edits, which nothing derives and nothing drops. The capture window shows none.
 
 ## 4. Storage
@@ -416,7 +417,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
           2026-09-22 image.png
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
-        search.db        # the notes' text for search, SQLite, derived, rebuildable
+        search.db        # the notes' text for search and the names they mention, SQLite, derived, rebuildable
         space.db         # SQLite: note embeddings for search by meaning, similar notes and threads, the thread each note was placed in, each note's place on the map, its closest notes and the categories they make there, derived, rebuildable; thread titles, notes kept out of threads and pins (3.13), the user's
     Work/
       notes/...
@@ -727,6 +728,8 @@ keep_out_of_threads(id, out)                // takes a note out of threads for g
 list_pins() -> Vec<Pin>                     // what the open space pinned to the left edge, in its order (3.13)
 set_pins(pins) -> Vec<Pin>                  // pins these in place of the pins before, tidied
 notes_containing(needles) -> Vec<Note>      // every note and page whose body holds any needle as typed, newest first
+list_mentions(space?) -> Vec<MentionSummary>  // every name mentioned, most first, with its notes and last day; none for a space not open (3.10)
+notes_mentioning(name) -> { name?, notes }  // the notes and pages naming it, newest first, and the name as the newest types it
 map_search(query) -> Vec<String>            // the ids of the notes whose text holds every word, for the map (6.5)
 get_settings() / set_settings(...)
 embedding_model_info() -> { installed, downloading(pct)? }
@@ -795,7 +798,7 @@ src/
     (app)/plugin/[type]/+page.svelte  # a plugin's page
   hooks.client.ts     # loads the plugins before the first view
   lib/plugins/        # the plugin API (api.ts), its registry of contributions, the loader
-  plugins/            # the core plugins, one folder each (basics/, mentions/, stats/)
+  plugins/            # the core plugins, one folder each (basics/, journal/, stats/)
 plugin-registry/      # a local stand-in for the GitHub registry (4.10)
   lib/components/ (NoteCard, CommandCenter, SpaceSwitcher, ...)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)

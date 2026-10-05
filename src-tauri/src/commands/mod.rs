@@ -2,6 +2,7 @@
 
 pub mod attachments;
 pub mod map;
+pub mod mentions;
 pub mod models;
 pub mod notes;
 pub mod pages;

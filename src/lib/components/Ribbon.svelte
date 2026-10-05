@@ -8,6 +8,7 @@
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
+	import AtSignIcon from '@lucide/svelte/icons/at-sign';
 	import MapIcon from '@lucide/svelte/icons/map';
 	import PinOffIcon from '@lucide/svelte/icons/pin-off';
 	import RouteIcon from '@lucide/svelte/icons/route';
@@ -20,7 +21,8 @@
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
-	/** Down the left edge of every view: today, the calendar, All pages, Threads
+	/** Down the left edge of every view: today, the calendar, All pages, the
+	 *  names mentioned (SPEC 3.10), Threads
 	 *  with how many are suggested (SPEC 6.4), the map (SPEC 6.5) and the
 	 *  core plugins' buttons, then the community plugins' own (SPEC 3.9),
 	 *  then what the space has pinned (SPEC 3.13). */
@@ -37,6 +39,7 @@
 				const thread = shell.canSimilar && shell.threadList.find((t) => t.id === pin.target);
 				return thread ? [{ pin, label: thread.title ?? m.thread_untitled() }] : [];
 			}
+			if (pin.kind === 'mention') return [{ pin, label: `@${pin.label ?? pin.target}` }];
 			const type = pinPage(pin);
 			const shown = registry.pages.some((entry) => entry.type === type);
 			return shown ? [{ pin, label: pin.label ?? type }] : [];
@@ -89,6 +92,16 @@
 		class="text-muted-foreground hover:text-foreground"
 	>
 		<FilesIcon />
+	</Button>
+	<Button
+		variant="ghost"
+		size="icon-sm"
+		href={resolve('mentions/')}
+		aria-label={m.mentions_title()}
+		title={m.mentions_title()}
+		class="text-muted-foreground hover:text-foreground"
+	>
+		<AtSignIcon />
 	</Button>
 	{#if shell.canSimilar}
 		{@const title = shell.suggested

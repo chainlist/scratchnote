@@ -324,6 +324,8 @@ export class Shell implements WorkspaceHost {
 
 	showPages = () => goto(resolve('pages/'));
 
+	showMentions = () => goto(resolve('mentions/'));
+
 	/** A plugin's page, `/plugin/<type>/`, with its query string. */
 	openPluginPage = (type: string, params: Record<string, string> = {}) => {
 		const query = Object.entries(params)
@@ -504,6 +506,7 @@ export class Shell implements WorkspaceHost {
 			route === '/(app)/search' ||
 			route === '/(app)/similar/[date]/[id]' ||
 			route === '/(app)/thread/[id]' ||
+			route === '/(app)/mention/[name]' ||
 			route === '/(app)/page/[date]/[id]'
 		)
 			await this.openDay(this.day);

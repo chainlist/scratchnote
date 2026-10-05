@@ -4,6 +4,7 @@
 	import { search, searchMeaning, type Note } from '#lib/api.js';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import * as Command from '#lib/components/ui/command/index.js';
+	import AtSignIcon from '@lucide/svelte/icons/at-sign';
 	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
 	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
 	import FilesIcon from '@lucide/svelte/icons/files';
@@ -25,6 +26,7 @@
 		ontoday,
 		onnewpage,
 		onpages,
+		onmentions,
 		onthreads,
 		onsettings
 	}: {
@@ -44,6 +46,8 @@
 		onnewpage: () => void;
 		/** List every page of the space. */
 		onpages: () => void;
+		/** List every name the space mentions (SPEC 3.10). */
+		onmentions: () => void;
 		/** List the space's threads, while there are threads (SPEC 6.4). */
 		onthreads?: () => void;
 		onsettings: () => void;
@@ -79,6 +83,7 @@
 		{ value: 'today', name: m.command_today(), icon: CalendarCheckIcon, run: ontoday },
 		{ value: 'new-page', name: m.pages_new(), icon: FilePlusIcon, run: onnewpage },
 		{ value: 'all-pages', name: m.pages_all(), icon: FilesIcon, run: onpages },
+		{ value: 'mentions', name: m.mentions_show_all(), icon: AtSignIcon, run: onmentions },
 		...(onthreads
 			? [{ value: 'threads', name: m.threads_all(), icon: RouteIcon, run: onthreads }]
 			: []),

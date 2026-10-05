@@ -73,7 +73,8 @@
 		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
 			event.preventDefault();
 			void save();
-		} else if (event.key === 'Escape') {
+		} else if (event.key === 'Escape' && !event.defaultPrevented) {
+			// The editor takes one first that closes the names `@` offers.
 			event.preventDefault();
 			writing = false;
 		}

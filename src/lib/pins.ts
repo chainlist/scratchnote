@@ -1,5 +1,6 @@
 import { resolve } from '$app/paths';
 import type { Pin } from '#lib/api.js';
+import { mentionHref } from '#lib/mentions.js';
 
 /** A colour per thread or page by its id, the same from one launch to the
  *  next: a thread's dots on the map, and its pin on the left edge. */
@@ -27,6 +28,7 @@ export function monogram(label: string) {
 /** The view a pin opens. */
 export function pinHref(pin: Pin) {
 	if (pin.kind === 'thread') return resolve(`thread/${pin.target}/`);
+	if (pin.kind === 'mention') return mentionHref(pin.target);
 	const at = pin.target.indexOf('?');
 	const type = at < 0 ? pin.target : pin.target.slice(0, at);
 	return `${resolve(`plugin/${type}/`)}${at < 0 ? '' : pin.target.slice(at)}`;

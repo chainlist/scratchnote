@@ -6,16 +6,21 @@ import {
 	type MarkdownParser
 } from '@lezer/markdown';
 import type { SyntaxNode, Tree } from '@lezer/common';
+import { mentionRender, mentionSyntax } from '#lib/mentions.js';
 import type { NodeRender, WidgetContext } from '#lib/plugins/api.js';
 import { registry, type SyntaxEntry } from '#lib/plugins/registry.svelte.js';
 
 /**
- * The markdown notes are shown with: CommonMark, bare links and
- * ~~strikethrough~~, and what the plugins' syntax adds, such as the Tasks
- * core plugin's `- [ ]` boxes (SPEC 3.9). The editor and the read-only view
- * both go through `preview`, so a note looks the same written and read.
+ * The markdown notes are shown with: CommonMark, bare links,
+ * ~~strikethrough~~ and `@name` mentions (SPEC 3.10), and what the plugins'
+ * syntax adds, such as the Tasks core plugin's `- [ ]` boxes (SPEC 3.9).
+ * The editor and the read-only view both go through `preview`, so a note
+ * looks the same written and read.
  */
-const CORE: MarkdownExtension[] = [Strikethrough, Autolink];
+const CORE: MarkdownExtension[] = [Strikethrough, Autolink, mentionSyntax];
+
+/** How the app draws the nodes of its own syntax. */
+const CORE_RULES: [string, NodeRender][] = [['Mention', mentionRender]];
 
 interface Syntax {
 	from: SyntaxEntry[];
@@ -40,7 +45,7 @@ function current(): Syntax {
 	const from = registry.syntax;
 	if (built?.from === from) return built;
 	const extensions = [...CORE];
-	const rules = new Map<string, NodeRender>();
+	const rules = new Map<string, NodeRender>(CORE_RULES);
 	const bulletless: string[] = [];
 	const itemMarks: RegExp[] = [];
 	for (const { syntax } of from) {

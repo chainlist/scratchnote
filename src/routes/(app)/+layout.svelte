@@ -276,6 +276,7 @@
 	ontoday={async () => void shell.openDay(await today())}
 	onnewpage={shell.newPage}
 	onpages={() => void shell.showPages()}
+	onmentions={() => void shell.showMentions()}
 	onthreads={shell.canSimilar ? () => void shell.showThreads() : undefined}
 	onsettings={() => (shell.settingsOpen = true)}
 />

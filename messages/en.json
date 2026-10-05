@@ -400,6 +400,7 @@
 	"mentions_title": "Mentions",
 	"mentions_chip_title": "Notes that mention {name}",
 	"mentions_show_all": "Show every mention",
+	"mentions_suggest_title": "Looks like {name}: add it to the note",
 	"mentions_none": "No mentions yet. Write @name in a note.",
 	"mentions_nothing": "Nothing mentions {name}.",
 	"stats_plugin_name": "Stats",

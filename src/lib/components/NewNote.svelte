@@ -7,6 +7,7 @@
 	import Recall from '#lib/components/Recall.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { noteDrafts } from '#lib/note-draft.js';
+	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {
@@ -99,7 +100,11 @@
 				<div class="flex items-center justify-end gap-1">
 					<!-- Opening the old note would leave this one unsaved, so it is
 					     only read here (SPEC 6.3). -->
-					<Recall text={draft} class="mr-auto min-w-0 text-xs text-neutral-500">
+					<Recall
+						text={draft}
+						onmention={(name) => (draft = withMention(draft, name))}
+						class="mr-auto min-w-0 text-xs text-neutral-500"
+					>
 						<span class="mr-auto text-[0.625rem] text-neutral-600">{m.note_edit_hint()}</span>
 					</Recall>
 					<button type="button" onclick={() => (writing = false)} class={action}

@@ -102,13 +102,14 @@ export const searchMeaning = (query: string) => invoke<Note[]>('search_meaning',
 export const similarNotes = (id: string) => invoke<Note[]>('similar_notes', { id });
 
 /**
- * The old note a draft is about, when one stands out (SPEC 6.3). `exclude` is
- * the note the draft is an edit of, and `space` the one it goes into, when
- * the capture window picked one: nothing is found for a space not open. Null
- * without the embedding model.
+ * What a draft calls to mind as it is written: the old note it is about,
+ * once one stands out (SPEC 6.3), and for a draft that mentions no name, the
+ * name it looks like (SPEC 3.10). `exclude` is the note it is an edit of.
+ * Nothing for a draft going into a space that is not open, or without the
+ * embedding model.
  */
-export const recall = (text: string, exclude?: string, space?: string) =>
-	invoke<Note | null>('recall', { text, exclude, space });
+export const draftHints = (text: string, exclude?: string, space?: string) =>
+	invoke<{ note: Note | null; mention: string | null }>('draft_hints', { text, exclude, space });
 
 /** The notes about one thing, gathered across days (SPEC 6.4). */
 export interface Thread {

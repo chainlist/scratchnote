@@ -22,6 +22,7 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
 	import { joinText, pageDraft } from '#lib/page-draft.js';
+	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
@@ -356,6 +357,7 @@
 				initial={openedWith}
 				exclude={page?.id}
 				onopen={onopennote}
+				onmention={(name) => (body = withMention(body, name))}
 				class="max-w-full"
 			/>
 		{/if}

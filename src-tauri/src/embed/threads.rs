@@ -551,6 +551,32 @@ impl Usual {
         }
     }
 
+    /// What the space adds up to with `text` written into it, as `DRAFT`,
+    /// and `exclude`, the note it is an edit of, left out.
+    fn with_text(vectors: &Vectors, text: &[f32], exclude: Option<&str>) -> Self {
+        let mut total: Vec<f64> = vectors.sum().iter().map(|s| f64::from(*s)).collect();
+        let left_out = exclude.and_then(|id| vectors.get(id));
+        for (i, t) in total.iter_mut().enumerate() {
+            *t += f64::from(text[i]);
+            if let Some((_, vector)) = left_out {
+                *t -= f64::from(vector[i]);
+            }
+        }
+        let sum: Vec<f32> = total.into_iter().map(|t| t as f32).collect();
+        let mut dots: HashMap<String, (f32, f32)> = vectors
+            .iter()
+            .filter(|(id, _, _)| Some(*id) != exclude)
+            .map(|(id, _, vector)| (id.to_string(), (dot(vector, vector), dot(vector, &sum))))
+            .collect();
+        dots.insert(DRAFT.to_string(), (dot(text, text), dot(text, &sum)));
+        Self {
+            ss: dot(&sum, &sum),
+            sum,
+            count: dots.len(),
+            dots,
+        }
+    }
+
     /// A note of the space as it is scored.
     fn note<'a>(&self, id: &str, vector: &'a [f32]) -> Part<'a> {
         let (own, all) = self
@@ -1272,6 +1298,47 @@ fn shown(
     })
 }
 
+/// What a text not saved yet stands for among the vectors, as `Usual`
+/// keys it.
+const DRAFT: &str = "\u{0}draft";
+
+/// The name whose notes a text not saved yet fits best (SPEC 3.10), with
+/// its score, when it clears `cut`: the text scored against each name's
+/// notes as a note against a thread, the space's mean taken off, and each
+/// standing out for the other by `lead`. `names` holds each name's notes;
+/// only names with `MIN_NOTES` of them are weighed, as fewer say little.
+/// `exclude` is the note the text is an edit of, which counts for nothing.
+pub fn closest_name(
+    vectors: &Vectors,
+    names: &BTreeMap<String, Vec<String>>,
+    text: &[f32],
+    exclude: Option<&str>,
+    cut: f32,
+    lead: f32,
+) -> Option<(String, f32)> {
+    let usual = Usual::with_text(vectors, text, exclude);
+    let draft = usual.note(DRAFT, text);
+    let mut best: Option<(String, f32)> = None;
+    for (name, notes) in names {
+        let mut group = Group::new(vectors.dims(), NaiveDate::MIN);
+        for id in notes.iter().filter(|id| Some(id.as_str()) != exclude) {
+            if let Some((_, vector)) = vectors.get(id) {
+                group.add(id, vector, NaiveDate::MIN, &usual);
+            }
+        }
+        if group.notes.len() < MIN_NOTES {
+            continue;
+        }
+        let Some(score) = usual.score(&draft, &group.part(), lead) else {
+            continue;
+        };
+        if score >= cut && best.as_ref().is_none_or(|(_, top)| score > *top) {
+            best = Some((name.clone(), score));
+        }
+    }
+    best
+}
+
 /// Where a note of `date` goes: the thread it scores best against, or the
 /// note on its own it scores best against, among those near enough in time
 /// that clear their threshold. `None` keeps it on its own.
@@ -1968,6 +2035,41 @@ mod tests {
     }
 
     #[test]
+    fn a_draft_close_to_a_names_notes_is_given_that_name() {
+        let (vectors, _, mentioned) = project();
+        let mut names: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (id, keys) in &mentioned {
+            for key in keys {
+                names.entry(key.clone()).or_default().push(id.clone());
+            }
+        }
+        names.insert("bob".into(), vec!["01Z1".into(), "01Z2".into()]);
+        let draft = |axes: &[usize]| {
+            let mut v = vec![0.0; 16];
+            v[0] = 1.0;
+            for axis in axes {
+                v[*axis] = 1.0;
+            }
+            v
+        };
+        let suggest = |text: &[f32], exclude: Option<&str>| {
+            closest_name(&vectors, &names, text, exclude, CUTS.join, CUTS.lead)
+                .map(|(name, _)| name)
+        };
+        assert_eq!(suggest(&draft(&[3, 1]), None).as_deref(), Some("atlas"));
+        assert_eq!(
+            suggest(&draft(&[3, 1]), Some("01A")).as_deref(),
+            Some("atlas")
+        );
+        assert_eq!(suggest(&draft(&[14]), None), None, "about nothing named");
+        assert_eq!(
+            suggest(&draft(&[6]), None),
+            None,
+            "two notes are too few to name"
+        );
+    }
+
+    #[test]
     fn a_note_naming_two_names_is_in_the_threads_of_both() {
         let (vectors, when, mut mentioned) = project();
         // Marie in the 404s and once in the performance work.
@@ -2025,6 +2127,76 @@ mod tests {
         assert_eq!(Edits::load(&db), edits);
         assert!(edits.take_out("01A"));
         assert_eq!(edits.put("atlas", "01A"), None);
+    }
+
+    /// Each made-up note that mentions a name, written with the name as a
+    /// plain word instead, the note left out as if it were being written:
+    /// nearly every time its name is suggested, and never another. The
+    /// notes that mention none get no name, but for planting tomatoes on a
+    /// balcony, which looks like the garden's. Needs the embedding model;
+    /// `cargo test a_draft_is_given -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the downloaded embedding model"]
+    fn a_draft_is_given_the_name_it_looks_like() {
+        use crate::embed::{installed_embedder, samples, Embedder};
+
+        let Some(embedder) = installed_embedder() else {
+            return;
+        };
+        let mut notes = samples::notes();
+        notes.extend(samples::mentioned());
+        let mut vectors = Vectors::new(embedder.model_id(), embedder.dims());
+        let mut names: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (_, note) in &notes {
+            let vector = embedder.embed_document(&note.body).unwrap();
+            vectors
+                .insert(note.id.clone(), note.hash.clone(), vector)
+                .unwrap();
+            for mention in crate::mentions::mentions(&note.body) {
+                names.entry(mention.key).or_default().push(note.id.clone());
+            }
+        }
+        let suggest = |text: &str, exclude: &str| {
+            let vector = embedder.embed_document(text).unwrap();
+            closest_name(
+                &vectors,
+                &names,
+                &vector,
+                Some(exclude),
+                CUTS.join,
+                CUTS.lead,
+            )
+            .map(|(name, _)| name)
+        };
+
+        let (mut named, mut asked) = (0, 0);
+        for (subject, note) in samples::mentioned() {
+            let mentioned = crate::mentions::mentions(&note.body);
+            let mut draft = note.body.clone();
+            for mention in &mentioned {
+                draft = draft.replace(&format!("@{}", mention.name), &mention.name);
+            }
+            let got = suggest(&draft, &note.id);
+            eprintln!("{subject:>9} {got:?}");
+            if let Some(got) = got {
+                assert!(
+                    mentioned.iter().any(|mention| mention.key == got),
+                    "{draft:?} given @{got}"
+                );
+                named += 1;
+            }
+            asked += 1;
+        }
+        assert!(named * 10 >= asked * 9, "{named} of {asked} named");
+
+        for (thing, note) in samples::notes() {
+            let got = suggest(&note.body, &note.id);
+            assert!(
+                got.is_none() || (thing == "-balcony" && got.as_deref() == Some("garden")),
+                "{:?} given {got:?}",
+                note.body
+            );
+        }
     }
 
     /// The made-up notes that mention names, placed with the real model

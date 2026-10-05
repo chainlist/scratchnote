@@ -10,7 +10,8 @@
 //! trigram tokenizer, which finds any run of three characters or more, so a
 //! search still matches inside words. `days` records each day file's time and
 //! length as last read, and `page_files` each file under `pages/`, which is
-//! how a launch tells the files to read again.
+//! how a launch tells the files to read again. `mentions` holds the names
+//! each note and page mentions (SPEC 3.10), read as its text goes in.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -19,10 +20,11 @@ use std::time::UNIX_EPOCH;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use super::daily_file::Note;
+use crate::mentions::mentions;
 use crate::search::fold;
 
 /// Bumped when the tables change: a file of another version is made again.
-const VERSION: i64 = 2;
+const VERSION: i64 = 3;
 
 /// An id is not unique: a note block copied by hand into another day keeps
 /// its id, and both copies are still found.
@@ -52,6 +54,18 @@ const TABLES: &str = "
         modified INTEGER NOT NULL,
         len INTEGER NOT NULL
     );
+    -- Each name a `texts` row mentions: `key` as it is found, lowercase,
+    -- and `name` as first typed there. Goes with its row.
+    CREATE TABLE mentions (
+        text INTEGER NOT NULL,
+        key TEXT NOT NULL,
+        name TEXT NOT NULL
+    );
+    CREATE INDEX mentions_key ON mentions(key);
+    CREATE INDEX mentions_text ON mentions(text);
+    CREATE TRIGGER mentions_removed AFTER DELETE ON texts BEGIN
+        DELETE FROM mentions WHERE text = old.rowid;
+    END;
 ";
 
 /// What keeps `texts_fts` in step with `texts`, row by row.
@@ -69,6 +83,7 @@ const TRIGGERS: &str = "
 const FILL_CACHE_KIB: i64 = 256 * 1024;
 
 const DROP: &str = "
+    DROP TABLE IF EXISTS mentions;
     DROP TABLE IF EXISTS texts_fts;
     DROP TABLE IF EXISTS texts;
     DROP TABLE IF EXISTS days;
@@ -437,6 +452,32 @@ impl SearchDb {
         Ok(found)
     }
 
+    /// Every name mentioned, by the id of the note or page mentioning it:
+    /// `(id, key, name)`.
+    pub fn mention_rows(&self) -> Result<Vec<(String, String, String)>, String> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT t.id, m.key, m.name FROM mentions m JOIN texts t ON t.rowid = m.text")
+            .map_err(to_string)?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .map_err(to_string)?;
+        rows.collect::<Result<_, _>>().map_err(to_string)
+    }
+
+    /// The notes and pages mentioning the name with this key, by id, with
+    /// the name as each types it.
+    pub fn mentioning(&self, key: &str) -> Result<HashMap<String, String>, String> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT t.id, m.name FROM mentions m JOIN texts t ON t.rowid = m.text WHERE m.key = ?1")
+            .map_err(to_string)?;
+        let rows = statement
+            .query_map([key], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(to_string)?;
+        rows.collect::<Result<_, _>>().map_err(to_string)
+    }
+
     /// The bodies it holds of `ids`.
     pub fn bodies<'a>(
         &self,
@@ -480,8 +521,17 @@ fn insert(conn: &Connection, note: &Note, day: Option<&str>) -> Result<(), Strin
         "INSERT INTO texts (id, day, body, folded) VALUES (?1, ?2, ?3, ?4)",
         params![note.id, day, note.body, folded],
     )
-    .map(|_| ())
-    .map_err(to_string)
+    .map_err(to_string)?;
+    let text = conn.last_insert_rowid();
+    let mut statement = conn
+        .prepare_cached("INSERT INTO mentions (text, key, name) VALUES (?1, ?2, ?3)")
+        .map_err(to_string)?;
+    for mention in mentions(&note.body) {
+        statement
+            .execute(params![text, mention.key, mention.name])
+            .map_err(to_string)?;
+    }
+    Ok(())
 }
 
 fn stamp_day(conn: &Connection, date: &str, stamp: Option<Stamp>) -> Result<(), String> {
@@ -598,6 +648,30 @@ mod tests {
 
         db.retain_days(&HashSet::new()).unwrap();
         assert!(db.matching(&words(&["second"])).unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_names_a_note_mentions_come_and_go_with_it() {
+        let mut db = SearchDb::in_memory().unwrap();
+        let day = [
+            note("01A", "2026-09-22", "@ProjectA is late, ask @marie"),
+            note("01B", "2026-09-22", "@projecta again"),
+        ];
+        db.replace_day("2026-09-22", &day, None).unwrap();
+        let found = db.mentioning("projecta").unwrap();
+        assert_eq!(sorted(found.keys().cloned().collect()), ["01A", "01B"]);
+        assert_eq!(found["01A"], "ProjectA");
+        assert_eq!(db.mention_rows().unwrap().len(), 3);
+
+        db.replace_day("2026-09-22", &[note("01B", "2026-09-22", "nothing")], None)
+            .unwrap();
+        assert!(db.mention_rows().unwrap().is_empty());
+        db.add_note(&note("01C", "2026-09-23", "@marie"), None)
+            .unwrap();
+        db.add_note(&note("01C", "2026-09-23", "@bob"), None)
+            .unwrap();
+        assert!(db.mentioning("marie").unwrap().is_empty());
+        assert_eq!(db.mentioning("bob").unwrap().len(), 1);
     }
 
     #[test]

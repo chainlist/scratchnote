@@ -1,6 +1,7 @@
 //! What the user pinned to the left edge of a space (SPEC 3.13), kept in
 //! `space.db` beside the thread edits, and like them never derived.
 
+use percent_encoding::percent_decode_str;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +17,8 @@ const MAX_TEXT: usize = 500;
 pub enum PinKind {
     /// A thread, by its id. Its title is read live, so none is kept.
     Thread,
+    /// A name mentioned, by its key, with the name as typed (SPEC 3.10).
+    Mention,
     /// A plugin's page, by its type and query, such as `mentions?name=bob`.
     View,
 }
@@ -24,6 +27,7 @@ impl PinKind {
     fn as_str(self) -> &'static str {
         match self {
             Self::Thread => "thread",
+            Self::Mention => "mention",
             Self::View => "view",
         }
     }
@@ -31,6 +35,7 @@ impl PinKind {
     fn parse(kind: &str) -> Option<Self> {
         match kind {
             "thread" => Some(Self::Thread),
+            "mention" => Some(Self::Mention),
             "view" => Some(Self::View),
             _ => None,
         }
@@ -69,14 +74,31 @@ fn read(conn: &Connection) -> rusqlite::Result<Vec<Pin>> {
     for row in rows {
         let (kind, target, label) = row?;
         if let Some(kind) = PinKind::parse(&kind) {
-            pins.push(Pin {
+            pins.push(from_plugin(Pin {
                 kind,
                 target,
                 label,
-            });
+            }));
         }
     }
     Ok(pins)
+}
+
+/// The page of the Mentions plugin a name was pinned as, before mentions
+/// were the app's own, as that name.
+fn from_plugin(pin: Pin) -> Pin {
+    let name = (pin.kind == PinKind::View)
+        .then(|| pin.target.strip_prefix("mentions?name="))
+        .flatten()
+        .map(|name| percent_decode_str(name).decode_utf8_lossy().into_owned());
+    match name {
+        Some(name) => Pin {
+            kind: PinKind::Mention,
+            target: crate::mentions::key(&name),
+            label: Some(name),
+        },
+        None => pin,
+    }
 }
 
 /// `pins` tidied: blank ones dropped, text cut to length, each pinned once,
@@ -175,7 +197,7 @@ mod tests {
     fn pins_come_back_in_their_order() {
         let mut db = SpaceDb::in_memory().unwrap();
         let pins = vec![
-            view("mentions?name=bob", "@bob"),
+            view("journal?date=2026-09-28", "Journal"),
             thread("01B"),
             thread("01A"),
         ];
@@ -183,6 +205,30 @@ mod tests {
         assert_eq!(load(&db), pins);
         save(&mut db, &pins[1..]).unwrap();
         assert_eq!(load(&db), pins[1..]);
+    }
+
+    #[test]
+    fn a_name_pinned_as_the_plugins_page_comes_back_as_a_mention() {
+        let mut db = SpaceDb::in_memory().unwrap();
+        save(
+            &mut db,
+            &[
+                view("mentions?name=Zo%C3%AB", "@Zoë"),
+                view("journal", "Journal"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            load(&db),
+            [
+                Pin {
+                    kind: PinKind::Mention,
+                    target: "zoë".into(),
+                    label: Some("Zoë".into())
+                },
+                view("journal", "Journal")
+            ]
+        );
     }
 
     #[test]

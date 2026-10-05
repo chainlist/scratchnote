@@ -181,12 +181,35 @@ export const mergeThreads = (from: string, into: string) =>
 export const onThreadsChanged = (handler: () => void): Promise<UnlistenFn> =>
 	listen('threads-changed', () => handler());
 
-/** A thread or a plugin's page pinned to the left edge of a space (SPEC 3.13). */
+/** A name the notes mention with `@name` (SPEC 3.10). */
+export interface MentionSummary {
+	/** As the newest note mentioning it types it. */
+	name: string;
+	/** Lowercase: case does not count. */
+	key: string;
+	/** How many notes and pages mention it. */
+	notes: number;
+	/** The day of the last. */
+	last: string;
+}
+
+/** Every name the open space mentions, most mentioned first. None for
+ *  another space, which is not read. */
+export const listMentions = (space?: string) =>
+	invoke<MentionSummary[]>('list_mentions', { space });
+
+/** The notes and pages that mention a name, newest first, and the name as
+ *  the newest of them types it: null when none does. */
+export const notesMentioning = (name: string) =>
+	invoke<{ name: string | null; notes: Note[] }>('notes_mentioning', { name });
+
+/** A thread, a name mentioned or a plugin's page pinned to the left edge of
+ *  a space (SPEC 3.13). */
 export interface Pin {
-	kind: 'thread' | 'view';
-	/** A thread's id, or a page's type and query: `mentions?name=bob`. */
+	kind: 'thread' | 'mention' | 'view';
+	/** A thread's id, a name's key, or a page's type and query: `journal?date=2026-09-28`. */
 	target: string;
-	/** A page's title when it was pinned. A thread's is read live. */
+	/** A name as typed, or a page's title when it was pinned. A thread's is read live. */
 	label?: string | null;
 }
 

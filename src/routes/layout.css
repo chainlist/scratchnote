@@ -302,6 +302,21 @@ a.md-link {
 a.md-link:hover {
 	text-decoration-color: currentColor;
 }
+/* A mention, `@name` (SPEC 3.10): a button on a card, which opens its notes. */
+.mention {
+	border-radius: 0.375rem;
+	padding: 0 0.3em;
+	background: color-mix(in oklab, var(--primary) 18%, transparent);
+	color: inherit;
+	font-weight: 500;
+}
+button.mention {
+	cursor: pointer;
+	transition: background-color 150ms;
+}
+button.mention:hover {
+	background: color-mix(in oklab, var(--primary) 30%, transparent);
+}
 .md-h1 {
 	font-size: 1.25em;
 	font-weight: 600;

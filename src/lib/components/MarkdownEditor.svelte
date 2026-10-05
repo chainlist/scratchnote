@@ -42,6 +42,7 @@
 		preview,
 		type WidgetRender
 	} from '#lib/markdown.js';
+	import { mentionCompletion } from '#lib/mentions.js';
 	import { runCommand } from '#lib/plugins/commands.js';
 	import { registry } from '#lib/plugins/registry.svelte.js';
 
@@ -330,7 +331,36 @@
 		'.cm-scroller': { fontFamily: 'inherit', lineHeight: 'inherit' },
 		'.cm-content': { padding: '0', minHeight: '100%', caretColor: 'currentColor' },
 		'.cm-line': { padding: '0 0 0 var(--md-indent, 0)' },
-		'.cm-placeholder': { color: 'var(--color-neutral-600)' }
+		'.cm-placeholder': { color: 'var(--color-neutral-600)' },
+		// The names offered as `@` is typed, as the app's menus look.
+		'.cm-tooltip.cm-tooltip-autocomplete': {
+			border: 'none',
+			borderRadius: '0.5rem',
+			padding: '0.25rem',
+			background: 'var(--popover)',
+			color: 'var(--popover-foreground)',
+			boxShadow:
+				'0 4px 12px rgb(0 0 0 / 0.3), 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent)'
+		},
+		'.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'inherit', maxHeight: '14rem' },
+		'.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
+			borderRadius: '0.375rem',
+			padding: '0.2rem 0.5rem',
+			lineHeight: '1.4'
+		},
+		'.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+			background: 'var(--accent)',
+			color: 'var(--accent-foreground)'
+		},
+		'.cm-completionLabel': { fontWeight: '500' },
+		'.cm-completionMatchedText': { textDecoration: 'none', color: 'var(--primary)' },
+		'.cm-completionDetail': {
+			marginLeft: '0.75rem',
+			fontStyle: 'normal',
+			fontFamily: 'var(--font-mono)',
+			fontSize: '0.75em',
+			color: 'var(--color-neutral-500)'
+		}
 	});
 </script>
 
@@ -483,6 +513,8 @@
 					// Enter carries a list or quote on to the next line.
 					Prec.high(keymap.of(markdownKeymap)),
 					formatKeys,
+					// The space's names as `@` is typed (SPEC 3.10).
+					mentionCompletion(() => space),
 					keymap.of([...standardKeymap, ...historyKeymap]),
 					plugins.of(plugged()),
 					attachedIn.of(spaceFacet(space)),

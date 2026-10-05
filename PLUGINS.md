@@ -297,8 +297,8 @@ this.app.workspace.openView('space-stats');
 `registerView` makes it a panel in the dock, where a page docks;
 `registerPage` makes it a page in the main area at `/plugin/<type>/`, with its
 title and a way back to the day. A page gets its query string as
-`this.params`: `app.workspace.openPage('mentions', { name: 'marie' })` opens
-`/plugin/mentions/?name=marie`, and another query opens it anew.
+`this.params`: `app.workspace.openPage('journal', { date: '2026-09-28' })` opens
+`/plugin/journal/?date=2026-09-28`, and another query opens it anew.
 `getDetail()` is dimmed after a page's title, as a count; call
 `refreshHeader()` when the title, icon or detail change.
 
@@ -404,20 +404,20 @@ new Setting(section.contentEl).setName('Colour').addDropdown(/* ... */);
 
 `this.app`:
 
-| Member                                                                    | What it is                                                     |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `version`, `window`, `locale`                                             | the app's version, this copy's window, the interface language  |
-| `notes.day(date)`, `notes.days()`, `notes.pages()`                        | the open space's notes                                         |
-| `notes.search(query)`                                                     | as the command center searches: words                          |
-| `notes.containing(needles)`                                               | every note and page whose text holds any of `needles`          |
-| `notes.setBody(note, body)`                                               | save a note's or a page's new text                             |
-| `notes.create(body, date?)`                                               | add a note to a day                                            |
-| `workspace.day`, `openDay(date)`, `openNote(note)`                        | the day shown, and the way to a day or a note                  |
-| `workspace.openPage(type, params?)`, `openView(type)`, `closeView(type?)` | a plugin's page or panel                                       |
-| `markdown.parse(text)`                                                    | the syntax tree, every plugin's syntax included                |
-| `markdown.render(el, text, options?)`                                     | draw markdown as a card does; `onchange` lets widgets save     |
-| `markdown.images(text)`                                                   | the attached images a text shows: where, name, and `url`       |
-| `on('notes-changed', listener)`                                           | a note was saved or deleted, or another space opened           |
+| Member                                                                    | What it is                                                    |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `version`, `window`, `locale`                                             | the app's version, this copy's window, the interface language |
+| `notes.day(date)`, `notes.days()`, `notes.pages()`                        | the open space's notes                                        |
+| `notes.search(query)`                                                     | as the command center searches: words                         |
+| `notes.containing(needles)`                                               | every note and page whose text holds any of `needles`         |
+| `notes.setBody(note, body)`                                               | save a note's or a page's new text                            |
+| `notes.create(body, date?)`                                               | add a note to a day                                           |
+| `workspace.day`, `openDay(date)`, `openNote(note)`                        | the day shown, and the way to a day or a note                 |
+| `workspace.openPage(type, params?)`, `openView(type)`, `closeView(type?)` | a plugin's page or panel                                      |
+| `markdown.parse(text)`                                                    | the syntax tree, every plugin's syntax included               |
+| `markdown.render(el, text, options?)`                                     | draw markdown as a card does; `onchange` lets widgets save    |
+| `markdown.images(text)`                                                   | the attached images a text shows: where, name, and `url`      |
+| `on('notes-changed', listener)`                                           | a note was saved or deleted, or another space opened          |
 
 ### Icons
 
@@ -469,4 +469,4 @@ plugin can do. Its data goes in `core-plugins/<id>.json`.
 
 A core plugin is on unless the user switches it off. One with
 `offByDefault: true` in its entry starts off instead, until the user switches
-it on, as Mentions, Stats and Journal view do.
+it on, as Stats and Journal view do.

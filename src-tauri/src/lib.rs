@@ -2,6 +2,7 @@ mod ahead;
 mod attachments;
 mod commands;
 mod embed;
+mod mentions;
 mod pages;
 mod plugins;
 mod search;
@@ -89,6 +90,8 @@ pub fn run() {
             commands::threads::merge_threads,
             commands::threads::threads_for_note,
             commands::threads::thread_cards,
+            commands::mentions::list_mentions,
+            commands::mentions::notes_mentioning,
             commands::pins::list_pins,
             commands::pins::set_pins,
             commands::map::note_map,

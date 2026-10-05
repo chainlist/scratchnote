@@ -404,6 +404,8 @@ pub struct Thread {
     pub since: String,
     /// The day of its last note.
     pub until: String,
+    /// The days of its notes, each once, oldest first.
+    pub days: Vec<String>,
 }
 
 /// A thread while notes are placed: its notes, what they add up to, and the
@@ -1284,6 +1286,8 @@ fn shown(
         .filter(|title| !title.trim().is_empty())
         .cloned();
     let day = |note: &str| when[note].date.format("%Y-%m-%d").to_string();
+    let mut days: Vec<String> = notes.iter().map(|note| day(note)).collect();
+    days.dedup();
     let scope = scope_of(id);
     Some(Thread {
         id: id.to_string(),
@@ -1292,8 +1296,9 @@ fn shown(
         named: title.is_some(),
         title,
         kept: kept.contains(id),
-        since: day(notes[0]),
-        until: day(notes[notes.len() - 1]),
+        since: days[0].clone(),
+        until: days[days.len() - 1].clone(),
+        days,
         notes: notes.into_iter().map(str::to_string).collect(),
     })
 }

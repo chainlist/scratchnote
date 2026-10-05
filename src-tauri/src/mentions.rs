@@ -6,7 +6,7 @@
 //! `@` right after a letter or a digit is no mention, so an email stays one,
 //! and nothing in code, after a backslash or in a link's target is a mention.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use serde::Serialize;
 
@@ -165,6 +165,9 @@ pub struct MentionSummary {
     pub key: String,
     pub notes: usize,
     pub last: String,
+    /// The days of those notes, each once, oldest first: how often it comes
+    /// up, week by week, as the list draws it.
+    pub days: Vec<String>,
     /// Pinned to the left edge (SPEC 3.13), as a project in hand is.
     pub pinned: bool,
 }
@@ -173,8 +176,9 @@ pub struct MentionSummary {
 /// one mentioned last.
 pub fn list(index: &Index, db: &SearchDb) -> Result<Vec<MentionSummary>, String> {
     let entries: HashMap<&str, &IndexEntry> = index.entries().map(|e| (e.id.as_str(), e)).collect();
-    // By key: the notes, and the newest one's place and spelling.
-    let mut names: HashMap<String, (Vec<&str>, (&str, &str), String)> = HashMap::new();
+    // By key: the notes, their days, and the newest one's place and spelling.
+    let mut names: HashMap<String, (Vec<&str>, BTreeSet<&str>, (&str, &str), String)> =
+        HashMap::new();
     for (id, key, name) in db.mention_rows()? {
         let Some(entry) = entries.get(id.as_str()) else {
             continue;
@@ -182,22 +186,24 @@ pub fn list(index: &Index, db: &SearchDb) -> Result<Vec<MentionSummary>, String>
         let when = (entry.date.as_str(), entry.time.as_str());
         let slot = names
             .entry(key)
-            .or_insert_with(|| (Vec::new(), when, name.clone()));
+            .or_insert_with(|| (Vec::new(), BTreeSet::new(), when, name.clone()));
         if !slot.0.contains(&entry.id.as_str()) {
             slot.0.push(entry.id.as_str());
         }
-        if when > slot.1 {
-            slot.1 = when;
-            slot.2 = name;
+        slot.1.insert(entry.date.as_str());
+        if when > slot.2 {
+            slot.2 = when;
+            slot.3 = name;
         }
     }
     let mut out: Vec<MentionSummary> = names
         .into_iter()
-        .map(|(key, (notes, (last, _), name))| MentionSummary {
+        .map(|(key, (notes, days, (last, _), name))| MentionSummary {
             name,
             key,
             notes: notes.len(),
             last: last.to_string(),
+            days: days.into_iter().map(str::to_string).collect(),
             pinned: false,
         })
         .collect();

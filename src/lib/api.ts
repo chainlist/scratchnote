@@ -133,6 +133,8 @@ export interface Thread {
 	since: string;
 	/** The day of its last note. */
 	until: string;
+	/** The days of its notes, each once, oldest first. */
+	days: string[];
 }
 
 /** A thread with its first two notes, to tell it from others with no title. */
@@ -199,6 +201,8 @@ export interface MentionSummary {
 	notes: number;
 	/** The day of the last. */
 	last: string;
+	/** The days of those notes, each once, oldest first. */
+	days: string[];
 	/** Pinned to the left edge, as a project in hand is (SPEC 3.13). */
 	pinned: boolean;
 }

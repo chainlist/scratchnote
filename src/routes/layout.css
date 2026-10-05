@@ -317,6 +317,24 @@ button.mention {
 button.mention:hover {
 	background: color-mix(in oklab, var(--primary) 30%, transparent);
 }
+/* A name's own colour on the lists of names and threads, its hue in
+   `--hue` (`mentionHue`): a tint behind its letter or chip, and a mark for
+   its activity. Light by default, dark in the dark theme, as the neutral
+   scale is mirrored but these are not. */
+.name-tint {
+	background: oklch(0.92 0.05 var(--hue));
+	color: oklch(0.42 0.1 var(--hue));
+}
+.name-mark {
+	background: oklch(0.62 0.13 var(--hue));
+}
+.dark .name-tint {
+	background: oklch(0.32 0.06 var(--hue));
+	color: oklch(0.86 0.09 var(--hue));
+}
+.dark .name-mark {
+	background: oklch(0.72 0.12 var(--hue));
+}
 .md-h1 {
 	font-size: 1.25em;
 	font-weight: 600;

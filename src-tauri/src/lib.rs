@@ -89,6 +89,8 @@ pub fn run() {
             commands::threads::merge_threads,
             commands::threads::threads_for_note,
             commands::threads::thread_cards,
+            commands::pins::list_pins,
+            commands::pins::set_pins,
             commands::map::note_map,
             commands::map::map_categories,
             commands::map::map_links,

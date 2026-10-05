@@ -23,6 +23,7 @@
 	import View from '#lib/components/View.svelte';
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
 	import { m } from '#lib/paraglide/messages.js';
+	import { colourOf } from '#lib/pins.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { graph, samePlaces, type Graph, type GraphNode } from './graph.js';
 	import { islands } from './islands.js';
@@ -183,11 +184,7 @@
 	const shores = $derived(islands(data.notes, categories, categoryLevel));
 
 	/** A colour per thread, the same from one launch to the next. */
-	function colour(thread: Thread) {
-		let hash = 0;
-		for (const char of thread.id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-		return `hsl(${hash % 360} 70% 58%)`;
-	}
+	const colour = (thread: Thread) => colourOf(thread.id);
 
 	/** Where a note is drawn: its place on the map, or in the graph. */
 	function place(note: MapNote): { x: number; y: number } {

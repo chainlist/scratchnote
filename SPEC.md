@@ -378,6 +378,15 @@ Journal view is a core plugin (3.9), built on the plugin API in `src/plugins/jou
 - The arrows under the book, the lower corners of the pages, which lift under the pointer, and the left and right arrow keys turn a page: to the rest of a long day, or to the next day or the one before, landing on the last spread of a long day when going back. The page turns on its spine in 3D, shading as it goes; with reduced motion the spread changes at once. The date under the book opens the day.
 - The book is for reading: task boxes do not tick, links open. It redraws when the notes change.
 
+### 3.13 Pins
+
+A space holds one stretch of life, such as work or home; the projects and subjects inside it are threads (6.4) and mentions (3.10), not spaces of their own, so a note never waits on a choice before it is saved. Pins put the ones in use one click away.
+
+- A pin button after the title of a thread's view and of a plugin's page, such as the notes mentioning `@name`, pins it to the left edge of the window, last, or unpins it. Pinning a thread only suggested keeps it.
+- Pins go under the left edge's buttons, after a line, each a square with two letters of its title, coloured as its thread is on the map (6.5), a page's colour following from its type and query the same way. The title shows on pointing at it. The pin of the view shown has a mark beside it. Right-clicking one offers Move up, Move down and Unpin.
+- A thread's pin reads the thread's title as it is, and shows while the thread is there and threads are on offer; a page's keeps the title it had when pinned, and shows while its plugin is on. Pins that lead nowhere for now are kept, and show again once they do. A thread merged into another stays pinned as that one.
+- Each space has its own pins, at most 24, in `space.db` with the thread edits, which nothing derives and nothing drops. The capture window shows none.
+
 ## 4. Storage
 
 ### 4.1 Layout
@@ -408,7 +417,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
       .scratchnote/
         index.jsonl      # derived cache, rebuildable
         search.db        # the notes' text for search, SQLite, derived, rebuildable
-        space.db         # SQLite: note embeddings for search by meaning, similar notes and threads, the thread each note was placed in, each note's place on the map, its closest notes and the categories they make there, derived, rebuildable; thread titles and notes kept out of threads, the user's
+        space.db         # SQLite: note embeddings for search by meaning, similar notes and threads, the thread each note was placed in, each note's place on the map, its closest notes and the categories they make there, derived, rebuildable; thread titles, notes kept out of threads and pins (3.13), the user's
     Work/
       notes/...
       .scratchnote/...
@@ -715,6 +724,8 @@ list_threads() -> { threads, alone }        // every thread, its notes oldest fi
 get_thread(id) -> { thread, notes }?        // a thread and its notes with their text
 rename_thread(id, title)                    // an empty title takes the user's title off
 keep_out_of_threads(id, out)                // takes a note out of threads for good, or lets it back in
+list_pins() -> Vec<Pin>                     // what the open space pinned to the left edge, in its order (3.13)
+set_pins(pins) -> Vec<Pin>                  // pins these in place of the pins before, tidied
 notes_containing(needles) -> Vec<Note>      // every note and page whose body holds any needle as typed, newest first
 map_search(query) -> Vec<String>            // the ids of the notes whose text holds every word, for the map (6.5)
 get_settings() / set_settings(...)

@@ -11,20 +11,24 @@ import {
 	isPage,
 	keepOutOfThreads,
 	keepThread,
+	listPins,
 	listThreads,
 	mergeThreads,
 	moveNote,
 	movePage,
 	noteToPage,
 	putInThread,
+	setPins,
 	updateNote,
 	type Note,
+	type Pin,
 	type SpacesView,
 	type Thread,
 	type ThreadOrder
 } from '#lib/api.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { addToPageDraft } from '#lib/page-draft.js';
+import { samePin } from '#lib/pins.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
 
 /** Where a note sits in its thread: the thread, and its place in it from 0. */
@@ -47,6 +51,8 @@ export interface ViewTitle {
 	/** Where the back arrow leads. Left out on a day, which has its own arrows. */
 	back?: string;
 	title?: string;
+	/** What the title row's pin button pins to the left edge (SPEC 3.13). */
+	pin?: Pin;
 	/** After the title, dimmed: a search's whole query. */
 	detail?: string;
 	/** In place of the title, told whether it is the small copy in the top bar. */
@@ -69,8 +75,12 @@ export class Shell implements WorkspaceHost {
 	/** The thread of the user's each note of the open space is in, by note
 	 *  (SPEC 6.4). A note in a thread only suggested has none. */
 	threads = $state.raw<Record<string, ThreadPlace>>({});
+	/** Every thread of the open space, kept or suggested. */
+	threadList = $state.raw<Thread[]>([]);
 	/** How many threads are only suggested. */
 	suggested = $state(0);
+	/** What the open space has pinned to the left edge, in its order. */
+	pins = $state.raw<Pin[]>([]);
 	/** The notes taken out of threads. */
 	alone = $state.raw<string[]>([]);
 	/** The text size setting, in pixels: the rem the day's columns are sized in. */
@@ -201,6 +211,7 @@ export class Shell implements WorkspaceHost {
 				if (thread.kept) thread.notes.forEach((id, index) => (places[id] = { thread, index }));
 
 			this.threads = places;
+			this.threadList = view.threads;
 			this.suggested = view.threads.filter((thread) => !thread.kept).length;
 			this.alone = view.alone;
 			// The view of a thread lists its notes itself.
@@ -212,6 +223,48 @@ export class Shell implements WorkspaceHost {
 	};
 
 	showThread = (id: string) => goto(resolve(`thread/${id}/`));
+
+	/** Read the open space's pins again. */
+	loadPins = async () => {
+		try {
+			this.pins = await listPins();
+		} catch (e) {
+			this.error = String(e);
+		}
+	};
+
+	isPinned = (pin: Pin) => this.pins.some((other) => samePin(other, pin));
+
+	/** Save the pins in this order. */
+	#savePins = async (pins: Pin[]) => {
+		try {
+			this.pins = await setPins(pins);
+		} catch (e) {
+			this.error = String(e);
+		}
+	};
+
+	/** Pin a view to the left edge, last, or unpin it. A thread only
+	 *  suggested is kept as it is pinned: one worth a click is the user's. */
+	togglePin = async (pin: Pin) => {
+		if (this.isPinned(pin))
+			return this.#savePins(this.pins.filter((other) => !samePin(other, pin)));
+		const thread = pin.kind === 'thread' && this.threadList.find((t) => t.id === pin.target);
+		if (thread && !thread.kept) await this.keepThread(thread.id, true);
+		await this.#savePins([...this.pins, pin]);
+	};
+
+	/** Move a pin one place up or down the edge, past the pin `shown` has
+	 *  next to it: the edge leaves out those that lead nowhere for now. */
+	movePin = (pin: Pin, by: -1 | 1, shown: Pin[]) => {
+		const next = shown[shown.findIndex((other) => samePin(other, pin)) + by];
+		const from = this.pins.findIndex((other) => samePin(other, pin));
+		const to = next ? this.pins.findIndex((other) => samePin(other, next)) : -1;
+		if (from < 0 || to < 0) return;
+		const pins = [...this.pins];
+		[pins[from], pins[to]] = [pins[to], pins[from]];
+		return this.#savePins(pins);
+	};
 
 	/** Forget the day ahead read in a note, for one read wrong. */
 	clearDayAhead = async (note: Pick<Note, 'id' | 'date'>) => {
@@ -454,7 +507,7 @@ export class Shell implements WorkspaceHost {
 			route === '/(app)/page/[date]/[id]'
 		)
 			await this.openDay(this.day);
-		await Promise.all([this.refresh(), this.loadThreads()]);
+		await Promise.all([this.refresh(), this.loadThreads(), this.loadPins()]);
 	};
 
 	/** What every card can do. */

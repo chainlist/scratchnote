@@ -16,6 +16,7 @@
 <View
 	back={shell.back}
 	title={thread?.title ?? m.thread_untitled()}
+	pin={thread ? { kind: 'thread', target: thread.id } : undefined}
 	detail={thread
 		? m.thread_detail({ count: thread.notes.length, date: shortDay(thread.since) })
 		: undefined}

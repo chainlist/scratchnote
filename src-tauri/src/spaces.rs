@@ -18,6 +18,7 @@ use crate::embed::vectors::Vectors;
 use crate::storage::day_path;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{self, Index, IndexEntry};
+use crate::storage::pins::{self, Pin};
 use crate::storage::search_db::{SearchDb, Stamp};
 use crate::storage::space_db::SpaceDb;
 use crate::storage::writer::Writer;
@@ -449,6 +450,34 @@ impl Space {
         }
         edits.save(db)?;
         Ok(true)
+    }
+
+    /// What is pinned to the left edge, in its order (SPEC 3.13).
+    pub fn pins(&self) -> Vec<Pin> {
+        match self.db.lock().as_deref() {
+            Ok(Some(db)) => pins::load(db),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Change the pins under one lock, as `change_edits` changes the edits.
+    /// Returns them as saved, or `None` when `change` changed nothing.
+    pub fn change_pins(
+        &self,
+        change: impl FnOnce(&mut Vec<Pin>) -> bool,
+    ) -> Result<Option<Vec<Pin>>, String> {
+        let mut db = self
+            .db
+            .lock()
+            .map_err(|_| "space.db lock poisoned".to_string())?;
+        let db = db.as_mut().ok_or("the space is closed")?;
+        let mut pins = pins::load(db);
+        if !change(&mut pins) {
+            return Ok(None);
+        }
+        let pins = pins::tidy(pins);
+        pins::save(db, &pins)?;
+        Ok(Some(pins))
     }
 
     /// Tell the embed task the index changed. `persist_index` does it, and

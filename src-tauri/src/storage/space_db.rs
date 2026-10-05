@@ -1,13 +1,14 @@
 //! `space.db`, what a space keeps beside its notes other than their text:
 //! the note embeddings, the thread each note was placed in, where each note
 //! sits on the map of the space and the categories it is in there, and what
-//! the user decided about threads (SPEC 6). Its text is in `search.db`, which
-//! serves search alone.
+//! the user decided about threads (SPEC 6), and the threads and views pinned
+//! to the left edge (SPEC 3.13). Its text is in `search.db`, which serves
+//! search alone.
 //!
 //! SQLite, so a change writes its own rows rather than a whole file. The
 //! vectors, placements and positions are derived: made with another model or version,
 //! they are replaced, and every note is embedded or placed again. The thread
-//! edits are the user's, so nothing here drops them.
+//! edits and the pins are the user's, so nothing here drops them.
 //!
 //! It replaces `vectors.bin`, `threads.json` and `thread-edits.json`, read in
 //! when the file is first made and then removed.
@@ -21,7 +22,7 @@ use crate::embed::vectors::Vectors;
 
 /// Bumped when the tables change. A later version moves the thread edits
 /// over to its tables, never drops them.
-const VERSION: i64 = 2;
+const VERSION: i64 = 3;
 
 const PAGE_SIZE: i64 = 16 * 1024;
 const WAL_BYTES: i64 = 1024 * 1024;
@@ -98,6 +99,18 @@ const CATEGORIES: &str = "
     );
 ";
 
+/// The table version 3 added.
+const PINS: &str = "
+    -- What is pinned to the left edge, in its order: a thread by its id, or
+    -- a plugin's page by its type and query, with the title it had then.
+    CREATE TABLE pins (
+        position INTEGER PRIMARY KEY,
+        kind TEXT NOT NULL,
+        target TEXT NOT NULL,
+        label TEXT
+    );
+";
+
 pub fn space_db_path(root: &Path) -> PathBuf {
     root.join(".scratchnote").join("space.db")
 }
@@ -138,7 +151,10 @@ impl SpaceDb {
             db.make(Some(root))?;
         } else if version < VERSION {
             db.transaction(|tx| {
-                tx.execute_batch(CATEGORIES).map_err(to_string)?;
+                if version < 2 {
+                    tx.execute_batch(CATEGORIES).map_err(to_string)?;
+                }
+                tx.execute_batch(PINS).map_err(to_string)?;
                 tx.pragma_update(None, "user_version", VERSION)
                     .map_err(to_string)
             })?;
@@ -192,6 +208,7 @@ impl SpaceDb {
         self.transaction(|tx| {
             tx.execute_batch(TABLES).map_err(to_string)?;
             tx.execute_batch(CATEGORIES).map_err(to_string)?;
+            tx.execute_batch(PINS).map_err(to_string)?;
             tx.pragma_update(None, "user_version", VERSION)
                 .map_err(to_string)?;
             if let Some((vectors, threads, edits)) = &old {
@@ -391,6 +408,25 @@ mod tests {
         assert_eq!(count, 0);
         drop(db);
         // Opened again, nothing is made twice.
+        drop(SpaceDb::open(&root).unwrap());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_file_of_version_2_gets_the_pins_and_keeps_the_rest() {
+        let root = scratch("version-2");
+        {
+            let conn = Connection::open(space_db_path(&root)).unwrap();
+            conn.execute_batch(TABLES).unwrap();
+            conn.execute_batch(CATEGORIES).unwrap();
+            conn.pragma_update(None, "user_version", 2).unwrap();
+            conn.execute("INSERT INTO kept_alone (note) VALUES ('01D')", [])
+                .unwrap();
+        }
+        let db = SpaceDb::open(&root).unwrap();
+        assert!(Edits::load(&db).alone.contains("01D"));
+        assert!(crate::storage::pins::load(&db).is_empty());
+        drop(db);
         drop(SpaceDb::open(&root).unwrap());
         let _ = std::fs::remove_dir_all(&root);
     }

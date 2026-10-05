@@ -31,6 +31,9 @@
 <View
 	back={shell.back}
 	title={entry ? header.title : undefined}
+	pin={entry && header.title
+		? { kind: 'view', target: `${type}${search}`, label: header.title }
+		: undefined}
 	detail={header.detail}
 	key={type}
 	fill={entry?.fill}

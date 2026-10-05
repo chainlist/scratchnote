@@ -5,6 +5,7 @@ pub mod map;
 pub mod models;
 pub mod notes;
 pub mod pages;
+pub mod pins;
 pub mod plugins;
 pub mod search;
 pub mod settings;

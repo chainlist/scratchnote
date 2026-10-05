@@ -9,6 +9,15 @@
 //! something rather than a subject for good, and a pass stays short however
 //! many notes the space holds.
 //!
+//! Threads are found within a scope: the notes mentioning one name, such as
+//! `@ProjectA` (SPEC 3.10), or the general one, of the notes mentioning
+//! none. A note mentioning two names is placed in each one's threads. Each
+//! scope is placed on its own, against its own notes' mean, so what all of
+//! a project's notes share is taken off and its subjects stand apart: the
+//! threads of `@ProjectA` are its last 404 in production, its performance.
+//! A thread of a mention's scope goes by `@key:note`, one of the general
+//! scope by the note it started with, as before there were scopes.
+//!
 //! Taking off the mean misleads in a small space, or one mostly about one
 //! thing: the mean is then mostly that thing, and every other note shares
 //! not being about it. So a note and a thread must also stand out for each
@@ -46,6 +55,12 @@ pub struct Cuts {
     /// How far above its usual cosine with the other notes each side must
     /// score the other, whether to join, start or merge.
     pub lead: f32,
+    /// The same among the notes of one name. They all share the name's
+    /// subject, so their cosines sit closer together and a note leads its
+    /// own subject's notes by less. On the made-up notes of `@Atlas` and
+    /// `@Marie`, notes on one subject led each other by 0.09 to 0.27,
+    /// notes on two by 0.06 at most.
+    pub scope_lead: f32,
     /// How many days a note may lie beyond a thread's first or last note
     /// and still join it, and two notes on their own lie apart and still
     /// start one.
@@ -58,11 +73,36 @@ pub const CUTS: Cuts = Cuts {
     join: 0.35,
     pair: 0.40,
     lead: 0.14,
+    scope_lead: 0.08,
     window: 60,
 };
 
 /// Bumped when the way notes are placed changes, so they are placed again.
-const VERSION: u32 = 2;
+const VERSION: u32 = 3;
+
+/// The scope of the notes that mention no name.
+pub const GENERAL: &str = "";
+
+/// The scope a thread was found in, by its id.
+pub fn scope_of(thread: &str) -> &str {
+    thread
+        .strip_prefix('@')
+        .and_then(|rest| rest.split_once(':'))
+        .map_or(GENERAL, |(key, _)| key)
+}
+
+/// The id of a thread of `scope` named after `note`.
+pub fn thread_id(scope: &str, note: &str) -> String {
+    if scope == GENERAL {
+        note.to_string()
+    } else {
+        format!("@{scope}:{note}")
+    }
+}
+
+/// The names each note mentions, by note, as `mentions.rs` keys them. A
+/// note left out mentions none.
+pub type Mentioned = HashMap<String, Vec<String>>;
 
 /// Two notes leave no other to say what is usual, so nothing is placed
 /// until a third comes.
@@ -103,26 +143,35 @@ struct Placed {
     out: bool,
 }
 
-/// Where every note of the space was placed. The fields are those of
-/// `threads.json`, which is read in once.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-#[serde(default)]
+/// Where each note of a scope was placed, by note.
+type Scope = BTreeMap<String, Placed>;
+
+/// Where every note of the space was placed, by scope.
+#[derive(Debug, Default, Clone)]
 pub struct Threads {
     version: u32,
     /// The model the vectors placed from came from.
     model: String,
-    notes: BTreeMap<String, Placed>,
+    scopes: BTreeMap<String, Scope>,
     /// The placements as last loaded or saved, so a save writes only the
     /// notes placed since. `None` until they are, which writes them all.
-    #[serde(skip)]
     saved: Option<Saved>,
+}
+
+/// `threads.json`, which held the general scope alone, and is read in once.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct Legacy {
+    version: u32,
+    model: String,
+    notes: Scope,
 }
 
 #[derive(Debug, Clone, Default)]
 struct Saved {
     version: u32,
     model: String,
-    notes: BTreeMap<String, Placed>,
+    scopes: BTreeMap<String, Scope>,
 }
 
 impl Saved {
@@ -134,7 +183,7 @@ impl Saved {
 /// The same placements, however much of them is saved.
 impl PartialEq for Threads {
     fn eq(&self, other: &Self) -> bool {
-        self.version == other.version && self.model == other.model && self.notes == other.notes
+        self.version == other.version && self.model == other.model && self.scopes == other.scopes
     }
 }
 
@@ -146,10 +195,12 @@ pub struct Edits {
     pub titles: BTreeMap<String, String>,
     /// Notes taken out of threads, which stay out.
     pub alone: BTreeSet<String>,
-    /// Notes the user put in a thread, by note, which stay there whatever
-    /// they score. A thread holding one is the user's, as is a titled one;
-    /// any other is only suggested.
+    /// Notes the user put in a thread of the general scope, by note, which
+    /// stay there whatever they score. A thread holding one is the user's,
+    /// as is a titled one; any other is only suggested.
     pub pinned: BTreeMap<String, String>,
+    /// The same for the scopes of mentions, by scope, then note.
+    pub pinned_in: BTreeMap<String, BTreeMap<String, String>>,
     /// Suggested threads the user dismissed, with the notes each held then.
     /// One is suggested again once it holds another.
     pub dismissed: BTreeMap<String, BTreeSet<String>>,
@@ -163,8 +214,55 @@ impl Edits {
             .iter()
             .filter(|(_, title)| !title.trim().is_empty())
             .map(|(thread, _)| thread.as_str())
-            .chain(self.pinned.values().map(String::as_str))
+            .chain(self.puts().map(|(_, _, thread)| thread))
             .collect()
+    }
+
+    /// The thread of `scope` the user put `note` in, if any.
+    pub fn put(&self, scope: &str, note: &str) -> Option<&String> {
+        if scope == GENERAL {
+            self.pinned.get(note)
+        } else {
+            self.pinned_in.get(scope)?.get(note)
+        }
+    }
+
+    /// Every note the user put in a thread: `(scope, note, thread)`.
+    pub fn puts(&self) -> impl Iterator<Item = (&str, &str, &str)> {
+        let general = self
+            .pinned
+            .iter()
+            .map(|(note, thread)| (GENERAL, note.as_str(), thread.as_str()));
+        let scoped = self.pinned_in.iter().flat_map(|(scope, notes)| {
+            notes
+                .iter()
+                .map(move |(note, thread)| (scope.as_str(), note.as_str(), thread.as_str()))
+        });
+        general.chain(scoped)
+    }
+
+    /// Put `note` in `thread`, in place of the thread of the same scope it
+    /// was put in before, if any.
+    pub fn put_in(&mut self, note: String, thread: String) {
+        let scope = scope_of(&thread).to_string();
+        if scope == GENERAL {
+            self.pinned.insert(note, thread);
+        } else {
+            self.pinned_in
+                .entry(scope)
+                .or_default()
+                .insert(note, thread);
+        }
+    }
+
+    /// Forget every thread the user put `note` in. True when it was in one.
+    pub fn take_out(&mut self, note: &str) -> bool {
+        let mut was = self.pinned.remove(note).is_some();
+        for notes in self.pinned_in.values_mut() {
+            was |= notes.remove(note).is_some();
+        }
+        self.pinned_in.retain(|_, notes| !notes.is_empty());
+        was
     }
 
     /// What the user decided. Edits that cannot be read decide nothing.
@@ -190,6 +288,22 @@ impl Edits {
         edits.pinned = pairs("SELECT note, thread FROM pinned")?
             .into_iter()
             .collect();
+        let mut statement = conn.prepare("SELECT scope, note, thread FROM pinned_in")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (scope, note, thread) = row?;
+            edits
+                .pinned_in
+                .entry(scope)
+                .or_default()
+                .insert(note, thread);
+        }
         for (thread, note) in pairs("SELECT thread, note FROM dismissed")? {
             edits.dismissed.entry(thread).or_default().insert(note);
         }
@@ -211,7 +325,7 @@ impl Edits {
     pub(crate) fn write(&self, tx: &Connection) -> Result<(), String> {
         tx.execute_batch(
             "DELETE FROM thread_titles; DELETE FROM kept_alone;
-             DELETE FROM pinned; DELETE FROM dismissed;",
+             DELETE FROM pinned; DELETE FROM pinned_in; DELETE FROM dismissed;",
         )
         .map_err(to_string)?;
         let run = |sql: &str, a: &str, b: Option<&str>| -> Result<(), String> {
@@ -240,6 +354,14 @@ impl Edits {
                 Some(thread),
             )?;
         }
+        let mut put = tx
+            .prepare_cached("INSERT INTO pinned_in (scope, note, thread) VALUES (?1, ?2, ?3)")
+            .map_err(to_string)?;
+        for (scope, notes) in &self.pinned_in {
+            for (note, thread) in notes {
+                put.execute([scope, note, thread]).map_err(to_string)?;
+            }
+        }
         for (thread, notes) in &self.dismissed {
             for note in notes {
                 run(
@@ -262,8 +384,14 @@ impl Edits {
 /// A thread as the views show it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Thread {
-    /// The id of the note it started with, which it keeps.
+    /// The id of the note it started with, which it keeps, after `@key:`
+    /// in the scope of a name mentioned.
     pub id: String,
+    /// The key of the name whose notes it was found among, or `None` in the
+    /// general scope.
+    pub scope: Option<String>,
+    /// That name as typed, which the commands fill in from the notes.
+    pub mention: Option<String>,
     /// The user's title. `None` until they give it one.
     pub title: Option<String>,
     /// The title is the user's.
@@ -395,6 +523,34 @@ impl Usual {
         }
     }
 
+    /// What the notes `members` add up to, as `of` for the whole space,
+    /// which it is when they are every note.
+    fn of_members(vectors: &Vectors, members: &BTreeSet<&str>) -> Self {
+        if members.len() == vectors.len() {
+            return Self::of(vectors);
+        }
+        let mut total = vec![0.0f64; vectors.dims()];
+        for (_, vector) in members.iter().filter_map(|id| vectors.get(id)) {
+            for (t, x) in total.iter_mut().zip(vector) {
+                *t += f64::from(*x);
+            }
+        }
+        let sum: Vec<f32> = total.into_iter().map(|t| t as f32).collect();
+        let dots: HashMap<String, (f32, f32)> = members
+            .iter()
+            .filter_map(|id| {
+                let (_, vector) = vectors.get(id)?;
+                Some((id.to_string(), (dot(vector, vector), dot(vector, &sum))))
+            })
+            .collect();
+        Self {
+            ss: dot(&sum, &sum),
+            sum,
+            count: dots.len(),
+            dots,
+        }
+    }
+
     /// A note of the space as it is scored.
     fn note<'a>(&self, id: &str, vector: &'a [f32]) -> Part<'a> {
         let (own, all) = self
@@ -463,8 +619,8 @@ impl Threads {
         let (Some(version), Some(model)) = (version, db.meta("threads_model")) else {
             return Self::default();
         };
-        let notes = match Self::read(db.conn()) {
-            Ok(notes) => notes,
+        let scopes = match Self::read(db.conn()) {
+            Ok(scopes) => scopes,
             Err(e) => {
                 log::warn!("could not read where notes were placed: {e}");
                 return Self::default();
@@ -474,27 +630,34 @@ impl Threads {
             saved: Some(Saved {
                 version,
                 model: model.clone(),
-                notes: notes.clone(),
+                scopes: scopes.clone(),
             }),
             version,
             model,
-            notes,
+            scopes,
         }
     }
 
-    fn read(conn: &Connection) -> rusqlite::Result<BTreeMap<String, Placed>> {
-        let mut statement = conn.prepare("SELECT id, hash, thread, out FROM placed")?;
-        let rows = statement
-            .query_map([], |row| {
-                let placed = Placed {
-                    hash: row.get(1)?,
-                    thread: row.get(2)?,
-                    out: row.get(3)?,
-                };
-                Ok((row.get(0)?, placed))
-            })?
-            .collect();
-        rows
+    /// The general scope from `placed`, the others from `placed_in`.
+    fn read(conn: &Connection) -> rusqlite::Result<BTreeMap<String, Scope>> {
+        let mut scopes: BTreeMap<String, Scope> = BTreeMap::new();
+        let mut statement = conn.prepare(
+            "SELECT '' AS scope, id, hash, thread, out FROM placed
+             UNION ALL SELECT scope, id, hash, thread, out FROM placed_in",
+        )?;
+        let rows = statement.query_map([], |row| {
+            let placed = Placed {
+                hash: row.get(2)?,
+                thread: row.get(3)?,
+                out: row.get(4)?,
+            };
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, placed))
+        })?;
+        for row in rows {
+            let (scope, id, placed) = row?;
+            scopes.entry(scope).or_default().insert(id, placed);
+        }
+        Ok(scopes)
     }
 
     /// Write the notes placed since the last save, all of it in one go.
@@ -503,36 +666,40 @@ impl Threads {
         db.transaction(|tx| self.write_changes(tx, changes.as_deref()))?;
         match (changes, self.saved.as_mut()) {
             (Some(changes), Some(saved)) => {
-                for (id, placed) in changes {
+                for ((scope, id), placed) in changes {
+                    let notes = saved.scopes.entry(scope).or_default();
                     match placed {
-                        Some(placed) => saved.notes.insert(id, placed),
-                        None => saved.notes.remove(&id),
+                        Some(placed) => notes.insert(id, placed),
+                        None => notes.remove(&id),
                     };
                 }
+                saved.scopes.retain(|_, notes| !notes.is_empty());
             }
             _ => {
                 self.saved = Some(Saved {
                     version: self.version,
                     model: self.model.clone(),
-                    notes: self.notes.clone(),
+                    scopes: self.scopes.clone(),
                 });
             }
         }
         Ok(())
     }
 
-    /// The notes placed or forgotten since the last save, each with where
-    /// it is now. `None` when every placement is to be written: none is
-    /// saved yet, or they were made another way. Both maps are in id order,
-    /// so one pass along them finds every difference.
-    fn changes(&self) -> Option<Vec<(String, Option<Placed>)>> {
+    /// The notes placed or forgotten since the last save, by scope and
+    /// note, each with where it is now. `None` when every placement is to
+    /// be written: none is saved yet, or they were made another way. Both
+    /// sides run in scope then note order, so one pass along them finds
+    /// every difference.
+    fn changes(&self) -> Option<Vec<((String, String), Option<Placed>)>> {
         let saved = self
             .saved
             .as_ref()
             .filter(|saved| saved.is_of(self.version, &self.model))?;
         let mut changes = Vec::new();
-        let mut now = self.notes.iter().peekable();
-        let mut then = saved.notes.iter().peekable();
+        let mut now = flat(&self.scopes).peekable();
+        let mut then = flat(&saved.scopes).peekable();
+        let owned = |(scope, id): (&str, &str)| (scope.to_string(), id.to_string());
         loop {
             let order = match (now.peek(), then.peek()) {
                 (None, None) => break,
@@ -542,18 +709,18 @@ impl Threads {
             };
             match order {
                 std::cmp::Ordering::Less => {
-                    let (id, placed) = now.next().expect("peeked");
-                    changes.push((id.clone(), Some(placed.clone())));
+                    let (key, placed) = now.next().expect("peeked");
+                    changes.push((owned(key), Some(placed.clone())));
                 }
                 std::cmp::Ordering::Greater => {
-                    let (id, _) = then.next().expect("peeked");
-                    changes.push((id.clone(), None));
+                    let (key, _) = then.next().expect("peeked");
+                    changes.push((owned(key), None));
                 }
                 std::cmp::Ordering::Equal => {
-                    let ((id, placed), (_, before)) =
+                    let ((key, placed), (_, before)) =
                         (now.next().expect("peeked"), then.next().expect("peeked"));
                     if placed != before {
-                        changes.push((id.clone(), Some(placed.clone())));
+                        changes.push((owned(key), Some(placed.clone())));
                     }
                 }
             }
@@ -567,60 +734,111 @@ impl Threads {
     }
 
     /// Write `changes`, or every placement when there are none to go by.
+    /// The general scope goes in `placed`, the others in `placed_in`.
     fn write_changes(
         &self,
         tx: &Connection,
-        changes: Option<&[(String, Option<Placed>)]>,
+        changes: Option<&[((String, String), Option<Placed>)]>,
     ) -> Result<(), String> {
         let mut put = tx
             .prepare_cached(
                 "INSERT OR REPLACE INTO placed (id, hash, thread, out) VALUES (?1, ?2, ?3, ?4)",
             )
             .map_err(to_string)?;
-        let mut row = |id: &str, placed: &Placed| -> Result<(), String> {
-            put.execute(rusqlite::params![
-                id,
-                placed.hash,
-                placed.thread,
-                placed.out
-            ])
+        let mut put_in = tx
+            .prepare_cached(
+                "INSERT OR REPLACE INTO placed_in (scope, id, hash, thread, out) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+            )
+            .map_err(to_string)?;
+        let mut row = |scope: &str, id: &str, placed: &Placed| -> Result<(), String> {
+            if scope == GENERAL {
+                put.execute(rusqlite::params![
+                    id,
+                    placed.hash,
+                    placed.thread,
+                    placed.out
+                ])
+            } else {
+                put_in.execute(rusqlite::params![
+                    scope,
+                    id,
+                    placed.hash,
+                    placed.thread,
+                    placed.out
+                ])
+            }
+            .map(|_| ())
+            .map_err(to_string)
+        };
+        let forget = |scope: &str, id: &str| -> Result<(), String> {
+            if scope == GENERAL {
+                tx.execute("DELETE FROM placed WHERE id = ?1", [id])
+            } else {
+                tx.execute(
+                    "DELETE FROM placed_in WHERE scope = ?1 AND id = ?2",
+                    [scope, id],
+                )
+            }
             .map(|_| ())
             .map_err(to_string)
         };
         match changes {
-            Some(changes) => changes.iter().try_for_each(|(id, placed)| match placed {
-                Some(placed) => row(id, placed),
-                None => tx
-                    .execute("DELETE FROM placed WHERE id = ?1", [id])
-                    .map(|_| ())
-                    .map_err(to_string),
-            }),
+            Some(changes) => changes
+                .iter()
+                .try_for_each(|((scope, id), placed)| match placed {
+                    Some(placed) => row(scope, id, placed),
+                    None => forget(scope, id),
+                }),
             None => {
-                tx.execute("DELETE FROM placed", []).map_err(to_string)?;
+                tx.execute_batch("DELETE FROM placed; DELETE FROM placed_in;")
+                    .map_err(to_string)?;
                 SpaceDb::set_meta(tx, "threads_version", &self.version.to_string())?;
                 SpaceDb::set_meta(tx, "threads_model", &self.model)?;
-                self.notes
-                    .iter()
-                    .try_for_each(|(id, placed)| row(id, placed))
+                flat(&self.scopes).try_for_each(|((scope, id), placed)| row(scope, id, placed))
             }
         }
     }
 
     /// The placements `threads.json` holds, `None` for a file that is
-    /// missing or unreadable. The file was saved through serde.
+    /// missing or unreadable. The file was saved through serde, and held
+    /// the general scope alone.
     pub fn read_json(path: &Path) -> Option<Self> {
-        serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+        let legacy: Legacy = serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
+        let mut scopes = BTreeMap::new();
+        if !legacy.notes.is_empty() {
+            scopes.insert(GENERAL.to_string(), legacy.notes);
+        }
+        Some(Self {
+            version: legacy.version,
+            model: legacy.model,
+            scopes,
+            saved: None,
+        })
     }
 
     /// The file `read_json` reads, as the app saved it before `space.db`.
     #[cfg(test)]
     pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap()
+        serde_json::to_string(&Legacy {
+            version: self.version,
+            model: self.model.clone(),
+            notes: self.scopes.get(GENERAL).cloned().unwrap_or_default(),
+        })
+        .unwrap()
     }
 
-    /// The thread a note is in, if any.
+    /// A thread a note is in, if any: the general scope's first.
+    #[cfg(test)]
     pub fn of(&self, id: &str) -> Option<&str> {
-        self.notes.get(id)?.thread.as_deref()
+        self.scopes
+            .values()
+            .find_map(|notes| notes.get(id)?.thread.as_deref())
+    }
+
+    /// The thread a note is in within `scope`, if any.
+    pub fn in_scope(&self, scope: &str, id: &str) -> Option<&str> {
+        self.scopes.get(scope)?.get(id)?.thread.as_deref()
     }
 
     /// Place every note of `vectors` not placed yet, oldest first, and place
@@ -628,239 +846,88 @@ impl Threads {
     /// threads, let back in or put in a thread. A note the user put in a
     /// thread goes there first, whatever it scores, so the notes like it
     /// join. Notes gone are forgotten. A note `when` does not know is left
-    /// for a later pass. Two threads of the user's never become one. True
-    /// when anything changed.
+    /// for a later pass. Two threads of the user's never become one. Every
+    /// note is in the general scope here: `reconcile_mentioned` places them
+    /// by the names they mention. True when anything changed.
+    #[cfg(test)]
     pub fn reconcile(
         &mut self,
         vectors: &Vectors,
         when: &HashMap<String, When>,
         edits: &Edits,
     ) -> bool {
-        self.reconcile_with(vectors, when, edits, CUTS)
+        self.reconcile_with(vectors, when, edits, &Mentioned::new(), CUTS)
     }
 
-    /// `reconcile`, with the lines drawn at `cuts`.
+    /// `reconcile`, each note in the scope of each name it mentions, or in
+    /// the general one when it mentions none, and in any scope the user put
+    /// it in a thread of.
+    pub fn reconcile_mentioned(
+        &mut self,
+        vectors: &Vectors,
+        when: &HashMap<String, When>,
+        edits: &Edits,
+        mentioned: &Mentioned,
+    ) -> bool {
+        self.reconcile_with(vectors, when, edits, mentioned, CUTS)
+    }
+
+    /// `reconcile_mentioned`, with the lines drawn at `cuts`.
     pub fn reconcile_with(
         &mut self,
         vectors: &Vectors,
         when: &HashMap<String, When>,
         edits: &Edits,
+        mentioned: &Mentioned,
         cuts: Cuts,
     ) -> bool {
-        let alone = &edits.alone;
         let mut changed = false;
         if self.version != VERSION || self.model != vectors.model_id() {
             self.version = VERSION;
             self.model = vectors.model_id().to_string();
-            self.notes.clear();
+            self.scopes.clear();
             changed = true;
         }
 
-        let before = self.notes.len();
-        self.notes.retain(|id, placed| {
-            vectors.get(id).is_some_and(|(hash, _)| hash == placed.hash)
-                && placed.out == alone.contains(id)
-                && edits
-                    .pinned
-                    .get(id)
-                    .is_none_or(|thread| placed.thread.as_ref() == Some(thread))
-        });
-        // A thread down to one note is no thread: that note is placed again.
-        let mut sizes: HashMap<String, usize> = HashMap::new();
-        for thread in self
-            .notes
-            .values()
-            .filter_map(|placed| placed.thread.clone())
-        {
-            *sizes.entry(thread).or_default() += 1;
-        }
-        self.notes.retain(|_, placed| {
-            placed
-                .thread
-                .as_ref()
-                .is_none_or(|thread| sizes[thread] > 1)
-        });
-        changed |= self.notes.len() != before;
-
-        let mut todo: Vec<(&When, &str)> = vectors
-            .iter()
-            .filter(|(id, _, _)| !self.notes.contains_key(*id))
-            .filter_map(|(id, _, _)| Some((when.get(id)?, id)))
-            .collect();
-        if todo.is_empty() || vectors.len() < MIN_NOTES {
-            return changed;
-        }
-        // Notes put in a thread by the user first, so the others can join.
-        todo.sort_by_key(|(written, id)| (!edits.pinned.contains_key(*id), *written, *id));
-
-        let usual = Usual::of(vectors);
-        // Ordered, so equal scores always pick the same thread.
-        let mut groups: BTreeMap<String, Group> = BTreeMap::new();
-        // The notes on their own that a note may start a thread with, by day.
-        let mut single: BTreeSet<(NaiveDate, String)> = BTreeSet::new();
-        for (id, placed) in &self.notes {
-            let (Some(written), Some((_, vector))) = (when.get(id), vectors.get(id)) else {
-                continue;
-            };
-            match &placed.thread {
-                Some(thread) => groups
-                    .entry(thread.clone())
-                    .or_insert_with(|| Group::new(vectors.dims(), written.date))
-                    .add(id, vector, written.date, &usual),
-                None if !alone.contains(id) => {
-                    single.insert((written.date, id.clone()));
-                }
-                None => {}
-            }
-        }
-
-        // Threads that formed or grew, which may take in a note on its own.
-        let mut touched: BTreeSet<String> = BTreeSet::new();
-        for (written, id) in todo {
-            let (hash, vector) = vectors.get(id).expect("listed from the vectors");
-            let choice = if alone.contains(id) {
-                None
-            } else if let Some(thread) = edits.pinned.get(id) {
-                Some(Choice::Put(thread.clone()))
-            } else {
-                let note = usual.note(id, vector);
-                best(&note, written.date, &usual, &groups, &single, vectors, cuts)
-            };
-            let thread = match choice {
-                Some(Choice::Put(thread)) => {
-                    groups
-                        .entry(thread.clone())
-                        .or_insert_with(|| Group::new(vectors.dims(), written.date))
-                        .add(id, vector, written.date, &usual);
-                    touched.insert(thread.clone());
-                    Some(thread)
-                }
-                Some(Choice::Join(thread)) => {
-                    if let Some(group) = groups.get_mut(&thread) {
-                        group.add(id, vector, written.date, &usual);
+        let mut members: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for (id, _, _) in vectors.iter() {
+            match mentioned.get(id).filter(|keys| !keys.is_empty()) {
+                Some(keys) => {
+                    for key in keys {
+                        members.entry(key.as_str()).or_default().insert(id);
                     }
-                    touched.insert(thread.clone());
-                    Some(thread)
-                }
-                Some(Choice::Pair(other)) => {
-                    let (Some(their), Some((_, theirs))) = (when.get(&other), vectors.get(&other))
-                    else {
-                        continue;
-                    };
-                    // Named after the earlier of the two, unless a thread
-                    // already goes by that name.
-                    let mut names = [other.as_str(), id];
-                    if (written, id) < (their, other.as_str()) {
-                        names.reverse();
-                    }
-                    let thread = names
-                        .iter()
-                        .map(|name| name.to_string())
-                        .chain((2..).map(|n| format!("{}-{n}", names[0])))
-                        .find(|name| !groups.contains_key(name))
-                        .expect("a free name");
-                    let mut group = Group::new(vectors.dims(), their.date);
-                    group.add(&other, theirs, their.date, &usual);
-                    group.add(id, vector, written.date, &usual);
-                    groups.insert(thread.clone(), group);
-                    single.remove(&(their.date, other.clone()));
-                    if let Some(placed) = self.notes.get_mut(&other) {
-                        placed.thread = Some(thread.clone());
-                    }
-                    touched.insert(thread.clone());
-                    Some(thread)
                 }
                 None => {
-                    if !alone.contains(id) {
-                        single.insert((written.date, id.to_string()));
-                    }
-                    None
+                    members.entry(GENERAL).or_default().insert(id);
                 }
-            };
-            let placed = Placed {
-                hash: hash.to_string(),
-                thread,
-                out: alone.contains(id),
-            };
-            self.notes.insert(id.to_string(), placed);
-        }
-
-        let kept = edits.kept();
-
-        // A note on its own was placed before the thread it fits formed, or
-        // before the thread grew towards it: it joins now. A thread that
-        // grew towards another becomes one with it. Either may draw a
-        // thread nearer others in turn.
-        while !touched.is_empty() {
-            let near: BTreeSet<(NaiveDate, String)> = touched
-                .iter()
-                .filter_map(|thread| groups.get(thread))
-                .flat_map(|group| {
-                    let last = latest(group.last, cuts.window);
-                    single
-                        .range((earliest(group.first, cuts.window), String::new())..)
-                        .take_while(move |(day, _)| *day <= last)
-                        .cloned()
-                })
-                .collect();
-            let grown = std::mem::take(&mut touched);
-            for (day, id) in near {
-                let Some((_, vector)) = vectors.get(&id) else {
-                    continue;
-                };
-                let note = usual.note(&id, vector);
-                let Some((_, thread)) = best_thread(&note, day, &usual, &groups, cuts) else {
-                    continue;
-                };
-                if let Some(group) = groups.get_mut(&thread) {
-                    group.add(&id, vector, day, &usual);
-                }
-                single.remove(&(day, id.clone()));
-                if let Some(placed) = self.notes.get_mut(&id) {
-                    placed.thread = Some(thread.clone());
-                }
-                touched.insert(thread);
-            }
-            for thread in grown {
-                let Some(other) = closest_thread(&thread, &usual, &groups, vectors, &kept, cuts)
-                else {
-                    continue;
-                };
-                // The user's goes on, else the older one.
-                let older = |a: &str, b: &str| (groups[a].first, a) < (groups[b].first, b);
-                let (keep, gone) = if kept.contains(other.as_str())
-                    || (!kept.contains(thread.as_str()) && older(&other, &thread))
-                {
-                    (other, thread)
-                } else {
-                    (thread, other)
-                };
-                let absorbed = groups.remove(&gone).expect("a thread just scored");
-                if let Some(group) = groups.get_mut(&keep) {
-                    group.absorb(absorbed, &usual);
-                }
-                for placed in self.notes.values_mut() {
-                    if placed.thread.as_deref() == Some(gone.as_str()) {
-                        placed.thread = Some(keep.clone());
-                    }
-                }
-                touched.remove(&gone);
-                touched.insert(keep);
             }
         }
-        true
+        for (scope, note, _) in edits.puts() {
+            if vectors.get(note).is_some() {
+                members.entry(scope).or_default().insert(note);
+            }
+        }
+
+        // A scope no note is in any more is forgotten.
+        let before = self.scopes.len();
+        self.scopes
+            .retain(|scope, _| members.contains_key(scope.as_str()));
+        changed |= self.scopes.len() != before;
+        for (scope, notes) in &members {
+            let placed = self.scopes.entry(scope.to_string()).or_default();
+            changed |= place(placed, scope, notes, vectors, when, edits, cuts);
+        }
+        self.scopes.retain(|_, placed| !placed.is_empty());
+        changed
     }
 
     /// Every thread, its notes oldest first, with the titles the user gave,
     /// but for suggestions the user dismissed that hold no other note since.
     pub fn list(&self, when: &HashMap<String, When>, edits: &Edits) -> Vec<Thread> {
         let mut members: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-        for (id, placed) in &self.notes {
+        for ((_, id), placed) in flat(&self.scopes) {
             if let (Some(thread), true) = (&placed.thread, when.contains_key(id)) {
-                members
-                    .entry(thread.as_str())
-                    .or_default()
-                    .push(id.as_str());
+                members.entry(thread.as_str()).or_default().push(id);
             }
         }
         let kept = edits.kept();
@@ -879,45 +946,55 @@ impl Threads {
 
     /// The ids of every thread, those of one note included.
     pub fn names(&self) -> HashSet<String> {
-        self.notes
-            .values()
-            .filter_map(|placed| placed.thread.clone())
+        flat(&self.scopes)
+            .filter_map(|(_, placed)| placed.thread.clone())
             .collect()
     }
 
     /// The threads a note could be put in, the one it fits best first,
     /// whatever their days and however low it scores: the user chooses.
-    /// Not the one it is in.
+    /// Those of every scope it is placed in, each scored against its own
+    /// scope. Not one it is in.
     pub fn ranked_for(&self, id: &str, vectors: &Vectors) -> Vec<String> {
         let Some((_, vector)) = vectors.get(id) else {
             return Vec::new();
         };
-        let usual = Usual::of(vectors);
-        let mut groups: BTreeMap<&str, Group> = BTreeMap::new();
-        let mine = self.of(id);
-        for (note, placed) in &self.notes {
-            let (Some(thread), Some((_, theirs))) = (placed.thread.as_deref(), vectors.get(note))
-            else {
-                continue;
-            };
-            if note != id && Some(thread) != mine {
-                groups
-                    .entry(thread)
-                    .or_insert_with(|| Group::new(vectors.dims(), NaiveDate::MIN))
-                    .add(note, theirs, NaiveDate::MIN, &usual);
-            }
-        }
-        let note = usual.note(id, vector);
-        let mut ranked: Vec<(f32, &str)> = groups
+        let mut ranked: Vec<(f32, &str)> = Vec::new();
+        for (scope, notes) in self
+            .scopes
             .iter()
-            .filter(|(_, group)| group.notes.len() > 1)
-            .map(|(thread, group)| {
-                let score = usual
-                    .score(&note, &group.part(), f32::NEG_INFINITY)
-                    .unwrap_or(f32::NEG_INFINITY);
-                (score, *thread)
-            })
-            .collect();
+            .filter(|(_, notes)| notes.contains_key(id))
+        {
+            let members: BTreeSet<&str> = notes.keys().map(String::as_str).collect();
+            let usual = Usual::of_members(vectors, &members);
+            let mut groups: BTreeMap<&str, Group> = BTreeMap::new();
+            let mine = self.in_scope(scope, id);
+            for (note, placed) in notes {
+                let (Some(thread), Some((_, theirs))) =
+                    (placed.thread.as_deref(), vectors.get(note))
+                else {
+                    continue;
+                };
+                if note != id && Some(thread) != mine {
+                    groups
+                        .entry(thread)
+                        .or_insert_with(|| Group::new(vectors.dims(), NaiveDate::MIN))
+                        .add(note, theirs, NaiveDate::MIN, &usual);
+                }
+            }
+            let note = usual.note(id, vector);
+            ranked.extend(
+                groups
+                    .iter()
+                    .filter(|(_, group)| group.notes.len() > 1)
+                    .map(|(thread, group)| {
+                        let score = usual
+                            .score(&note, &group.part(), f32::NEG_INFINITY)
+                            .unwrap_or(f32::NEG_INFINITY);
+                        (score, *thread)
+                    }),
+            );
+        }
         ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(b.1)));
         ranked
             .into_iter()
@@ -929,7 +1006,8 @@ impl Threads {
     /// `None` once it is gone. A dismissed suggestion is still got.
     pub fn get(&self, id: &str, when: &HashMap<String, When>, edits: &Edits) -> Option<Thread> {
         let notes: Vec<&str> = self
-            .notes
+            .scopes
+            .get(scope_of(id))?
             .iter()
             .filter(|(note, placed)| {
                 placed.thread.as_deref() == Some(id) && when.contains_key(*note)
@@ -938,6 +1016,227 @@ impl Threads {
             .collect();
         shown(id, notes, when, edits, &edits.kept())
     }
+}
+
+/// Every placement, in scope then note order.
+fn flat(scopes: &BTreeMap<String, Scope>) -> impl Iterator<Item = ((&str, &str), &Placed)> {
+    scopes.iter().flat_map(|(scope, notes)| {
+        notes
+            .iter()
+            .map(move |(id, placed)| ((scope.as_str(), id.as_str()), placed))
+    })
+}
+
+/// Place the notes of one scope, `members`, as `Threads::reconcile` says,
+/// scored against what the scope's notes add up to. True when anything
+/// changed.
+fn place(
+    placed: &mut Scope,
+    scope: &str,
+    members: &BTreeSet<&str>,
+    vectors: &Vectors,
+    when: &HashMap<String, When>,
+    edits: &Edits,
+    cuts: Cuts,
+) -> bool {
+    let cuts = if scope == GENERAL {
+        cuts
+    } else {
+        Cuts {
+            lead: cuts.scope_lead,
+            ..cuts
+        }
+    };
+    let alone = &edits.alone;
+    let mut changed = false;
+    let before = placed.len();
+    placed.retain(|id, placed| {
+        members.contains(id.as_str())
+            && vectors.get(id).is_some_and(|(hash, _)| hash == placed.hash)
+            && placed.out == alone.contains(id)
+            && edits
+                .put(scope, id)
+                .is_none_or(|thread| placed.thread.as_ref() == Some(thread))
+    });
+    // A thread down to one note is no thread: that note is placed again.
+    let mut sizes: HashMap<String, usize> = HashMap::new();
+    for thread in placed.values().filter_map(|placed| placed.thread.clone()) {
+        *sizes.entry(thread).or_default() += 1;
+    }
+    placed.retain(|_, placed| {
+        placed
+            .thread
+            .as_ref()
+            .is_none_or(|thread| sizes[thread] > 1)
+    });
+    changed |= placed.len() != before;
+
+    let mut todo: Vec<(&When, &str)> = members
+        .iter()
+        .filter(|id| !placed.contains_key(**id))
+        .filter_map(|id| Some((when.get(*id)?, *id)))
+        .collect();
+    if todo.is_empty() || members.len() < MIN_NOTES {
+        return changed;
+    }
+    // Notes put in a thread by the user first, so the others can join.
+    todo.sort_by_key(|(written, id)| (edits.put(scope, id).is_none(), *written, *id));
+
+    let usual = Usual::of_members(vectors, members);
+    // Ordered, so equal scores always pick the same thread.
+    let mut groups: BTreeMap<String, Group> = BTreeMap::new();
+    // The notes on their own that a note may start a thread with, by day.
+    let mut single: BTreeSet<(NaiveDate, String)> = BTreeSet::new();
+    for (id, placed) in placed.iter() {
+        let (Some(written), Some((_, vector))) = (when.get(id), vectors.get(id)) else {
+            continue;
+        };
+        match &placed.thread {
+            Some(thread) => groups
+                .entry(thread.clone())
+                .or_insert_with(|| Group::new(vectors.dims(), written.date))
+                .add(id, vector, written.date, &usual),
+            None if !alone.contains(id) => {
+                single.insert((written.date, id.clone()));
+            }
+            None => {}
+        }
+    }
+
+    // Threads that formed or grew, which may take in a note on its own.
+    let mut touched: BTreeSet<String> = BTreeSet::new();
+    for (written, id) in todo {
+        let (hash, vector) = vectors.get(id).expect("listed from the vectors");
+        let choice = if alone.contains(id) {
+            None
+        } else if let Some(thread) = edits.put(scope, id) {
+            Some(Choice::Put(thread.clone()))
+        } else {
+            let note = usual.note(id, vector);
+            best(&note, written.date, &usual, &groups, &single, vectors, cuts)
+        };
+        let thread = match choice {
+            Some(Choice::Put(thread)) => {
+                groups
+                    .entry(thread.clone())
+                    .or_insert_with(|| Group::new(vectors.dims(), written.date))
+                    .add(id, vector, written.date, &usual);
+                touched.insert(thread.clone());
+                Some(thread)
+            }
+            Some(Choice::Join(thread)) => {
+                if let Some(group) = groups.get_mut(&thread) {
+                    group.add(id, vector, written.date, &usual);
+                }
+                touched.insert(thread.clone());
+                Some(thread)
+            }
+            Some(Choice::Pair(other)) => {
+                let (Some(their), Some((_, theirs))) = (when.get(&other), vectors.get(&other))
+                else {
+                    continue;
+                };
+                // Named after the earlier of the two, unless a thread
+                // already goes by that name.
+                let mut names = [other.as_str(), id];
+                if (written, id) < (their, other.as_str()) {
+                    names.reverse();
+                }
+                let thread = names
+                    .iter()
+                    .map(|name| thread_id(scope, name))
+                    .chain((2..).map(|n| thread_id(scope, &format!("{}-{n}", names[0]))))
+                    .find(|name| !groups.contains_key(name))
+                    .expect("a free name");
+                let mut group = Group::new(vectors.dims(), their.date);
+                group.add(&other, theirs, their.date, &usual);
+                group.add(id, vector, written.date, &usual);
+                groups.insert(thread.clone(), group);
+                single.remove(&(their.date, other.clone()));
+                if let Some(placed) = placed.get_mut(&other) {
+                    placed.thread = Some(thread.clone());
+                }
+                touched.insert(thread.clone());
+                Some(thread)
+            }
+            None => {
+                if !alone.contains(id) {
+                    single.insert((written.date, id.to_string()));
+                }
+                None
+            }
+        };
+        let note = Placed {
+            hash: hash.to_string(),
+            thread,
+            out: alone.contains(id),
+        };
+        placed.insert(id.to_string(), note);
+    }
+
+    let kept = edits.kept();
+
+    // A note on its own was placed before the thread it fits formed, or
+    // before the thread grew towards it: it joins now. A thread that
+    // grew towards another becomes one with it. Either may draw a
+    // thread nearer others in turn.
+    while !touched.is_empty() {
+        let near: BTreeSet<(NaiveDate, String)> = touched
+            .iter()
+            .filter_map(|thread| groups.get(thread))
+            .flat_map(|group| {
+                let last = latest(group.last, cuts.window);
+                single
+                    .range((earliest(group.first, cuts.window), String::new())..)
+                    .take_while(move |(day, _)| *day <= last)
+                    .cloned()
+            })
+            .collect();
+        let grown = std::mem::take(&mut touched);
+        for (day, id) in near {
+            let Some((_, vector)) = vectors.get(&id) else {
+                continue;
+            };
+            let note = usual.note(&id, vector);
+            let Some((_, thread)) = best_thread(&note, day, &usual, &groups, cuts) else {
+                continue;
+            };
+            if let Some(group) = groups.get_mut(&thread) {
+                group.add(&id, vector, day, &usual);
+            }
+            single.remove(&(day, id.clone()));
+            if let Some(placed) = placed.get_mut(&id) {
+                placed.thread = Some(thread.clone());
+            }
+            touched.insert(thread);
+        }
+        for thread in grown {
+            let Some(other) = closest_thread(&thread, &usual, &groups, vectors, &kept, cuts) else {
+                continue;
+            };
+            // The user's goes on, else the older one.
+            let older = |a: &str, b: &str| (groups[a].first, a) < (groups[b].first, b);
+            let (keep, gone) = if kept.contains(other.as_str())
+                || (!kept.contains(thread.as_str()) && older(&other, &thread))
+            {
+                (other, thread)
+            } else {
+                (thread, other)
+            };
+            let absorbed = groups.remove(&gone).expect("a thread just scored");
+            if let Some(group) = groups.get_mut(&keep) {
+                group.absorb(absorbed, &usual);
+            }
+            for placed in placed.values_mut() {
+                if placed.thread.as_deref() == Some(gone.as_str()) {
+                    placed.thread = Some(keep.clone());
+                }
+            }
+            touched.remove(&gone);
+            touched.insert(keep);
+        }
+    }
+    true
 }
 
 /// Thread `id` of `notes` as the views show it, or `None` for a thread of
@@ -959,8 +1258,11 @@ fn shown(
         .filter(|title| !title.trim().is_empty())
         .cloned();
     let day = |note: &str| when[note].date.format("%Y-%m-%d").to_string();
+    let scope = scope_of(id);
     Some(Thread {
         id: id.to_string(),
+        scope: (scope != GENERAL).then(|| scope.to_string()),
+        mention: None,
         named: title.is_some(),
         title,
         kept: kept.contains(id),
@@ -1437,7 +1739,7 @@ mod tests {
         let (vectors, when) = space(&two);
         let mut threads = Threads::default();
         threads.reconcile(&vectors, &when, &Edits::default());
-        assert!(threads.notes.is_empty(), "nothing placed yet");
+        assert!(threads.scopes.is_empty(), "nothing placed yet");
 
         let (vectors, when) = space(&[two[0], two[1], ("01Z1", "2026-09-01", 9)]);
         assert!(threads.reconcile(&vectors, &when, &Edits::default()));
@@ -1465,7 +1767,7 @@ mod tests {
             lead: f32::NEG_INFINITY,
             ..CUTS
         };
-        mean_only.reconcile_with(&vectors, &when, &Edits::default(), cuts);
+        mean_only.reconcile_with(&vectors, &when, &Edits::default(), &Mentioned::new(), cuts);
         assert!(mean_only.of("01P").is_some(), "the old mistake");
 
         let mut threads = Threads::default();
@@ -1576,6 +1878,221 @@ mod tests {
         edits.dismissed.clear();
         edits.save(&mut db).unwrap();
         assert_eq!(Edits::load(&db), edits);
+    }
+
+    /// Notes as `(id, date, the axes it is about)`, each axis weighed as
+    /// given, over the first axis every note leans on.
+    fn weighed(notes: &[(&str, &str, &[(usize, f32)])]) -> (Vectors, HashMap<String, When>) {
+        let mut vectors = Vectors::new("m", 16);
+        let mut when = HashMap::new();
+        for (id, date, axes) in notes {
+            let mut v = vec![0.0; 16];
+            v[0] = 1.0;
+            for (axis, weight) in *axes {
+                v[*axis] += weight;
+            }
+            vectors.insert(id.to_string(), format!("h{id}"), v).unwrap();
+            let written = When {
+                date: NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap(),
+                time: "09:00".to_string(),
+            };
+            when.insert(id.to_string(), written);
+        }
+        (vectors, when)
+    }
+
+    /// Six notes of one project, axis 3, three about its 404s, axis 1, and
+    /// three about its performance, axis 2, among unrelated others.
+    fn project() -> (Vectors, HashMap<String, When>, Mentioned) {
+        let mut notes: Vec<(&str, &str, &[(usize, f32)])> = vec![
+            ("01A", "2026-09-10", &[(3, 1.0), (1, 1.0)]),
+            ("01B", "2026-09-11", &[(3, 1.0), (1, 1.0)]),
+            ("01C", "2026-09-12", &[(3, 1.0), (1, 1.0)]),
+            ("01D", "2026-09-13", &[(3, 1.0), (2, 1.0)]),
+            ("01E", "2026-09-14", &[(3, 1.0), (2, 1.0)]),
+            ("01F", "2026-09-15", &[(3, 1.0), (2, 1.0)]),
+        ];
+        const OTHER: [&[(usize, f32)]; 8] = [
+            &[(6, 1.0)],
+            &[(7, 1.0)],
+            &[(8, 1.0)],
+            &[(9, 1.0)],
+            &[(10, 1.0)],
+            &[(11, 1.0)],
+            &[(12, 1.0)],
+            &[(13, 1.0)],
+        ];
+        let others = [
+            "01Z1", "01Z2", "01Z3", "01Z4", "01Z5", "01Z6", "01Z7", "01Z8",
+        ];
+        for (id, axes) in others.iter().zip(OTHER) {
+            notes.push((id, "2026-09-05", axes));
+        }
+        let (vectors, when) = weighed(&notes);
+        let mentioned: Mentioned = ["01A", "01B", "01C", "01D", "01E", "01F"]
+            .iter()
+            .map(|id| (id.to_string(), vec!["atlas".to_string()]))
+            .collect();
+        (vectors, when, mentioned)
+    }
+
+    #[test]
+    fn a_projects_subjects_part_among_its_own_notes() {
+        let (vectors, when, mentioned) = project();
+
+        // Across the space, what the project's notes share ties them into one.
+        let mut whole = Threads::default();
+        whole.reconcile(&vectors, &when, &Edits::default());
+        assert_eq!(
+            threads_of(&whole, &when),
+            vec![vec!["01A", "01B", "01C", "01D", "01E", "01F"]]
+        );
+
+        // Among its own notes, that is taken off, and its subjects part.
+        let mut threads = Threads::default();
+        assert!(threads.reconcile_mentioned(&vectors, &when, &Edits::default(), &mentioned));
+        assert_eq!(
+            threads_of(&threads, &when),
+            vec![vec!["01A", "01B", "01C"], vec!["01D", "01E", "01F"]]
+        );
+        let listed = threads.list(&when, &Edits::default());
+        assert_eq!(listed[0].id, "@atlas:01A");
+        assert_eq!(listed[0].scope.as_deref(), Some("atlas"));
+        assert_eq!(threads.in_scope("atlas", "01F"), Some("@atlas:01D"));
+        assert_eq!(
+            threads.in_scope(GENERAL, "01A"),
+            None,
+            "not in the general scope"
+        );
+        assert!(!threads.reconcile_mentioned(&vectors, &when, &Edits::default(), &mentioned));
+    }
+
+    #[test]
+    fn a_note_naming_two_names_is_in_the_threads_of_both() {
+        let (vectors, when, mut mentioned) = project();
+        // Marie in the 404s and once in the performance work.
+        for id in ["01A", "01B", "01C", "01D"] {
+            mentioned
+                .entry(id.to_string())
+                .or_default()
+                .push("marie".into());
+        }
+        let mut threads = Threads::default();
+        threads.reconcile_mentioned(&vectors, &when, &Edits::default(), &mentioned);
+        assert_eq!(threads.in_scope("atlas", "01B"), Some("@atlas:01A"));
+        assert_eq!(threads.in_scope("marie", "01B"), Some("@marie:01A"));
+        let marie = threads.get("@marie:01A", &when, &Edits::default()).unwrap();
+        assert_eq!(marie.notes, ["01A", "01B", "01C"]);
+        assert_eq!(
+            threads.ranked_for("01B", &vectors),
+            ["@atlas:01D"],
+            "only the threads of its own names, and not those it is in"
+        );
+    }
+
+    #[test]
+    fn a_name_no_longer_mentioned_takes_its_threads_along() {
+        let (vectors, when, mut mentioned) = project();
+        let mut threads = Threads::default();
+        threads.reconcile_mentioned(&vectors, &when, &Edits::default(), &mentioned);
+        mentioned.clear();
+        assert!(threads.reconcile_mentioned(&vectors, &when, &Edits::default(), &mentioned));
+        assert!(!threads.scopes.contains_key("atlas"));
+        assert_eq!(threads.of("01A"), Some("01A"), "back in the general scope");
+    }
+
+    #[test]
+    fn a_note_put_in_a_names_thread_stays_there_and_scopes_round_trip() {
+        let (vectors, when, mentioned) = project();
+        let mut edits = Edits::default();
+        edits.put_in("01Z1".into(), "@atlas:01D".into());
+        edits.put_in("01A".into(), "@atlas:01D".into());
+        edits.put_in("01A".into(), "@atlas:01A-2".into());
+        assert_eq!(
+            edits.put("atlas", "01A").map(String::as_str),
+            Some("@atlas:01A-2"),
+            "one per scope"
+        );
+        let mut threads = Threads::default();
+        threads.reconcile_mentioned(&vectors, &when, &edits, &mentioned);
+        assert_eq!(threads.in_scope("atlas", "01Z1"), Some("@atlas:01D"));
+        assert!(edits.kept().contains("@atlas:01D"));
+
+        let mut db = SpaceDb::in_memory().unwrap();
+        threads.save(&mut db).unwrap();
+        assert_eq!(Threads::load(&db), threads);
+        edits.save(&mut db).unwrap();
+        assert_eq!(Edits::load(&db), edits);
+        assert!(edits.take_out("01A"));
+        assert_eq!(edits.put("atlas", "01A"), None);
+    }
+
+    /// The made-up notes that mention names, placed with the real model
+    /// beside the others: among each name's notes, every thread is about one
+    /// of its subjects, and the subjects with notes enough have theirs; the
+    /// general samples gather as they do without them. Needs the embedding
+    /// model; `cargo test threads_part -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "needs the downloaded embedding model"]
+    fn threads_part_the_subjects_of_a_name() {
+        use crate::embed::{installed_embedder, samples, Embedder};
+
+        let Some(embedder) = installed_embedder() else {
+            return;
+        };
+        let mut notes = samples::notes();
+        notes.extend(samples::mentioned());
+        let mut vectors = Vectors::new(embedder.model_id(), embedder.dims());
+        let mut when = HashMap::new();
+        let mut mentioned = Mentioned::new();
+        for (_, note) in &notes {
+            let vector = embedder.embed_document(&note.body).unwrap();
+            vectors
+                .insert(note.id.clone(), note.hash.clone(), vector)
+                .unwrap();
+            let written = When {
+                date: NaiveDate::parse_from_str(&note.date, "%Y-%m-%d").unwrap(),
+                time: note.time.clone(),
+            };
+            when.insert(note.id.clone(), written);
+            let keys: Vec<String> = crate::mentions::mentions(&note.body)
+                .into_iter()
+                .map(|mention| mention.key)
+                .collect();
+            if !keys.is_empty() {
+                mentioned.insert(note.id.clone(), keys);
+            }
+        }
+        let about: HashMap<&str, &str> = notes
+            .iter()
+            .map(|(thing, note)| (note.id.as_str(), *thing))
+            .collect();
+
+        let mut threads = Threads::default();
+        threads.reconcile_mentioned(&vectors, &when, &Edits::default(), &mentioned);
+        let mut found: BTreeSet<(String, &str)> = BTreeSet::new();
+        for thread in threads.list(&when, &Edits::default()) {
+            let things: BTreeSet<&str> = thread.notes.iter().map(|id| about[id.as_str()]).collect();
+            let scope = thread.scope.clone().unwrap_or_default();
+            eprintln!("{scope:>8} {things:?} {}", thread.notes.len());
+            assert_eq!(things.len(), 1, "a thread of {scope:?} mixes {things:?}");
+            found.insert((scope, things.into_iter().next().unwrap()));
+        }
+        for (scope, subject) in [
+            ("atlas", "404"),
+            ("atlas", "release"),
+            ("atlas", "perf"),
+            ("marie", "leave"),
+            ("marie", "review"),
+            ("garden", "water"),
+            ("", "argocd"),
+            ("", "kitchen"),
+        ] {
+            assert!(
+                found.contains(&(scope.to_string(), subject)),
+                "no thread of {scope:?} about {subject}"
+            );
+        }
     }
 
     /// The made-up notes, placed with the real model: every thread is about

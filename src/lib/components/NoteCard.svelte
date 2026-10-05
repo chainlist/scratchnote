@@ -192,7 +192,7 @@
 			<Markdown text={body} onchange={saveTicks} class="text-base leading-7 text-neutral-200" />
 			<!-- The day the note looks forward to, and the thread it is in. -->
 			{#if note.on || (threadLine && inThread)}
-				<div class="mt-1.5 flex min-w-0 items-center gap-3">
+				<div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
 					{#if note.on}<DayAhead on={note.on} />{/if}
 					{#if threadLine}<ThreadLine id={note.id} />{/if}
 				</div>

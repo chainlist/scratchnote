@@ -6,6 +6,7 @@
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import { m } from '#lib/paraglide/messages.js';
 	import type { ThreadPick } from '#lib/shell.svelte.js';
+	import { threadScope } from '#lib/threads.js';
 
 	let {
 		pick = $bindable(),
@@ -23,8 +24,10 @@
 	/** What the picker shows, kept as it was while it fades out. */
 	let shown = $state<ThreadPick | null>(null);
 
-	// One note is offered the threads it fits best first; several, or a
-	// whole thread, every other thread, the one written in last first.
+	// One note is offered the threads it fits best first, among the names
+	// it mentions; several, or a whole thread, every other thread, the one
+	// written in last first. Notes from a thread only go to another thread
+	// of the same name: a thread of one name never takes in another's.
 	$effect(() => {
 		const asked = pick;
 		if (!asked) return;
@@ -37,7 +40,11 @@
 				: threadCards();
 		load
 			.then((found) => {
-				if (pick === asked) threads = found.filter((thread) => thread.id !== asked.from);
+				if (pick !== asked) return;
+				const scope = asked.from === undefined ? undefined : threadScope(asked.from);
+				threads = found.filter(
+					(thread) => thread.id !== asked.from && (scope === undefined || thread.scope === scope)
+				);
 			})
 			.catch((e) => (error = String(e)));
 	});
@@ -110,6 +117,7 @@
 				<span class="flex min-w-0 flex-1 flex-col gap-0.5">
 					<span class="truncate">{name(thread)}</span>
 					<span class="truncate text-xs text-muted-foreground">
+						{#if thread.mention}@{thread.mention} ·{/if}
 						{m.thread_last({ count: thread.notes.length, date: shortDay(thread.until) })}
 						{#if !thread.kept}· {m.threads_suggested()}{/if}
 					</span>

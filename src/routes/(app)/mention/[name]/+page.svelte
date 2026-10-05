@@ -6,12 +6,21 @@
 	import { mentionKey } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
+	import { threadHref } from '#lib/threads.js';
 
 	let { data, params } = $props();
 
 	const shell = getShell();
 	/** As the newest note types it, or as the link has it once none does. */
 	const name = $derived(data.found.name ?? params.name);
+
+	/** The threads found among the name's notes (SPEC 6.4), the user's
+	 *  first, then those only suggested, each the one written in last first. */
+	const threads = $derived(
+		shell.threadList
+			.filter((thread) => thread.scope === mentionKey(name))
+			.toSorted((a, b) => Number(b.kept) - Number(a.kept) || b.until.localeCompare(a.until))
+	);
 
 	/** The notes by day, newest first, as they come. */
 	const days = $derived.by(() => {
@@ -39,6 +48,31 @@
 	pin={{ kind: 'mention', target: mentionKey(name), label: name }}
 	key={mentionKey(params.name)}
 >
+	{#if threads.length && shell.canSimilar}
+		<!-- What the name's notes are about, before them all. -->
+		<section class="mb-8">
+			<h2 class="border-b border-neutral-800 pb-2 text-sm font-medium text-neutral-400">
+				{m.threads_all()}
+			</h2>
+			<ul class="mt-1">
+				{#each threads as thread (thread.id)}
+					<li>
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
+						<a
+							href={threadHref(thread.id)}
+							class="-mx-2 flex items-baseline justify-between gap-4 rounded px-2 py-2 hover:bg-neutral-900"
+						>
+							<span class="truncate text-neutral-200">{thread.title ?? m.thread_untitled()}</span>
+							<span class="shrink-0 text-xs text-neutral-500">
+								{m.thread_last({ count: thread.notes.length, date: shortDay(thread.until) })}
+								{#if !thread.kept}· {m.threads_suggested()}{/if}
+							</span>
+						</a>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 	{#each days as day (day.date)}
 		<section class="mb-8 last:mb-0">
 			<h2 class="border-b border-neutral-800 pb-2 text-sm font-medium text-neutral-400">

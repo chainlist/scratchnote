@@ -55,14 +55,55 @@ pub const SAMPLES: &[(&str, &str, &str, &str)] = &[
     ("-balcony", "2026-07-15", "18:40", "Planted tomatoes and basil on the balcony."),
 ];
 
+/// Made-up notes that mention names, `@Atlas` and `@Garden` for two
+/// projects and `@Marie` for a person, each with the subject it is about
+/// within its names, for the threads found among a name's notes (SPEC 6.4).
+/// A subject starting with `-` is the only one of its name about it.
+pub const MENTIONED: &[(&str, &str, &str, &str)] = &[
+    ("404", "2026-09-02", "09:20", "@Atlas returns a 404 on /campaigns/{id} in production since yesterday's deploy, only for campaigns created before July."),
+    ("404", "2026-09-02", "15:40", "Found the cause of the @Atlas 404: the new router drops the trailing slash and the legacy campaign ids still have one."),
+    ("404", "2026-09-03", "11:05", "Hotfix for the @Atlas 404 on old campaign ids is deployed, the error rate is back to zero."),
+    ("404", "2026-09-08", "14:30", "Postmortem of the @Atlas 404 incident: add a contract test on the legacy campaign URLs before each release."),
+    ("perf", "2026-09-10", "10:15", "The @Atlas reporting page takes 8 seconds to load, the aggregation query scans the whole events table."),
+    ("perf", "2026-09-14", "16:50", "Added an index on events(campaign_id, day) for @Atlas: the reporting query went from 6 s to 900 ms."),
+    ("perf", "2026-09-21", "09:45", "@Atlas p95 latency is still high on the export endpoint, the profile shows JSON serialization of 50k rows."),
+    ("perf", "2026-09-24", "17:30", "Streaming the @Atlas CSV export instead of building it in memory halved the p95."),
+    ("release", "2026-09-15", "11:00", "@Atlas v2 release planned for November 4, feature freeze on October 20."),
+    ("release", "2026-09-29", "14:10", "Moved the @Atlas v2 release to November 18, the billing integration is not ready."),
+    ("release", "2026-10-06", "10:30", "Checklist for the @Atlas v2 release: migration dry run, rollback plan, changelog for customers."),
+    ("perf", "2026-09-17", "15:00", "1:1 with @Marie: she wants to lead the @Atlas performance work next quarter."),
+    ("leave", "2026-09-09", "12:00", "@Marie goes on parental leave from December, I need to plan her handover."),
+    ("leave", "2026-09-23", "16:20", "Handover plan for @Marie's leave: Julien takes the on-call, Sara the roadmap reviews."),
+    ("review", "2026-10-01", "09:30", "@Marie asked for a raise, prepare the case with what she achieved this year."),
+    ("review", "2026-10-02", "18:00", "Notes for @Marie's yearly review: great ownership of incidents, could delegate more."),
+    ("tomatoes", "2026-07-12", "19:00", "@Garden: planted the tomatoes and the basil along the south fence."),
+    ("tomatoes", "2026-08-03", "08:40", "The @Garden tomatoes have blight on the lower leaves, removed them and sprayed copper."),
+    ("tomatoes", "2026-08-25", "18:30", "@Garden harvest: 4 kg of tomatoes this week, making sauce on Sunday."),
+    ("water", "2026-09-06", "10:00", "Ordered a rain barrel and a drip irrigation kit for the @Garden."),
+    ("water", "2026-09-19", "11:30", "Drip irrigation installed in the @Garden, the timer waters at 6 am for 20 minutes."),
+    ("-fence", "2026-08-14", "20:10", "Need to fix the @Garden fence, the neighbour's dog keeps getting in."),
+];
+
+/// The notes `MENTIONED` holds, oldest first, each with its subject.
+pub fn mentioned() -> Vec<(&'static str, Note)> {
+    as_notes(MENTIONED, "01M")
+}
+
 /// The samples as notes, oldest first, each with the thing it is about.
 pub fn notes() -> Vec<(&'static str, Note)> {
-    let mut notes: Vec<(&str, Note)> = SAMPLES
+    as_notes(SAMPLES, "01S")
+}
+
+fn as_notes(
+    samples: &'static [(&'static str, &'static str, &'static str, &'static str)],
+    prefix: &str,
+) -> Vec<(&'static str, Note)> {
+    let mut notes: Vec<(&str, Note)> = samples
         .iter()
         .enumerate()
         .map(|(i, (group, date, time, body))| {
             let note = Note {
-                id: format!("01S{i:03}"),
+                id: format!("{prefix}{i:03}"),
                 date: date.to_string(),
                 time: time.to_string(),
                 file: relative_day_path(date),

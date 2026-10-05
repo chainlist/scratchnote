@@ -124,7 +124,7 @@
 					{#if words > 0}<span>{m.pages_read_time({ count: minutes })}</span>{/if}
 				</div>
 				{#if note.on || (threadLine && shell.threadOf(note.id))}
-					<div class="mt-1.5 flex min-w-0 items-center gap-3">
+					<div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
 						{#if note.on}<DayAhead on={note.on} />{/if}
 						{#if threadLine}<ThreadLine id={note.id} />{/if}
 					</div>

@@ -22,7 +22,7 @@ use crate::embed::vectors::Vectors;
 
 /// Bumped when the tables change. A later version moves the thread edits
 /// over to its tables, never drops them.
-const VERSION: i64 = 3;
+const VERSION: i64 = 4;
 
 const PAGE_SIZE: i64 = 16 * 1024;
 const WAL_BYTES: i64 = 1024 * 1024;
@@ -111,6 +111,27 @@ const PINS: &str = "
     );
 ";
 
+/// The tables version 4 added: where each note was placed, and where the
+/// user put it, in the threads of each name mentioned (SPEC 6.4). The
+/// general scope stays in `placed` and `pinned`, which a version before
+/// reads as it did.
+const SCOPES: &str = "
+    CREATE TABLE placed_in (
+        scope TEXT NOT NULL,
+        id TEXT NOT NULL,
+        hash TEXT NOT NULL,
+        thread TEXT,
+        out INTEGER NOT NULL,
+        PRIMARY KEY (scope, id)
+    ) WITHOUT ROWID;
+    CREATE TABLE pinned_in (
+        scope TEXT NOT NULL,
+        note TEXT NOT NULL,
+        thread TEXT NOT NULL,
+        PRIMARY KEY (scope, note)
+    ) WITHOUT ROWID;
+";
+
 pub fn space_db_path(root: &Path) -> PathBuf {
     root.join(".scratchnote").join("space.db")
 }
@@ -154,7 +175,10 @@ impl SpaceDb {
                 if version < 2 {
                     tx.execute_batch(CATEGORIES).map_err(to_string)?;
                 }
-                tx.execute_batch(PINS).map_err(to_string)?;
+                if version < 3 {
+                    tx.execute_batch(PINS).map_err(to_string)?;
+                }
+                tx.execute_batch(SCOPES).map_err(to_string)?;
                 tx.pragma_update(None, "user_version", VERSION)
                     .map_err(to_string)
             })?;
@@ -209,6 +233,7 @@ impl SpaceDb {
             tx.execute_batch(TABLES).map_err(to_string)?;
             tx.execute_batch(CATEGORIES).map_err(to_string)?;
             tx.execute_batch(PINS).map_err(to_string)?;
+            tx.execute_batch(SCOPES).map_err(to_string)?;
             tx.pragma_update(None, "user_version", VERSION)
                 .map_err(to_string)?;
             if let Some((vectors, threads, edits)) = &old {
@@ -408,6 +433,35 @@ mod tests {
         assert_eq!(count, 0);
         drop(db);
         // Opened again, nothing is made twice.
+        drop(SpaceDb::open(&root).unwrap());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_file_of_version_3_gets_the_scopes_and_keeps_the_rest() {
+        let root = scratch("version-3");
+        {
+            let conn = Connection::open(space_db_path(&root)).unwrap();
+            conn.execute_batch(TABLES).unwrap();
+            conn.execute_batch(CATEGORIES).unwrap();
+            conn.execute_batch(PINS).unwrap();
+            conn.pragma_update(None, "user_version", 3).unwrap();
+            conn.execute(
+                "INSERT INTO pinned (note, thread) VALUES ('01B', '01A')",
+                [],
+            )
+            .unwrap();
+        }
+        let db = SpaceDb::open(&root).unwrap();
+        let edits = Edits::load(&db);
+        assert_eq!(
+            edits
+                .put(crate::embed::threads::GENERAL, "01B")
+                .map(String::as_str),
+            Some("01A")
+        );
+        assert!(edits.pinned_in.is_empty());
+        drop(db);
         drop(SpaceDb::open(&root).unwrap());
         let _ = std::fs::remove_dir_all(&root);
     }

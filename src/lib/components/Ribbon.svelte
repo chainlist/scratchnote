@@ -110,9 +110,12 @@
 		}
 	});
 
-	/** An edge button's look: brighter while its kind of view is shown. */
+	/** An edge button's look: in the accent colour while its kind of view is
+	 *  shown. */
 	const tone = (button: string) =>
-		section === button ? 'text-foreground' : 'text-muted-foreground hover:text-foreground';
+		section === button
+			? 'text-primary hover:text-primary'
+			: 'text-muted-foreground hover:text-foreground';
 
 	/** One that fails says so above the view. */
 	function run(item: RibbonEntry) {
@@ -229,7 +232,7 @@
      steps back over it to line up with a pin's. -->
 {#snippet marker(active: boolean, bordered = true)}
 	{#if active}
-		<span class={['absolute top-1 -left-2 h-5 w-1 rounded-r bg-foreground', bordered && '-m-px']}
+		<span class={['absolute top-1 -left-2 h-5 w-1 rounded-r bg-primary', bordered && '-m-px']}
 		></span>
 	{/if}
 {/snippet}

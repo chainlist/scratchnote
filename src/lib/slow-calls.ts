@@ -49,6 +49,7 @@ const LABELS: Record<string, Label | null> = {
 	list_days: m.slow_loading,
 	notes_about: m.slow_loading,
 	get_note: m.slow_loading,
+	get_notes: m.slow_loading,
 	list_pages: m.slow_loading,
 	get_page: m.slow_loading,
 	list_threads: m.slow_loading,

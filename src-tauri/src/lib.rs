@@ -99,6 +99,7 @@ pub fn run() {
             commands::map::map_links,
             commands::map::map_search,
             commands::notes::get_note,
+            commands::notes::get_notes,
             commands::search::notes_containing,
             commands::notes::delete_note,
             commands::notes::update_note,

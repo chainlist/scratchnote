@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ThreadCard } from '#lib/api.js';
+	import { getNotes, type Note, type Thread, type ThreadCard } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -9,14 +9,54 @@
 	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadHref } from '#lib/threads.js';
+	import { leadNotes, SUGGESTED_PAGE, threadHref } from '#lib/threads.js';
 	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
 
 	let { data } = $props();
 
 	const shell = getShell();
+
+	/** First notes read since the page loaded, as more suggestions show. */
+	let more = $state<Note[]>([]);
+	const notes = $derived(new Map([...more, ...data.notes].map((note) => [note.id, note])));
+	const card = (thread: Thread): ThreadCard => ({
+		...thread,
+		first: thread.notes.slice(0, 2).flatMap((id) => notes.get(id) ?? [])
+	});
+
 	const suggested = $derived(data.threads.filter((thread) => !thread.kept));
-	const yours = $derived(data.threads.filter((thread) => thread.kept));
+	const yours = $derived(data.threads.filter((thread) => thread.kept).map(card));
+
+	/** How many suggestions are drawn: a space can hold hundreds. */
+	let shown = $state(SUGGESTED_PAGE);
+	const drawn = $derived(suggested.slice(0, shown).map(card));
+
+	/** Read the first notes of the first `count` suggestions not read yet.
+	 *  Each is asked for once, even while on its way or gone since. */
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- nothing is drawn from it
+	const asked = new Set<string>();
+	async function readFirst(count: number) {
+		const ids = leadNotes(suggested.slice(0, count)).filter(
+			(id) => !notes.has(id) && !asked.has(id)
+		);
+		if (!ids.length) return;
+		ids.forEach((id) => asked.add(id));
+		const found = await getNotes(ids);
+		more = [...more, ...found];
+	}
+
+	// Once the list changes under them, as a suggestion is kept or dismissed,
+	// the ones moving up into view need their notes too.
+	$effect(() => void readFirst(shown).catch((e) => shell.showError(String(e))));
+
+	async function showMore() {
+		try {
+			await readFirst(shown + SUGGESTED_PAGE);
+		} catch (e) {
+			shell.showError(String(e));
+		}
+		shown += SUGGESTED_PAGE;
+	}
 
 	function firstLine(body: string) {
 		return body.split('\n').find((line) => line.trim()) ?? '';
@@ -56,7 +96,7 @@
 				{#if suggested.length}
 					<p class="mb-4 text-sm text-neutral-500">{m.threads_suggested_hint()}</p>
 					<ul class="flex flex-col gap-3">
-						{#each suggested as thread (thread.id)}
+						{#each drawn as thread (thread.id)}
 							<li class="rounded-lg border border-neutral-800 px-4 py-3">
 								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
 								<a
@@ -94,6 +134,11 @@
 							</li>
 						{/each}
 					</ul>
+					{#if shown < suggested.length}
+						<div class="mt-4 flex justify-center">
+							<Button variant="outline" size="sm" onclick={showMore}>{m.search_show_more()}</Button>
+						</div>
+					{/if}
 				{:else}
 					<p class="text-sm text-neutral-500">{m.threads_suggested_none()}</p>
 				{/if}

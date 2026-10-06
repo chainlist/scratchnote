@@ -162,13 +162,11 @@
 						<p class="text-sm text-muted-foreground">{pluginDescription(entry.plugin)}</p>
 					</div>
 					<!-- Drawn while it shows, as Obsidian draws a plugin's tab. -->
-					{#if settings.tab === value}
-						<PluginSettingsHost
-							tab={entry.tab}
-							plugin={entry.plugin}
-							onerror={(message) => settings.say(message, true)}
-						/>
-					{/if}
+					<PluginSettingsHost
+						tab={entry.tab}
+						plugin={entry.plugin}
+						onerror={(message) => settings.say(message, true)}
+					/>
 				</Tabs.Content>
 			{/each}
 		</div>

@@ -1,5 +1,6 @@
 //! Notes: capture, the day view, edits, and the index behind them.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Local;
@@ -150,6 +151,23 @@ pub async fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<N
         None => Ok(None),
     })?;
     Ok(note.flatten())
+}
+
+/// Some notes or pages of the open space with their text, in the order
+/// asked, leaving out those gone, as the Threads page shows the first notes
+/// of the threads it draws (SPEC 6.4).
+#[tauri::command]
+pub async fn get_notes(state: State<'_, AppState>, ids: Vec<String>) -> Result<Vec<Note>, String> {
+    let space = state.space()?;
+    let notes = space.read(|idx, db| {
+        let entries: HashMap<&str, &IndexEntry> =
+            idx.entries().map(|e| (e.id.as_str(), e)).collect();
+        let asked = ids
+            .iter()
+            .filter_map(|id| entries.get(id.as_str()).copied());
+        crate::search::with_bodies(db, asked)
+    })?;
+    Ok(notes.unwrap_or_default())
 }
 
 /// Remove a note from its day file.

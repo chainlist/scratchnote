@@ -20,15 +20,18 @@
 		return format.format(day);
 	}
 
+	/** The formats `shortDay` made, by language and whether the year shows. */
+	const shortDays: Record<string, Intl.DateTimeFormat> = {};
+
 	/** A day in a few characters, as a line names it: the year only when it is not this one. */
 	export function shortDay(date: string) {
 		const day = new Date(`${date}T00:00:00`);
 		const thisYear = day.getFullYear() === new Date().getFullYear();
-		return day.toLocaleDateString(getLocale(), {
-			day: 'numeric',
-			month: 'short',
-			...(thisYear ? {} : { year: 'numeric' })
-		});
+		const format = (shortDays[`${getLocale()} ${thisYear}`] ??= new Intl.DateTimeFormat(
+			getLocale(),
+			{ day: 'numeric', month: 'short', ...(thisYear ? {} : { year: 'numeric' }) }
+		));
+		return format.format(day);
 	}
 </script>
 

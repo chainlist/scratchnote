@@ -284,6 +284,9 @@ export const mapSearch = (query: string) => invoke<string[]>('map_search', { que
 /** One note or page with its text, or null once it is gone. */
 export const getNote = (id: string) => invoke<Note | null>('get_note', { id });
 
+/** Some notes or pages with their text, in the order asked, those gone left out. */
+export const getNotes = (ids: string[]) => invoke<Note[]>('get_notes', { ids });
+
 /** Fired when notes moved on the map, or joined or left it. */
 export const onMapChanged = (handler: () => void): Promise<UnlistenFn> =>
 	listen('map-changed', () => handler());

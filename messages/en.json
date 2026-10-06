@@ -121,6 +121,7 @@
 	"threads_all": "Threads",
 	"threads_suggested": "Suggested",
 	"threads_suggested_hint": "Notes that look like one thing. Keep a thread to have new notes join it, or dismiss it.",
+	"thread_range": "{since} to {until}",
 	"threads_yours": "Your threads",
 	"threads_none": "No threads yet: notes about one thing gather here as you write.",
 	"threads_yours_none": "No threads kept yet: keep a suggested one to have new notes join it.",
@@ -133,7 +134,7 @@
 	"map_title": "Map",
 	"map_empty": "The map appears once your notes are embedded: notes about the same thing sit close together.",
 	"map_fit": "Fit every note in view",
-	"map_no_thread": "No thread",
+	"map_no_name": "No mention",
 	"map_hint": "Click a note to see it. Drag to move around, scroll to zoom.",
 	"map_open": "Open",
 	"map_graph": "Graph",
@@ -144,7 +145,16 @@
 	"thread_keep": "Keep thread",
 	"thread_dismiss": "Dismiss",
 	"thread_suggested_banner": "Suggested: these notes look like one thing.",
-	"thread_last": "{count} notes, last on {date}",
+	"thread_last": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note, on {date}",
+				"countPlural=other": "{count} notes, last on {date}"
+			}
+		}
+	],
 	"thread_add": "Add to a thread…",
 	"thread_move": "Move to another thread…",
 	"thread_select": "Select notes",
@@ -170,6 +180,7 @@
 	"search_meaning_pending": "Searching by meaning…",
 	"command_group_commands": "Commands",
 	"command_today": "Go to today",
+	"command_calendar": "Open the calendar",
 	"command_see_all": "See all",
 	"search_show_more": "Show more",
 	"editor_title": "Edit note",
@@ -405,8 +416,19 @@
 	"mention_threads_none": "No threads among these notes yet: they gather as more notes mention it.",
 	"mentions_none": "No mentions yet. Write @name in a note.",
 	"mentions_nothing": "Nothing mentions {name}.",
-	"mentions_quiet": "{count} notes, quiet since {date}",
-	"mentions_pulse": "Days it came up, week by week, the last 12 weeks",
+	"mentions_quiet": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note, quiet since {date}",
+				"countPlural=other": "{count} notes, quiet since {date}"
+			}
+		}
+	],
+	"mentions_pulse": "Days it came up, over the last 12 weeks",
+	"mentions_active": "In hand",
+	"mentions_others": "The others",
 	"mentions_search": "Find a name",
 	"mentions_no_match": "No name matches.",
 	"stats_plugin_name": "Stats",

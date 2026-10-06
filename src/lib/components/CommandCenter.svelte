@@ -5,13 +5,14 @@
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import * as Command from '#lib/components/ui/command/index.js';
 	import AtSignIcon from '@lucide/svelte/icons/at-sign';
-	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
+	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
+	import SunIcon from '@lucide/svelte/icons/sun';
 	import { hasEvery, queryWords } from '#lib/matching.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { formatHotkey, runCommand } from '#lib/plugins/commands.js';
@@ -25,6 +26,7 @@
 		onpick,
 		onseeall,
 		ontoday,
+		oncalendar,
 		onnewpage,
 		onpages,
 		onmentions,
@@ -43,6 +45,8 @@
 		/** Show every note the query matches in the timeline. */
 		onseeall: (query: string) => void;
 		ontoday: () => void;
+		/** Pick a day on the calendar. */
+		oncalendar: () => void;
 		/** Start a page on the day shown (SPEC 3.5). */
 		onnewpage: () => void;
 		/** List every page of the space. */
@@ -81,7 +85,8 @@
 	};
 
 	const builtIn = $derived<Action[]>([
-		{ value: 'today', name: m.command_today(), icon: CalendarCheckIcon, run: ontoday },
+		{ value: 'today', name: m.command_today(), icon: SunIcon, run: ontoday },
+		{ value: 'calendar', name: m.command_calendar(), icon: CalendarIcon, run: oncalendar },
 		{ value: 'new-page', name: m.pages_new(), icon: FilePlusIcon, run: onnewpage },
 		{ value: 'all-pages', name: m.pages_all(), icon: FilesIcon, run: onpages },
 		{ value: 'mentions', name: m.mentions_show_all(), icon: AtSignIcon, run: onmentions },

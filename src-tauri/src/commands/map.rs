@@ -9,8 +9,8 @@ use crate::embed::categories::Category;
 use crate::state::AppState;
 use crate::storage::daily_file::Kind;
 
-/// A note's place on the map, with what opening it takes, and the smallest
-/// category it is in, if any.
+/// A note's place on the map, with what opening it takes, the smallest
+/// category it is in, if any, and the keys of the names it mentions.
 #[derive(Debug, Serialize)]
 pub struct MapNote {
     pub id: String,
@@ -19,6 +19,7 @@ pub struct MapNote {
     pub x: f32,
     pub y: f32,
     pub category: Option<i64>,
+    pub mentions: Vec<String>,
 }
 
 /// Every note of the open space the embed task has placed on its map, none
@@ -26,6 +27,13 @@ pub struct MapNote {
 #[tauri::command]
 pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String> {
     let space = state.space()?;
+    let mut mentions: HashMap<String, Vec<String>> = HashMap::new();
+    for (id, key, _) in space.read(|_, db| db.mention_rows())?.unwrap_or_default() {
+        let keys = mentions.entry(id).or_default();
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
     let places: HashMap<String, ([f32; 2], Option<i64>)> = {
         let map = space.map.lock().map_err(|_| "map lock poisoned")?;
         let Some(map) = map.as_ref() else {
@@ -51,6 +59,7 @@ pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String
                 x,
                 y,
                 category,
+                mentions: mentions.remove(&entry.id).unwrap_or_default(),
             })
         })
         .collect())

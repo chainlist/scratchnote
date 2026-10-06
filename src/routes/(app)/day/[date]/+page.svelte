@@ -11,6 +11,7 @@
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
+	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import type { Day } from './+page';
@@ -108,13 +109,27 @@
 			>
 				<ChevronRightIcon />
 			</Button>
+			<!-- The date opens the calendar, on the day's month; the calendar after
+			     it says it can be clicked. -->
 			<svelte:element
 				this={compact ? 'span' : 'h1'}
 				class={compact
 					? 'text-sm font-semibold whitespace-nowrap'
 					: 'text-2xl font-semibold tracking-tight'}
 			>
-				{dayHeading(data.date, compact)}
+				<a
+					href={resolve('calendar/')}
+					title={m.calendar_pick()}
+					class="group/date -mx-1.5 inline-flex items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none dark:hover:bg-muted/50"
+				>
+					{dayHeading(data.date, compact)}
+					<CalendarIcon
+						class={[
+							'shrink-0 text-muted-foreground transition-colors group-hover/date:text-foreground',
+							compact ? 'size-3.5' : 'size-4.5'
+						]}
+					/>
+				</a>
 			</svelte:element>
 		{/snippet}
 

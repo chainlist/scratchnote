@@ -237,12 +237,14 @@ export const setPins = (pins: Pin[]) => invoke<Pin[]>('set_pins', { pins });
 export const onPinsChanged = (handler: () => void): Promise<UnlistenFn> =>
 	listen('pins-changed', () => handler());
 
-/** A note's place on the map of the space by meaning (SPEC 6.5), and the
- *  smallest category it is in there, if any. */
+/** A note's place on the map of the space by meaning (SPEC 6.5), the
+ *  smallest category it is in there, if any, and the keys of the names it
+ *  mentions. */
 export interface MapNote extends Pick<Note, 'id' | 'date' | 'kind'> {
 	x: number;
 	y: number;
 	category: number | null;
+	mentions: string[];
 }
 
 /** Every note placed on the map. Empty until the embed task has placed them. */

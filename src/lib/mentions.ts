@@ -63,16 +63,10 @@ export function mentionHue(key: string) {
 	return HUES[hash % HUES.length];
 }
 
-/** How many of `days` fall in each of the last `weeks` weeks, the oldest
- *  first, the last of them ending today. */
-export function weekly(days: string[], weeks: number) {
-	const counts = Array<number>(weeks).fill(0);
-	for (const day of days) {
-		const week = Math.floor(daysAgo(day) / 7);
-		if (week >= 0 && week < weeks) counts[weeks - 1 - week]++;
-	}
-	return counts;
-}
+/** Where each of `days` within the last `span` days falls along them, from
+ *  0 for `span` days ago to 1 for today. */
+export const along = (days: string[], span: number) =>
+	days.map((day) => 1 - daysAgo(day) / span).filter((at) => at >= 0 && at <= 1);
 
 /** The view of the notes mentioning a name. */
 export const mentionHref = (name: string) =>

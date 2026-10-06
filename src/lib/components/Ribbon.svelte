@@ -3,8 +3,6 @@
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
-	import CalendarCheckIcon from '@lucide/svelte/icons/calendar-check';
-	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import FilesIcon from '@lucide/svelte/icons/files';
 	import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
 	import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
@@ -12,6 +10,7 @@
 	import MapIcon from '@lucide/svelte/icons/map';
 	import PinOffIcon from '@lucide/svelte/icons/pin-off';
 	import RouteIcon from '@lucide/svelte/icons/route';
+	import SunIcon from '@lucide/svelte/icons/sun';
 	import { today, type Pin } from '#lib/api.js';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import * as ContextMenu from '#lib/components/ui/context-menu/index.js';
@@ -22,11 +21,12 @@
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
-	/** Down the left edge of every view: today, the calendar, All pages, the
-	 *  names mentioned (SPEC 3.10), Threads
-	 *  with how many are suggested (SPEC 6.4), the map (SPEC 6.5) and the
-	 *  core plugins' buttons, then the community plugins' own (SPEC 3.9),
-	 *  then what the space has pinned (SPEC 3.13). */
+	/** Down the left edge of every view, a line between each group: the
+	 *  days (today, All pages; the calendar opens from a day's date), what
+	 *  ties the notes together (the names mentioned, SPEC 3.10, Threads with
+	 *  how many are suggested, SPEC 6.4, the map, SPEC 6.5), the core
+	 *  plugins' buttons, the community plugins' own (SPEC 3.9), then what
+	 *  the space has pinned (SPEC 3.13). */
 	const shell = getShell();
 
 	const core = $derived(registry.ribbon.filter((item) => coreIds.has(item.plugin)));
@@ -85,15 +85,13 @@
 	const atPin = $derived(pins.some(({ pin }) => isHere(pin, pinHref(pin))));
 
 	/** The edge's own button whose kind of view is shown, if any: today's
-	 *  day, the calendar, a page or All pages, a name or Mentions, a thread
-	 *  or Threads, the map. */
+	 *  day, a page or All pages, a name or Mentions, a thread or Threads,
+	 *  the map. */
 	const section = $derived.by(() => {
 		if (atPin) return null;
 		switch (page.route.id) {
 			case '/(app)/day/[date]':
 				return page.params.date === page.data.today ? 'today' : null;
-			case '/(app)/calendar':
-				return 'calendar';
 			case '/(app)/pages':
 			case '/(app)/page/[date]/[id]':
 				return 'pages';
@@ -140,19 +138,7 @@
 		aria-current={section === 'today' ? 'page' : undefined}
 	>
 		{@render marker(section === 'today')}
-		<CalendarCheckIcon />
-	</Button>
-	<Button
-		variant="ghost"
-		size="icon-sm"
-		href={resolve('calendar/')}
-		aria-label={m.calendar_pick()}
-		title={m.calendar_pick()}
-		class={['relative', tone('calendar')]}
-		aria-current={section === 'calendar' ? 'page' : undefined}
-	>
-		{@render marker(section === 'calendar')}
-		<CalendarIcon />
+		<SunIcon />
 	</Button>
 	<Button
 		variant="ghost"
@@ -166,6 +152,7 @@
 		{@render marker(section === 'pages')}
 		<FilesIcon />
 	</Button>
+	<Separator class="my-1 w-5!" />
 	<Button
 		variant="ghost"
 		size="icon-sm"
@@ -214,7 +201,10 @@
 			<MapIcon />
 		</Button>
 	{/if}
-	{#each core as item (item)}{@render pluginButton(item)}{/each}
+	{#if core.length}
+		<Separator class="my-1 w-5!" />
+		{#each core as item (item)}{@render pluginButton(item)}{/each}
+	{/if}
 	{#if community.length}
 		<Separator class="my-1 w-5!" />
 		{#each community as item (item)}{@render pluginButton(item)}{/each}

@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { getNotes, type Note, type Thread, type ThreadCard } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
-	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import * as Tabs from '#lib/components/ui/tabs/index.js';
+	import SectionTabs from '#lib/components/SectionTabs.svelte';
 	import View from '#lib/components/View.svelte';
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
 	import { mentionHue } from '#lib/mentions.js';
@@ -23,6 +22,9 @@
 		...thread,
 		first: thread.notes.slice(0, 2).flatMap((id) => notes.get(id) ?? [])
 	});
+
+	/** The section shown: the user's threads, or the suggestions. */
+	let tab = $state<'yours' | 'suggested'>('yours');
 
 	const suggested = $derived(data.threads.filter((thread) => !thread.kept));
 	const yours = $derived(data.threads.filter((thread) => thread.kept).map(card));
@@ -70,55 +72,47 @@
 </script>
 
 <!-- The space's threads: the user's, the one written in last first, or those
-     only suggested, to keep or dismiss (SPEC 6.4). -->
+     only suggested, to keep or dismiss (SPEC 6.4). A suggestion is a card
+     with its first notes, which opens it, and Keep and Dismiss on its top
+     line. -->
 <View back={shell.back} title={m.threads_all()}>
 	{#if data.threads.length === 0}
 		<p class="text-base text-neutral-600">{m.threads_none()}</p>
 	{:else}
-		<Tabs.Root value="yours">
-			<Tabs.List class="mb-4">
-				<Tabs.Trigger value="yours" class="px-3">{m.threads_yours()}</Tabs.Trigger>
-				<Tabs.Trigger value="suggested" class="px-3">
-					{m.threads_suggested()}
-					{#if suggested.length}
-						<Badge class="h-4 min-w-4 px-1 tabular-nums">{suggested.length}</Badge>
-					{/if}
-				</Tabs.Trigger>
-			</Tabs.List>
-			<Tabs.Content value="yours">
-				{#if yours.length}
-					<ThreadLanes threads={yours} {name} />
-				{:else}
-					<p class="text-sm text-neutral-500">{m.threads_yours_none()}</p>
-				{/if}
-			</Tabs.Content>
-			<Tabs.Content value="suggested">
-				{#if suggested.length}
-					<p class="mb-4 text-sm text-neutral-500">{m.threads_suggested_hint()}</p>
-					<ul class="flex flex-col gap-3">
-						{#each drawn as thread (thread.id)}
-							<li class="rounded-lg border border-neutral-800 px-4 py-3">
-								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
-								<a
-									href={threadHref(thread.id)}
-									class="block rounded text-sm text-neutral-300 hover:text-neutral-100"
-								>
-									<span class="text-xs text-neutral-500">
-										{#if thread.mention}<span
-												class="name-tint mr-1.5 rounded-md px-1 font-medium"
-												style:--hue={thread.scope && mentionHue(thread.scope)}
-												>@{thread.mention}</span
-											>{/if}
-										{m.thread_detail({ count: thread.notes.length, date: shortDay(thread.since) })}
-									</span>
-									{#each thread.first as note (note.id)}
-										<Markdown text={note.body} links={false} class="mt-1 line-clamp-1" />
-									{/each}
-								</a>
-								<div class="mt-3 flex justify-end gap-2">
+		<SectionTabs
+			bind:value={tab}
+			tabs={[
+				{ value: 'yours', label: m.threads_yours(), count: yours.length },
+				{ value: 'suggested', label: m.threads_suggested(), count: suggested.length }
+			]}
+		/>
+		{#if tab === 'yours'}
+			{#if yours.length}
+				<ThreadLanes threads={yours} {name} />
+			{:else}
+				<p class="text-sm text-neutral-500">{m.threads_yours_none()}</p>
+			{/if}
+		{:else}
+			{#if suggested.length}
+				<p class="mb-4 text-sm text-neutral-500">{m.threads_suggested_hint()}</p>
+				<ul class="flex flex-col gap-3">
+					{#each drawn as thread (thread.id)}
+						<li
+							class="relative rounded-lg border border-neutral-800 px-4 py-3 transition-colors hover:border-neutral-700 hover:bg-neutral-900"
+						>
+							<div class="flex items-center gap-2">
+								<span class="min-w-0 flex-1 truncate text-xs text-neutral-500">
+									{#if thread.mention}<span
+											class="name-tint mr-1.5 rounded-md px-1 font-medium"
+											style:--hue={thread.scope && mentionHue(thread.scope)}>@{thread.mention}</span
+										>{/if}
+									{m.thread_detail({ count: thread.notes.length, date: shortDay(thread.since) })}
+								</span>
+								<div class="relative z-10 flex shrink-0 gap-1">
 									<Button
 										variant="ghost"
 										size="sm"
+										class="h-7 px-2 text-xs"
 										onclick={() => void shell.keepThread(thread.id, false)}
 									>
 										{m.thread_dismiss()}
@@ -126,23 +120,33 @@
 									<Button
 										variant="outline"
 										size="sm"
+										class="h-7 px-2 text-xs"
 										onclick={() => void shell.keepThread(thread.id, true)}
 									>
 										{m.thread_keep()}
 									</Button>
 								</div>
-							</li>
-						{/each}
-					</ul>
-					{#if shown < suggested.length}
-						<div class="mt-4 flex justify-center">
-							<Button variant="outline" size="sm" onclick={showMore}>{m.search_show_more()}</Button>
-						</div>
-					{/if}
-				{:else}
-					<p class="text-sm text-neutral-500">{m.threads_suggested_none()}</p>
+							</div>
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
+							<a
+								href={threadHref(thread.id)}
+								class="mt-1 block text-sm text-neutral-300 after:absolute after:inset-0"
+							>
+								{#each thread.first as note (note.id)}
+									<Markdown text={note.body} links={false} class="mt-1 line-clamp-1" />
+								{/each}
+							</a>
+						</li>
+					{/each}
+				</ul>
+				{#if shown < suggested.length}
+					<div class="mt-4 flex justify-center">
+						<Button variant="outline" size="sm" onclick={showMore}>{m.search_show_more()}</Button>
+					</div>
 				{/if}
-			</Tabs.Content>
-		</Tabs.Root>
+			{:else}
+				<p class="text-sm text-neutral-500">{m.threads_suggested_none()}</p>
+			{/if}
+		{/if}
 	{/if}
 </View>

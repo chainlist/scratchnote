@@ -121,6 +121,7 @@
 	"threads_all": "Threads",
 	"threads_suggested": "Suggérés",
 	"threads_suggested_hint": "Des notes qui semblent parler d'une même chose. Gardez un thread pour que les nouvelles notes le rejoignent, ou écartez-le.",
+	"thread_range": "du {since} au {until}",
 	"threads_yours": "Vos threads",
 	"threads_none": "Pas encore de thread : les notes sur une même chose se rassemblent ici au fil de l'écriture.",
 	"threads_yours_none": "Aucun thread gardé pour l'instant : gardez un thread suggéré pour que les nouvelles notes le rejoignent.",
@@ -133,7 +134,7 @@
 	"map_title": "Carte",
 	"map_empty": "La carte apparaît une fois vos notes analysées : les notes sur une même chose s'y rapprochent.",
 	"map_fit": "Voir toutes les notes",
-	"map_no_thread": "Sans thread",
+	"map_no_name": "Sans mention",
 	"map_hint": "Cliquez sur une note pour la voir. Faites glisser pour vous déplacer, la molette pour zoomer.",
 	"map_open": "Ouvrir",
 	"map_graph": "Graphe",
@@ -144,7 +145,16 @@
 	"thread_keep": "Garder le thread",
 	"thread_dismiss": "Écarter",
 	"thread_suggested_banner": "Suggéré : ces notes semblent parler d'une même chose.",
-	"thread_last": "{count} notes, la dernière le {date}",
+	"thread_last": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note, le {date}",
+				"countPlural=other": "{count} notes, la dernière le {date}"
+			}
+		}
+	],
 	"thread_add": "Ajouter à un thread…",
 	"thread_move": "Déplacer vers un autre thread…",
 	"thread_select": "Sélectionner des notes",
@@ -170,6 +180,7 @@
 	"search_meaning_pending": "Recherche par le sens…",
 	"command_group_commands": "Commandes",
 	"command_today": "Aller à aujourd'hui",
+	"command_calendar": "Ouvrir le calendrier",
 	"command_see_all": "Tout voir",
 	"search_show_more": "Afficher plus",
 	"editor_title": "Modifier la note",
@@ -405,8 +416,19 @@
 	"mention_threads_none": "Pas encore de thread parmi ces notes : ils se forment à mesure que d'autres notes le mentionnent.",
 	"mentions_none": "Aucune mention pour l'instant. Écrivez @nom dans une note.",
 	"mentions_nothing": "Rien ne mentionne {name}.",
-	"mentions_quiet": "{count} notes, rien depuis le {date}",
-	"mentions_pulse": "Jours où il revient, semaine par semaine, sur 12 semaines",
+	"mentions_quiet": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note, rien depuis le {date}",
+				"countPlural=other": "{count} notes, rien depuis le {date}"
+			}
+		}
+	],
+	"mentions_pulse": "Jours où il revient, sur les 12 dernières semaines",
+	"mentions_active": "En cours",
+	"mentions_others": "Les autres",
 	"mentions_search": "Trouver un nom",
 	"mentions_no_match": "Aucun nom ne correspond.",
 	"stats_plugin_name": "Statistiques",

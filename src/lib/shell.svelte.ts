@@ -352,6 +352,8 @@ export class Shell implements WorkspaceHost {
 
 	showPages = () => goto(resolve('pages/'));
 
+	showCalendar = () => goto(resolve('calendar/'));
+
 	showMentions = () => goto(resolve('mentions/'));
 
 	/** A plugin's page, `/plugin/<type>/`, with its query string. */

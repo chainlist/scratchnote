@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { invalidate } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
 	import { onMount, untrack } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import ScanIcon from '@lucide/svelte/icons/scan';
@@ -22,11 +22,12 @@
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import View from '#lib/components/View.svelte';
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
+	import { mentionHref, mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { colourOf } from '#lib/pins.js';
 	import { getShell } from '#lib/shell.svelte.js';
+	import { threadHref } from '#lib/threads.js';
 	import { graph, samePlaces, type Graph, type GraphNode } from './graph.js';
-	import { islands } from './islands.js';
 
 	let { data } = $props();
 
@@ -38,10 +39,13 @@
 	const DOT = 2.5;
 	/** Room left around the notes when they are fitted in view. */
 	const MARGIN = 24;
-	/** How close, in CSS pixels, two dots must look to be in one category. */
-	const GAP = 12;
-	/** How wide or tall, in CSS pixels, an island must look to be named. */
+	/** How wide, in CSS pixels, the squares are that a name or a thread is
+	 *  named in the busiest of. */
+	const CELL = 48;
+	/** How wide or tall, in CSS pixels, a thread must look to be named. */
 	const NAMED = 32;
+	/** The key the notes that mention no name are picked by, which no name has. */
+	const NO_NAME = '';
 	/** How strongly a note the search or the dates leave out is drawn. */
 	const DIM = 0.12;
 	/** How many bars show how the notes spread over time. */
@@ -87,6 +91,24 @@
 	let found = $state.raw<Set<string> | null>(null);
 	/** The first and last day shown, null while every day is. */
 	let span = $state<[number, number] | null>(null);
+	/** The name whose notes alone are drawn as ever, by key, `NO_NAME` for
+	 *  the notes that mention none; null while every note is. */
+	let pickedName = $state<string | null>(null);
+	/** The name and the thread pointed at on the list or by their names on
+	 *  the map, whose notes are brought forward. */
+	let pointedName = $state<string | null>(null);
+	let pointedThread = $state.raw<Thread | null>(null);
+	/** Where each name and thread was named when the map was last drawn, to
+	 *  point at it there. */
+	let labels: { x0: number; x1: number; y0: number; y1: number; name?: string; thread?: Thread }[] =
+		[];
+
+	/** Whether a note mentions the name with this key, or none for `NO_NAME`. */
+	const mentions = (note: MapNote, key: string) =>
+		key === NO_NAME ? note.mentions.length === 0 : note.mentions.includes(key);
+	/** Each name by key, as the newest note mentioning it types it. */
+	const names = $derived(new Map(data.mentions.map((mention) => [mention.key, mention])));
+	const nameOf = (key: string) => `@${names.get(key)?.name ?? key}`;
 
 	/** Each note's day, and the first and last day of them all. */
 	const days = $derived(new Map(data.notes.map((note) => [note.id, dayNumber(note.date)])));
@@ -95,13 +117,17 @@
 		for (const day of days.values()) [first, last] = [Math.min(first, day), Math.max(last, day)];
 		return [first, last] as const;
 	});
-	/** The notes the search and the dates let through, drawn as ever; null
-	 *  while neither narrows anything. */
+	/** The notes the search, the dates and the name picked let through,
+	 *  drawn as ever; null while none narrows anything. */
 	const lit = $derived.by(() => {
-		if (!found && !span) return null;
+		if (!found && !span && pickedName === null) return null;
 		const through = (note: MapNote) => {
 			const day = days.get(note.id)!;
-			return (!found || found.has(note.id)) && (!span || (day >= span[0] && day <= span[1]));
+			return (
+				(!found || found.has(note.id)) &&
+				(!span || (day >= span[0] && day <= span[1])) &&
+				(pickedName === null || mentions(note, pickedName))
+			);
 		};
 		return new Set(data.notes.filter(through).map((note) => note.id));
 	});
@@ -139,14 +165,27 @@
 			...data.threads.map((thread, i) => [thread, lists[i]] as const)
 		];
 	});
-	/** Every thread on the map with its number of notes, biggest first. */
+	/** The notes on the map mentioning each name, by key. */
+	const byName = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- made anew with the notes, never changed after
+		const out = new Map<string, MapNote[]>();
+		for (const note of data.notes) {
+			for (const key of note.mentions) {
+				const notes = out.get(key);
+				if (notes) notes.push(note);
+				else out.set(key, [note]);
+			}
+		}
+		return out;
+	});
+	/** Every name on the map with its number of notes, the pinned first, as
+	 *  on the list of names, then the biggest. */
 	const legend = $derived(
-		groups
-			.filter(([thread, notes]) => thread && notes.length)
-			.map(([thread, notes]) => ({ thread: thread!, count: notes.length }))
-			.sort((a, b) => b.count - a.count)
+		[...byName]
+			.map(([key, notes]) => ({ key, count: notes.length, pinned: !!names.get(key)?.pinned }))
+			.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.count - a.count)
 	);
-	const looseCount = $derived(groups[0][1].length);
+	const unnamedCount = $derived(data.notes.filter((note) => !note.mentions.length).length);
 	/** Each colour's notes, those the search and the dates let through apart
 	 *  from those they leave out. */
 	const parts = $derived(
@@ -158,30 +197,69 @@
 	);
 	const hoveredThread = $derived(hovered ? threadOf.get(hovered.id) : undefined);
 	const selectedThread = $derived(selected ? threadOf.get(selected.id) : undefined);
-	/** The thread brought forward: the one pointed at, else the one clicked. */
-	const focusThread = $derived(hovered ? hoveredThread : selectedThread);
+	/** The thread brought forward: the one pointed at, its note or its name,
+	 *  else the one clicked. */
+	const focusThread = $derived(hovered ? hoveredThread : (pointedThread ?? selectedThread));
+	/** Whether a note is of the name pointed at, else of the thread brought
+	 *  forward. */
+	const inFocus = (note: MapNote) =>
+		pointedName !== null ? mentions(note, pointedName) : threadOf.get(note.id) === focusThread;
 	const preview = $derived(hovered ? previews.get(hovered.id) : undefined);
 	const selectedPreview = $derived(selected ? previews.get(selected.id) : undefined);
 
-	/** The zoom, in steps of √2 from every note in view, so the categories
-	 *  shown change only now and then. */
+	/** The zoom, in steps of √2 from every note in view, so the places names
+	 *  are shown at change only now and then. */
 	const level = $derived(Math.round(2 * Math.log2(view.scale / fitScale)));
-	const categories = $derived(
-		new Map(data.categories.categories.map((category) => [category.id, category]))
-	);
-	/** The level of the categories shown: those of notes that look `GAP` apart
-	 *  or less, so zooming in parts a category into the ones it holds. Never
-	 *  under level 0, nor over the last, where every note is in one. */
-	const categoryLevel = $derived.by(() => {
-		const { base, categories } = data.categories;
-		if (!base) return 0;
-		const last = categories.reduce((last, category) => Math.max(last, category.high), 0);
-		const wanted = 2 * Math.log2(GAP / (fitScale * Math.SQRT2 ** level * base));
-		return Math.min(last, Math.max(0, Math.round(wanted)));
+	/** How far apart notes usually lie on the map: the side of the square
+	 *  each would have, sharing out the box they span. */
+	const spacing = $derived.by(() => {
+		if (data.notes.length < 2) return 1;
+		const xs = data.notes.map((note) => note.x);
+		const ys = data.notes.map((note) => note.y);
+		const area = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
+		return Math.sqrt(area / data.notes.length) || 1;
 	});
-	/** How close notes of one category shown lie on the map. */
-	const reach = $derived(data.categories.base * Math.SQRT2 ** categoryLevel);
-	const shores = $derived(islands(data.notes, categories, categoryLevel));
+
+	/** Where a group of notes is named: the middle of those around the
+	 *  square, `cell` wide, most of them lie in, so a name whose notes lie in
+	 *  two parts of the map is named on the bigger. With how many notes lie
+	 *  there and how wide they spread. */
+	function spot(notes: MapNote[], cell: number) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- a count, nothing is drawn from it
+		const counts = new Map<string, number>();
+		let [most, bestX, bestY] = [0, 0, 0];
+		for (const note of notes) {
+			const [i, j] = [Math.floor(note.x / cell), Math.floor(note.y / cell)];
+			const count = (counts.get(`${i},${j}`) ?? 0) + 1;
+			counts.set(`${i},${j}`, count);
+			if (count > most) [most, bestX, bestY] = [count, i, j];
+		}
+		const near = notes.filter(
+			(note) =>
+				Math.abs(Math.floor(note.x / cell) - bestX) <= 1 &&
+				Math.abs(Math.floor(note.y / cell) - bestY) <= 1
+		);
+		const xs = near.map((note) => note.x);
+		const ys = near.map((note) => note.y);
+		return {
+			x: xs.reduce((sum, x) => sum + x, 0) / near.length,
+			y: ys.reduce((sum, y) => sum + y, 0) / near.length,
+			count: near.length,
+			minY: Math.min(...ys),
+			maxY: Math.max(...ys),
+			wide: Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys))
+		};
+	}
+	/** Where each name and each titled thread is named at the zoom shown. */
+	const spots = $derived.by(() => {
+		const cell = CELL / (fitScale * Math.SQRT2 ** level);
+		return {
+			names: legend.map(({ key }) => ({ key, ...spot(byName.get(key)!, cell) })),
+			threads: groups
+				.filter(([thread, notes]) => thread?.title && notes.length > 1)
+				.map(([thread, notes]) => ({ thread: thread!, ...spot(notes, cell) }))
+		};
+	});
 
 	/** A colour per thread, the same from one launch to the next. */
 	const colour = (thread: Thread) => colourOf(thread.id);
@@ -260,15 +338,19 @@
 			}
 			context.fill();
 		};
-		// Behind the dots, a shape around each island: a disc around each of
-		// its dots, wide enough that the discs of dots within reach meet.
+		// Behind the dots, a faint shape in its colour around each thread of
+		// more than one note: a disc around each of its dots, half as wide as
+		// notes usually lie apart, so the discs of its notes lying close meet.
 		const foreground = style.getPropertyValue('--foreground').trim() || 'black';
 		const graphing = mode === 'graph' ? graphed : null;
 		if (!graphing) {
-			const shore = (reach * scale) / 2 + 4;
-			context.fillStyle = foreground;
-			context.globalAlpha = 0.06;
-			for (const island of shores) dots(island.notes, shore);
+			const halo = Math.min(40, Math.max(6, 0.5 * spacing * scale));
+			for (const { thread, shown } of parts) {
+				if (!thread || shown.length < 2) continue;
+				context.globalAlpha = focusThread && thread !== focusThread ? 0.04 : 0.1;
+				context.fillStyle = colour(thread);
+				dots(shown, halo);
+			}
 		} else {
 			// Behind the dots, the links: faint, those of the note pointed at
 			// or clicked brighter.
@@ -294,22 +376,27 @@
 				);
 			}
 		}
-		// The notes the search or the dates leave out, faint, under the rest.
+		// The notes the search, the dates or the name picked leave out, faint,
+		// under the rest.
 		context.globalAlpha = DIM;
 		for (const { thread, left } of parts) {
 			context.fillStyle = thread ? colour(thread) : grey;
 			if (left.length) dots(left, radius);
 		}
+		// Pointing at a name or a thread, or at or clicking a note of a thread,
+		// brings its notes forward.
+		const focusing = pointedName !== null || !!focusThread;
 		for (const { thread, shown } of parts) {
-			// Pointing at or clicking a note of a thread brings its thread forward.
-			context.globalAlpha = focusThread && thread !== focusThread ? 0.25 : thread ? 0.9 : 0.55;
+			context.globalAlpha = focusing ? 0.25 : thread ? 0.9 : 0.55;
 			context.fillStyle = thread ? colour(thread) : grey;
-			dots(shown, radius);
+			dots(focusing ? shown.filter((note) => !inFocus(note)) : shown, radius);
 		}
 		context.globalAlpha = 1;
-		if (focusThread) {
-			context.fillStyle = colour(focusThread);
-			dots(parts.find(({ thread }) => thread === focusThread)?.shown ?? [], radius + 1);
+		if (focusing) {
+			for (const { thread, shown } of parts) {
+				context.fillStyle = thread ? colour(thread) : grey;
+				dots(shown.filter(inFocus), radius + 1);
+			}
 		}
 		context.strokeStyle = foreground;
 		context.lineWidth = 1.5;
@@ -321,43 +408,64 @@
 		for (const note of [hovered, selected]) {
 			if (note) ring(place(note).x * scale + left, place(note).y * scale + top);
 		}
-		if (graphing) {
-			context.globalAlpha = 1;
-			return;
-		}
+		labels = [];
+		if (graphing) return;
 
-		// Over the dots, each island big enough on screen named above it, else
-		// below, the biggest first, leaving out a name that would cover one
-		// already shown.
-		context.font = `500 12px ${style.fontFamily}`;
-		context.textAlign = 'center';
-		context.textBaseline = 'bottom';
-		context.lineJoin = 'round';
-		context.lineWidth = 3;
-		context.strokeStyle = style.getPropertyValue('--background').trim() || 'white';
-		context.fillStyle = foreground;
-		context.globalAlpha = 0.8;
-		const named: { x0: number; x1: number; y0: number; y1: number }[] = [];
-		for (const island of [...shores].sort((a, b) => b.notes.length - a.notes.length)) {
-			const [x0, x1] = [island.minX * scale + left, island.maxX * scale + left];
-			const [y0, y1] = [island.minY * scale + top, island.maxY * scale + top];
-			if (!island.name || Math.max(x1 - x0, y1 - y0) < NAMED) continue;
-			const x = (x0 + x1) / 2;
-			const half = context.measureText(island.name).width / 2 + 4;
-			const box = [y0 - 4, y1 + 20]
-				.map((y) => ({ x0: x - half, x1: x + half, y0: y - 16, y1: y }))
+		// Over the dots, each name as a chip in its colour above the notes
+		// most of its notes lie among, else below, the pinned and the biggest
+		// first; then the title of each thread wide enough on screen, the same
+		// way, the biggest first. A label that would cover one already shown
+		// is left out.
+		const labelBox = (text: string, at: { x: number; minY: number; maxY: number }, pad: number) => {
+			const x = at.x * scale + left;
+			const half = context.measureText(text).width / 2 + pad;
+			return [at.minY * scale + top - 6, at.maxY * scale + top + 26]
+				.map((y) => ({ x0: x - half, x1: x + half, y0: y - 20, y1: y }))
 				.find(
 					(box) =>
 						box.x1 > 0 &&
 						box.x0 < width &&
 						box.y1 > 0 &&
 						box.y0 < height &&
-						!named.some((o) => box.x0 < o.x1 && o.x0 < box.x1 && box.y0 < o.y1 && o.y0 < box.y1)
+						!labels.some((o) => box.x0 < o.x1 && o.x0 < box.x1 && box.y0 < o.y1 && o.y0 < box.y1)
 				);
+		};
+		const dark = document.documentElement.classList.contains('dark');
+		context.font = `500 12px ${style.fontFamily}`;
+		context.textAlign = 'center';
+		context.textBaseline = 'middle';
+		for (const name of spots.names) {
+			if (name.count < 2 || (pickedName !== null && pickedName !== name.key)) continue;
+			const text = nameOf(name.key);
+			const box = labelBox(text, name, 6);
 			if (!box) continue;
-			named.push(box);
-			context.strokeText(island.name, x, box.y1);
-			context.fillText(island.name, x, box.y1);
+			labels.push({ ...box, name: name.key });
+			const hue = mentionHue(name.key);
+			context.globalAlpha = pointedName === null || pointedName === name.key ? 1 : 0.5;
+			context.fillStyle = dark ? `oklch(0.32 0.06 ${hue})` : `oklch(0.92 0.05 ${hue})`;
+			context.beginPath();
+			context.roundRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, 6);
+			context.fill();
+			context.fillStyle = dark ? `oklch(0.86 0.09 ${hue})` : `oklch(0.42 0.1 ${hue})`;
+			context.fillText(text, (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2);
+		}
+		context.lineJoin = 'round';
+		context.lineWidth = 3;
+		context.strokeStyle = style.getPropertyValue('--background').trim() || 'white';
+		context.fillStyle = foreground;
+		for (const spotted of [...spots.threads].sort((a, b) => b.count - a.count)) {
+			const { thread } = spotted;
+			if (spotted.wide * scale < NAMED) continue;
+			if (lit && !thread.notes.some((id) => lit.has(id))) continue;
+			const title = thread.title!;
+			const text = title.length > 40 ? `${title.slice(0, 39)}…` : title;
+			const box = labelBox(text, spotted, 4);
+			if (!box) continue;
+			labels.push({ ...box, thread });
+			context.globalAlpha = focusThread && focusThread !== thread ? 0.4 : 0.85;
+			const [x, y] = [(box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2];
+			context.strokeText(text, x, y);
+			context.fillText(text, x, y);
 		}
 		context.globalAlpha = 1;
 	}
@@ -386,6 +494,18 @@
 	function at(event: MouseEvent) {
 		const box = canvas!.getBoundingClientRect();
 		return { x: event.clientX - box.left, y: event.clientY - box.top };
+	}
+
+	/** The name or the thread named at the point, drawn over the dots. */
+	const labelAt = (x: number, y: number) =>
+		labels.find((box) => x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1);
+
+	/** Point at the note, else the name or the thread named, at the point. */
+	function pointAt(x: number, y: number) {
+		const label = labelAt(x, y);
+		hovered = label ? null : nearest(x, y);
+		pointedName = label?.name ?? null;
+		pointedThread = label?.thread ?? null;
 	}
 
 	/** A press on the canvas: it moves the view, or in the graph the note
@@ -422,7 +542,8 @@
 			const dy = event.clientY - drag.y;
 			if (!drag.moved && Math.hypot(dx, dy) > 3) {
 				drag.moved = dragging = true;
-				hovered = null;
+				hovered = pointedThread = null;
+				pointedName = null;
 			}
 			if (drag.moved && drag.node) {
 				const point = at(event);
@@ -439,15 +560,20 @@
 				return;
 			}
 		}
-		const point = at(event);
-		hovered = nearest(point.x, point.y);
+		const { x, y } = at(event);
+		pointAt(x, y);
 	}
 
-	/** A click, not the end of a drag, shows the note under it, or none. */
+	/** A click, not the end of a drag, shows the note under it, or none; on
+	 *  a name it shows only that name's notes, or every note again, and on a
+	 *  thread's title it opens the thread. */
 	function up(event: PointerEvent) {
 		if (drag && !drag.moved) {
-			const point = at(event);
-			selectedId = nearest(point.x, point.y)?.id ?? null;
+			const { x, y } = at(event);
+			const label = labelAt(x, y);
+			if (label?.name !== undefined) pickName(label.name);
+			else if (label?.thread) void goto(threadHref(label.thread.id));
+			else selectedId = nearest(x, y)?.id ?? null;
 		}
 		if (drag?.node) graphed?.release(drag.node);
 		drag = null;
@@ -470,10 +596,15 @@
 				left: point.x - (point.x - view.left) * by,
 				top: point.y - (point.y - view.top) * by
 			};
-			hovered = nearest(point.x, point.y);
+			pointAt(point.x, point.y);
 		};
 		node.addEventListener('wheel', wheel, { passive: false });
 		return () => node.removeEventListener('wheel', wheel);
+	}
+
+	/** Show only the notes of the name with this key, or every note again. */
+	function pickName(key: string) {
+		pickedName = pickedName === key ? null : key;
 	}
 
 	/** Show the notes on the map or as a graph, all of them in view. */
@@ -556,7 +687,7 @@
 </script>
 
 <!-- Every note of the space by meaning, notes about the same thing close
-     together, coloured by thread (SPEC 6.5). -->
+     together, coloured by thread, with the names they mention (SPEC 6.5). -->
 <View back={shell.back} title={m.map_title()} fill>
 	{#if data.notes.length === 0}
 		<p class="mx-auto max-w-3xl text-base text-neutral-600">{m.map_empty()}</p>
@@ -567,13 +698,21 @@
 				{@attach zoomable}
 				class={[
 					'absolute inset-0 size-full touch-none',
-					dragging ? 'cursor-grabbing' : hovered ? 'cursor-pointer' : 'cursor-grab'
+					dragging
+						? 'cursor-grabbing'
+						: hovered || pointedName !== null || pointedThread
+							? 'cursor-pointer'
+							: 'cursor-grab'
 				]}
 				aria-label={m.map_title()}
 				onpointerdown={down}
 				onpointermove={move}
 				onpointerup={up}
-				onpointerleave={() => !drag && (hovered = null)}
+				onpointerleave={() => {
+					if (drag) return;
+					hovered = pointedThread = null;
+					pointedName = null;
+				}}
 			></canvas>
 			<div class="absolute top-2 right-2 flex items-center gap-2">
 				<ToggleGroup.Root
@@ -664,22 +803,40 @@
 					{/if}
 				</Card.Content>
 				<Card.Content class="min-h-0 overflow-y-auto">
-					<ul class="space-y-1">
-						{#each legend as { thread, count } (thread.id)}
-							<li class="flex items-center gap-2">
-								<span class="size-2.5 shrink-0 rounded-full" style:background={colour(thread)}
-								></span>
-								<span class="min-w-0 flex-1 truncate">{thread.title ?? m.thread_untitled()}</span>
-								<span class="text-xs text-muted-foreground tabular-nums">{count}</span>
+					<!-- Pointing at a name brings its notes forward; clicking it shows
+					     only them, until it is clicked again. -->
+					<ul class="-mx-1 space-y-px">
+						{#each [...legend, ...(unnamedCount ? [{ key: NO_NAME, count: unnamedCount }] : [])] as { key, count } (key)}
+							<li>
+								<button
+									type="button"
+									class={[
+										'flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-muted',
+										pickedName === key && 'bg-muted'
+									]}
+									style:--hue={key === NO_NAME ? undefined : mentionHue(key)}
+									aria-pressed={pickedName === key}
+									onclick={() => pickName(key)}
+									onpointerenter={() => (pointedName = key)}
+									onpointerleave={() => (pointedName = null)}
+									onfocus={() => (pointedName = key)}
+									onblur={() => (pointedName = null)}
+								>
+									{#if key === NO_NAME}
+										<span class="min-w-0 flex-1 truncate text-muted-foreground"
+											>{m.map_no_name()}</span
+										>
+									{:else}
+										<span class="min-w-0 flex-1 truncate">
+											<span class="name-tint rounded-md px-1 text-sm font-medium"
+												>{nameOf(key)}</span
+											>
+										</span>
+									{/if}
+									<span class="text-xs text-muted-foreground tabular-nums">{count}</span>
+								</button>
 							</li>
 						{/each}
-						{#if looseCount}
-							<li class="flex items-center gap-2">
-								<span class="size-2.5 shrink-0 rounded-full bg-muted-foreground/55"></span>
-								<span class="min-w-0 flex-1 truncate">{m.map_no_thread()}</span>
-								<span class="text-xs text-muted-foreground tabular-nums">{looseCount}</span>
-							</li>
-						{/if}
 					</ul>
 				</Card.Content>
 				<Card.Content class="text-xs text-muted-foreground">{m.map_hint()}</Card.Content>
@@ -713,12 +870,28 @@
 							<Markdown text={selectedPreview.body} links={false} />
 						</Card.Content>
 					{/if}
+					{#if note.mentions.length}
+						<Card.Content class="flex flex-wrap gap-1">
+							{#each note.mentions as key (key)}
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- mentionHref resolves it -->
+								<a
+									href={mentionHref(key)}
+									class="name-tint rounded-md px-1 text-sm font-medium hover:underline"
+									style:--hue={mentionHue(key)}>{nameOf(key)}</a
+								>
+							{/each}
+						</Card.Content>
+					{/if}
 					<Card.Content class="flex items-center gap-2">
 						{#if thread}
 							<span class="size-2.5 shrink-0 rounded-full" style:background={colour(thread)}></span>
-							<span class="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
+							<a
+								href={threadHref(thread.id)}
+								class="min-w-0 flex-1 truncate text-xs text-muted-foreground hover:underline"
+							>
 								{thread.title ?? m.thread_untitled()}
-							</span>
+							</a>
 						{/if}
 						<Button size="sm" class="ml-auto" onclick={() => void shell.openCited(note)}>
 							{m.map_open()}
@@ -739,6 +912,16 @@
 					{/if}
 					{#if preview}
 						<Markdown text={preview.body} links={false} class="mt-0.5 line-clamp-3" />
+					{/if}
+					{#if hovered.mentions.length}
+						<p class="mt-1.5 flex flex-wrap gap-1">
+							{#each hovered.mentions as key (key)}
+								<span
+									class="name-tint rounded-md px-1 text-xs font-medium"
+									style:--hue={mentionHue(key)}>{nameOf(key)}</span
+								>
+							{/each}
+						</p>
 					{/if}
 					{#if thread}
 						<p class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">

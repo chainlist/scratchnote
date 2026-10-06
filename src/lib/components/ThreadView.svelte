@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { renameThread, type Note, type Thread } from '#lib/api.js';
-	import NoteList from '#lib/components/NoteList.svelte';
+	import NotesByDay from '#lib/components/NotesByDay.svelte';
 	import RenameThreadDialog from '#lib/components/RenameThreadDialog.svelte';
-	import { dayHeading } from '#lib/components/ViewHeader.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import MergeIcon from '@lucide/svelte/icons/merge';
@@ -26,17 +25,11 @@
 	const action =
 		'-mx-1.5 flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-neutral-900 hover:text-neutral-200';
 
-	/** The thread's notes by day, in the order the settings ask for. They
-	 *  come oldest first, so a day's are together either way. */
-	const days = $derived.by(() => {
-		const days: { date: string; notes: Note[] }[] = [];
+	/** The thread's notes in the order the settings ask for. They come
+	 *  oldest first, so a day's are together either way. */
+	const ordered = $derived.by(() => {
 		const notes = found?.notes ?? [];
-		for (const note of shell.threadOrder === 'newest' ? notes.toReversed() : notes) {
-			const last = days.at(-1);
-			if (last?.date === note.date) last.notes.push(note);
-			else days.push({ date: note.date, notes: [note] });
-		}
-		return days;
+		return shell.threadOrder === 'newest' ? notes.toReversed() : notes;
 	});
 
 	/** The thread being renamed, while the dialog is open. */
@@ -117,21 +110,13 @@
 			</button>
 		{/if}
 	</div>
-	{#each days as day (day.date)}
-		<section class="mb-8 last:mb-0">
-			<h2 class="border-b border-neutral-800 pb-2 text-sm font-medium text-neutral-400">
-				{dayHeading(day.date)}
-			</h2>
-			<NoteList
-				notes={day.notes}
-				empty=""
-				threadLine={false}
-				{chosen}
-				onchoose={choose}
-				{...shell.cardActions}
-			/>
-		</section>
-	{/each}
+	<NotesByDay
+		notes={ordered}
+		threadLine={false}
+		{chosen}
+		onchoose={choose}
+		{...shell.cardActions}
+	/>
 {:else}
 	<p class="text-base text-neutral-600">{m.thread_gone()}</p>
 {/if}

@@ -31,81 +31,125 @@
 		Math.min(180, Math.max(30, ...threads.map((thread) => daysAgo(thread.since) + 1)))
 	);
 
-	/** Where a day falls along a lane, in percent from its left, today at its right end. */
-	const at = (date: string) => (1 - daysAgo(date) / span) * 100;
+	/** How far along a lane a day falls, from 0 at its left to 1 for today. */
+	const along = (date: string) => 1 - daysAgo(date) / span;
 
-	/** The first of each month within the span, to mark on the lanes. One
-	 *  too near today is left out, as its name would run off the end. */
+	/** Where along a lane falls, kept a dot's half from either end so the
+	 *  first and last dots are whole. */
+	const x = (at: number) => `calc(${Math.max(0, at)} * (100% - 0.5rem) + 0.25rem)`;
+
+	/** The first of each month within the span, each a line down the lanes,
+	 *  named just after it. One too near the first day shown is left
+	 *  unnamed, as is one too near the right end for its name to fit. */
 	const months = $derived.by(() => {
 		const format = new Intl.DateTimeFormat(getLocale(), { month: 'short' });
-		const marks: { left: number; label: string }[] = [];
+		const marks: { at: number; label: string | null }[] = [];
 		const now = new Date();
 		for (let back = 0; ; back++) {
 			const day = new Date(now.getFullYear(), now.getMonth() - back, 1);
 			const month = String(day.getMonth() + 1).padStart(2, '0');
-			const left = at(`${day.getFullYear()}-${month}-01`);
-			if (left < 0) return marks;
-			if (left < 92) marks.push({ left, label: format.format(day) });
+			const at = along(`${day.getFullYear()}-${month}-01`);
+			if (at < 0) return marks;
+			marks.push({ at, label: at > 0.15 && at < 0.9 ? format.format(day) : null });
 		}
 	});
+
+	/** The first day the lanes show. */
+	const first = $derived.by(() => {
+		const now = new Date();
+		const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - span);
+		const pad = (n: number) => String(n).padStart(2, '0');
+		return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+	});
+
+	const range = (thread: T) =>
+		thread.since === thread.until
+			? shortDay(thread.since)
+			: m.thread_range({ since: shortDay(thread.since), until: shortDay(thread.until) });
 </script>
 
-<!-- Threads as lanes across the same stretch of days, a dot for each day a
-     thread holds a note, today at the right: how long each ran and how
-     often it came up, side by side (SPEC 6.4). A name's thread is in that
-     name's hue, one only suggested fainter. -->
-<div class="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 pb-1">
-	<span></span>
-	<span class="relative h-4 text-xs text-neutral-600" aria-hidden="true">
-		{#each months as month (month.left)}
-			<span class="absolute" style:left="{month.left}%">{month.label}</span>
-		{/each}
-	</span>
-</div>
-<ul>
-	{#each threads as thread (thread.id)}
-		{@const mark = thread.scope !== null ? 'name-mark' : 'bg-neutral-400'}
-		<li
-			class="-mx-2 flex items-center gap-1 rounded hover:bg-neutral-900"
-			style:--hue={thread.scope && mentionHue(thread.scope)}
-		>
-			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
-			<a
-				href={threadHref(thread.id)}
-				class="grid min-w-0 flex-1 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-center gap-4 px-2 py-2"
+<!-- A line down the lanes at the first of each month. -->
+{#snippet gridlines()}
+	{#each months as month (month.at)}
+		<span class="absolute inset-y-0 w-px bg-neutral-800" style:left={x(month.at)}></span>
+	{/each}
+{/snippet}
+
+<!-- Threads as lanes across the same stretch of days in one framed list, a
+     dot for each day a thread holds a note, today at the right: how long
+     each ran and how often it came up, side by side (SPEC 6.4). Above them,
+     the first day shown and each month named at its line, so a name reads
+     as the line's rather than a column's. A name's thread is in that
+     name's hue, one of no name in the accent, one only suggested fainter.
+     A whole row opens its thread. -->
+<div class="overflow-hidden rounded-lg border border-neutral-800">
+	<div
+		class="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 border-b border-neutral-800 bg-neutral-900/50 px-3"
+		aria-hidden="true"
+	>
+		<span></span>
+		<span class="relative h-7 text-xs text-neutral-500">
+			{@render gridlines()}
+			<span class="absolute top-1/2 left-1 -translate-y-1/2">{shortDay(first)}</span>
+			{#each months as month (month.at)}
+				{#if month.label}
+					<span class="absolute top-1/2 -translate-y-1/2 pl-1.5" style:left={x(month.at)}>
+						{month.label}
+					</span>
+				{/if}
+			{/each}
+		</span>
+	</div>
+	<ul class="divide-y divide-neutral-800">
+		{#each threads as thread (thread.id)}
+			{@const mark = thread.scope !== null ? 'name-mark' : 'bg-primary'}
+			<li
+				class="relative grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 px-3 transition-colors hover:bg-neutral-900"
+				style:--hue={thread.scope && mentionHue(thread.scope)}
 			>
-				<span class="min-w-0">
-					<span class="block truncate text-neutral-200">
-						{#if chips && thread.mention}<span
-								class="name-tint mr-1.5 rounded-md px-1 text-sm font-medium">@{thread.mention}</span
-							>{/if}{name(thread)}
-					</span>
-					<span class="block truncate text-xs text-neutral-500">
-						{m.thread_last({ count: thread.notes.length, date: shortDay(thread.until) })}
-						{#if !thread.kept}· {m.threads_suggested()}{/if}
-					</span>
-				</span>
-				<span class={['relative h-4', !thread.kept && 'opacity-50']} aria-hidden="true">
-					{#each months as month (month.left)}
-						<span class="absolute inset-y-0 w-px bg-neutral-800/60" style:left="{month.left}%"
-						></span>
-					{/each}
+				<div class="flex min-w-0 items-center gap-2 py-2.5">
+					<div class="min-w-0 flex-1">
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
+						<a
+							href={threadHref(thread.id)}
+							title={range(thread)}
+							class="block truncate text-neutral-200 after:absolute after:inset-0"
+						>
+							{#if chips && thread.mention}<span
+									class="name-tint mr-1.5 rounded-md px-1 text-sm font-medium"
+									>@{thread.mention}</span
+								>{/if}{name(thread)}
+						</a>
+						<span class="block truncate text-xs text-neutral-500">
+							{m.thread_last({ count: thread.notes.length, date: shortDay(thread.until) })}
+							{#if !thread.kept}· {m.threads_suggested()}{/if}
+						</span>
+					</div>
+					{#if actions}
+						<div class="relative flex shrink-0 items-center gap-1">{@render actions(thread)}</div>
+					{/if}
+				</div>
+				<span
+					class={['pointer-events-none relative', !thread.kept && 'opacity-50']}
+					aria-hidden="true"
+				>
+					{@render gridlines()}
+					<span class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-neutral-800"></span>
 					<span
 						class={['absolute top-1/2 h-0.5 -translate-y-1/2 rounded-full opacity-40', mark]}
-						style:left="{Math.max(0, at(thread.since))}%"
-						style:right="{100 - Math.max(0, at(thread.until))}%"
+						style:left={x(along(thread.since))}
+						style:width="calc({along(thread.until) - Math.max(0, along(thread.since))} * (100% - 0.5rem))"
 					></span>
 					{#each thread.days as day (day)}
-						{#if at(day) >= 0}
+						{#if along(day) >= 0}
 							<span
 								class={['absolute top-1/2 size-2 -translate-1/2 rounded-full', mark]}
-								style:left="{at(day)}%"
+								style:left={x(along(day))}
 							></span>
 						{/if}
 					{/each}
 				</span>
-			</a>
-			{@render actions?.(thread)}
-		</li>
-	{/each}
-</ul>
+			</li>
+		{/each}
+	</ul>
+</div>

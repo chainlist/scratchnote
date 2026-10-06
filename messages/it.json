@@ -121,6 +121,7 @@
 	"threads_all": "Thread",
 	"threads_suggested": "Suggeriti",
 	"threads_suggested_hint": "Note che sembrano parlare di una stessa cosa. Tieni un thread perché le nuove note vi entrino, oppure scartalo.",
+	"thread_range": "dal {since} al {until}",
 	"threads_yours": "I tuoi thread",
 	"threads_none": "Ancora nessun thread: le note su una stessa cosa si raccolgono qui mentre scrivi.",
 	"threads_yours_none": "Nessun thread tenuto per ora: tieni un thread suggerito perché le nuove note vi entrino.",
@@ -133,7 +134,7 @@
 	"map_title": "Mappa",
 	"map_empty": "La mappa appare quando le tue note sono analizzate: le note su una stessa cosa stanno vicine.",
 	"map_fit": "Mostra tutte le note",
-	"map_no_thread": "Senza thread",
+	"map_no_name": "Senza menzione",
 	"map_hint": "Clicca su una nota per vederla. Trascina per spostarti, usa la rotellina per lo zoom.",
 	"map_open": "Apri",
 	"map_graph": "Grafo",
@@ -144,7 +145,16 @@
 	"thread_keep": "Tieni il thread",
 	"thread_dismiss": "Scarta",
 	"thread_suggested_banner": "Suggerito: queste note sembrano parlare di una stessa cosa.",
-	"thread_last": "{count} note, l'ultima il {date}",
+	"thread_last": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota, il {date}",
+				"countPlural=other": "{count} note, l'ultima il {date}"
+			}
+		}
+	],
 	"thread_add": "Aggiungi a un thread…",
 	"thread_move": "Sposta in un altro thread…",
 	"thread_select": "Seleziona note",
@@ -170,6 +180,7 @@
 	"search_meaning_pending": "Ricerca per significato…",
 	"command_group_commands": "Comandi",
 	"command_today": "Vai a oggi",
+	"command_calendar": "Apri il calendario",
 	"command_see_all": "Vedi tutti",
 	"search_show_more": "Mostra altri",
 	"editor_title": "Modifica nota",
@@ -405,8 +416,19 @@
 	"mention_threads_none": "Ancora nessun thread tra queste note: si formano man mano che altre note lo menzionano.",
 	"mentions_none": "Ancora nessuna menzione. Scrivi @nome in una nota.",
 	"mentions_nothing": "Niente menziona {name}.",
-	"mentions_quiet": "{count} note, niente dal giorno {date}",
-	"mentions_pulse": "Giorni in cui compare, settimana per settimana, nelle ultime 12 settimane",
+	"mentions_quiet": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota, niente dal giorno {date}",
+				"countPlural=other": "{count} note, niente dal giorno {date}"
+			}
+		}
+	],
+	"mentions_pulse": "Giorni in cui compare, nelle ultime 12 settimane",
+	"mentions_active": "In corso",
+	"mentions_others": "Gli altri",
 	"mentions_search": "Trova un nome",
 	"mentions_no_match": "Nessun nome corrisponde.",
 	"stats_plugin_name": "Statistiche",

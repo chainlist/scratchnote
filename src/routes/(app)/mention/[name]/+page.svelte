@@ -1,20 +1,24 @@
 <script lang="ts">
-	import type { Note } from '#lib/api.js';
-	import NoteList from '#lib/components/NoteList.svelte';
+	import NotesByDay from '#lib/components/NotesByDay.svelte';
+	import SectionTabs from '#lib/components/SectionTabs.svelte';
 	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import View from '#lib/components/View.svelte';
-	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
-	import { mentionKey } from '#lib/mentions.js';
+	import { shortDay } from '#lib/components/ViewHeader.svelte';
+	import { mentionHue, mentionKey } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
 	let { data, params } = $props();
 
 	const shell = getShell();
+
+	// A view being left reads its title once more with the next route's data,
+	// as the top bar draws it, which may hold no name: then nothing, no error.
+	/** The notes and pages that mention it, newest first. */
+	const notes = $derived(data.found?.notes ?? []);
 	/** As the newest note types it, or as the link has it once none does. */
-	const name = $derived(data.found.name ?? params.name);
+	const name = $derived(data.found?.name ?? params.name ?? '');
 
 	/** The threads found among the name's notes (SPEC 6.4), the user's
 	 *  first, then those only suggested, each the one written in last first. */
@@ -30,52 +34,59 @@
 	/** Threads only while they are on offer, with the embedding model. */
 	const shown = $derived(shell.canSimilar ? showing : 'notes');
 
-	/** The notes by day, newest first, as they come. */
-	const days = $derived.by(() => {
-		const days: { date: string; notes: Note[] }[] = [];
-		for (const note of data.found.notes) {
-			const last = days.at(-1);
-			if (last?.date === note.date) last.notes.push(note);
-			else days.push({ date: note.date, notes: [note] });
-		}
-		return days;
+	/** How many notes name it, and the days of the first and the last. */
+	const facts = $derived.by(() => {
+		if (!notes.length) return null;
+		const first = notes.at(-1)!.date;
+		const last = notes[0].date;
+		return [
+			m.tags_notes({ count: notes.length }),
+			first === last
+				? shortDay(last)
+				: m.thread_range({ since: shortDay(first), until: shortDay(last) })
+		].join(' · ');
 	});
 </script>
 
-<!-- The notes and pages that mention a name, each day under its own heading,
+<!-- A name as a page of its own: its letter in its colour, how many notes
+     name it and over which days, then its notes as a calendar reads them,
      or the threads found among them (SPEC 3.10). Keyed by the name, so
      another one rises into place. -->
 <View
 	back={shell.back}
 	title={`@${name}`}
-	detail={data.found.notes.length
-		? m.thread_detail({
-				count: data.found.notes.length,
-				date: shortDay(data.found.notes.at(-1)!.date)
-			})
-		: undefined}
 	pin={{ kind: 'mention', target: mentionKey(name), label: name }}
-	key={mentionKey(params.name)}
+	key={mentionKey(params.name ?? '')}
 >
+	{#snippet heading(compact: boolean)}
+		{#if compact}
+			<span class="min-w-0 truncate text-sm font-semibold">@{name}</span>
+		{:else}
+			<span
+				class="name-tint ml-1 flex size-11 shrink-0 items-center justify-center rounded-xl text-lg font-semibold"
+				style:--hue={mentionHue(mentionKey(name))}
+				aria-hidden="true"
+			>
+				{[...name][0]?.toUpperCase()}
+			</span>
+			<div class="ml-1.5 min-w-0">
+				<h1 class="truncate text-2xl leading-8 font-semibold tracking-tight">@{name}</h1>
+				{#if facts}
+					<p class="truncate text-sm text-muted-foreground">{facts}</p>
+				{/if}
+			</div>
+		{/if}
+	{/snippet}
+
 	{#if shell.canSimilar}
 		<!-- Its notes, or the threads among them, each with how many. -->
-		<ToggleGroup.Root
-			type="single"
-			variant="outline"
-			size="sm"
-			value={showing}
-			onValueChange={(value) => value && (showing = value as 'notes' | 'threads')}
-			class="-mt-4 mb-6"
-		>
-			<ToggleGroup.Item value="notes" class="gap-1.5 px-3">
-				{m.mention_notes()}
-				<span class="text-xs text-muted-foreground tabular-nums">{data.found.notes.length}</span>
-			</ToggleGroup.Item>
-			<ToggleGroup.Item value="threads" class="gap-1.5 px-3">
-				{m.threads_all()}
-				<span class="text-xs text-muted-foreground tabular-nums">{threads.length}</span>
-			</ToggleGroup.Item>
-		</ToggleGroup.Root>
+		<SectionTabs
+			bind:value={showing}
+			tabs={[
+				{ value: 'notes', label: m.mention_notes(), count: notes.length },
+				{ value: 'threads', label: m.threads_all(), count: threads.length }
+			]}
+		/>
 	{/if}
 
 	{#if shown === 'threads'}
@@ -106,16 +117,9 @@
 		{:else}
 			<p class="text-base text-neutral-600">{m.mention_threads_none()}</p>
 		{/if}
+	{:else if notes.length}
+		<NotesByDay {notes} {...shell.cardActions} />
 	{:else}
-		{#each days as day (day.date)}
-			<section class="mb-8 last:mb-0">
-				<h2 class="border-b border-neutral-800 pb-2 text-sm font-medium text-neutral-400">
-					{dayHeading(day.date)}
-				</h2>
-				<NoteList notes={day.notes} empty="" {...shell.cardActions} />
-			</section>
-		{:else}
-			<p class="text-base text-neutral-600">{m.mentions_nothing({ name: `@${name}` })}</p>
-		{/each}
+		<p class="text-base text-neutral-600">{m.mentions_nothing({ name: `@${name}` })}</p>
 	{/if}
 </View>

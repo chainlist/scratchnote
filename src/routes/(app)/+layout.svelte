@@ -278,6 +278,7 @@
 	onpick={(note) => void shell.openCited(note)}
 	onseeall={(q) => void shell.showResults(q)}
 	ontoday={async () => void shell.openDay(await today())}
+	oncalendar={() => void shell.showCalendar()}
 	onnewpage={shell.newPage}
 	onpages={() => void shell.showPages()}
 	onmentions={() => void shell.showMentions()}

@@ -121,6 +121,7 @@
 	"threads_all": "Threads",
 	"threads_suggested": "Vorgeschlagen",
 	"threads_suggested_hint": "Notizen, die nach einer Sache aussehen. Behalte einen Thread, damit neue Notizen dazukommen, oder verwirf ihn.",
+	"thread_range": "{since} bis {until}",
 	"threads_yours": "Deine Threads",
 	"threads_none": "Noch keine Threads: Notizen über eine Sache sammeln sich hier, während du schreibst.",
 	"threads_yours_none": "Noch keine behaltenen Threads: Behalte einen vorgeschlagenen, damit neue Notizen dazukommen.",
@@ -133,7 +134,7 @@
 	"map_title": "Karte",
 	"map_empty": "Die Karte erscheint, sobald deine Notizen erfasst sind: Notizen über dieselbe Sache liegen nah beieinander.",
 	"map_fit": "Alle Notizen zeigen",
-	"map_no_thread": "Ohne Thread",
+	"map_no_name": "Ohne Erwähnung",
 	"map_hint": "Klicke auf eine Notiz, um sie zu sehen. Ziehen zum Verschieben, Mausrad zum Zoomen.",
 	"map_open": "Öffnen",
 	"map_graph": "Graph",
@@ -144,7 +145,16 @@
 	"thread_keep": "Thread behalten",
 	"thread_dismiss": "Verwerfen",
 	"thread_suggested_banner": "Vorschlag: Diese Notizen sehen nach einer Sache aus.",
-	"thread_last": "{count} Notizen, zuletzt am {date}",
+	"thread_last": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} Notiz, am {date}",
+				"countPlural=other": "{count} Notizen, zuletzt am {date}"
+			}
+		}
+	],
 	"thread_add": "Zu einem Thread hinzufügen…",
 	"thread_move": "In einen anderen Thread verschieben…",
 	"thread_select": "Notizen auswählen",
@@ -170,6 +180,7 @@
 	"search_meaning_pending": "Suche nach Bedeutung…",
 	"command_group_commands": "Befehle",
 	"command_today": "Zu heute springen",
+	"command_calendar": "Kalender öffnen",
 	"command_see_all": "Alle anzeigen",
 	"search_show_more": "Mehr anzeigen",
 	"editor_title": "Notiz bearbeiten",
@@ -405,8 +416,19 @@
 	"mention_threads_none": "Noch keine Threads unter diesen Notizen: Sie bilden sich, wenn weitere Notizen ihn erwähnen.",
 	"mentions_none": "Noch keine Erwähnungen. Schreibe @Name in eine Notiz.",
 	"mentions_nothing": "Nichts erwähnt {name}.",
-	"mentions_quiet": "{count} Notizen, still seit {date}",
-	"mentions_pulse": "Tage mit einer Erwähnung, Woche für Woche, die letzten 12 Wochen",
+	"mentions_quiet": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} Notiz, still seit {date}",
+				"countPlural=other": "{count} Notizen, still seit {date}"
+			}
+		}
+	],
+	"mentions_pulse": "Tage mit einer Erwähnung in den letzten 12 Wochen",
+	"mentions_active": "Gerade dran",
+	"mentions_others": "Die übrigen",
 	"mentions_search": "Namen finden",
 	"mentions_no_match": "Kein Name passt.",
 	"stats_plugin_name": "Statistik",

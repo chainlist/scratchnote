@@ -1,5 +1,16 @@
 import { resolve } from '$app/paths';
-import type { Thread } from '#lib/api.js';
+import type { Note, Thread } from '#lib/api.js';
+import { noteTitle } from '#lib/markdown.js';
+import { m } from '#lib/paraglide/messages.js';
+
+/**
+ * A thread's name, the same wherever it shows: the user's title, else the
+ * first line of its first note as words, else "Thread" while that note is
+ * not read yet.
+ */
+export function threadName(thread: Pick<Thread, 'title'>, first?: Pick<Note, 'subject' | 'body'>) {
+	return thread.title ?? ((first && noteTitle(first)) || m.thread_untitled());
+}
 
 /**
  * The key of the name a thread was found among the notes of, from its id,

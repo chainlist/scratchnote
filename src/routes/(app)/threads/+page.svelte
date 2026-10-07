@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { getNotes, type Note, type Thread, type ThreadCard } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -8,7 +9,7 @@
 	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { leadNotes, SUGGESTED_PAGE, threadHref } from '#lib/threads.js';
+	import { leadNotes, SUGGESTED_PAGE, threadHref, threadName } from '#lib/threads.js';
 	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
 
 	let { data } = $props();
@@ -23,8 +24,11 @@
 		first: thread.notes.slice(0, 2).flatMap((id) => notes.get(id) ?? [])
 	});
 
-	/** The section shown: the user's threads, or the suggestions. */
-	let tab = $state<'yours' | 'suggested'>('yours');
+	/** The section shown: suggestions first, as they wait on a decision
+	 *  (SPEC 6.4); with none, the user's threads. */
+	let tab = $state<'yours' | 'suggested'>(
+		untrack(() => data.threads.some((thread) => !thread.kept)) ? 'suggested' : 'yours'
+	);
 
 	const suggested = $derived(data.threads.filter((thread) => !thread.kept));
 	const yours = $derived(data.threads.filter((thread) => thread.kept).map(card));
@@ -60,15 +64,8 @@
 		shown += SUGGESTED_PAGE;
 	}
 
-	function firstLine(body: string) {
-		return body.split('\n').find((line) => line.trim()) ?? '';
-	}
-
-	/** A thread's title, else its first note's first line. */
-	function name(thread: ThreadCard) {
-		const first = thread.first[0];
-		return thread.title ?? (first ? (first.subject ?? firstLine(first.body)) : m.thread_untitled());
-	}
+	/** A thread's name, as everywhere: its title, else its first note's first line. */
+	const name = (thread: ThreadCard) => threadName(thread, thread.first[0]);
 </script>
 
 <!-- The space's threads: the user's, the one written in last first, or those

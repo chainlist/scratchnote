@@ -141,6 +141,33 @@
 	"thread_title_label": "Titre du thread",
 	"thread_gone": "Ce thread n'existe plus : ses notes ne vont plus ensemble.",
 	"thread_leave": "Retirer du thread",
+	"thread_undo": "Annuler",
+	"thread_merged": "{from} fusionné avec {into}",
+	"thread_dismissed": "Suggestion écartée",
+	"thread_kept": "Gardé. Les nouvelles notes sur ce sujet le rejoindront.",
+	"thread_added": "Ajoutée à {into}",
+	"thread_moved": [
+		{
+			"declarations": ["input count", "input into", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note déplacée vers {into}",
+				"countPlural=other": "{count} notes déplacées vers {into}"
+			}
+		}
+	],
+	"thread_moved_new": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note déplacée vers un nouveau thread",
+				"countPlural=other": "{count} notes déplacées vers un nouveau thread"
+			}
+		}
+	],
+	"thread_taken_out": "Note retirée du thread",
+	"thread_undo_late": "Impossible d'annuler : les threads ont changé depuis.",
 	"thread_rejoin": "Laisser rejoindre un thread",
 	"threads_all": "Threads",
 	"threads_suggested": "Suggérés",
@@ -190,7 +217,16 @@
 	"thread_pick_merge": "Fusionner avec un thread",
 	"thread_pick_add_hint": "Les threads qui lui vont le mieux viennent en premier. Elle reste dans celui que vous choisissez.",
 	"thread_pick_move_hint": "Les notes restent dans le thread que vous choisissez.",
-	"thread_pick_merge_hint": "Toutes les notes de ce thread passent dans celui que vous choisissez.",
+	"thread_pick_merge_hint": [
+		{
+			"declarations": ["input count", "input from", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "La {count} note de {from} rejoint le thread choisi. Il garde son titre, ou prend celui-ci s'il n'en a pas.",
+				"countPlural=other": "Les {count} notes de {from} rejoignent le thread choisi. Il garde son titre, ou prend celui-ci s'il n'en a pas."
+			}
+		}
+	],
 	"thread_pick_search": "Chercher un thread",
 	"thread_pick_none": "Aucun thread à choisir.",
 	"thread_new": "Nouveau thread",

@@ -141,6 +141,33 @@
 	"thread_title_label": "Titel des Threads",
 	"thread_gone": "Diesen Thread gibt es nicht mehr: seine Notizen gehören nicht mehr zusammen.",
 	"thread_leave": "Aus dem Thread nehmen",
+	"thread_undo": "Rückgängig",
+	"thread_merged": "{from} mit {into} zusammengeführt",
+	"thread_dismissed": "Vorschlag verworfen",
+	"thread_kept": "Behalten. Neue Notizen dazu kommen hinzu.",
+	"thread_added": "Zu {into} hinzugefügt",
+	"thread_moved": [
+		{
+			"declarations": ["input count", "input into", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} Notiz nach {into} verschoben",
+				"countPlural=other": "{count} Notizen nach {into} verschoben"
+			}
+		}
+	],
+	"thread_moved_new": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} Notiz in einen neuen Thread verschoben",
+				"countPlural=other": "{count} Notizen in einen neuen Thread verschoben"
+			}
+		}
+	],
+	"thread_taken_out": "Notiz aus dem Thread genommen",
+	"thread_undo_late": "Das lässt sich nicht mehr rückgängig machen: Die Threads haben sich seitdem geändert.",
 	"thread_rejoin": "Wieder in einen Thread lassen",
 	"threads_all": "Threads",
 	"threads_suggested": "Vorgeschlagen",
@@ -190,7 +217,16 @@
 	"thread_pick_merge": "Mit einem Thread zusammenführen",
 	"thread_pick_add_hint": "Die Threads, zu denen sie am besten passt, stehen oben. Sie bleibt in dem, den du wählst.",
 	"thread_pick_move_hint": "Die Notizen bleiben in dem Thread, den du wählst.",
-	"thread_pick_merge_hint": "Alle Notizen dieses Threads kommen in den, den du wählst.",
+	"thread_pick_merge_hint": [
+		{
+			"declarations": ["input count", "input from", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "Die {count} Notiz von {from} kommt in den Thread, den du wählst. Er behält seinen Titel oder übernimmt diesen, wenn er keinen hat.",
+				"countPlural=other": "Die {count} Notizen von {from} kommen in den Thread, den du wählst. Er behält seinen Titel oder übernimmt diesen, wenn er keinen hat."
+			}
+		}
+	],
 	"thread_pick_search": "Threads durchsuchen",
 	"thread_pick_none": "Kein Thread zur Auswahl.",
 	"thread_new": "Neuer Thread",

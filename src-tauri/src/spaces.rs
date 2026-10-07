@@ -232,6 +232,19 @@ pub struct Space {
     /// Set once the space is deleted or renamed away, so nothing still in
     /// hand for it writes files back into the old folder.
     pub retired: AtomicBool,
+    /// The last change to threads that can be taken back, kept only while
+    /// the app runs.
+    undo: Mutex<Option<ThreadUndo>>,
+}
+
+/// The thread edits and the pins together: what one change to threads, a
+/// merge say, may change both of.
+pub type Decided = (Edits, Vec<Pin>);
+
+/// What the threads were before a change, and what the change left.
+struct ThreadUndo {
+    before: Decided,
+    after: Decided,
 }
 
 impl Space {
@@ -251,6 +264,7 @@ impl Space {
             root,
             embed_wake,
             editing: Mutex::new(HashSet::new()),
+            undo: Mutex::new(None),
         }
     }
 
@@ -478,6 +492,53 @@ impl Space {
         let pins = pins::tidy(pins);
         pins::save(db, &pins)?;
         Ok(Some(pins))
+    }
+
+    /// The thread edits and the pins as they are now.
+    pub fn decided(&self) -> Decided {
+        (self.edits(), self.pins())
+    }
+
+    /// Remember the change to threads made since `before`, so that
+    /// `undo_threads` can take it back. It replaces the one before it.
+    pub fn remember_change(&self, before: Decided) {
+        let after = self.decided();
+        if let Ok(mut undo) = self.undo.lock() {
+            *undo = (before != after).then_some(ThreadUndo { before, after });
+        }
+    }
+
+    /// Put the thread edits and the pins back as they were before the last
+    /// change remembered, once, and only while nothing has changed them
+    /// since: a later change is never lost to an older undo. `None` when
+    /// there was nothing to take back, else whether the pins changed too.
+    pub fn undo_threads(&self) -> Result<Option<bool>, String> {
+        let Some(undo) = self
+            .undo
+            .lock()
+            .map_err(|_| "undo lock poisoned".to_string())?
+            .take()
+        else {
+            return Ok(None);
+        };
+        if self.decided() != undo.after {
+            return Ok(None);
+        }
+        let (edits, pins) = undo.before;
+        self.change_edits(|now| {
+            *now = edits;
+            true
+        })?;
+        let pins_changed = self
+            .change_pins(|now| {
+                if *now == pins {
+                    return false;
+                }
+                *now = pins;
+                true
+            })?
+            .is_some();
+        Ok(Some(pins_changed))
     }
 
     /// Tell the embed task the index changed. `persist_index` does it, and
@@ -731,6 +792,51 @@ mod tests {
 
     fn wake() -> Wake {
         std::sync::Arc::new(tokio::sync::Notify::new())
+    }
+
+    #[test]
+    fn a_change_to_threads_is_undone_once_and_never_over_a_later_one() {
+        let root = scratch("undo-threads");
+        write_note(&root, "01AAA", "2026-09-22");
+        let space = Space::new("Test", root.clone(), wake());
+        space.load();
+        assert_eq!(space.undo_threads().unwrap(), None, "nothing to undo yet");
+
+        // A merge-like change: the edits and the pins both move.
+        let before = space.decided();
+        space
+            .change_edits(|edits| edits.alone.insert("01AAA".into()))
+            .unwrap();
+        space
+            .change_pins(|pins| {
+                pins.push(Pin {
+                    kind: pins::PinKind::Thread,
+                    target: "01AAA".into(),
+                    label: None,
+                });
+                true
+            })
+            .unwrap();
+        space.remember_change(before.clone());
+        assert_eq!(space.undo_threads().unwrap(), Some(true));
+        assert_eq!(space.decided(), before);
+        assert_eq!(space.undo_threads().unwrap(), None, "only once");
+
+        // Anything changed after it keeps the older change from coming undone.
+        let before = space.decided();
+        space
+            .change_edits(|edits| {
+                edits.titles.insert("01AAA".into(), "Kitchen".into());
+                true
+            })
+            .unwrap();
+        space.remember_change(before);
+        space
+            .change_edits(|edits| edits.alone.insert("01AAA".into()))
+            .unwrap();
+        assert_eq!(space.undo_threads().unwrap(), None);
+        assert!(space.edits().titles.contains_key("01AAA"));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

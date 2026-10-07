@@ -890,7 +890,7 @@
 								href={threadHref(thread.id)}
 								class="min-w-0 flex-1 truncate text-xs text-muted-foreground hover:underline"
 							>
-								{thread.title ?? m.thread_untitled()}
+								{shell.nameOf(thread)}
 							</a>
 						{/if}
 						<Button size="sm" class="ml-auto" onclick={() => void shell.openCited(note)}>
@@ -926,7 +926,7 @@
 					{#if thread}
 						<p class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
 							<span class="size-2 shrink-0 rounded-full" style:background={colour(thread)}></span>
-							<span class="truncate">{thread.title ?? m.thread_untitled()}</span>
+							<span class="truncate">{shell.nameOf(thread)}</span>
 						</p>
 					{/if}
 				</div>

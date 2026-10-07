@@ -141,6 +141,33 @@
 	"thread_title_label": "Title of the thread",
 	"thread_gone": "This thread is gone: its notes no longer go together.",
 	"thread_leave": "Take out of the thread",
+	"thread_undo": "Undo",
+	"thread_merged": "{from} merged into {into}",
+	"thread_dismissed": "Suggestion dismissed",
+	"thread_kept": "Kept. New notes about this will join.",
+	"thread_added": "Added to {into}",
+	"thread_moved": [
+		{
+			"declarations": ["input count", "input into", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note moved to {into}",
+				"countPlural=other": "{count} notes moved to {into}"
+			}
+		}
+	],
+	"thread_moved_new": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note moved to a new thread",
+				"countPlural=other": "{count} notes moved to a new thread"
+			}
+		}
+	],
+	"thread_taken_out": "Note taken out of the thread",
+	"thread_undo_late": "That can no longer be undone: the threads have changed since.",
 	"thread_rejoin": "Let it join a thread",
 	"threads_all": "Threads",
 	"threads_suggested": "Suggested",
@@ -190,7 +217,16 @@
 	"thread_pick_merge": "Merge into a thread",
 	"thread_pick_add_hint": "The threads it fits best come first. It stays in the one you pick.",
 	"thread_pick_move_hint": "The notes stay in the thread you pick.",
-	"thread_pick_merge_hint": "Every note of this thread moves to the one you pick.",
+	"thread_pick_merge_hint": [
+		{
+			"declarations": ["input count", "input from", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "The {count} note of {from} joins the thread you pick. It keeps its title, or takes this one's if it has none.",
+				"countPlural=other": "The {count} notes of {from} join the thread you pick. It keeps its title, or takes this one's if it has none."
+			}
+		}
+	],
 	"thread_pick_search": "Search threads",
 	"thread_pick_none": "No thread to pick.",
 	"thread_new": "New thread",

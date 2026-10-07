@@ -165,6 +165,7 @@ pub async fn keep_out_of_threads(
     out: bool,
 ) -> Result<(), String> {
     let space = state.space()?;
+    let before = space.decided();
     let changed = space.change_edits(|edits| {
         if out {
             let put = edits.take_out(&id);
@@ -176,6 +177,7 @@ pub async fn keep_out_of_threads(
     if !changed {
         return Ok(());
     }
+    space.remember_change(before);
     place_again(&app, &space).await
 }
 
@@ -215,6 +217,7 @@ pub async fn keep_thread(
     if notes.is_empty() {
         return Ok(());
     }
+    let before = space.decided();
     space.change_edits(|edits| {
         for note in notes {
             edits.put_in(note, id.clone());
@@ -222,6 +225,7 @@ pub async fn keep_thread(
         edits.dismissed.remove(&id);
         true
     })?;
+    space.remember_change(before);
     place_again(&app, &space).await
 }
 
@@ -237,10 +241,12 @@ pub async fn dismiss_thread(
     if notes.is_empty() {
         return Ok(());
     }
+    let before = space.decided();
     space.change_edits(|edits| {
         edits.dismissed.insert(id, notes.into_iter().collect());
         true
     })?;
+    space.remember_change(before);
     place_again(&app, &space).await
 }
 
@@ -276,6 +282,7 @@ pub async fn put_in_thread(
                 .expect("a free name")
         }
     };
+    let before = space.decided();
     space.change_edits(|edits| {
         for note in notes {
             edits.alone.remove(&note);
@@ -283,6 +290,7 @@ pub async fn put_in_thread(
         }
         true
     })?;
+    space.remember_change(before);
     place_again(&app, &space).await?;
     Ok(thread)
 }
@@ -303,6 +311,7 @@ pub async fn merge_threads(
     if scope_of(&from) != scope_of(&into) {
         return Err("threads of two different names cannot become one".to_string());
     }
+    let before = space.decided();
     // A thread pinned to the left edge stays pinned as the one it went into.
     if space
         .change_pins(|pins| crate::storage::pins::follow_merge(pins, &from, &into))?
@@ -322,7 +331,27 @@ pub async fn merge_threads(
         edits.dismissed.remove(&from);
         true
     })?;
+    space.remember_change(before);
     place_again(&app, &space).await
+}
+
+/// Take back the last merge, dismissal, thread kept, notes put in or moved,
+/// or note taken out or let back in, pins included, while nothing has
+/// changed the threads since. Says whether it did.
+#[tauri::command]
+pub async fn undo_thread_change(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let space = state.space()?;
+    let Some(pins_changed) = space.undo_threads()? else {
+        return Ok(false);
+    };
+    if pins_changed {
+        super::pins::pins_changed(&app, &space.name);
+    }
+    place_again(&app, &space).await?;
+    Ok(true)
 }
 
 /// Every thread of the open space with its first notes, newest first.

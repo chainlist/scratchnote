@@ -27,18 +27,19 @@
 		onclick={(event) => {
 			// A page's card opens the page on any other click.
 			event.stopPropagation();
-			shell.dockThread(thread.id);
+			// The dock opens on this note, where it was clicked, not the thread's first.
+			shell.dockThread(thread.id, id);
 		}}
 		title={m.thread_open({ count: thread.notes.length, date: shortDay(thread.since) })}
 		class={cn(
-			'flex max-w-full min-w-0 cursor-pointer items-center gap-1.5 text-xs text-neutral-500 transition-colors hover:text-neutral-200',
+			'flex max-w-full min-w-0 cursor-pointer items-center gap-1.5 text-xs text-meta transition-colors hover:text-neutral-200',
 			className
 		)}
 	>
 		<RouteIcon class="size-3 shrink-0" />
 		{#if thread.mention}<span class="shrink-0 text-neutral-400">@{thread.mention}</span>{/if}
-		<span class="truncate">{thread.title ?? m.thread_untitled()}</span>
-		<span class="shrink-0 text-neutral-600">
+		<span class="truncate">{shell.nameOf(thread)}</span>
+		<span class="shrink-0 tabular-nums">
 			{m.thread_position({ n: index + 1, count: thread.notes.length })}
 		</span>
 	</button>

@@ -141,6 +141,33 @@
 	"thread_title_label": "Titolo del thread",
 	"thread_gone": "Questo thread non c'è più: le sue note non vanno più insieme.",
 	"thread_leave": "Togli dal thread",
+	"thread_undo": "Annulla",
+	"thread_merged": "{from} unito a {into}",
+	"thread_dismissed": "Suggerimento scartato",
+	"thread_kept": "Tenuto. Le nuove note su questo tema vi entreranno.",
+	"thread_added": "Aggiunta a {into}",
+	"thread_moved": [
+		{
+			"declarations": ["input count", "input into", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota spostata in {into}",
+				"countPlural=other": "{count} note spostate in {into}"
+			}
+		}
+	],
+	"thread_moved_new": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota spostata in un nuovo thread",
+				"countPlural=other": "{count} note spostate in un nuovo thread"
+			}
+		}
+	],
+	"thread_taken_out": "Nota tolta dal thread",
+	"thread_undo_late": "Non si può più annullare: i thread sono cambiati nel frattempo.",
 	"thread_rejoin": "Lascia che entri in un thread",
 	"threads_all": "Thread",
 	"threads_suggested": "Suggeriti",
@@ -190,7 +217,16 @@
 	"thread_pick_merge": "Unisci a un thread",
 	"thread_pick_add_hint": "Prima i thread a cui si adatta meglio. Resta in quello che scegli.",
 	"thread_pick_move_hint": "Le note restano nel thread che scegli.",
-	"thread_pick_merge_hint": "Tutte le note di questo thread passano in quello che scegli.",
+	"thread_pick_merge_hint": [
+		{
+			"declarations": ["input count", "input from", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "La {count} nota di {from} entra nel thread che scegli. Tiene il suo titolo, o prende questo se non ne ha.",
+				"countPlural=other": "Le {count} note di {from} entrano nel thread che scegli. Tiene il suo titolo, o prende questo se non ne ha."
+			}
+		}
+	],
 	"thread_pick_search": "Cerca thread",
 	"thread_pick_none": "Nessun thread da scegliere.",
 	"thread_new": "Nuovo thread",

@@ -5,6 +5,7 @@
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { getShell } from '#lib/shell.svelte.js';
 
 	let {
 		thread = $bindable(),
@@ -15,6 +16,8 @@
 		/** Resolves to an error to show, or null once renamed. */
 		onconfirm: (thread: Thread, title: string) => Promise<string | null>;
 	} = $props();
+
+	const shell = getShell();
 
 	let title = $state('');
 	let input = $state<HTMLInputElement | null>(null);
@@ -66,7 +69,7 @@
 					id="thread-title"
 					bind:ref={input}
 					bind:value={title}
-					placeholder={m.thread_untitled()}
+					placeholder={thread ? shell.nameOf(thread) : m.thread_untitled()}
 					maxlength={120}
 				/>
 			</div>

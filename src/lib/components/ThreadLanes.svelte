@@ -6,16 +6,19 @@
 	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { getShell } from '#lib/shell.svelte.js';
 	import { threadHref } from '#lib/threads.js';
+
+	const shell = getShell();
 
 	let {
 		threads,
-		name = (thread) => thread.title ?? m.thread_untitled(),
+		name = (thread) => shell.nameOf(thread),
 		chips = true,
 		actions
 	}: {
 		threads: T[];
-		/** What a thread goes by: its title, else a generic one. */
+		/** What a thread goes by: by default, its name as everywhere (`nameOf`). */
 		name?: (thread: T) => string;
 		/** The name a thread was found among, before its title: left out
 		 *  where every thread is of that one name. */

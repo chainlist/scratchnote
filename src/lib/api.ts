@@ -187,6 +187,10 @@ export const putInThread = (notes: string[], into: string | null, scope?: string
 export const mergeThreads = (from: string, into: string) =>
 	invoke<void>('merge_threads', { from, into });
 
+/** Take back the last merge, dismissal or note taken out, while nothing has
+ *  changed the threads since. Resolves to whether it did. */
+export const undoThreadChange = () => invoke<boolean>('undo_thread_change');
+
 /** Fired when the notes were placed in threads anew, or a thread renamed. */
 export const onThreadsChanged = (handler: () => void): Promise<UnlistenFn> =>
 	listen('threads-changed', () => handler());

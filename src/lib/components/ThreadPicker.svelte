@@ -5,8 +5,8 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { ThreadPick } from '#lib/shell.svelte.js';
-	import { threadScope } from '#lib/threads.js';
+	import { getShell, type ThreadPick } from '#lib/shell.svelte.js';
+	import { threadName, threadScope } from '#lib/threads.js';
 
 	let {
 		pick = $bindable(),
@@ -18,16 +18,38 @@
 		onconfirm: (pick: ThreadPick, into: string | null) => Promise<string | null>;
 	} = $props();
 
+	const shell = getShell();
+
 	let threads = $state<ThreadCard[]>([]);
 	let error = $state<string | null>(null);
 	let working = $state(false);
 	/** What the picker shows, kept as it was while it fades out. */
 	let shown = $state<ThreadPick | null>(null);
 
+	/**
+	 * A whole thread's best fits first: each thread scores by its place
+	 * among the threads its first, middle and last notes fit best, and the
+	 * rest keep the order of the one written in last first. Without the
+	 * embedding model nothing scores, so that order is all.
+	 */
+	async function mergeTargets(notes: string[]): Promise<ThreadCard[]> {
+		const sample = [...new Set([notes[0], notes[Math.floor(notes.length / 2)], notes.at(-1)])];
+		const [all, ...ranked] = await Promise.all([
+			threadCards(),
+			...sample.filter((id) => id !== undefined).map(threadsForNote)
+		]);
+		const score: Record<string, number> = {};
+		for (const list of ranked)
+			list.forEach((thread, i) => (score[thread.id] = (score[thread.id] ?? 0) + 1 / (10 + i)));
+		return all.toSorted((a, b) => (score[b.id] ?? 0) - (score[a.id] ?? 0));
+	}
+
 	// One note is offered the threads it fits best first, among the names
-	// it mentions; several, or a whole thread, every other thread, the one
-	// written in last first. Notes from a thread only go to another thread
-	// of the same name: a thread of one name never takes in another's.
+	// it mentions; a whole thread, those its notes fit best; several notes,
+	// every other thread, the one written in last first. Notes from a thread
+	// only go to another thread of the same name: a thread of one name never
+	// takes in another's. A thread of the user's is never merged into one
+	// only suggested, which a slip of the keyboard could otherwise pick.
 	$effect(() => {
 		const asked = pick;
 		if (!asked) return;
@@ -35,15 +57,21 @@
 		threads = [];
 		error = null;
 		const load =
-			asked.kind !== 'merge' && asked.notes.length === 1
-				? threadsForNote(asked.notes[0])
-				: threadCards();
+			asked.kind === 'merge'
+				? mergeTargets(asked.notes)
+				: asked.notes.length === 1
+					? threadsForNote(asked.notes[0])
+					: threadCards();
+		const fromKept = shell.threadList.find((thread) => thread.id === asked.from)?.kept ?? false;
 		load
 			.then((found) => {
 				if (pick !== asked) return;
 				const scope = asked.from === undefined ? undefined : threadScope(asked.from);
 				threads = found.filter(
-					(thread) => thread.id !== asked.from && (scope === undefined || thread.scope === scope)
+					(thread) =>
+						thread.id !== asked.from &&
+						(scope === undefined || thread.scope === scope) &&
+						!(asked.kind === 'merge' && fromKept && !thread.kept)
 				);
 			})
 			.catch((e) => (error = String(e)));
@@ -59,23 +87,22 @@
 				? m.thread_pick_move()
 				: m.thread_pick_add()
 	);
+	/** The thread a merge takes the notes of, as it is named everywhere. */
+	const fromName = $derived.by(() => {
+		const from = shell.threadList.find((thread) => thread.id === shown?.from);
+		return from ? shell.nameOf(from) : m.thread_untitled();
+	});
+
 	const hint = $derived(
 		shown?.kind === 'merge'
-			? m.thread_pick_merge_hint()
+			? m.thread_pick_merge_hint({ count: shown.notes.length, from: fromName })
 			: shown?.kind === 'move'
 				? m.thread_pick_move_hint()
 				: m.thread_pick_add_hint()
 	);
 
-	function firstLine(body: string) {
-		return body.split('\n').find((line) => line.trim()) ?? '';
-	}
-
-	/** A thread's title, else its first note's first line. */
-	function name(thread: ThreadCard) {
-		const first = thread.first[0];
-		return thread.title ?? (first ? (first.subject ?? firstLine(first.body)) : m.thread_untitled());
-	}
+	/** A thread's name, as everywhere: its title, else its first note's first line. */
+	const name = (thread: ThreadCard) => threadName(thread, thread.first[0]);
 
 	async function choose(into: string | null) {
 		if (!pick || working) return;

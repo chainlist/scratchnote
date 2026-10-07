@@ -16,7 +16,7 @@
 	import * as ContextMenu from '#lib/components/ui/context-menu/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { coreIds } from '#lib/plugins/loader.js';
-	import { colourOf, monogram, pinHref, pinPage } from '#lib/pins.js';
+	import { monogram, pinColour, pinHref, pinPage } from '#lib/pins.js';
 	import { threadScope } from '#lib/threads.js';
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -41,7 +41,7 @@
 			if (pin.kind === 'thread') {
 				const thread = shell.canSimilar && shell.threadList.find((t) => t.id === pin.target);
 				if (!thread) return [];
-				const label = thread.title ?? m.thread_untitled();
+				const label = shell.nameOf(thread);
 				const title = thread.mention ? `@${thread.mention} · ${label}` : label;
 				return [{ pin, label, title }];
 			}
@@ -182,7 +182,7 @@
 			<RouteIcon />
 			{#if shell.suggested}
 				<span
-					class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] leading-none font-medium text-primary-foreground"
+					class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[color-mix(in_oklab,var(--primary)_78%,black)] px-1 text-[0.6rem] leading-none font-semibold text-primary-foreground"
 				>
 					{shell.suggested > 9 ? '9+' : shell.suggested}
 				</span>
@@ -231,13 +231,16 @@
 	{@const href = pinHref(pin)}
 	{@const active = isHere(pin, href)}
 	{@const below = threadsOf(pin)}
-	{@const colour = colourOf(pin.target)}
+	{@const colour = pinColour(pin.target)}
 	<ContextMenu.Root>
 		<ContextMenu.Trigger>
 			{#snippet child({ props })}
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- pinHref resolves it -->
+				<!-- The trigger's props take the link out of the tab order; it is
+				     put back, and the Menu key or Shift+F10 opens its menu. -->
 				<a
 					{...props}
+					tabindex={0}
 					{href}
 					aria-label={title}
 					aria-current={active ? 'page' : undefined}
@@ -248,7 +251,7 @@
 					<span
 						class={[
 							'flex size-7 items-center justify-center rounded-md text-[0.7rem] leading-none font-semibold transition-opacity',
-							active ? 'opacity-100' : 'opacity-75 hover:opacity-100'
+							active ? 'opacity-100' : 'opacity-85 hover:opacity-100'
 						]}
 						style:color={colour}
 						style:background-color="color-mix(in oklab, {colour} 18%, transparent)"
@@ -264,7 +267,7 @@
 			{#if below.length}
 				{#each below as thread (thread.id)}
 					<ContextMenu.Item onSelect={() => void shell.showThread(thread.id)}>
-						<RouteIcon /><span class="truncate">{thread.title ?? m.thread_untitled()}</span>
+						<RouteIcon /><span class="truncate">{shell.nameOf(thread)}</span>
 					</ContextMenu.Item>
 				{/each}
 				<ContextMenu.Separator />

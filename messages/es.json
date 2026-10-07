@@ -141,6 +141,33 @@
 	"thread_title_label": "Título del thread",
 	"thread_gone": "Este thread ya no existe: sus notas ya no van juntas.",
 	"thread_leave": "Sacar del thread",
+	"thread_undo": "Deshacer",
+	"thread_merged": "{from} fusionado con {into}",
+	"thread_dismissed": "Sugerencia descartada",
+	"thread_kept": "Guardado. Las notas nuevas sobre esto se unirán.",
+	"thread_added": "Añadida a {into}",
+	"thread_moved": [
+		{
+			"declarations": ["input count", "input into", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota movida a {into}",
+				"countPlural=other": "{count} notas movidas a {into}"
+			}
+		}
+	],
+	"thread_moved_new": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota movida a un thread nuevo",
+				"countPlural=other": "{count} notas movidas a un thread nuevo"
+			}
+		}
+	],
+	"thread_taken_out": "Nota sacada del thread",
+	"thread_undo_late": "Ya no se puede deshacer: los threads han cambiado desde entonces.",
 	"thread_rejoin": "Dejar que se una a un thread",
 	"threads_all": "Threads",
 	"threads_suggested": "Sugeridos",
@@ -190,7 +217,16 @@
 	"thread_pick_merge": "Fusionar con un thread",
 	"thread_pick_add_hint": "Primero los threads que mejor le encajan. Se queda en el que elijas.",
 	"thread_pick_move_hint": "Las notas se quedan en el thread que elijas.",
-	"thread_pick_merge_hint": "Todas las notas de este thread pasan al que elijas.",
+	"thread_pick_merge_hint": [
+		{
+			"declarations": ["input count", "input from", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "La {count} nota de {from} se une al thread que elijas. Conserva su título, o toma este si no tiene.",
+				"countPlural=other": "Las {count} notas de {from} se unen al thread que elijas. Conserva su título, o toma este si no tiene."
+			}
+		}
+	],
 	"thread_pick_search": "Buscar threads",
 	"thread_pick_none": "No hay ningún thread que elegir.",
 	"thread_new": "Thread nuevo",

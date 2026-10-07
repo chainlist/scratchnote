@@ -141,6 +141,33 @@
 	"thread_title_label": "Título do thread",
 	"thread_gone": "Este thread não existe mais: suas notas não andam mais juntas.",
 	"thread_leave": "Tirar do thread",
+	"thread_undo": "Desfazer",
+	"thread_merged": "{from} mesclado com {into}",
+	"thread_dismissed": "Sugestão descartada",
+	"thread_kept": "Mantido. As novas notas sobre isso entrarão nele.",
+	"thread_added": "Adicionada a {into}",
+	"thread_moved": [
+		{
+			"declarations": ["input count", "input into", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota movida para {into}",
+				"countPlural=other": "{count} notas movidas para {into}"
+			}
+		}
+	],
+	"thread_moved_new": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota movida para um novo thread",
+				"countPlural=other": "{count} notas movidas para um novo thread"
+			}
+		}
+	],
+	"thread_taken_out": "Nota tirada do thread",
+	"thread_undo_late": "Não dá mais para desfazer: os threads mudaram desde então.",
 	"thread_rejoin": "Deixar entrar em um thread",
 	"threads_all": "Threads",
 	"threads_suggested": "Sugeridos",
@@ -190,7 +217,16 @@
 	"thread_pick_merge": "Mesclar com um thread",
 	"thread_pick_add_hint": "Primeiro os threads em que ela melhor se encaixa. Ela fica no que você escolher.",
 	"thread_pick_move_hint": "As notas ficam no thread que você escolher.",
-	"thread_pick_merge_hint": "Todas as notas deste thread passam para o que você escolher.",
+	"thread_pick_merge_hint": [
+		{
+			"declarations": ["input count", "input from", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "A {count} nota de {from} entra no thread que você escolher. Ele mantém o título, ou fica com este se não tiver.",
+				"countPlural=other": "As {count} notas de {from} entram no thread que você escolher. Ele mantém o título, ou fica com este se não tiver."
+			}
+		}
+	],
 	"thread_pick_search": "Buscar threads",
 	"thread_pick_none": "Nenhum thread para escolher.",
 	"thread_new": "Novo thread",

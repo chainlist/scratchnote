@@ -11,6 +11,12 @@ export function colourOf(id: string) {
 	return `hsl(${hash % 360} 70% 58%)`;
 }
 
+/** The same colour for a pin's letters, darker on a light page so they
+ *  stay readable on its tint there, through `--pin-lightness`. */
+export function pinColour(id: string) {
+	return colourOf(id).replace('58%)', 'var(--pin-lightness))');
+}
+
 /** Two letters for a pin on the left edge: a title's first two words'
  *  initials, or its first two letters, an `@` kept in front. */
 export function monogram(label: string) {

@@ -78,6 +78,7 @@ const LABELS: Record<string, Label | null> = {
 	dismiss_thread: m.slow_threads,
 	put_in_thread: m.slow_threads,
 	merge_threads: m.slow_threads,
+	undo_thread_change: m.slow_threads,
 
 	move_note: m.slow_moving,
 	move_page: m.slow_moving,

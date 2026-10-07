@@ -88,6 +88,7 @@ pub fn run() {
             commands::threads::dismiss_thread,
             commands::threads::put_in_thread,
             commands::threads::merge_threads,
+            commands::threads::undo_thread_change,
             commands::threads::threads_for_note,
             commands::threads::thread_cards,
             commands::mentions::list_mentions,

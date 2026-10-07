@@ -5,6 +5,9 @@ node_modules
 .vercel
 .netlify
 .wrangler
+.impeccable
+.claude/skills/impeccable
+.claude/agents/impeccable-*
 /.svelte-kit
 /build
 

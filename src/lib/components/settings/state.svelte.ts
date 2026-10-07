@@ -9,7 +9,7 @@ import { DEFAULT_APPEARANCE } from '#lib/appearance.js';
 import { m } from '#lib/paraglide/messages.js';
 
 /** The fields `setSettings` takes, out of a view that carries more. */
-const editable = (s: Settings): Settings => ({
+export const editable = (s: Settings): Settings => ({
 	root: s.root,
 	captureHotkey: s.captureHotkey,
 	hideImmediately: s.hideImmediately,

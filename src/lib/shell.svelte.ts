@@ -10,6 +10,7 @@ import {
 	deletePage,
 	dismissThread,
 	getNotes,
+	getSettings,
 	isPage,
 	keepOutOfThreads,
 	keepThread,
@@ -21,6 +22,7 @@ import {
 	noteToPage,
 	putInThread,
 	setPins,
+	setSettings,
 	undoThreadChange,
 	updateNote,
 	type Note,
@@ -31,6 +33,7 @@ import {
 } from '#lib/api.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { addToPageDraft } from '#lib/page-draft.js';
+import { editable } from '#lib/components/settings/state.svelte.js';
 import { m } from '#lib/paraglide/messages.js';
 import { samePin } from '#lib/pins.js';
 import { noteTitle } from '#lib/markdown.js';
@@ -605,6 +608,19 @@ export class Shell implements WorkspaceHost {
 		clearTimeout(this.#blinkTimer);
 		// A little past the animation, which runs 1.2s.
 		this.#blinkTimer = setTimeout(() => (this.blinking = null), 1400);
+	};
+
+	/** Change the order of a thread's notes, the setting Settings > Threads
+	 *  has, from the thread itself. */
+	setThreadOrder = async (order: ThreadOrder) => {
+		const was = this.threadOrder;
+		this.threadOrder = order;
+		try {
+			await setSettings({ ...editable(await getSettings()), threadOrder: order });
+		} catch (e) {
+			this.threadOrder = was;
+			this.fail(m.error_save_setting(), e);
+		}
 	};
 
 	/** The inline editor. */

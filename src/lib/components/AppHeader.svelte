@@ -35,10 +35,12 @@
 >
 	<SpaceSwitcher view={spaces} />
 	{#if title}
-		<!-- Rises into place as the page's own title leaves, and sinks back out. -->
+		<!-- Rises into place as the page's own title leaves, and sinks back out.
+		     Centred on the window, it keeps clear of the bar's two ends, the
+		     wider being the window's buttons, and is cut short in a narrow one. -->
 		<div
 			inert={!titleShown}
-			class="absolute left-1/2 flex -translate-x-1/2 items-center gap-1 transition duration-200 ease-out {titleShown
+			class="absolute left-1/2 flex max-w-[calc(100%-28rem)] -translate-x-1/2 items-center gap-1 transition duration-200 ease-out {titleShown
 				? 'translate-y-0 opacity-100'
 				: 'pointer-events-none translate-y-2 opacity-0'}"
 		>

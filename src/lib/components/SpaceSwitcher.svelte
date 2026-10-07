@@ -145,7 +145,9 @@
 					className
 				)}
 			>
-				<span class="truncate">{current ?? 'Scratchnote'}</span>
+				<!-- Room on the right for a script font's last stroke, which the
+				     clipping that truncation needs would cut off. -->
+				<span class="truncate pr-[0.2em]">{current ?? 'Scratchnote'}</span>
 				<ChevronsUpDownIcon class="size-3.5 shrink-0 text-muted-foreground" />
 			</button>
 		{/snippet}

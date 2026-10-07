@@ -1,3 +1,11 @@
+<script lang="ts" module>
+	const isMac = navigator.userAgent.includes('Mac');
+
+	/** Shows an accelerator the way the OS spells it, e.g. Ctrl+Shift+Space. */
+	export const prettyHotkey = (accelerator: string) =>
+		accelerator.replace('CommandOrControl', isMac ? '⌘' : 'Ctrl').replace('Super', 'Win');
+</script>
+
 <script lang="ts">
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -27,8 +35,6 @@
 		event.stopPropagation();
 		recording = false;
 	}
-
-	const isMac = navigator.userAgent.includes('Mac');
 
 	/** Turns a key press into the accelerator syntax the global-shortcut plugin reads. */
 	function recordHotkey(event: KeyboardEvent) {
@@ -62,10 +68,6 @@
 		onchange([...mods, key].join('+'));
 		recording = false;
 	}
-
-	/** Shows an accelerator the way the OS spells it, e.g. Ctrl+Shift+Space. */
-	const prettyHotkey = (accelerator: string) =>
-		accelerator.replace('CommandOrControl', isMac ? '⌘' : 'Ctrl').replace('Super', 'Win');
 </script>
 
 <svelte:window onkeydowncapture={cancelRecording} />

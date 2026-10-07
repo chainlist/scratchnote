@@ -1,18 +1,8 @@
-<script lang="ts" module>
-	import type { Note } from '#lib/api.js';
-
-	/** What a line names a note by: its subject, or the start of its text without markup. */
-	export function noteTitle(note: Pick<Note, 'subject' | 'body'>) {
-		if (note.subject) return note.subject;
-		const line = note.body.split('\n').find((text) => text.trim()) ?? '';
-		return line.replace(/^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|#+\s+|>\s*)/, '').trim();
-	}
-</script>
-
 <script lang="ts">
+	import { noteTitle } from '#lib/markdown.js';
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { draftHints } from '#lib/api.js';
+	import { draftHints, type Note } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';

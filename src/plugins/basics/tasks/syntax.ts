@@ -32,6 +32,12 @@ function box(node: WidgetContext): HTMLElement {
 	button.setAttribute('aria-label', m.note_task_done());
 	button.disabled = !node.editable;
 	button.addEventListener('click', toggle);
+	// Named after its task once it is on the page, so a screen reader says
+	// which task it ticks; "Done" stays for a box with no text after it.
+	queueMicrotask(() => {
+		const task = button.closest('.md-line')?.textContent?.trim();
+		if (task) button.setAttribute('aria-label', task);
+	});
 	return button;
 }
 

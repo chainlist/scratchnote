@@ -27,7 +27,6 @@
 	import DeleteNoteDialog from '#lib/components/DeleteNoteDialog.svelte';
 	import Dock from '#lib/components/Dock.svelte';
 	import MoveDialog from '#lib/components/MoveDialog.svelte';
-	import NoteEditor from '#lib/components/NoteEditor.svelte';
 	import NoteToPageDialog from '#lib/components/NoteToPageDialog.svelte';
 	import OldChatModelDialog from '#lib/components/OldChatModelDialog.svelte';
 	import PageView from '#lib/components/PageView.svelte';
@@ -143,10 +142,12 @@
 
 			shell.textSize = settings.fontSize;
 			shell.threadOrder = settings.threadOrder;
+			shell.captureHotkey = settings.captureHotkey;
 			off.push(
 				onSettingsChanged((changed) => {
 					shell.textSize = changed.fontSize;
 					shell.threadOrder = changed.threadOrder;
+					shell.captureHotkey = changed.captureHotkey;
 				})
 			);
 			// A note saved from the capture window lands in another webview.
@@ -284,12 +285,6 @@
 	onmentions={() => void shell.showMentions()}
 	onthreads={shell.canSimilar ? () => void shell.showThreads() : undefined}
 	onsettings={() => (shell.settingsOpen = true)}
-/>
-
-<NoteEditor
-	bind:note={shell.editing}
-	onsave={shell.saveEdit}
-	ondelete={(n) => (shell.deleting = n)}
 />
 
 <DeleteNoteDialog bind:note={shell.deleting} onconfirm={shell.remove} />

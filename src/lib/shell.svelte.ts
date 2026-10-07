@@ -1,4 +1,5 @@
 import { createContext, tick, type Snippet } from 'svelte';
+import { toast } from 'svelte-sonner';
 import { EditorView } from '@codemirror/view';
 import { goto, invalidate } from '$app/navigation';
 import { resolve } from '$app/paths';
@@ -28,6 +29,7 @@ import {
 } from '#lib/api.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { addToPageDraft } from '#lib/page-draft.js';
+import { m } from '#lib/paraglide/messages.js';
 import { samePin } from '#lib/pins.js';
 import { threadHref, threadScope } from '#lib/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
@@ -57,6 +59,8 @@ export interface ViewTitle {
 	pin?: Pin;
 	/** After the title, dimmed: a search's whole query. */
 	detail?: string;
+	/** A title not the user's yet, as a suggested thread's: set lighter. */
+	tentative?: boolean;
 	/** In place of the title, told whether it is the small copy in the top bar. */
 	heading?: Snippet<[compact: boolean]>;
 }
@@ -70,7 +74,12 @@ export interface ViewTitle {
 export class Shell implements WorkspaceHost {
 	/** The day last shown: the one the views go back to and a new page goes on. */
 	day = $state('');
+	/** What went wrong, in the app's own words, over the views. */
 	error = $state<string | null>(null);
+	/** The error as it came, under Details, for a report; null for a message alone. */
+	errorDetail = $state<string | null>(null);
+	/** Does what failed again, for a failure worth another try. */
+	errorRetry = $state<(() => unknown) | null>(null);
 	/** Similar notes come from the embedding model's vectors. */
 	embeddingInstalled = $state(false);
 	canSimilar = $derived(this.embeddingInstalled);
@@ -91,12 +100,12 @@ export class Shell implements WorkspaceHost {
 	textSize = $state(16);
 	/** The thread order setting: which of a thread's notes its view lists first. */
 	threadOrder = $state<ThreadOrder>('oldest');
+	/** The capture hotkey setting, as an accelerator; null until it is read. */
+	captureHotkey = $state<string | null>(null);
 	/** The views' width, which a docked page narrows. Taken with the
 	 *  scrollbar, which comes and goes with what the columns hold. */
 	width = $state(0);
 
-	/** The note open in the editor. */
-	editing = $state<Note | null>(null);
 	/** The note waiting on the delete confirmation. */
 	deleting = $state<Note | null>(null);
 	/** The note waiting on a title to become a page. */
@@ -173,14 +182,41 @@ export class Shell implements WorkspaceHost {
 		while (navigating.complete) await navigating.complete.catch(() => {});
 		await invalidate('app:notes');
 		this.reloads++;
-		this.error = null;
 		// The plugins' pages and panels load their notes themselves.
 		notesChanged();
 	};
 
 	showError = (message: string) => {
 		this.error = message;
+		this.errorDetail = null;
+		this.errorRetry = null;
 	};
+
+	/** Say what failed in plain words, keeping the error itself under Details. */
+	fail = (what: string, e: unknown, retry?: () => unknown) => {
+		this.error = what;
+		this.errorDetail = e instanceof Error ? e.message : String(e);
+		this.errorRetry = retry ?? null;
+	};
+
+	/** The operation that failed with `what` worked since: its error goes,
+	 *  and only its own, so a success elsewhere never hides a failure. */
+	#cleared = (what: string) => {
+		if (this.error === what) this.error = null;
+	};
+
+	/** A failure away from what the user is doing, such as reading the pins:
+	 *  a toast with another try, rather than a banner over the page. */
+	#failQuietly = (what: string, e: unknown, retry?: () => unknown) => {
+		console.error(e);
+		toast.error(what, {
+			action: retry ? { label: m.error_retry(), onClick: () => void retry() } : undefined
+		});
+	};
+
+	/** The saves that failed, by note, with the error as it came: each note
+	 *  shows its own under its text or its editor, until it saves. */
+	saveFailures = $state.raw<Record<string, string>>({});
 
 	openDay = (date: string) => goto(resolve(`day/${date}/`));
 
@@ -245,7 +281,7 @@ export class Shell implements WorkspaceHost {
 			await invalidate('app:threads');
 			this.reloads++;
 		} catch (e) {
-			this.error = String(e);
+			this.#failQuietly(m.error_load_threads(), e, this.loadThreads);
 		}
 	};
 
@@ -256,7 +292,7 @@ export class Shell implements WorkspaceHost {
 		try {
 			this.pins = await listPins();
 		} catch (e) {
-			this.error = String(e);
+			this.#failQuietly(m.error_load_pins(), e, this.loadPins);
 		}
 	};
 
@@ -267,7 +303,7 @@ export class Shell implements WorkspaceHost {
 		try {
 			this.pins = await setPins(pins);
 		} catch (e) {
-			this.error = String(e);
+			this.#failQuietly(m.error_save_pins(), e, () => this.#savePins(pins));
 		}
 	};
 
@@ -297,9 +333,10 @@ export class Shell implements WorkspaceHost {
 	clearDayAhead = async (note: Pick<Note, 'id' | 'date'>) => {
 		try {
 			await clearDayAhead(note.date, note.id);
+			this.#cleared(m.error_clear_day_ahead());
 			await this.refresh();
 		} catch (e) {
-			this.error = String(e);
+			this.fail(m.error_clear_day_ahead(), e, () => this.clearDayAhead(note));
 		}
 	};
 
@@ -307,8 +344,9 @@ export class Shell implements WorkspaceHost {
 	keepOut = async (note: Pick<Note, 'id'>, out: boolean) => {
 		try {
 			await keepOutOfThreads(note.id, out);
+			this.#cleared(m.error_thread_change());
 		} catch (e) {
-			this.error = String(e);
+			this.fail(m.error_thread_change(), e, () => this.keepOut(note, out));
 		}
 	};
 
@@ -316,8 +354,9 @@ export class Shell implements WorkspaceHost {
 	keepThread = async (id: string, keep: boolean) => {
 		try {
 			await (keep ? keepThread(id) : dismissThread(id));
+			this.#cleared(m.error_keep_thread());
 		} catch (e) {
-			this.error = String(e);
+			this.fail(m.error_keep_thread(), e, () => this.keepThread(id, keep));
 		}
 	};
 
@@ -424,14 +463,26 @@ export class Shell implements WorkspaceHost {
 	openCited = async (entry: Pick<Note, 'id' | 'date' | 'kind'>) => {
 		if (isPage(entry)) return this.openPage(entry);
 		await this.openDay(entry.date);
+		await this.blink(entry.id);
+	};
+
+	/** Bring a note on view into sight and blink it, the first found in
+	 *  `within`, as the thread's lane does inside its own view. With `focus`,
+	 *  the keyboard goes on from the note rather than from what was pressed. */
+	blink = async (id: string, within: ParentNode = document, { focus = false } = {}) => {
 		// Cleared first so a second click on the same note blinks it again.
 		this.blinking = null;
 		await tick();
-		this.blinking = entry.id;
+		this.blinking = id;
 		await tick();
-		document
-			.querySelector(`[data-note-id="${CSS.escape(entry.id)}"]`)
-			?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		const note = within.querySelector<HTMLElement>(`[data-note-id="${CSS.escape(id)}"]`);
+		const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+		note?.scrollIntoView({ block: 'center', behavior: still ? 'instant' : 'smooth' });
+		if (note && focus) {
+			// Reachable by script only, so Tab still skips the note itself.
+			if (!note.hasAttribute('tabindex')) note.tabIndex = -1;
+			note.focus({ preventScroll: true });
+		}
 		clearTimeout(this.#blinkTimer);
 		// A little past the animation, which runs 1.2s.
 		this.#blinkTimer = setTimeout(() => (this.blinking = null), 1400);
@@ -441,25 +492,20 @@ export class Shell implements WorkspaceHost {
 	saveBody = async (note: Note, body: string): Promise<boolean> => {
 		try {
 			if (body.trim() !== note.body) await updateNote(note.date, note.id, body);
-			this.error = null;
+			if (note.id in this.saveFailures)
+				this.saveFailures = Object.fromEntries(
+					Object.entries(this.saveFailures).filter(([id]) => id !== note.id)
+				);
 			await this.refresh();
 			return true;
 		} catch (e) {
-			this.error = String(e);
+			// Shown on the note itself: the editor keeps the text, and its
+			// Save is the way to try again.
+			this.saveFailures = {
+				...this.saveFailures,
+				[note.id]: e instanceof Error ? e.message : String(e)
+			};
 			return false;
-		}
-	};
-
-	/** The full editor. Resolves to an error for it to show, or null once saved. */
-	saveEdit = async (note: Note, body: string): Promise<string | null> => {
-		try {
-			if (body.trim() !== note.body) await updateNote(note.date, note.id, body);
-			this.error = null;
-			await this.refresh();
-			return null;
-		} catch (e) {
-			await this.refresh();
-			return String(e);
 		}
 	};
 
@@ -467,7 +513,6 @@ export class Shell implements WorkspaceHost {
 	turnIntoPage = async (note: Note, title: string): Promise<string | null> => {
 		try {
 			const created = await noteToPage(note.date, note.id, title);
-			this.error = null;
 			await this.refresh();
 			await this.openPage(created);
 			return null;
@@ -483,14 +528,13 @@ export class Shell implements WorkspaceHost {
 
 	/**
 	 * Move a note or a page to another space. It leaves the views here, the
-	 * editor, the dock and its own page included. Resolves to an error for
+	 * dock and its own page included. Resolves to an error for
 	 * the dialog to show, or null once moved.
 	 */
 	moveTo = async (note: Note, space: string): Promise<string | null> => {
 		try {
 			if (isPage(note)) await movePage(note.date, note.id, space);
 			else await moveNote(note.date, note.id, space);
-			if (this.editing?.id === note.id) this.editing = null;
 			if (this.docked?.id === note.id) this.docked = null;
 			if (page.params.id === note.id) await this.openDay(this.day);
 			await this.refresh();
@@ -504,13 +548,13 @@ export class Shell implements WorkspaceHost {
 		try {
 			if (isPage(note)) await deletePage(note.date, note.id);
 			else await deleteNote(note.date, note.id);
-			if (this.editing?.id === note.id) this.editing = null;
 			if (this.docked?.id === note.id) this.docked = null;
 			// The page itself, or the notes similar to it, go back to the day.
 			if (page.params.id === note.id) await this.openDay(this.day);
+			this.#cleared(m.error_delete_note());
 			await this.refresh();
 		} catch (e) {
-			this.error = String(e);
+			this.fail(m.error_delete_note(), e, () => this.remove(note));
 		}
 	};
 
@@ -545,7 +589,6 @@ export class Shell implements WorkspaceHost {
 
 	/** What every card can do. */
 	cardActions = $derived({
-		onedit: (note: Note) => (this.editing = note),
 		ondelete: (note: Note) => (this.deleting = note),
 		onsave: this.saveBody,
 		onsimilar: this.canSimilar ? this.showSimilar : undefined,

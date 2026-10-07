@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { ComponentProps } from 'svelte';
 	import type { Note } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import DayAhead from '#lib/components/DayAhead.svelte';
@@ -18,6 +19,7 @@
 		ondelete,
 		showDate = false,
 		threadLine = true,
+		timeline,
 		blink = false
 	}: {
 		/** A page: its subject is its title (SPEC 3.5). */
@@ -31,11 +33,15 @@
 		/** Name the thread the page is in, as everywhere but in that thread. */
 		threadLine?: boolean;
 		blink?: boolean;
+		/** How the timeline places it: the part of the day it opens, the room
+		 *  above it, and a box beside it while notes are being chosen. */
+		timeline?: Pick<
+			ComponentProps<typeof TimelineItem>,
+			'part' | 'partLevel' | 'gapMinutes' | 'aside'
+		>;
 	} = $props();
 
 	const words = $derived(note.body.split(/\s+/).filter(Boolean).length);
-	/** Reading at 200 words a minute, the usual rough figure; never under one. */
-	const minutes = $derived(Math.max(1, Math.round(words / 200)));
 	/** The start of the text without its blank lines, so both preview lines say something. */
 	const preview = $derived(
 		note.body
@@ -51,7 +57,9 @@
      The card is one big click target; its title is the button, for the
      keyboard. -->
 <TimelineItem
+	{...timeline}
 	data-note-id={note.id}
+	aria-label={note.subject ?? undefined}
 	time={note.time}
 	date={showDate ? note.date : undefined}
 	hover={false}
@@ -66,11 +74,11 @@
 		{#if note.missing}
 			<div class="rounded-lg border border-dashed border-neutral-800 px-4 py-3">
 				<p class="truncate text-base text-neutral-400">{note.subject ?? m.pages_untitled()}</p>
-				<p class="mt-1 text-sm text-neutral-600">{m.pages_missing()}</p>
+				<p class="mt-1 text-sm text-meta">{m.pages_missing()}</p>
 				<button
 					type="button"
 					onclick={() => ondelete(note)}
-					class="-mx-1.5 mt-2 cursor-pointer rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200"
+					class="-mx-1.5 mt-2 cursor-pointer rounded px-1.5 py-0.5 text-xs text-meta hover:bg-neutral-800 hover:text-neutral-200"
 				>
 					{m.pages_remove_stub()}
 				</button>
@@ -88,12 +96,12 @@
 							event.stopPropagation();
 							onopen(note);
 						}}
-						class="min-w-0 flex-1 cursor-pointer truncate text-left text-base font-medium text-neutral-100 outline-none focus-visible:underline"
+						class="line-clamp-2 min-w-0 flex-1 cursor-pointer text-left text-base font-medium break-words text-neutral-100 outline-none focus-visible:underline"
 					>
 						{note.subject}
 					</button>
 					<span
-						class="flex shrink-0 items-center gap-2 text-xs text-neutral-500 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
+						class="flex shrink-0 items-center gap-2 text-xs text-meta opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
 					>
 						<button
 							type="button"
@@ -119,9 +127,8 @@
 						class="mt-1 max-h-[2lh] overflow-hidden text-sm leading-6 text-neutral-400"
 					/>
 				{/if}
-				<div class="mt-2 flex items-center gap-3 text-xs text-neutral-600">
+				<div class="mt-2 flex items-center gap-3 text-xs text-meta tabular-nums">
 					<span>{m.pages_words({ count: words })}</span>
-					{#if words > 0}<span>{m.pages_read_time({ count: minutes })}</span>{/if}
 				</div>
 				{#if note.on || (threadLine && shell.threadOf(note.id))}
 					<div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">

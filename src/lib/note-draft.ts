@@ -5,3 +5,10 @@
  * to another day or view and back finds the note as it was left.
  */
 export const noteDrafts = new Map<string, { body: string; writing: boolean }>();
+
+/**
+ * The changes made to notes and left unsaved, by note: an edit closed with
+ * Esc keeps them, as a new note's editor keeps its draft, until they are
+ * saved or discarded.
+ */
+export const editDrafts = new Map<string, string>();

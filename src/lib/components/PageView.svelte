@@ -306,7 +306,7 @@
 				>
 					<EllipsisIcon class="size-4" />
 				</DropdownMenu.Trigger>
-				<DropdownMenu.Content align="end" class="w-52">
+				<DropdownMenu.Content align="end" class="w-max max-w-80 min-w-52">
 					{#if onsimilar}
 						<DropdownMenu.Item onSelect={() => onsimilar(current)}>
 							<WaypointsIcon />{m.note_similar()}

@@ -5,19 +5,40 @@
 	 *  takes far longer than using it, and a thread heads every day with one. */
 	const headings: Record<string, Intl.DateTimeFormat> = {};
 
+	function headingFormat(short: boolean) {
+		return (headings[`${getLocale()} ${short}`] ??= new Intl.DateTimeFormat(
+			getLocale(),
+			short
+				? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }
+				: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
+		));
+	}
+
 	/** A day as its title reads, or shorter, as the top bar has it. */
 	export function dayHeading(date: string, short = false) {
 		const day = new Date(`${date}T00:00:00`);
 		// A view being left reads its title once more with the next route's
 		// data, which may hold no date: as toLocaleDateString did, no error.
 		if (Number.isNaN(day.getTime())) return String(day);
-		const format = (headings[`${getLocale()} ${short}`] ??= new Intl.DateTimeFormat(
-			getLocale(),
-			short
-				? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }
-				: { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
-		));
-		return format.format(day);
+		return headingFormat(short).format(day);
+	}
+
+	/** A day's title in two parts, as a journal page heads its day: the
+	 *  weekday, capitalised as a title's first word is, then the date. */
+	export function dayTitle(date: string): { weekday: string; date: string } {
+		const day = new Date(`${date}T00:00:00`);
+		if (Number.isNaN(day.getTime())) return { weekday: String(day), date: '' };
+		const parts = headingFormat(false).formatToParts(day);
+		const weekday = parts.find((part) => part.type === 'weekday')?.value ?? '';
+		const rest = parts
+			.filter((part) => part.type !== 'weekday')
+			.map((part) => part.value)
+			.join('')
+			.replace(/^[\s,]+|[\s,]+$/g, '');
+		return {
+			weekday: weekday.charAt(0).toLocaleUpperCase(getLocale()) + weekday.slice(1),
+			date: rest
+		};
 	}
 
 	/** The formats `shortDay` made, by language and whether the year shows. */
@@ -47,6 +68,7 @@
 		title,
 		pin,
 		detail,
+		tentative = false,
 		heading,
 		compact = false
 	}: ViewTitle & {
@@ -61,7 +83,7 @@
 	// The top bar shows a copy of this title while it is scrolled away.
 	$effect(() => {
 		if (compact) return;
-		const mine: ViewTitle = { back, title, pin, detail, heading };
+		const mine: ViewTitle = { back, title, pin, detail, tentative, heading };
 		shell.title = mine;
 		return () => {
 			if (shell.title === mine) shell.title = null;
@@ -107,9 +129,12 @@
 		<!-- The page has its heading; the copy in the bar is not a second one. -->
 		<svelte:element
 			this={compact ? 'span' : 'h1'}
-			class={compact
-				? 'min-w-0 truncate text-sm font-semibold'
-				: 'min-w-0 truncate text-2xl font-semibold tracking-tight'}
+			class={[
+				compact
+					? 'min-w-0 truncate text-sm font-semibold'
+					: 'min-w-0 truncate text-2xl font-semibold tracking-tight',
+				tentative && 'font-normal! text-neutral-300'
+			]}
 		>
 			{title}
 			{#if detail}<span class="font-normal text-muted-foreground">{detail}</span>{/if}

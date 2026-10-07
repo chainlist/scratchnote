@@ -15,7 +15,8 @@ const SANS = 'ui-sans-serif, system-ui, sans-serif';
 
 /**
  * Font presets, bundled with the app so they render offline. The first is the
- * default. Only the sans stack changes: dates and counts stay monospace.
+ * default. Only the sans stack changes: dates and counts stay monospace,
+ * bar a timeline's times, which take the font with figures of one width.
  */
 export const FONTS = [
 	{ name: 'inter', label: () => 'Inter', family: `'Inter Variable', ${SANS}` },

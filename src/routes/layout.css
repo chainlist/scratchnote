@@ -69,9 +69,12 @@ body {
 	--sidebar-accent-foreground: oklch(0.205 0 0);
 	--sidebar-border: var(--color-neutral-800);
 	--sidebar-ring: oklch(0.708 0 0);
+	/* A pin's letters on its tint (`pinColour`): darker on a light page. */
+	--pin-lightness: 34%;
 }
 
 .dark {
+	--pin-lightness: 58%;
 	--background: var(--color-neutral-950);
 	--foreground: oklch(0.985 0 0);
 	--card: var(--color-neutral-900);
@@ -137,6 +140,10 @@ body {
 	--color-card: var(--card);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
+	/* The quiet text around a note: its time, its lines, the day's hints.
+	   Between neutral-400 and -500, about 5.7:1 on the page in both themes,
+	   where neutral-600 read at 2.5:1. */
+	--color-meta: color-mix(in oklab, var(--color-neutral-400), var(--color-neutral-500));
 	--radius-sm: calc(var(--radius) * 0.6);
 	--radius-md: calc(var(--radius) * 0.8);
 	--radius-lg: var(--radius);
@@ -227,35 +234,17 @@ body {
 	}
 }
 
-@keyframes note-flow {
-	to {
-		background-position: 200% 0;
+@keyframes note-glow {
+	50% {
+		color: color-mix(in oklab, var(--primary) 75%, var(--foreground));
 	}
 }
 
-/* Text at work, as a search by meaning: colours flowing through the
-   letters. Deeper shades on a light page and lighter ones on a dark page
-   keep it readable. */
+/* Text at work, as a search by meaning: it breathes from the quiet tone
+   to the user's accent and back, never below the quiet tone's contrast. */
 .note-glow-text {
-	color: transparent;
-	background: linear-gradient(90deg, #7c3aed, #2563eb, #0891b2, #059669, #d97706, #db2777, #7c3aed)
-		0 0 / 200% 100% repeat-x;
-	-webkit-background-clip: text;
-	background-clip: text;
-	animation: note-flow 8s linear infinite;
-}
-
-.dark .note-glow-text {
-	background-image: linear-gradient(
-		90deg,
-		#a78bfa,
-		#60a5fa,
-		#22d3ee,
-		#34d399,
-		#fbbf24,
-		#f472b6,
-		#a78bfa
-	);
+	color: var(--color-meta);
+	animation: note-glow 2.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -265,7 +254,8 @@ body {
 }
 
 /* Markdown in a note, the same in the editor and in the read-only view.
-   Colours are inherited, except bold and italic, which take the accent.
+   Colours are inherited: the accent marks what can be clicked, as a link's
+   underline, never the user's own emphasis.
    A line's indent goes through --md-indent, which the editor's line
    padding reads as well. */
 .md-line {
@@ -275,11 +265,9 @@ body {
 }
 .md-strong {
 	font-weight: 600;
-	color: var(--primary);
 }
 .md-em {
 	font-style: italic;
-	color: var(--primary);
 }
 .md-strike {
 	text-decoration: line-through;
@@ -293,14 +281,15 @@ body {
 }
 .md-link {
 	text-decoration: underline;
-	text-decoration-color: color-mix(in oklab, currentColor 40%, transparent);
+	text-decoration-color: color-mix(in oklab, var(--primary) 70%, transparent);
 	text-underline-offset: 3px;
 }
 a.md-link {
 	cursor: pointer;
 }
 a.md-link:hover {
-	text-decoration-color: currentColor;
+	text-decoration-color: var(--primary);
+	text-decoration-thickness: 2px;
 }
 /* A mention, `@name` (SPEC 3.10): a button on a card, which opens its notes. */
 .mention {

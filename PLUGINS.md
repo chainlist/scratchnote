@@ -312,10 +312,13 @@ view core plugin sizes its book.
 ### Timelines
 
 A list of notes, or of anything that happened at a time, is drawn on the
-day's own timeline: the time on the left, the rail with its dot, and the body
-on the right. The app draws the time and the rail with the day's component,
-so a plugin's timeline looks like the day's and follows it when the day's
-design changes. The body is the plugin's element, `contentEl`, to fill with
+day's own timeline: the time hanging in the margin and the body in the
+column. Items of one day, with no date set, are spaced by the time between
+them and the first of each part of the day (morning, afternoon, evening,
+night) names it in the margin, as the day's notes are; items with a date span
+days and keep an even rhythm. The app draws the time and the spacing with the
+day's component, so a plugin's timeline looks like the day's and follows it
+when the day's design changes. The body is the plugin's element, `contentEl`, to fill with
 markdown, plain DOM, or a root of another framework, such as React's
 `createRoot(item.contentEl)`.
 
@@ -342,7 +345,7 @@ for (const note of notes) {
 | `timelineEl`                 | the list                                                      |
 | `item.setTime(time)`         | the time on the left, such as `14:05`                         |
 | `item.setDate(date?)`        | the date above it, for a timeline that spans days             |
-| `item.setIcon(icon?)`        | an icon in a box on the rail, as a page has; the dot without  |
+| `item.setIcon(icon?)`        | a small mark before the time, as a page has; none without it  |
 | `item.onClickTime(callback)` | the date and time as a button, such as to the note on its day |
 | `item.remove()`              | the item taken away                                           |
 | `item.contentEl`             | the body, the plugin's                                        |

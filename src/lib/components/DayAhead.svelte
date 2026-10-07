@@ -43,7 +43,7 @@
 	}}
 	title={m.day_ahead_title({ date: dayHeading(on) })}
 	class={cn(
-		'flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-neutral-500 transition-colors hover:text-neutral-200',
+		'flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-meta transition-colors hover:text-neutral-200',
 		className
 	)}
 >

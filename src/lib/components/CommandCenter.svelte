@@ -275,13 +275,8 @@
 								aria-label={m.search_meaning_pending()}
 								class="flex items-center gap-2 px-2 py-1.5 text-sm [&_svg]:size-4 [&_svg]:shrink-0"
 							>
-								<SparklesIcon class="text-violet-600 dark:text-violet-400" />
-								<span
-									data-text={m.search_meaning_pending()}
-									class="note-glow-text relative isolate inline-block"
-								>
-									{m.search_meaning_pending()}
-								</span>
+								<SparklesIcon class="text-primary" />
+								<span class="note-glow-text">{m.search_meaning_pending()}</span>
 							</div>
 						{/snippet}
 					</Command.Loading>

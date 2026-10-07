@@ -4,9 +4,10 @@
 	import { saveNote } from '#lib/api.js';
 	import NewNote from '#lib/components/NewNote.svelte';
 	import NoteList from '#lib/components/NoteList.svelte';
-	import { noteTitle } from '#lib/components/Recall.svelte';
+	import { noteTitle } from '#lib/markdown.js';
 	import View from '#lib/components/View.svelte';
-	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
+	import { dayHeading, dayTitle, shortDay } from '#lib/components/ViewHeader.svelte';
+	import { prettyHotkey } from '#lib/components/settings/HotkeyInput.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
@@ -43,25 +44,36 @@
 
 	const dayHref = (date: string) => resolve(`day/${date}/`);
 
-	/** Add a note to the day shown. */
-	async function addNote(body: string): Promise<boolean> {
+	/** Add a note to the day shown. Resolves to the error as it came, which
+	 *  the editor shows under itself, or null once saved. */
+	async function addNote(body: string): Promise<string | null> {
 		try {
 			await saveNote(body, data.date);
-			shell.error = null;
 			await shell.refresh();
-			return true;
+			return null;
 		} catch (e) {
-			shell.error = String(e);
-			return false;
+			return e instanceof Error ? e.message : String(e);
 		}
 	}
 
+	/** The day's new note: the one under its notes, or the empty day's. */
+	let newNote = $state<NewNote>();
+
 	function onWindowKeydown(event: KeyboardEvent) {
-		if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
-		// Text keeps its Alt+arrows, which move by word on macOS, and a
-		// dialog keeps them from the day behind it.
+		// Text keeps its keys, Alt+arrows move by word on macOS, and a dialog
+		// or a menu keeps them from the day behind it.
 		const target = event.target as HTMLElement;
-		if (target.isContentEditable || target.closest('input, textarea, [role="dialog"]')) return;
+		if (event.defaultPrevented || target.isContentEditable) return;
+		if (target.closest('input, textarea, select, [role="dialog"], [role="menu"], [role="listbox"]'))
+			return;
+		// N starts a note, as the button under the day's notes does.
+		if (event.key.toLowerCase() === 'n' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+			if (event.repeat) return;
+			event.preventDefault();
+			void newNote?.start();
+			return;
+		}
+		if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
 		// Also stops the webview going back in its history.
 		event.preventDefault();
 		const day = event.key === 'ArrowLeft' ? data.previous : data.next;
@@ -113,16 +125,16 @@
 			     it says it can be clicked. -->
 			<svelte:element
 				this={compact ? 'span' : 'h1'}
-				class={compact
-					? 'text-sm font-semibold whitespace-nowrap'
-					: 'text-2xl font-semibold tracking-tight'}
+				class={compact ? 'text-sm font-semibold whitespace-nowrap' : 'text-2xl font-medium'}
 			>
 				<a
 					href={resolve('calendar/')}
 					title={m.calendar_pick()}
 					class="group/date -mx-1.5 inline-flex items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none dark:hover:bg-muted/50"
 				>
-					{dayHeading(data.date, compact)}
+					<span>
+						{#if compact}{dayHeading(data.date, true)}{:else}{@render dayName(data.date)}{/if}
+					</span>
 					<CalendarIcon
 						class={[
 							'shrink-0 text-muted-foreground transition-colors group-hover/date:text-foreground',
@@ -135,8 +147,10 @@
 
 		<!-- What earlier notes said about this day (SPEC 5.3). -->
 		{#if data.about.length}
-			<section class="mb-6 rounded-lg border border-neutral-800 px-3 py-2.5">
-				<h2 class="mb-1.5 flex items-center gap-1.5 px-1.5 text-xs font-medium text-neutral-500">
+			<!-- On the day's own columns, the day written where a note's time is,
+			     so it reads as part of the page rather than a box laid on it. -->
+			<section class="mb-8">
+				<h2 class="mb-1 flex items-center gap-1.5 pl-24 text-xs font-medium text-meta">
 					<CalendarClockIcon class="size-3.5" />{m.day_from_earlier()}
 				</h2>
 				<ul>
@@ -146,12 +160,20 @@
 								type="button"
 								onclick={() => void shell.openCited(note)}
 								title={m.day_written_on({ date: dayHeading(note.date) })}
-								class="flex w-full min-w-0 cursor-pointer items-baseline gap-3 rounded px-1.5 py-1 text-left text-sm hover:bg-neutral-900"
+								class="group -mx-3 grid w-[calc(100%+1.5rem)] cursor-pointer grid-cols-[4.5rem_1fr] items-baseline gap-x-6 rounded-lg px-3 py-1.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
 							>
-								<span class="w-14 shrink-0 font-mono text-xs text-neutral-600">
+								<!-- The day it was written, which brightens with a tick of the
+								     accent, as a note's time does. -->
+								<span
+									class="relative text-right text-xs text-meta tabular-nums transition-colors group-hover:text-neutral-300 group-focus-visible:text-neutral-300"
+								>
 									{shortDay(note.date)}
+									<span
+										aria-hidden="true"
+										class="absolute top-1/2 -right-3 h-3 w-0.5 -translate-y-1/2 rounded-full bg-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+									></span>
 								</span>
-								<span class="truncate text-neutral-300">{noteTitle(note)}</span>
+								<span class="truncate text-sm text-neutral-300">{noteTitle(note)}</span>
 							</button>
 						</li>
 					{/each}
@@ -162,13 +184,19 @@
 		{#if data.notes.length === 0}
 			<div class="flex flex-col items-center gap-4 py-16 text-center">
 				{#if writingOn !== data.date}
-					<p class="text-base text-neutral-600">
-						{data.date === data.today
-							? m.page_empty_day({ hotkey: 'Ctrl+Shift+Space' })
-							: m.page_empty_other_day()}
+					<!-- Today names the capture hotkey once it is read, and only when one is set. -->
+					<p class="text-base text-meta">
+						{#if data.date > data.today}
+							{m.page_empty_future_day()}
+						{:else if data.date < data.today || shell.captureHotkey === ''}
+							{m.page_empty_other_day()}
+						{:else if shell.captureHotkey}
+							{m.page_empty_day({ hotkey: prettyHotkey(shell.captureHotkey) })}
+						{/if}
 					</p>
 				{/if}
 				<NewNote
+					bind:this={newNote}
 					{draftKey}
 					onsave={addNote}
 					onpage={shell.newPage}
@@ -181,11 +209,23 @@
 			</div>
 		{:else}
 			<NoteList notes={data.notes} empty="" blinking={shell.blinking} {...shell.cardActions} />
-			<NewNote {draftKey} onsave={addNote} onpage={shell.newPage} onerror={shell.showError} />
+			<NewNote
+				bind:this={newNote}
+				{draftKey}
+				onsave={addNote}
+				onpage={shell.newPage}
+				onerror={shell.showError}
+			/>
 		{/if}
 	</View>
 	{#if columns === 3}{@render besideDay(data.next)}{/if}
 </div>
+
+<!-- A day's name as its column heads it: the weekday, then the date, quieter. -->
+{#snippet dayName(date: string)}
+	{@const title = dayTitle(date)}
+	{title.weekday} <span class="font-normal whitespace-nowrap text-meta">{title.date}</span>
+{/snippet}
 
 <!-- A neighbour's column. Its date opens it; it has no new note of its own.
      Left empty before the first day, so the day keeps its place. -->
@@ -196,7 +236,7 @@
 				href={dayHref(day.date)}
 				class="mt-6 mb-8 block max-w-full truncate text-lg leading-8 font-medium text-muted-foreground transition-colors hover:text-foreground"
 			>
-				{dayHeading(day.date)}
+				{@render dayName(day.date)}
 			</a>
 			{#key day.date}
 				<div class="page-in">

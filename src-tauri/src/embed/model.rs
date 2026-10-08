@@ -31,14 +31,73 @@ impl Catalogued for EmbeddingModel {
 /// in.
 pub const LEGACY_EMBEDDING_FILE: &str = "Qwen3-Embedding-0.6B-Q8_0.gguf";
 
-/// Where a downloaded model lives. Outside `notes/` so sync tools can skip it
-/// (SPEC 4.1).
-pub fn models_dir(root: &std::path::Path) -> PathBuf {
-    root.join("models")
+/// Where a downloaded model lives, under `local_data`, the app's own folder
+/// on this computer, so a sync tool carrying the notes root never carries
+/// the model (SPEC 4.1).
+pub fn models_dir(local_data: &std::path::Path) -> PathBuf {
+    local_data.join("models")
 }
 
-pub fn model_file(root: &std::path::Path, model: impl Catalogued) -> PathBuf {
-    models_dir(root).join(model.file())
+/// Move the models versions up to 0.7.0 kept in the notes root's
+/// `models/` into `local_data`'s, once: each file is renamed, or copied and
+/// then removed when the two are on different drives. A file already in the
+/// new folder is left where it was. The old folder goes once empty. Returns
+/// whether anything moved.
+pub fn move_from_notes_root(root: &std::path::Path, local_data: &std::path::Path) -> bool {
+    let (from, to) = (models_dir(root), models_dir(local_data));
+    let Ok(files) = std::fs::read_dir(&from) else {
+        return false;
+    };
+    if from == to {
+        return false;
+    }
+    if let Err(e) = std::fs::create_dir_all(&to) {
+        log::warn!("could not create {}: {e}", to.display());
+        return false;
+    }
+    let mut moved = false;
+    for file in files.flatten() {
+        let (source, target) = (file.path(), to.join(file.file_name()));
+        if !source.is_file() || target.exists() {
+            continue;
+        }
+        let done = std::fs::rename(&source, &target).or_else(|_| {
+            // Copied under another name first, so a copy cut short is never
+            // taken for the model.
+            let part = to.join(format!("{}.moving", file.file_name().to_string_lossy()));
+            std::fs::copy(&source, &part)?;
+            std::fs::rename(&part, &target)?;
+            std::fs::remove_file(&source)
+        });
+        match done {
+            Ok(()) => {
+                log::info!("moved {} to {}", source.display(), target.display());
+                moved = true;
+            }
+            Err(e) => log::warn!("could not move {}: {e}", source.display()),
+        }
+    }
+    let _ = std::fs::remove_dir(&from);
+    moved
+}
+
+/// The app's own folder on this computer, as Tauri's `app_local_data_dir`
+/// names it, for the tests that use the downloaded model.
+#[cfg(test)]
+pub fn installed_local_data() -> Option<PathBuf> {
+    let var = |name| std::env::var_os(name).map(PathBuf::from);
+    let base = if cfg!(windows) {
+        var("LOCALAPPDATA")
+    } else if cfg!(target_os = "macos") {
+        var("HOME").map(|home| home.join("Library/Application Support"))
+    } else {
+        var("XDG_DATA_HOME").or_else(|| var("HOME").map(|home| home.join(".local/share")))
+    };
+    Some(base?.join("com.scratchnote.app"))
+}
+
+pub fn model_file(local_data: &std::path::Path, model: impl Catalogued) -> PathBuf {
+    models_dir(local_data).join(model.file())
 }
 
 /// The chat models versions before 0.5.0 downloaded, which nothing reads
@@ -100,11 +159,38 @@ mod tests {
     }
 
     #[test]
-    fn models_live_outside_the_notes_tree() {
-        let root = std::path::Path::new("/root");
-        let file = model_file(root, EmbeddingModel);
-        assert!(file.starts_with(root.join("models")));
-        assert!(!file.starts_with(root.join("notes")));
+    fn the_models_in_the_notes_root_move_out_of_it_once() {
+        let root = scratch("move-models-root");
+        let local = scratch("move-models-local");
+        let old = models_dir(&root);
+        std::fs::write(model_file(&root, EmbeddingModel), b"weights").unwrap();
+        std::fs::write(old.join(format!("{}.json", EmbeddingModel.file())), b"{}").unwrap();
+        // Already in the new folder, so it stays where it is.
+        std::fs::write(old.join("kept.gguf"), b"old").unwrap();
+        std::fs::write(models_dir(&local).join("kept.gguf"), b"new").unwrap();
+
+        assert!(move_from_notes_root(&root, &local));
+        assert_eq!(
+            std::fs::read(model_file(&local, EmbeddingModel)).unwrap(),
+            b"weights"
+        );
+        assert!(models_dir(&local)
+            .join(format!("{}.json", EmbeddingModel.file()))
+            .is_file());
+        assert_eq!(
+            std::fs::read(models_dir(&local).join("kept.gguf")).unwrap(),
+            b"new"
+        );
+        assert!(!model_file(&root, EmbeddingModel).exists());
+        assert!(
+            old.join("kept.gguf").is_file(),
+            "the folder is not empty, so it stays"
+        );
+
+        std::fs::remove_file(old.join("kept.gguf")).unwrap();
+        assert!(!move_from_notes_root(&root, &local));
+        assert!(!old.exists(), "an empty old folder goes");
+        assert!(!move_from_notes_root(&root, &local), "nothing left to move");
     }
 
     fn scratch(name: &str) -> PathBuf {

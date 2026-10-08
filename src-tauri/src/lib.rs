@@ -166,10 +166,17 @@ pub fn run() {
             // Before spaces.json is read, since it may point it at a new folder.
             spaces::migrate_root(&root);
             startup::step("Reading the settings");
+            let local_data = app.path().app_local_data_dir().unwrap_or_else(|e| {
+                log::warn!(
+                    "no folder for the app's own data ({e}), keeping the models in the notes root"
+                );
+                root.clone()
+            });
 
             let embed_wake: embed::sync::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
             app.manage(AppState {
                 root: root.clone(),
+                local_data,
                 settings: std::sync::RwLock::new(settings),
                 writer: Writer::spawn(),
                 // Filled in below: opening a space starts its watcher, which
@@ -208,8 +215,17 @@ pub fn run() {
 
             // Opening the space above already woke it, so its notes are
             // backfilled.
-            embed::sync::spawn(app.handle().clone(), embed_wake);
-            commands::models::replace_legacy_embedding_model(app.handle());
+            embed::sync::spawn(app.handle().clone(), embed_wake.clone());
+            // Off the launch, as a model moved to another drive is copied.
+            // The legacy model is looked for once it has moved.
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let state = handle.state::<AppState>();
+                if embed::model::move_from_notes_root(&state.root, &state.local_data) {
+                    embed_wake.notify_one();
+                }
+                commands::models::replace_legacy_embedding_model(&handle);
+            });
             startup::step("Starting the embedding task");
 
             build_capture_window(app.handle())?;

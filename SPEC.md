@@ -430,8 +430,9 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
     Work/
       notes/...
       .scratchnote/...
-  models/            # the embedding model's GGUF file (outside notes so sync tools can ignore it)
 ```
+
+The embedding model is not in the notes root, so a sync tool carrying the root never carries it: it is in `models/` in the app's own folder on that computer, Tauri's local app data (`%LOCALAPPDATA%\com.scratchnote.app` on Windows, `~/Library/Application Support/com.scratchnote.app` on macOS, `~/.local/share/com.scratchnote.app` on Linux). Versions up to 0.7.0 kept it in the root's `models/`: at launch, off the main thread, each file there is moved over, renamed, or copied and then removed when the two are on different drives, unless the new folder already has it, and the old folder goes once empty.
 
 Day boundaries use the **local timezone** at save time.
 
@@ -509,7 +510,7 @@ Talked with the team, the auto-sync broke staging again.
 - A marker without a `status` is read as written, so a body that starts with a heading or a quoted `#tag` keeps it.
 - Rebuild index (7) writes every such block and page of the open space as they are written now, leaving the rest of each file as it is. Until then they are read as they are, and written anew only when the app edits that note.
 - `queue.json`, `categories.json` and `days-ahead.json` in a space's `.scratchnote/` are no longer read, and are left for the user to delete.
-- Nor are the chat models in `models/` (Qwen3-4B-Instruct-2507 and Qwen3-1.7B, each with a download not finished, `.gguf.part`, and the record of its download, `.gguf.json`). When one is still there, the main window asks at launch whether to remove it, saying how much room it takes, once What's new (3.6), if shown, is closed: Remove it deletes those files, Keep it is remembered on that computer and the question is not asked again, and closing it any other way asks again at the next launch. Nothing is removed unasked.
+- Nor are the chat models in `models/` (4.1): Qwen3-4B-Instruct-2507 and Qwen3-1.7B, each with a download not finished, `.gguf.part`, and the record of its download, `.gguf.json`. When one is still there, the main window asks at launch whether to remove it, saying how much room it takes, once What's new (3.6), if shown, is closed: Remove it deletes those files, Keep it is remembered on that computer and the question is not asked again, and closing it any other way asks again at the next launch. Nothing is removed unasked.
 
 ### 4.6 Spaces
 
@@ -622,7 +623,7 @@ Community plugins come from GitHub, as Obsidian's do.
 
 ### 5.2 Model management
 
-- The onboarding offers the embedding model, EmbeddingGemma-300M (Q8_0, ~330 MB, from `ggml-org/embeddinggemma-300M-GGUF`; Google's own repo is gated), downloaded from Hugging Face with a progress bar, resumable, with SHA-256 verification, into `models/`. Settings has its download row too. Hugging Face answers 401 for a repo that does not exist exactly as it does for a private one, so a wrong repo name surfaces as an authorization error rather than a missing one.
+- The onboarding offers the embedding model, EmbeddingGemma-300M (Q8_0, ~330 MB, from `ggml-org/embeddinggemma-300M-GGUF`; Google's own repo is gated), downloaded from Hugging Face with a progress bar, resumable, with SHA-256 verification, into `models/` in the app's own folder (4.1). Settings has its download row too. Hugging Face answers 401 for a repo that does not exist exactly as it does for a private one, so a wrong repo name surfaces as an authorization error rather than a missing one.
 - The app must be fully usable while the model is downloading or absent: capture, browsing, search by words and the day ahead need no model.
 - Record the resolved Hugging Face revision (commit SHA) alongside the downloaded file, so "which build of this model do I have" has an exact answer. Quant repos are re-uploaded in place, so a filename is not an identity.
 - On an integrated GPU, whose memory is the system's, llama.cpp holds a copy of the weights there and a second copy of the vocabulary on the host, none of it backed by the file: measured on an Intel iGPU, about 900 MB against 260 MB on the CPU, where the file is mapped and only the pages read count, for 13 ms a note against 31 ms, which is why it runs on the CPU. Once it is there, a background task embeds the open space's note bodies into `space.db`, again whenever a body's hash changes; a space not open catches up when it opens. A task's box is embedded as words, `- [ ]` as `To do:` and `- [x]` as `Done:`, so a question about what is left to do finds the notes with tasks. An install that still has the earlier Qwen3-Embedding-0.6B fetches EmbeddingGemma on launch and deletes the old file once the new one is verified; `space.db` records the model and how it embeds a note, and a change to either embeds every note again.
@@ -746,7 +747,7 @@ map_search(query) -> Vec<String>            // the ids of the notes whose text h
 get_settings() / set_settings(...)
 embedding_model_info() -> { installed, downloading(pct)? }
 download_embedding_model()
-old_chat_model() -> { bytes }?                // the chat models of versions before 0.5.0 still in models/ (4.5)
+old_chat_model() -> { bytes }?                // the chat models of versions before 0.5.0 still in models/ (4.1, 4.5)
 remove_old_chat_model()                       // deletes them, their unfinished downloads and their records
 rebuild_index()                               // drops the labels of earlier versions (4.5), reparses, embeds again
 set_tray_labels(labels)                      // the tray menu's wording, sent by the main window in its language

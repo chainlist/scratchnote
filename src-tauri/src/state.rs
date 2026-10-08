@@ -10,8 +10,11 @@ use crate::storage::writer::Writer;
 pub struct AppState {
     /// The notes root for this run. A new one chosen in settings applies on
     /// the next launch, since the spaces and their watchers are all bound
-    /// to it. The model and settings live here; notes live in the spaces.
+    /// to it. The settings live here; notes live in the spaces.
     pub root: PathBuf,
+    /// The app's own folder on this computer (Tauri's `app_local_data_dir`),
+    /// never synced with the notes: the models live here.
+    pub local_data: PathBuf,
     /// What settings.json says now, for the parts that apply live.
     pub settings: RwLock<Settings>,
     pub writer: Writer,

@@ -19,7 +19,7 @@ pub struct EmbeddingModelInfo {
 #[tauri::command]
 pub fn embedding_model_info(state: State<'_, AppState>) -> EmbeddingModelInfo {
     EmbeddingModelInfo {
-        installed: download::is_installed(&state.root, EmbeddingModel),
+        installed: download::is_installed(&state.local_data, EmbeddingModel),
         downloading: state.embedding_download.lock().ok().and_then(|d| *d),
     }
 }
@@ -54,7 +54,7 @@ async fn fetch_embedding_model(app: &AppHandle) -> Result<(), String> {
     let progress_app = app.clone();
     let result = async {
         let remote = download::lookup(EmbeddingModel).await?;
-        download::fetch(&state.root, EmbeddingModel, &remote, move |percent| {
+        download::fetch(&state.local_data, EmbeddingModel, &remote, move |percent| {
             if let Ok(mut running) = progress_app.state::<AppState>().embedding_download.lock() {
                 *running = Some(percent);
             }
@@ -92,13 +92,13 @@ pub struct OldChatModel {
 /// removing them.
 #[tauri::command]
 pub async fn old_chat_model(state: State<'_, AppState>) -> Result<Option<OldChatModel>, String> {
-    Ok(model::old_chat_bytes(&state.root).map(|bytes| OldChatModel { bytes }))
+    Ok(model::old_chat_bytes(&state.local_data).map(|bytes| OldChatModel { bytes }))
 }
 
 /// Remove the old chat models, once the user said so.
 #[tauri::command]
 pub async fn remove_old_chat_model(state: State<'_, AppState>) -> Result<(), String> {
-    model::remove_old_chat_models(&state.root)
+    model::remove_old_chat_models(&state.local_data)
 }
 
 /// An install from before EmbeddingGemma still has Qwen3-Embedding on disk.
@@ -106,8 +106,8 @@ pub async fn remove_old_chat_model(state: State<'_, AppState>) -> Result<(), Str
 /// back without a trip to settings, and the old file goes once the new one is
 /// in.
 pub fn replace_legacy_embedding_model(app: &AppHandle) {
-    let root = app.state::<AppState>().root.clone();
-    let legacy = models_dir(&root).join(LEGACY_EMBEDDING_FILE);
+    let local_data = app.state::<AppState>().local_data.clone();
+    let legacy = models_dir(&local_data).join(LEGACY_EMBEDDING_FILE);
     if !legacy.exists() {
         return;
     }
@@ -118,7 +118,7 @@ pub fn replace_legacy_embedding_model(app: &AppHandle) {
             }
         }
     };
-    if download::is_installed(&root, EmbeddingModel) {
+    if download::is_installed(&local_data, EmbeddingModel) {
         remove_legacy();
         return;
     }

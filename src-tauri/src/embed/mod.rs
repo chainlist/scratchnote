@@ -47,10 +47,10 @@ pub trait Embedder: Send + Sync {
 pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
     let state = app.state::<AppState>();
     crate::state::load_once(&state.embedder, &state.embedder_loading, || {
-        if !download::is_installed(&state.root, EmbeddingModel) {
+        if !download::is_installed(&state.local_data, EmbeddingModel) {
             return None;
         }
-        let path = model_file(&state.root, EmbeddingModel);
+        let path = model_file(&state.local_data, EmbeddingModel);
         log::info!("loading {}", path.display());
 
         match llama::LlamaEmbedder::load(&path) {
@@ -79,18 +79,13 @@ pub fn normalize(vector: &mut [f32]) {
 
 /// The embedding model for the tests that need real weights: the file
 /// `SCRATCHNOTE_EMBEDDING_MODEL` names, else the one the app downloads into
-/// `~/Scratchnote/models`. `None`, and the test skips, without either.
+/// the app's own folder on this computer. `None`, and the test skips,
+/// without either.
 #[cfg(test)]
 pub fn installed_embedder() -> Option<llama::LlamaEmbedder> {
     let path = match std::env::var_os("SCRATCHNOTE_EMBEDDING_MODEL") {
         Some(path) => std::path::PathBuf::from(path),
-        None => {
-            let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
-            model_file(
-                &std::path::PathBuf::from(home).join("Scratchnote"),
-                EmbeddingModel,
-            )
-        }
+        None => model_file(&model::installed_local_data()?, EmbeddingModel),
     };
     if !path.is_file() {
         eprintln!("no embedding model at {}, skipping", path.display());

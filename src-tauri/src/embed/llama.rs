@@ -295,16 +295,14 @@ mod tests {
         );
     }
 
-    /// Needs the embedding model in `~/Scratchnote/models`;
+    /// Needs the embedding model the app downloaded;
     /// `cargo test ranks_the_note -- --ignored --nocapture`.
     #[test]
     #[ignore = "needs the downloaded embedding model"]
     fn ranks_the_note_that_answers_first_in_either_language() {
-        use crate::embed::model::{model_file, EmbeddingModel};
+        use crate::embed::model::{installed_local_data, model_file, EmbeddingModel};
 
-        let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
-        let root = std::path::PathBuf::from(home.unwrap()).join("Scratchnote");
-        let path = model_file(&root, EmbeddingModel);
+        let path = model_file(&installed_local_data().unwrap(), EmbeddingModel);
         if !path.is_file() {
             eprintln!("no embedding model at {}, skipping", path.display());
             return;

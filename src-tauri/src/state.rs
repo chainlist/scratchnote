@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
+use crate::embed::activity::Activity;
 use crate::embed::sync::Wake;
 use crate::embed::Embedder;
 use crate::settings::Settings;
@@ -34,6 +35,8 @@ pub struct AppState {
     /// so a settings screen opened meanwhile shows it, and a second click
     /// does not start another.
     pub embedding_download: Mutex<Option<u8>>,
+    /// What the embedder is doing now (`embed::activity`).
+    pub embedder_activity: Mutex<Activity>,
 }
 
 /// What `slot` holds, or else what `load` makes, which is stored there. One

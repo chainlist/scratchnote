@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { dev } from '$app/env';
 	import { afterNavigate } from '$app/navigation';
 	import { navigating } from '$app/state';
 	import { getVersion } from '@tauri-apps/api/app';
@@ -24,6 +25,7 @@
 	} from '#lib/api.js';
 	import AppHeader from '#lib/components/AppHeader.svelte';
 	import CommandCenter from '#lib/components/CommandCenter.svelte';
+	import EmbedderBar from '#lib/components/EmbedderBar.svelte';
 	import DeleteNoteDialog from '#lib/components/DeleteNoteDialog.svelte';
 	import Dock from '#lib/components/Dock.svelte';
 	import MoveDialog from '#lib/components/MoveDialog.svelte';
@@ -248,6 +250,9 @@
 			</Resizable.PaneGroup>
 		</div>
 	</div>
+	{#if dev}
+		<EmbedderBar />
+	{/if}
 </div>
 
 {#snippet dock(order: number)}

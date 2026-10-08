@@ -4,6 +4,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::embed::activity::Activity;
 use crate::embed::download;
 use crate::embed::model::{self, models_dir, EmbeddingModel, LEGACY_EMBEDDING_FILE};
 use crate::state::AppState;
@@ -22,6 +23,16 @@ pub fn embedding_model_info(state: State<'_, AppState>) -> EmbeddingModelInfo {
         installed: download::is_installed(&state.local_data, EmbeddingModel),
         downloading: state.embedding_download.lock().ok().and_then(|d| *d),
     }
+}
+
+/// What the embedder is doing, for the status bar of a dev build.
+#[tauri::command]
+pub fn embedder_activity(state: State<'_, AppState>) -> Activity {
+    state
+        .embedder_activity
+        .lock()
+        .map(|activity| activity.clone())
+        .unwrap_or_default()
 }
 
 /// Fetch the embedding model, behind search by meaning, similar notes,

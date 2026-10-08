@@ -110,6 +110,7 @@ pub fn run() {
             commands::models::download_embedding_model,
             commands::models::old_chat_model,
             commands::models::remove_old_chat_model,
+            commands::models::embedder_activity,
             commands::notes::today,
             commands::settings::get_settings,
             commands::settings::set_settings,
@@ -187,6 +188,7 @@ pub fn run() {
                 embedder_loading: std::sync::Mutex::new(()),
                 embed_wake: embed_wake.clone(),
                 embedding_download: std::sync::Mutex::new(None),
+                embedder_activity: std::sync::Mutex::default(),
             });
 
             // Every space is listed, but only the open one is read and watched

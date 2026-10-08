@@ -4,6 +4,7 @@
 //! Only the body is embedded, so a vector is tied to the body hash: editing a
 //! note's text embeds it again, renaming a page does not.
 
+pub mod activity;
 #[cfg(test)]
 mod bench;
 pub mod categories;
@@ -22,6 +23,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
+use activity::Activity;
 use model::{model_file, EmbeddingModel};
 
 /// A model that turns text into vectors.
@@ -48,10 +50,12 @@ pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
     let state = app.state::<AppState>();
     crate::state::load_once(&state.embedder, &state.embedder_loading, || {
         if !download::is_installed(&state.local_data, EmbeddingModel) {
+            activity::report(app, Activity::NoModel);
             return None;
         }
         let path = model_file(&state.local_data, EmbeddingModel);
         log::info!("loading {}", path.display());
+        activity::report(app, Activity::Loading);
 
         match llama::LlamaEmbedder::load(&path) {
             Ok(loaded) => {
@@ -60,6 +64,7 @@ pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
             }
             Err(e) => {
                 log::error!("could not load the embedding model: {e}");
+                activity::report(app, Activity::Failed { error: e.to_string() });
                 None
             }
         }

@@ -388,6 +388,21 @@ export const onEmbeddingStatus = (
 ): Promise<UnlistenFn> =>
 	listen<EmbeddingStatus>('embedding-status', (event) => handler(event.payload));
 
+/** What the embedder is doing, for the status bar of a dev build. */
+export type EmbedderActivity =
+	| { state: 'waiting' | 'noModel' | 'loading' }
+	| { state: 'failed'; error: string }
+	| { state: 'embedding'; space: string; done: number; total: number }
+	| { state: 'threads' | 'map'; space: string }
+	| { state: 'idle'; embedded: number; ms: number; vectors: number };
+
+export const embedderActivity = () => invoke<EmbedderActivity>('embedder_activity');
+
+export const onEmbedderActivity = (
+	handler: (activity: EmbedderActivity) => void
+): Promise<UnlistenFn> =>
+	listen<EmbedderActivity>('embedder-activity', (event) => handler(event.payload));
+
 /** Replace a note's body. */
 export const updateNote = (date: string, id: string, body: string) =>
 	invoke<Note>('update_note', { date, id, body });

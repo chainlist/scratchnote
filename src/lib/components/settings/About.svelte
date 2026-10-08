@@ -96,8 +96,9 @@
 							? m.update_retry()
 							: m.update_to({ version: appUpdate.update.version })}
 				</Button>
-			{:else if !dev}
-				<!-- A dev build is not a release, so no release replaces it. -->
+			{:else if !dev && !navigator.userAgent.includes('Android')}
+				<!-- A dev build is not a release, so no release replaces it; Android
+				     gets a new APK rather than updating itself. -->
 				<Button variant="secondary" size="sm" onclick={look} disabled={checking}>
 					<RefreshCwIcon class={checking ? 'animate-spin' : ''} />
 					{checking ? m.settings_checking() : m.settings_check_updates()}

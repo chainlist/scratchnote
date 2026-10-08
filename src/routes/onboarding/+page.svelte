@@ -27,10 +27,13 @@
 	import { clearResumeStep, resumeStep, setResumeStep } from '#lib/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
 
+	const android = navigator.userAgent.includes('Android');
+
 	/**
 	 * The first-run walkthrough. The main page sends a fresh install here;
 	 * every choice is saved as it is made, so leaving part way loses nothing.
 	 * The folder comes before the search model, which is downloaded into it.
+	 * Android has no capture hotkey, so it skips that step.
 	 */
 	const STEPS = [
 		{
@@ -69,7 +72,7 @@
 			title: m.onboarding_appearance_title,
 			body: m.onboarding_appearance_body
 		}
-	] as const;
+	].filter((s) => !(android && s.id === 'hotkey'));
 
 	const settings = new SettingsState();
 	let index = $state(0);
@@ -117,7 +120,9 @@
 			const lastSeenVersion = await getVersion();
 			if (!(await settings.apply({ onboarded: true, lastSeenVersion }))) return;
 			clearResumeStep();
-			await goto(resolve('/(app)'));
+			// In place of the walkthrough, so Android's back button cannot
+			// return to it.
+			await goto(resolve('/(app)'), { replace: true });
 		} finally {
 			working = false;
 		}
@@ -138,7 +143,7 @@
 	>
 		<span class="text-sm font-medium">Scratchnote</span>
 		<div class="ml-auto">
-			{#if !mac}<WindowControls />{/if}
+			{#if !mac && !android}<WindowControls />{/if}
 		</div>
 	</header>
 
@@ -198,6 +203,7 @@
 					<div class="flex flex-col gap-2">
 						<FolderPicker
 							value={settings.draft.root}
+							appStorage={view.defaultRoot}
 							onchange={(root) => (settings.draft.root = root)}
 							onerror={(message) => settings.say(message, true)}
 						/>

@@ -22,8 +22,9 @@
 	}
 
 	onMount(() => {
-		// A dev build is not a release, so no release replaces it.
-		if (dev) return;
+		// A dev build is not a release, so no release replaces it. Android
+		// gets a new APK rather than updating itself.
+		if (dev || navigator.userAgent.includes('Android')) return;
 		void look();
 		const timer = setInterval(look, DAY);
 		return () => clearInterval(timer);

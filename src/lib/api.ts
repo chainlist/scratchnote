@@ -503,6 +503,8 @@ export type ThreadOrder = 'oldest' | 'newest';
 export interface SettingsView extends Settings {
 	/** The root this run is using; differs from `root` until the next launch. */
 	activeRoot: string;
+	/** Where the notes go when no folder is chosen: the app's own storage on Android. */
+	defaultRoot: string;
 }
 
 export const getSettings = () => invoke<SettingsView>('get_settings');
@@ -512,6 +514,9 @@ export const setSettings = (settings: Settings) =>
 
 /** Relaunch the app, which is how a new notes root takes effect. */
 export const restartApp = () => invoke<void>('restart_app');
+
+/** Android's folder chooser, which the dialog plugin lacks there; null when backed out of. */
+export const pickNotesFolder = () => invoke<string | null>('pick_notes_folder');
 
 export const onSettingsChanged = (handler: (settings: Settings) => void): Promise<UnlistenFn> =>
 	listen<Settings>('settings-changed', (event) => handler(event.payload));

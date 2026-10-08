@@ -302,6 +302,7 @@
 	"settings_root": "Notizordner",
 	"settings_root_hint": "Hier liegt eine Markdown-Datei pro Tag.",
 	"settings_root_choose": "Auswählen…",
+	"settings_root_app_storage": "App-Speicher",
 	"settings_root_dialog": "Wähle, wo deine Notizen liegen sollen",
 	"settings_restart_needed": "Gespeichert. Starte Scratchnote neu, um von {path} zu wechseln.",
 	"settings_hotkey": "Tastenkürzel zum Festhalten",

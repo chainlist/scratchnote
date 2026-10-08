@@ -70,7 +70,7 @@ impl Source {
                     .join("plugin-registry"),
             ));
         }
-        let client = reqwest::Client::builder()
+        let client = crate::http::client()
             .user_agent(concat!("Scratchnote/", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(30))
             .build()

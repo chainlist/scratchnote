@@ -101,6 +101,8 @@
 	let checkingNews = $state(true);
 
 	const mac = navigator.userAgent.includes('Mac');
+	// Android has no capture window, so no hotkey brings it up.
+	const android = navigator.userAgent.includes('Android');
 
 	function onWindowKeydown(event: KeyboardEvent) {
 		if (event.key === '/' && (event.ctrlKey || event.metaKey)) {
@@ -158,12 +160,12 @@
 
 			shell.textSize = settings.fontSize;
 			shell.threadOrder = settings.threadOrder;
-			shell.captureHotkey = settings.captureHotkey;
+			shell.captureHotkey = android ? '' : settings.captureHotkey;
 			off.push(
 				onSettingsChanged((changed) => {
 					shell.textSize = changed.fontSize;
 					shell.threadOrder = changed.threadOrder;
-					shell.captureHotkey = changed.captureHotkey;
+					shell.captureHotkey = android ? '' : changed.captureHotkey;
 				})
 			);
 			// A note saved from the capture window lands in another webview.

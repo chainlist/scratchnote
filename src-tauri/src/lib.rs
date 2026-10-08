@@ -1,7 +1,10 @@
 mod ahead;
+#[cfg(target_os = "android")]
+mod android;
 mod attachments;
 mod commands;
 mod embed;
+mod http;
 mod mentions;
 mod pages;
 mod plugins;
@@ -13,12 +16,14 @@ mod state;
 mod storage;
 mod watcher;
 
+#[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
+#[cfg(desktop)]
 use tauri::tray::TrayIconBuilder;
-use tauri::{
-    AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent,
-};
+use tauri::{AppHandle, Emitter, Manager, State};
+#[cfg(desktop)]
+use tauri::{WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+#[cfg(desktop)]
 use tauri_plugin_global_shortcut::ShortcutState;
 
 use settings::Settings;
@@ -29,13 +34,20 @@ const CAPTURE: &str = "capture";
 const MAIN: &str = "main";
 /// Toggles the capture window, for desktops where apps cannot register a
 /// global shortcut (Wayland): the user binds this command there instead.
+#[cfg(desktop)]
 const CAPTURE_FLAG: &str = "--capture";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     startup::begin();
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init());
+    // The tray, the capture window and its hotkey, launch at login and
+    // self-update are desktop things; Android has none of them.
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         // Launching the app again reaches the running one instead, which also
         // brings the main window back on desktops that show no tray icon.
@@ -47,8 +59,6 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -57,7 +67,10 @@ pub fn run() {
                     }
                 })
                 .build(),
-        )
+        );
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(android::init());
+    builder
         // Attached images, read from the open space's `attachments/` folder
         // (SPEC 3.7). The folder is chosen at runtime, which a Tauri asset
         // scope in the config could not follow.
@@ -116,6 +129,7 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::set_settings,
             commands::settings::restart_app,
+            commands::settings::pick_notes_folder,
             commands::spaces::list_spaces,
             commands::spaces::create_space,
             commands::spaces::rename_space,
@@ -231,23 +245,28 @@ pub fn run() {
             });
             startup::step("Starting the embedding task");
 
-            build_capture_window(app.handle())?;
-            startup::step("Making the capture window");
-            build_tray(app.handle())?;
-            keep_main_window_alive(app.handle());
-            startup::step("Making the tray icon");
-
+            #[cfg(desktop)]
             {
-                use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                if let Err(e) = app.global_shortcut().register(hotkey.as_str()) {
-                    log::error!("could not register the capture hotkey {hotkey}: {e}");
-                }
-            }
+                build_capture_window(app.handle())?;
+                startup::step("Making the capture window");
+                build_tray(app.handle())?;
+                keep_main_window_alive(app.handle());
+                startup::step("Making the tray icon");
 
-            if std::env::args().any(|a| a == CAPTURE_FLAG) {
-                toggle_capture(app.handle());
+                {
+                    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                    if let Err(e) = app.global_shortcut().register(hotkey.as_str()) {
+                        log::error!("could not register the capture hotkey {hotkey}: {e}");
+                    }
+                }
+
+                if std::env::args().any(|a| a == CAPTURE_FLAG) {
+                    toggle_capture(app.handle());
+                }
+                startup::step("Registering the capture shortcut");
             }
-            startup::step("Registering the capture shortcut");
+            #[cfg(mobile)]
+            let _ = hotkey;
             startup::done();
 
             Ok(())
@@ -310,6 +329,7 @@ fn reveal_note(app: AppHandle, id: String, date: String, kind: Option<String>) {
     );
 }
 
+#[cfg(desktop)]
 /// The capture window is built once at startup and only ever shown and
 /// hidden, so the hotkey never pays for window creation. It opens centred;
 /// where the user moves and sizes it then holds until the app quits.
@@ -328,6 +348,7 @@ fn build_capture_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .build()
 }
 
+#[cfg(desktop)]
 fn toggle_capture(app: &AppHandle) {
     let Some(window) = app.get_webview_window(CAPTURE) else {
         return;
@@ -345,11 +366,13 @@ fn toggle_capture(app: &AppHandle) {
 fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN) {
         let _ = window.show();
+        #[cfg(desktop)]
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
 }
 
+#[cfg(desktop)]
 /// Closing the main window hides it; the app stays in the tray.
 fn keep_main_window_alive(app: &AppHandle) {
     let Some(window) = app.get_webview_window(MAIN) else {
@@ -368,6 +391,7 @@ fn keep_main_window_alive(app: &AppHandle) {
 /// main window sends them once its language is known, and again on a change.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(mobile, allow(dead_code))]
 struct TrayLabels {
     new_note: String,
     open: String,
@@ -375,6 +399,7 @@ struct TrayLabels {
     quit: String,
 }
 
+#[cfg(desktop)]
 impl Default for TrayLabels {
     fn default() -> Self {
         Self {
@@ -386,6 +411,7 @@ impl Default for TrayLabels {
     }
 }
 
+#[cfg(desktop)]
 fn tray_menu(app: &AppHandle, labels: &TrayLabels) -> tauri::Result<Menu<tauri::Wry>> {
     let new_note = MenuItem::with_id(app, "new_note", &labels.new_note, true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", &labels.open, true, None::<&str>)?;
@@ -394,6 +420,7 @@ fn tray_menu(app: &AppHandle, labels: &TrayLabels) -> tauri::Result<Menu<tauri::
     Menu::with_items(app, &[&new_note, &open, &settings, &quit])
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn set_tray_labels(app: AppHandle, labels: TrayLabels) -> Result<(), String> {
     let tray = app.tray_by_id("tray").ok_or("no tray icon")?;
@@ -401,6 +428,14 @@ fn set_tray_labels(app: AppHandle, labels: TrayLabels) -> Result<(), String> {
     tray.set_menu(Some(menu)).map_err(|e| e.to_string())
 }
 
+/// Android has no tray to label.
+#[cfg(mobile)]
+#[tauri::command]
+fn set_tray_labels(labels: TrayLabels) {
+    let _ = labels;
+}
+
+#[cfg(desktop)]
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = tray_menu(app, &TrayLabels::default())?;
 

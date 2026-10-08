@@ -100,8 +100,14 @@ pub fn file(app: &AppHandle) -> PathBuf {
     settings_path(&default_root(app))
 }
 
-fn default_root(app: &AppHandle) -> PathBuf {
-    match app.path().home_dir() {
+/// Android has no home folder anyone browses, so the notes start in the
+/// app's own storage there; Settings can move them to a shared folder.
+pub fn default_root(app: &AppHandle) -> PathBuf {
+    #[cfg(mobile)]
+    let home = app.path().app_data_dir();
+    #[cfg(desktop)]
+    let home = app.path().home_dir();
+    match home {
         Ok(home) => home.join("Scratchnote"),
         Err(e) => {
             log::warn!("no home directory ({e}), using the working directory");

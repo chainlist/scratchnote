@@ -154,7 +154,13 @@
 				{/if}
 			</div>
 		{:else}
-			<div class="flex min-w-0 items-center gap-3 {centered ? 'justify-center' : ''}">
+			<!-- Wraps on a phone, where the draft's button would otherwise
+			     shrink under its own label. -->
+			<div
+				class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 {centered
+					? 'justify-center'
+					: ''}"
+			>
 				<!-- A draft set aside comes back by its first words, so it is
 				     never mistaken for lost. -->
 				<button

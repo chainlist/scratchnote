@@ -497,8 +497,28 @@
 	/** Pick files to attach at the cursor, for the paperclip. */
 	function attachFiles() {
 		void attach(async (into) => {
+			if (android) {
+				const files = await pickFileBytes();
+				return Promise.all(files.map((file) => saveAttachment(file, into)));
+			}
 			const picked = await pickFiles({ multiple: true });
 			return picked ? addAttachments(picked, into) : [];
+		});
+	}
+
+	/**
+	 * Android's picker hands out content URIs, which the backend cannot read
+	 * as paths, so the files go over as bytes, as a paste does.
+	 */
+	const android = navigator.userAgent.includes('Android');
+	function pickFileBytes(): Promise<File[]> {
+		return new Promise((done) => {
+			const input = document.createElement('input');
+			input.type = 'file';
+			input.multiple = true;
+			input.onchange = () => done([...(input.files ?? [])]);
+			input.oncancel = () => done([]);
+			input.click();
 		});
 	}
 

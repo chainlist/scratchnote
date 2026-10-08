@@ -27,6 +27,8 @@
 	// macOS keeps its native traffic lights over the top left corner;
 	// elsewhere the window is undecorated and draws its own controls.
 	const mac = navigator.userAgent.includes('Mac');
+	// Android shows the app full screen, with no window to control.
+	const android = navigator.userAgent.includes('Android');
 </script>
 
 <header
@@ -73,6 +75,6 @@
 		>
 			<SettingsIcon />
 		</Button>
-		{#if !mac}<WindowControls />{/if}
+		{#if !mac && !android}<WindowControls />{/if}
 	</div>
 </header>

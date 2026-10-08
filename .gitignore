@@ -28,7 +28,11 @@ vite.config.ts.timestamp-*
 # Tauri build output (also ignored by src-tauri/.gitignore; listed here so
 # eslint, which reads this file, skips it too)
 /src-tauri/target/
-/src-tauri/gen/
+/src-tauri/gen/schemas/
+# The Android project is kept (it holds StoragePlugin.kt); its own
+# .gitignore covers Gradle's output for git, this for eslint and prettier.
+/src-tauri/gen/android/.gradle/
+/src-tauri/gen/android/**/build/
 # Paraglide
 src/lib/paraglide
 project.inlang/cache/

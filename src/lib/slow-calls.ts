@@ -24,6 +24,8 @@ const LABELS: Record<string, Label | null> = {
 	hide_capture: null,
 	set_tray_labels: null,
 	restart_app: null,
+	// Waits on the user in Android's folder chooser.
+	pick_notes_folder: null,
 	old_chat_model: null,
 	download_embedding_model: null,
 	search_meaning: null,

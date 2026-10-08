@@ -14,13 +14,17 @@ pub struct SettingsView {
     #[serde(flatten)]
     pub settings: Settings,
     pub active_root: std::path::PathBuf,
+    /// Where the notes go when no folder is chosen, for Android's "app
+    /// storage" choice.
+    pub default_root: std::path::PathBuf,
 }
 
 #[tauri::command]
-pub fn get_settings(state: State<'_, AppState>) -> Result<SettingsView, String> {
+pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<SettingsView, String> {
     Ok(SettingsView {
         settings: current_settings(&state)?,
         active_root: state.root.clone(),
+        default_root: crate::settings::default_root(&app),
     })
 }
 
@@ -35,6 +39,7 @@ pub async fn set_settings(
     settings.validate()?;
     let old = current_settings(&state)?;
 
+    #[cfg(desktop)]
     if settings.capture_hotkey != old.capture_hotkey {
         use tauri_plugin_global_shortcut::GlobalShortcutExt;
         let shortcuts = app.global_shortcut();
@@ -46,10 +51,14 @@ pub async fn set_settings(
         let _ = shortcuts.unregister(old.capture_hotkey.as_str());
     }
 
+    #[cfg(mobile)]
+    let _ = old;
+
     save_settings(&app, &state, settings.clone()).await?;
     Ok(SettingsView {
         settings,
         active_root: state.root.clone(),
+        default_root: crate::settings::default_root(&app),
     })
 }
 
@@ -57,7 +66,25 @@ pub async fn set_settings(
 /// onboarding uses it so the model downloads into the chosen folder.
 #[tauri::command]
 pub fn restart_app(app: AppHandle) {
+    // Tauri restarts by running its own binary again, which Android does
+    // not allow, so the activity is relaunched there instead.
+    #[cfg(target_os = "android")]
+    crate::android::restart(&app);
+    #[cfg(not(target_os = "android"))]
     app.restart();
+}
+
+/// Android's folder chooser for the notes root, as a full path: the dialog
+/// plugin cannot pick folders there. None when the user backs out.
+#[tauri::command]
+pub async fn pick_notes_folder(app: AppHandle) -> Result<Option<String>, String> {
+    #[cfg(target_os = "android")]
+    return crate::android::pick_folder(&app).await;
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("the dialog plugin picks folders on this system".to_string())
+    }
 }
 
 pub(super) fn current_settings(state: &State<'_, AppState>) -> Result<Settings, String> {

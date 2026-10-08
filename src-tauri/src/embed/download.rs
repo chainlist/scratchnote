@@ -70,7 +70,9 @@ pub fn is_installed(root: &Path, model: impl Catalogued) -> bool {
 /// Ask the registry which revision is current and what the file should hash to.
 pub async fn lookup(model: impl Catalogued) -> Result<RemoteModel, String> {
     let repo = model.repo();
-    let info: RepoInfo = reqwest::Client::new()
+    let info: RepoInfo = crate::http::client()
+        .build()
+        .map_err(|e| e.to_string())?
         .get(format!(
             "https://huggingface.co/api/models/{repo}?blobs=true"
         ))
@@ -163,7 +165,10 @@ where
     }
 
     if done < remote.size {
-        let mut request = reqwest::Client::new().get(&remote.url);
+        let mut request = crate::http::client()
+            .build()
+            .map_err(|e| e.to_string())?
+            .get(&remote.url);
         if done > 0 {
             request = request.header(reqwest::header::RANGE, format!("bytes={done}-"));
         }

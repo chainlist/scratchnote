@@ -29,7 +29,9 @@ sha2 = "0.10.9"
 unicode-normalization = "0.1.25"
 tokio = { version = "1.53.1", features = ["full"] }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
-llama-cpp-2 = "0.1.156"
+# The defaults minus android-shared-stdcxx, which Android swaps for the
+# static C++ runtime below.
+llama-cpp-2 = { version = "0.1.156", default-features = false, features = ["openmp", "common"] }
 futures-util = "0.3.34"
 reqwest = { version = "0.13.3", default-features = false, features = ["rustls", "stream", "json"] }
 encoding_rs = "0.8.35"
@@ -45,6 +47,12 @@ tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
+
+# Android ships no C++ runtime for apps, so llama.cpp links its own in.
+[target.'cfg(target_os = "android")'.dependencies]
+llama-cpp-2 = { version = "0.1.156", default-features = false, features = ["android-static-stdcxx"] }
+# Root certificates for HTTPS, see src/http.rs.
+webpki-root-certs = "1"
 
 [dev-dependencies]
 filetime = "0.2.29"

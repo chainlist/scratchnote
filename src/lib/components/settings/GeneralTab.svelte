@@ -21,8 +21,11 @@
 	const restartNeeded = $derived(view.root !== view.activeRoot);
 
 	let launchAtLogin = $state(false);
+	// Android has no capture window, hotkey or login to launch at.
+	const android = navigator.userAgent.includes('Android');
 
 	onMount(async () => {
+		if (android) return;
 		try {
 			launchAtLogin = await isEnabled();
 		} catch (e) {
@@ -57,6 +60,7 @@
 			</div>
 			<FolderPicker
 				value={settings.draft.root}
+				appStorage={view.defaultRoot}
 				onchange={(root) => (settings.draft.root = root)}
 				onerror={(message) => settings.say(message, true)}
 			/>
@@ -66,23 +70,25 @@
 				</p>
 			{/if}
 		</div>
-		<SettingRow id="hotkey" label={m.settings_hotkey()} hint={m.settings_hotkey_hint()}>
-			<HotkeyInput
-				id="hotkey"
-				value={settings.draft.captureHotkey}
-				onchange={(hotkey) => (settings.draft.captureHotkey = hotkey)}
-			/>
-		</SettingRow>
-		<SettingRow
-			id="hide"
-			label={m.settings_hide()}
-			hint={settings.draft.hideImmediately ? m.settings_hide_on() : m.settings_hide_off()}
-		>
-			<Switch id="hide" bind:checked={settings.draft.hideImmediately} />
-		</SettingRow>
-		<SettingRow id="login" label={m.settings_login()} hint={m.settings_login_hint()}>
-			<Switch id="login" checked={launchAtLogin} onCheckedChange={toggleLaunchAtLogin} />
-		</SettingRow>
+		{#if !android}
+			<SettingRow id="hotkey" label={m.settings_hotkey()} hint={m.settings_hotkey_hint()}>
+				<HotkeyInput
+					id="hotkey"
+					value={settings.draft.captureHotkey}
+					onchange={(hotkey) => (settings.draft.captureHotkey = hotkey)}
+				/>
+			</SettingRow>
+			<SettingRow
+				id="hide"
+				label={m.settings_hide()}
+				hint={settings.draft.hideImmediately ? m.settings_hide_on() : m.settings_hide_off()}
+			>
+				<Switch id="hide" bind:checked={settings.draft.hideImmediately} />
+			</SettingRow>
+			<SettingRow id="login" label={m.settings_login()} hint={m.settings_login_hint()}>
+				<Switch id="login" checked={launchAtLogin} onCheckedChange={toggleLaunchAtLogin} />
+			</SettingRow>
+		{/if}
 		<SettingRow label={m.settings_onboarding()} hint={m.settings_onboarding_hint()}>
 			<Button variant="secondary" size="sm" onclick={runOnboarding}>
 				{m.settings_onboarding_run()}

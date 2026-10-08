@@ -19,6 +19,8 @@
 	/** Everything inside sizes in rem, so the floor grows with the text: a
 	 *  larger text never leaves a window too small for its own bar. */
 	function fitMinSize(fontSize: number) {
+		// Android shows the app full screen, at the size of the screen.
+		if (navigator.userAgent.includes('Android')) return;
 		const window = getCurrentWindow();
 		const [width, height] = MIN_SIZE[window.label] ?? [0, 0];
 		const scale = fontSize / 16;

@@ -302,6 +302,7 @@
 	"settings_root": "Pasta de notas",
 	"settings_root_hint": "Um arquivo markdown por dia fica aqui.",
 	"settings_root_choose": "Escolher…",
+	"settings_root_app_storage": "Armazenamento do app",
 	"settings_root_dialog": "Escolha onde guardar suas notas",
 	"settings_restart_needed": "Salvo. Reinicie o Scratchnote para mudar de {path}.",
 	"settings_hotkey": "Atalho de captura",

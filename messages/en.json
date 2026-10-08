@@ -302,6 +302,7 @@
 	"settings_root": "Notes folder",
 	"settings_root_hint": "One markdown file per day lives here.",
 	"settings_root_choose": "Choose…",
+	"settings_root_app_storage": "App storage",
 	"settings_root_dialog": "Choose where to store your notes",
 	"settings_restart_needed": "Saved. Restart Scratchnote to switch from {path}.",
 	"settings_hotkey": "Capture shortcut",

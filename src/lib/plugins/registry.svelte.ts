@@ -1,6 +1,14 @@
 import type { Extension } from '@codemirror/state';
 import type { Editor } from './editor';
-import type { ItemView, Label, MarkdownSyntax, PluginSettingTab, ToolbarButton } from './api';
+import type { Note } from '#lib/api.js';
+import type {
+	ItemView,
+	Label,
+	MarkdownSyntax,
+	NoteChip,
+	PluginSettingTab,
+	ToolbarButton
+} from './api';
 
 /**
  * Everything the plugins add to this window, as they have it now. The hosts
@@ -54,6 +62,11 @@ export interface EditorExtensionEntry {
 	extension: Extension;
 }
 
+export interface ChipEntry {
+	plugin: string;
+	chip: (note: Note) => NoteChip | null;
+}
+
 interface Lists {
 	commands: CommandEntry[];
 	ribbon: RibbonEntry[];
@@ -65,6 +78,8 @@ interface Lists {
 	settingTabs: SettingTabEntry[];
 	syntax: SyntaxEntry[];
 	editorExtensions: EditorExtensionEntry[];
+	/** Chips under a note's text on its card. */
+	chips: ChipEntry[];
 }
 
 class Registry implements Lists {
@@ -78,6 +93,7 @@ class Registry implements Lists {
 	settingTabs = $state.raw<SettingTabEntry[]>([]);
 	syntax = $state.raw<SyntaxEntry[]>([]);
 	editorExtensions = $state.raw<EditorExtensionEntry[]>([]);
+	chips = $state.raw<ChipEntry[]>([]);
 }
 
 export const registry = new Registry();

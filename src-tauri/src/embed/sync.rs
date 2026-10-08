@@ -68,6 +68,11 @@ pub fn spawn(app: AppHandle, wake: Wake) {
                 Ok(spaces) => {
                     for (name, synced) in spaces {
                         let space = serde_json::json!({ "space": name });
+                        // Threads change when the vectors are first read from
+                        // disk, so either says the notes' vectors are new.
+                        if synced.vectors || synced.threads {
+                            let _ = app.emit("vectors-changed", space.clone());
+                        }
                         if synced.threads {
                             let _ = app.emit("threads-changed", space.clone());
                         }
@@ -85,6 +90,8 @@ pub fn spawn(app: AppHandle, wake: Wake) {
 /// What a pass changed in a space, for the views to show.
 #[derive(Default)]
 struct Synced {
+    /// Notes were embedded, or left the vectors.
+    vectors: bool,
     threads: bool,
     map: bool,
     /// How many notes it embedded.
@@ -100,6 +107,7 @@ fn sync_space(app: &AppHandle, space: &Space, embedder: &dyn Embedder) -> Synced
     }
     let keep_going = || !space.is_retired() && space.is_open();
     let held = space.held();
+    let mut vectors = false;
     let mut progress = activity::Progress::new(app, &space.name);
     let mut embedded = 0;
     match reconcile(
@@ -117,6 +125,7 @@ fn sync_space(app: &AppHandle, space: &Space, embedder: &dyn Embedder) -> Synced
     ) {
         // A space renamed or deleted meanwhile: its folder is gone from here.
         Ok(true) if !space.is_retired() => {
+            vectors = true;
             if let (Ok(mut vectors), Ok(mut db)) = (space.vectors.lock(), space.db.lock()) {
                 if let (Some(vectors), Some(db)) = (vectors.as_mut(), db.as_mut()) {
                     match vectors.save(db) {
@@ -146,6 +155,7 @@ fn sync_space(app: &AppHandle, space: &Space, embedder: &dyn Embedder) -> Synced
             false
         });
     Synced {
+        vectors,
         threads,
         map,
         embedded,

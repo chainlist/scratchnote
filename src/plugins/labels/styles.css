@@ -1,0 +1,55 @@
+.labels-list {
+	display: flex;
+	flex-direction: column;
+}
+.labels-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 1rem;
+	border-radius: var(--radius-sm);
+	padding: 0.375rem 0.5rem;
+	color: var(--color-neutral-200);
+	font-size: 0.875rem;
+	cursor: pointer;
+}
+.labels-row:is(:hover, :focus-visible) {
+	background: var(--color-neutral-800);
+}
+.labels-nested {
+	padding-left: 1.5rem;
+	color: var(--color-neutral-300);
+}
+.labels-count {
+	color: var(--color-meta);
+	font-variant-numeric: tabular-nums;
+}
+.labels-unsure,
+.labels-empty {
+	margin-top: 1rem;
+	color: var(--color-meta);
+	font-size: 0.75rem;
+}
+.labels-back,
+.labels-more {
+	border-radius: var(--radius-sm);
+	padding: 0.25rem 0.5rem;
+	color: var(--color-meta);
+	font-size: 0.75rem;
+	cursor: pointer;
+}
+.labels-back {
+	margin-bottom: 0.75rem;
+}
+.labels-title {
+	margin-bottom: 0.25rem;
+	color: var(--color-neutral-100);
+	font-weight: 600;
+}
+.labels-more {
+	margin-top: 0.75rem;
+}
+.labels-back:is(:hover, :focus-visible),
+.labels-more:is(:hover, :focus-visible) {
+	color: var(--color-neutral-200);
+}

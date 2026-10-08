@@ -293,6 +293,25 @@ export const getNote = (id: string) => invoke<Note | null>('get_note', { id });
 /** Some notes or pages with their text, in the order asked, those gone left out. */
 export const getNotes = (ids: string[]) => invoke<Note[]>('get_notes', { ids });
 
+/** A label, and how sure of it the classifier is, from 0 to 1. */
+export interface Guess {
+	label: string;
+	score: number;
+}
+
+/** What a note is about (SPEC 3.14): its part of life, and for work, its job family. */
+export interface NoteLabel {
+	life: Guess;
+	job?: Guess;
+}
+
+/** Every embedded note's label, by id. Empty without the embedding model. */
+export const noteLabels = () => invoke<Record<string, NoteLabel>>('note_labels');
+
+/** Fired after notes were embedded, or their vectors first loaded. */
+export const onVectorsChanged = (handler: () => void): Promise<UnlistenFn> =>
+	listen('vectors-changed', () => handler());
+
 /** Fired when notes moved on the map, or joined or left it. */
 export const onMapChanged = (handler: () => void): Promise<UnlistenFn> =>
 	listen('map-changed', () => handler());

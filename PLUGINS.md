@@ -116,6 +116,7 @@ marked external works.
 | `registerPage(type, create, options?)`     | a page at `/plugin/<type>/`, opened with `app.workspace.openPage` |
 | `registerMarkdownSyntax(syntax)`           | syntax for the editor and the cards                               |
 | `registerEditorExtension(extension)`       | any CodeMirror extension, in every editor                         |
+| `registerNoteChip(chip)`                   | a chip on a note's card, see [Note chips](#note-chips)            |
 | `loadData()`, `saveData(data)`             | the plugin's `data.json`                                          |
 | `register(cleanup)`                        | something to undo on unload                                       |
 | `registerEvent(off)`                       | `this.registerEvent(this.app.on('notes-changed', ...))`           |
@@ -358,6 +359,32 @@ Call `clear()` (or `remove()`) before emptying the element the timeline is in,
 as when a view closes, and destroy what you drew in the items first: an item
 left mounted stays in memory, as a `markdown.render` left undestroyed does.
 
+### Note chips
+
+`registerNoteChip(chip)` puts a chip under a note's text on its card, beside
+its thread. The cards call `chip(note)` as they draw: it returns `{ text,
+icon?, title?, onClick? }`, or null for none, and should only read what the
+plugin already holds. A plugin keeping that in Svelte state, as a core plugin
+can, has the cards redraw as it changes.
+
+`app.notes.labels()` gives what each embedded note is about, by id: its part
+of life, `life: { label, score }`, and for work its job family, `job`, each
+with how sure of it the app is, from 0 to 1. The Labels core plugin shows
+them as chips. `meaning-changed` says notes were embedded since.
+
+```js
+let labels = await this.app.notes.labels();
+this.registerEvent(
+	this.app.on('meaning-changed', async () => (labels = await this.app.notes.labels()))
+);
+this.registerNoteChip((note) => {
+	const label = labels[note.id];
+	return label && label.life.score >= 0.5 ? { text: label.life.label } : null;
+});
+```
+
+A chip read from a plain variable shows what it held when the card was drawn.
+
 ### Settings
 
 ```js
@@ -413,6 +440,8 @@ new Setting(section.contentEl).setName('Colour').addDropdown(/* ... */);
 | `notes.day(date)`, `notes.days()`, `notes.pages()`                        | the open space's notes                                        |
 | `notes.search(query)`                                                     | as the command center searches: words                         |
 | `notes.containing(needles)`                                               | every note and page whose text holds any of `needles`         |
+| `notes.get(ids)`                                                          | these notes and pages, in the order asked                     |
+| `notes.labels()`                                                          | what each note is about, by id, see [Note chips](#note-chips) |
 | `notes.setBody(note, body)`                                               | save a note's or a page's new text                            |
 | `notes.create(body, date?)`                                               | add a note to a day                                           |
 | `workspace.day`, `openDay(date)`, `openNote(note)`                        | the day shown, and the way to a day or a note                 |
@@ -421,6 +450,7 @@ new Setting(section.contentEl).setName('Colour').addDropdown(/* ... */);
 | `markdown.render(el, text, options?)`                                     | draw markdown as a card does; `onchange` lets widgets save    |
 | `markdown.images(text)`                                                   | the attached images a text shows: where, name, and `url`      |
 | `on('notes-changed', listener)`                                           | a note was saved or deleted, or another space opened          |
+| `on('meaning-changed', listener)`                                         | notes were embedded: their labels may have changed            |
 
 ### Icons
 
@@ -472,4 +502,4 @@ plugin can do. Its data goes in `core-plugins/<id>.json`.
 
 A core plugin is on unless the user switches it off. One with
 `offByDefault: true` in its entry starts off instead, until the user switches
-it on, as Stats and Journal view do.
+it on, as Stats, Journal view and Labels do.

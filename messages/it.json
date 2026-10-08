@@ -613,5 +613,62 @@
 				"countPlural=other": "Altre {count} attività sono ancora in corso."
 			}
 		}
-	]
+	],
+	"labels_plugin_name": "Etichette",
+	"labels_plugin_description": "Legge di cosa parla ogni nota dal suo significato: una parte della vita e, per il lavoro, il tipo di mestiere. Lo mostra sulla scheda della nota ed elenca le note per etichetta. Richiede il modello di ricerca.",
+	"labels_show": "Mostra etichette",
+	"labels_all": "Tutte le etichette",
+	"labels_open": "Note con l'etichetta {label}",
+	"labels_none": "Ancora nessuna etichetta: arrivano quando il modello di ricerca ha letto le note.",
+	"labels_setting_sure": "Mostra un'etichetta da",
+	"labels_setting_sure_hint": "Quanto l'app deve essere sicura di un'etichetta per mostrarla. Più basso mostra più etichette, e più sbagliate.",
+	"labels_unsure": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} nota esclusa, troppo incerta",
+				"countPlural=other": "{count} note escluse, troppo incerte"
+			}
+		}
+	],
+	"labels_name_work": "Lavoro",
+	"labels_name_health": "Salute",
+	"labels_name_family": "Famiglia",
+	"labels_name_home": "Casa",
+	"labels_name_food": "Cibo",
+	"labels_name_money": "Soldi",
+	"labels_name_paperwork": "Burocrazia",
+	"labels_name_transport": "Trasporti",
+	"labels_name_pets": "Animali",
+	"labels_name_social": "Vita sociale",
+	"labels_name_leisure": "Tempo libero",
+	"labels_name_travel": "Viaggi",
+	"labels_name_learning": "Apprendimento",
+	"labels_name_shopping": "Acquisti",
+	"labels_name_mind": "Pensieri",
+	"labels_name_errands": "Commissioni",
+	"labels_name_software": "Software",
+	"labels_name_infrastructure": "Infrastruttura",
+	"labels_name_data": "Dati",
+	"labels_name_sales": "Vendite",
+	"labels_name_marketing": "Marketing",
+	"labels_name_support": "Assistenza clienti",
+	"labels_name_finance_accounting": "Finanza e contabilità",
+	"labels_name_legal": "Legale",
+	"labels_name_management": "Management",
+	"labels_name_healthcare": "Sanità",
+	"labels_name_education": "Istruzione",
+	"labels_name_research": "Ricerca",
+	"labels_name_trades": "Artigianato",
+	"labels_name_hospitality": "Ospitalità",
+	"labels_name_retail": "Commercio",
+	"labels_name_logistics": "Logistica",
+	"labels_name_manufacturing": "Produzione",
+	"labels_name_agriculture": "Agricoltura",
+	"labels_name_creative": "Creatività",
+	"labels_name_media": "Media",
+	"labels_name_public_service": "Pubblica amministrazione",
+	"labels_name_security": "Sicurezza",
+	"labels_name_beauty": "Bellezza"
 }

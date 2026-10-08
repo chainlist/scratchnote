@@ -1,10 +1,13 @@
 import {
 	finishPage,
 	getDay,
+	getNotes,
 	isPage,
 	listDays,
 	listPages,
+	noteLabels,
 	notesContaining,
+	onVectorsChanged,
 	saveNote,
 	search,
 	updateNote,
@@ -54,16 +57,23 @@ export function reportError(message: string) {
 }
 
 const listeners = new Set<() => void>();
+const meaningListeners = new Set<() => void>();
+/** Listening to the embed task, from the first plugin that asks. */
+let hearingMeaning = false;
 
-/** Tell the plugins the notes changed: the shell calls it after each reload. */
-export function notesChanged() {
-	for (const listener of listeners) {
+function call(each: Set<() => void>) {
+	for (const listener of each) {
 		try {
 			listener();
 		} catch (e) {
 			console.error(e);
 		}
 	}
+}
+
+/** Tell the plugins the notes changed: the shell calls it after each reload. */
+export function notesChanged() {
+	call(listeners);
 }
 
 const runtime = { label: 'main' as App['window'], version: '' };
@@ -91,6 +101,8 @@ export const app: App = {
 		// Every match, as the plugin API has always given them.
 		search: async (query) => (await search(query)).notes,
 		containing: notesContaining,
+		get: getNotes,
+		labels: noteLabels,
 		async setBody(note, body) {
 			if (isPage(note)) {
 				await updatePage(note.id, body);
@@ -132,8 +144,14 @@ export const app: App = {
 				}))
 	},
 	on(event, listener) {
-		if (event !== 'notes-changed') throw new Error(`there is no ${event} event`);
-		listeners.add(listener);
-		return () => listeners.delete(listener);
+		const each =
+			event === 'notes-changed' ? listeners : event === 'meaning-changed' ? meaningListeners : null;
+		if (!each) throw new Error(`there is no ${event} event`);
+		if (each === meaningListeners && !hearingMeaning) {
+			hearingMeaning = true;
+			void onVectorsChanged(() => call(meaningListeners));
+		}
+		each.add(listener);
+		return () => each.delete(listener);
 	}
 };

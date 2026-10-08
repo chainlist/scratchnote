@@ -1,7 +1,14 @@
 import type { Extension } from '@codemirror/state';
 import type { Tree } from '@lezer/common';
 import type { MarkdownExtension } from '@lezer/markdown';
-import { pluginData, savePluginData, type Note, type PluginManifest } from '#lib/api.js';
+import {
+	pluginData,
+	savePluginData,
+	type Guess,
+	type Note,
+	type NoteLabel,
+	type PluginManifest
+} from '#lib/api.js';
 import type { Editor } from './editor';
 import { contribute, registry } from './registry.svelte';
 
@@ -26,7 +33,7 @@ export { Timeline, TimelineItem } from './timeline.svelte';
  * keep what is there working. PLUGINS.md is the guide for their authors.
  */
 
-export type { Note, PluginManifest };
+export type { Guess, Note, NoteLabel, PluginManifest };
 
 /** Text a plugin shows: a string, or a function to follow the interface language. */
 export type Label = string | (() => string);
@@ -50,8 +57,10 @@ export interface App {
 	 * Call `listener` on an event; returns what stops it, for `registerEvent`.
 	 * `notes-changed`: a note or page was saved or deleted, here
 	 * or on disk, or another space opened.
+	 * `meaning-changed`: notes were embedded, so what is read from their
+	 * meaning, such as their labels, may have changed.
 	 */
-	on(event: 'notes-changed', listener: () => void): () => void;
+	on(event: 'notes-changed' | 'meaning-changed', listener: () => void): () => void;
 }
 
 /** The notes of the open space. */
@@ -69,6 +78,14 @@ export interface Notes {
 	search(query: string): Promise<Note[]>;
 	/** Every note and page whose text holds any of `needles` as typed, newest first. */
 	containing(needles: string[]): Promise<Note[]>;
+	/** These notes and pages, in the order asked; one gone is left out. */
+	get(ids: string[]): Promise<Note[]>;
+	/**
+	 * What each note is about, by id, read from its meaning: its part of
+	 * life, and for work its job family, each with how sure of it the app
+	 * is. Only notes embedded so far, and none without the embedding model.
+	 */
+	labels(): Promise<Record<string, NoteLabel>>;
 	/** Save a new text for a note or a page. */
 	setBody(note: Note, body: string): Promise<void>;
 	/** Add a note to a day, today by default. Null for an empty body. */
@@ -192,6 +209,17 @@ export interface NodeRender {
 	 * Otherwise a click on it puts the cursor there, to edit it.
 	 */
 	handlesClicks?: boolean;
+}
+
+/** A chip under a note's text on its card, beside its thread. */
+export interface NoteChip {
+	text: string;
+	/** SVG markup, see `icon` in PLUGINS.md. */
+	icon?: string;
+	/** On pointing at it. */
+	title?: string;
+	/** Makes it a button. */
+	onClick?: () => unknown;
 }
 
 /** How a page registered with `registerPage` is laid out. */
@@ -401,6 +429,15 @@ export class Component {
 			throw new Error(`a page named ${type} is registered already`);
 		const fill = options.fill ?? false;
 		this.register(contribute('pages', { plugin: pluginOf(this).manifest.id, type, create, fill }));
+	}
+
+	/**
+	 * A chip on a note's card, from what `chip` returns for the note, or none
+	 * for null. The cards call it as they draw, so it should only read what
+	 * the plugin holds; one reading Svelte state redraws as that changes.
+	 */
+	registerNoteChip(chip: (note: Note) => NoteChip | null) {
+		this.register(contribute('chips', { plugin: pluginOf(this).manifest.id, chip }));
 	}
 
 	/** Syntax for the editor and the cards; they redraw with it at once. */

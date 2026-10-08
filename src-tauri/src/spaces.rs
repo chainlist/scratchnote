@@ -11,6 +11,7 @@ use std::sync::{Mutex, RwLock, RwLockWriteGuard};
 
 use serde::{Deserialize, Serialize};
 
+use crate::embed::classify::NoteLabel;
 use crate::embed::sync::Wake;
 use crate::embed::map::Map;
 use crate::embed::threads::{Edits, Threads};
@@ -218,6 +219,10 @@ pub struct Space {
     /// vectors. `None` until the embed task first runs with a model, which
     /// loads it from `db`. Taken after `vectors`, and never with `threads`.
     pub map: Mutex<Option<Map>>,
+    /// Each note's label (SPEC 3.14) with the body hash it was read from,
+    /// kept between calls so only notes embedded since are labelled again.
+    /// Taken after `vectors`.
+    labels: Mutex<HashMap<String, (String, NoteLabel)>>,
     /// Where the vectors, the placements, the map and the thread edits are
     /// saved, `None` while the space is not open. Taken after `vectors`,
     /// `threads` and `map` when held with any.
@@ -258,6 +263,7 @@ impl Space {
             threads: Mutex::new(None),
             placing: Mutex::new(()),
             map: Mutex::new(None),
+            labels: Mutex::new(HashMap::new()),
             db: Mutex::new(None),
             watcher: Mutex::new(None),
             retired: AtomicBool::new(false),
@@ -421,6 +427,25 @@ impl Space {
             .ok()
             .and_then(|vectors| Some(vectors.as_ref()?.similar(id, k, min_score)))
             .unwrap_or_default()
+    }
+
+    /// Every embedded note's label (SPEC 3.14). Empty until the embed task
+    /// has loaded the vectors, or when they come from another embedding
+    /// recipe than the classifier's.
+    pub fn labels(&self) -> HashMap<String, NoteLabel> {
+        let Ok(vectors) = self.vectors.lock() else {
+            return HashMap::new();
+        };
+        let Ok(mut kept) = self.labels.lock() else {
+            return HashMap::new();
+        };
+        match vectors.as_ref() {
+            Some(vectors) => crate::embed::classify::label_notes(vectors, &mut kept),
+            None => {
+                kept.clear();
+                HashMap::new()
+            }
+        }
     }
 
     /// Notes close to a vector that need not be stored, such as a draft's,

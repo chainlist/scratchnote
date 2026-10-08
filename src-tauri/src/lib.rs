@@ -79,6 +79,7 @@ pub fn run() {
             commands::search::search,
             commands::search::search_meaning,
             commands::search::similar_notes,
+            commands::labels::note_labels,
             commands::search::draft_hints,
             commands::threads::list_threads,
             commands::threads::get_thread,

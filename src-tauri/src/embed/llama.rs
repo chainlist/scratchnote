@@ -201,7 +201,7 @@ fn spell_tasks(text: &str) -> String {
 /// again. Named after the file alone, notes embedded at the last token for
 /// Qwen3-Embedding were kept and compared with queries averaged for
 /// EmbeddingGemma, which ranked notes close to at random.
-fn model_id(stem: &str, dims: usize) -> String {
+pub(super) fn model_id(stem: &str, dims: usize) -> String {
     format!(
         "{stem}/{dims}/{POOLING:?}/{}/{}|{}",
         document_prompt("").trim_end(),

@@ -613,5 +613,62 @@
 				"countPlural=other": "{count} other tasks are still running."
 			}
 		}
-	]
+	],
+	"labels_plugin_name": "Labels",
+	"labels_plugin_description": "Reads what each note is about from its meaning: a part of life, and for work the kind of job. Shows it on the note's card and lists the notes by label. Needs the search model.",
+	"labels_show": "Show labels",
+	"labels_all": "All labels",
+	"labels_open": "Notes labelled {label}",
+	"labels_none": "No labels yet: they come once the search model has read the notes.",
+	"labels_setting_sure": "Show a label from",
+	"labels_setting_sure_hint": "How sure the app must be of a label to show it. Lower shows more labels, and more wrong ones.",
+	"labels_unsure": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note left out, too unsure to label",
+				"countPlural=other": "{count} notes left out, too unsure to label"
+			}
+		}
+	],
+	"labels_name_work": "Work",
+	"labels_name_health": "Health",
+	"labels_name_family": "Family",
+	"labels_name_home": "Home",
+	"labels_name_food": "Food",
+	"labels_name_money": "Money",
+	"labels_name_paperwork": "Paperwork",
+	"labels_name_transport": "Transport",
+	"labels_name_pets": "Pets",
+	"labels_name_social": "Social",
+	"labels_name_leisure": "Leisure",
+	"labels_name_travel": "Travel",
+	"labels_name_learning": "Learning",
+	"labels_name_shopping": "Shopping",
+	"labels_name_mind": "Mind",
+	"labels_name_errands": "Errands",
+	"labels_name_software": "Software",
+	"labels_name_infrastructure": "Infrastructure",
+	"labels_name_data": "Data",
+	"labels_name_sales": "Sales",
+	"labels_name_marketing": "Marketing",
+	"labels_name_support": "Customer support",
+	"labels_name_finance_accounting": "Finance and accounting",
+	"labels_name_legal": "Legal",
+	"labels_name_management": "Management",
+	"labels_name_healthcare": "Healthcare",
+	"labels_name_education": "Education",
+	"labels_name_research": "Research",
+	"labels_name_trades": "Trades",
+	"labels_name_hospitality": "Hospitality",
+	"labels_name_retail": "Retail",
+	"labels_name_logistics": "Logistics",
+	"labels_name_manufacturing": "Manufacturing",
+	"labels_name_agriculture": "Agriculture",
+	"labels_name_creative": "Creative",
+	"labels_name_media": "Media",
+	"labels_name_public_service": "Public service",
+	"labels_name_security": "Security",
+	"labels_name_beauty": "Beauty"
 }

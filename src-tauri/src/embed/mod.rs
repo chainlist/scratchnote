@@ -8,6 +8,7 @@ pub mod activity;
 #[cfg(test)]
 mod bench;
 pub mod categories;
+pub mod classify;
 pub mod download;
 pub mod llama;
 pub mod map;

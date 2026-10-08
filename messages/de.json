@@ -613,5 +613,62 @@
 				"countPlural=other": "{count} weitere Aufgaben laufen noch."
 			}
 		}
-	]
+	],
+	"labels_plugin_name": "Etiketten",
+	"labels_plugin_description": "Liest aus der Bedeutung jeder Notiz, worum es geht: einen Lebensbereich und bei Arbeit die Art des Berufs. Zeigt es auf der Karte der Notiz und listet die Notizen nach Etikett. Braucht das Suchmodell.",
+	"labels_show": "Etiketten anzeigen",
+	"labels_all": "Alle Etiketten",
+	"labels_open": "Notizen mit dem Etikett {label}",
+	"labels_none": "Noch keine Etiketten: Sie kommen, sobald das Suchmodell die Notizen gelesen hat.",
+	"labels_setting_sure": "Etikett zeigen ab",
+	"labels_setting_sure_hint": "Wie sicher sich die App bei einem Etikett sein muss, um es zu zeigen. Niedriger zeigt mehr Etiketten, auch mehr falsche.",
+	"labels_unsure": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} Notiz ausgelassen, zu unsicher",
+				"countPlural=other": "{count} Notizen ausgelassen, zu unsicher"
+			}
+		}
+	],
+	"labels_name_work": "Arbeit",
+	"labels_name_health": "Gesundheit",
+	"labels_name_family": "Familie",
+	"labels_name_home": "Zuhause",
+	"labels_name_food": "Essen",
+	"labels_name_money": "Geld",
+	"labels_name_paperwork": "Papierkram",
+	"labels_name_transport": "Mobilität",
+	"labels_name_pets": "Haustiere",
+	"labels_name_social": "Soziales",
+	"labels_name_leisure": "Freizeit",
+	"labels_name_travel": "Reisen",
+	"labels_name_learning": "Lernen",
+	"labels_name_shopping": "Einkaufen",
+	"labels_name_mind": "Gedanken",
+	"labels_name_errands": "Besorgungen",
+	"labels_name_software": "Software",
+	"labels_name_infrastructure": "Infrastruktur",
+	"labels_name_data": "Daten",
+	"labels_name_sales": "Vertrieb",
+	"labels_name_marketing": "Marketing",
+	"labels_name_support": "Kundensupport",
+	"labels_name_finance_accounting": "Finanzen und Buchhaltung",
+	"labels_name_legal": "Recht",
+	"labels_name_management": "Management",
+	"labels_name_healthcare": "Gesundheitswesen",
+	"labels_name_education": "Bildung",
+	"labels_name_research": "Forschung",
+	"labels_name_trades": "Handwerk",
+	"labels_name_hospitality": "Gastgewerbe",
+	"labels_name_retail": "Einzelhandel",
+	"labels_name_logistics": "Logistik",
+	"labels_name_manufacturing": "Fertigung",
+	"labels_name_agriculture": "Landwirtschaft",
+	"labels_name_creative": "Kreativarbeit",
+	"labels_name_media": "Medien",
+	"labels_name_public_service": "Öffentlicher Dienst",
+	"labels_name_security": "Sicherheit",
+	"labels_name_beauty": "Kosmetik"
 }

@@ -613,5 +613,62 @@
 				"countPlural=other": "{count} autres tâches sont encore en cours."
 			}
 		}
-	]
+	],
+	"labels_plugin_name": "Étiquettes",
+	"labels_plugin_description": "Lit le sujet de chaque note d'après son sens : une part de la vie, et pour le travail le type de métier. L'affiche sur la carte de la note et liste les notes par étiquette. Demande le modèle de recherche.",
+	"labels_show": "Afficher les étiquettes",
+	"labels_all": "Toutes les étiquettes",
+	"labels_open": "Notes étiquetées {label}",
+	"labels_none": "Pas encore d'étiquettes : elles viennent une fois que le modèle de recherche a lu les notes.",
+	"labels_setting_sure": "Afficher une étiquette à partir de",
+	"labels_setting_sure_hint": "À quel point l'app doit être sûre d'une étiquette pour l'afficher. Plus bas, plus d'étiquettes, et plus de fausses.",
+	"labels_unsure": [
+		{
+			"declarations": ["input count", "local countPlural = count: plural"],
+			"selectors": ["countPlural"],
+			"match": {
+				"countPlural=one": "{count} note laissée de côté, trop incertaine",
+				"countPlural=other": "{count} notes laissées de côté, trop incertaines"
+			}
+		}
+	],
+	"labels_name_work": "Travail",
+	"labels_name_health": "Santé",
+	"labels_name_family": "Famille",
+	"labels_name_home": "Maison",
+	"labels_name_food": "Alimentation",
+	"labels_name_money": "Argent",
+	"labels_name_paperwork": "Démarches",
+	"labels_name_transport": "Transports",
+	"labels_name_pets": "Animaux",
+	"labels_name_social": "Vie sociale",
+	"labels_name_leisure": "Loisirs",
+	"labels_name_travel": "Voyages",
+	"labels_name_learning": "Apprentissage",
+	"labels_name_shopping": "Achats",
+	"labels_name_mind": "Pensées",
+	"labels_name_errands": "Commissions",
+	"labels_name_software": "Logiciel",
+	"labels_name_infrastructure": "Infrastructure",
+	"labels_name_data": "Données",
+	"labels_name_sales": "Vente",
+	"labels_name_marketing": "Marketing",
+	"labels_name_support": "Support client",
+	"labels_name_finance_accounting": "Finance et comptabilité",
+	"labels_name_legal": "Juridique",
+	"labels_name_management": "Management",
+	"labels_name_healthcare": "Soins",
+	"labels_name_education": "Enseignement",
+	"labels_name_research": "Recherche",
+	"labels_name_trades": "Bâtiment et artisanat",
+	"labels_name_hospitality": "Hôtellerie-restauration",
+	"labels_name_retail": "Commerce",
+	"labels_name_logistics": "Logistique",
+	"labels_name_manufacturing": "Industrie",
+	"labels_name_agriculture": "Agriculture",
+	"labels_name_creative": "Création",
+	"labels_name_media": "Médias",
+	"labels_name_public_service": "Service public",
+	"labels_name_security": "Sécurité",
+	"labels_name_beauty": "Beauté"
 }

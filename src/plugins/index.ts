@@ -1,6 +1,7 @@
 import type { CorePlugin } from '#lib/plugins/core.js';
 import basics from './basics';
 import journal from './journal';
+import labels from './labels';
 import stats from './stats';
 
 /**
@@ -11,4 +12,4 @@ import stats from './stats';
  * the app's messages and UI components, and nothing else of the app, so what
  * it does a community plugin could do too.
  */
-export const corePlugins: CorePlugin[] = [basics, stats, journal];
+export const corePlugins: CorePlugin[] = [basics, stats, journal, labels];

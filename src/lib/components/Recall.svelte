@@ -114,7 +114,7 @@
 							{...props}
 							type="button"
 							title={m.recall_title({ date: dayHeading(note.date) })}
-							class="flex min-w-0 cursor-pointer items-center gap-1 text-left transition-colors hover:text-neutral-200"
+							class="flex min-w-0 cursor-pointer items-center gap-1 text-left transition-colors hover:text-neutral-200 focus-visible:text-neutral-200"
 						>
 							<HistoryIcon class="size-3 shrink-0" />
 							<span class="shrink-0">{shortDay(note.date)}</span>

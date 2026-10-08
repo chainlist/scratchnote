@@ -15,6 +15,7 @@
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import { RadioGroup } from 'bits-ui';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import FolderIcon from '@lucide/svelte/icons/folder';
@@ -155,7 +156,7 @@
 
 			<div class="flex flex-col gap-2">
 				<step.icon class="size-6 text-primary" />
-				<h1 class="text-xl font-semibold">{step.title()}</h1>
+				<h1 id="onboarding-step" class="text-xl font-semibold">{step.title()}</h1>
 				<p class="text-sm text-muted-foreground">{step.body()}</p>
 			</div>
 
@@ -168,23 +169,29 @@
 
 			{#if view}
 				{#if step.id === 'language'}
-					<div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label={step.title()}>
+					<!-- One stop for Tab; the arrows move between the languages. -->
+					<RadioGroup.Root
+						value={view.language}
+						onValueChange={(picked) => {
+							const language = LANGUAGES.find((l) => l === picked);
+							if (language) void settings.apply({ language });
+						}}
+						aria-labelledby="onboarding-step"
+						class="grid grid-cols-2 gap-2"
+					>
 						{#each LANGUAGES as language (language)}
 							{@const selected = view.language === language}
-							<button
-								type="button"
-								role="radio"
-								aria-checked={selected}
-								onclick={() => settings.apply({ language })}
-								class="flex items-center justify-between rounded-lg border bg-card px-4 py-3 text-left text-sm transition-colors {selected
+							<RadioGroup.Item
+								value={language}
+								class="flex items-center justify-between rounded-lg border bg-card px-4 py-3 text-left text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 {selected
 									? 'border-primary bg-primary/5'
 									: 'hover:bg-accent'}"
 							>
 								{languageName(language)}
 								{#if selected}<CheckIcon class="size-4 text-primary" />{/if}
-							</button>
+							</RadioGroup.Item>
 						{/each}
-					</div>
+					</RadioGroup.Root>
 				{:else if step.id === 'welcome'}
 					<WelcomeStep />
 				{:else if step.id === 'folder'}
@@ -195,17 +202,20 @@
 							onerror={(message) => settings.say(message, true)}
 						/>
 						{#if restartNeeded}
-							<p class="text-xs text-amber-500">{m.onboarding_folder_restart()}</p>
+							<p class="text-xs text-warning">{m.onboarding_folder_restart()}</p>
 						{/if}
 					</div>
 				{:else if step.id === 'hotkey'}
 					<div class="flex flex-col items-start gap-3">
+						<!-- Named by the step's title, the hint read after it. -->
 						<HotkeyInput
 							value={view.captureHotkey}
 							onchange={(captureHotkey) => settings.apply({ captureHotkey })}
+							aria-labelledby="onboarding-step"
+							aria-describedby="onboarding-hotkey-hint"
 							class="h-11 w-72 text-base"
 						/>
-						<p class={hint}>{m.onboarding_hotkey_try()}</p>
+						<p id="onboarding-hotkey-hint" class={hint}>{m.onboarding_hotkey_try()}</p>
 					</div>
 				{:else if step.id === 'model'}
 					<EmbeddingModel {settings} />

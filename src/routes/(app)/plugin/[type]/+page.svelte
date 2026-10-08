@@ -45,6 +45,6 @@
 			{/key}
 		{/key}
 	{:else}
-		<p class="text-base text-neutral-600">{m.plugins_page_missing()}</p>
+		<p class="text-base text-meta">{m.plugins_page_missing()}</p>
 	{/if}
 </View>

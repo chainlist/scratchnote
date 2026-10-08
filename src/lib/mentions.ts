@@ -63,6 +63,14 @@ export function mentionHue(key: string) {
 	return HUES[hash % HUES.length];
 }
 
+/** A hue anywhere round the wheel for what has no name to take one from,
+ *  as a thread of the general scope or a page's pin: its id, hashed. */
+export function hueOf(id: string) {
+	let hash = 0;
+	for (const char of id) hash = (Math.imul(hash, 31) + char.codePointAt(0)!) >>> 0;
+	return hash % 360;
+}
+
 /** Where each of `days` within the last `span` days falls along them, from
  *  0 for `span` days ago to 1 for today. */
 export const along = (days: string[], span: number) =>

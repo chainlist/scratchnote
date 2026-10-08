@@ -62,7 +62,8 @@
 
 <View back={resolve(`day/${date}/`)} key={opened}>
 	{#snippet heading(compact: boolean)}
-		<!-- The page's title is its own heading, in the view; this is its day. -->
+		<!-- The page's title is its own heading, in the view (PageView's
+		     `own`); this is its day. -->
 		<span class="text-sm font-medium whitespace-nowrap text-muted-foreground">
 			{dayHeading(date, compact)}
 		</span>
@@ -77,5 +78,6 @@
 		onsimilar={shell.canSimilar ? shell.showSimilar : undefined}
 		onmove={shell.canMove ? shell.askMove : undefined}
 		onopennote={(note) => void shell.openCited(note)}
+		own
 	/>
 </View>

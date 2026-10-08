@@ -1,5 +1,6 @@
 import { resolve } from '$app/paths';
 import type { Note, Thread } from '#lib/api.js';
+import { hueOf, mentionHue } from '#lib/mentions.js';
 import { noteTitle } from '#lib/markdown.js';
 import { m } from '#lib/paraglide/messages.js';
 
@@ -21,6 +22,14 @@ export function threadScope(id: string): string | null {
 	if (!id.startsWith('@')) return null;
 	const end = id.indexOf(':');
 	return end < 0 ? null : id.slice(1, end);
+}
+
+/** A thread's own hue (oklch), the same in every view, its pin's and its
+ *  dots on the map too: its name's, for a thread found among a name's
+ *  notes, else one of its own from its id. */
+export function threadHue(id: string) {
+	const scope = threadScope(id);
+	return scope === null ? hueOf(id) : mentionHue(scope);
 }
 
 /** How many suggested threads the Threads page draws at a time. */

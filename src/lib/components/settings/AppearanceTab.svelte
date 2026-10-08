@@ -2,6 +2,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
+	import { RadioGroup } from 'bits-ui';
 	import {
 		ACCENTS,
 		DEFAULT_APPEARANCE,
@@ -72,27 +73,34 @@
 			/>
 		</SettingRow>
 		<SettingRow label={m.settings_accent()} hint={m.settings_accent_hint()}>
-			<div class="flex gap-2" role="radiogroup" aria-label={m.settings_accent()}>
+			<!-- One stop for Tab; the arrows move between the colours. -->
+			<RadioGroup.Root
+				value={view.accentColor}
+				onValueChange={(accentColor) => settings.apply({ accentColor })}
+				orientation="horizontal"
+				aria-label={m.settings_accent()}
+				class="flex gap-2"
+			>
 				{#each ACCENTS as accent (accent.name)}
 					{@const selected = view.accentColor === accent.name}
-					<button
-						type="button"
-						role="radio"
-						aria-checked={selected}
+					<RadioGroup.Item
+						value={accent.name}
 						aria-label={accent.label()}
 						title={accent.label()}
-						onclick={() => settings.apply({ accentColor: accent.name })}
-						class="flex size-7 cursor-pointer items-center justify-center rounded-full ring-offset-2 ring-offset-card transition {selected
+						class="flex size-7 cursor-pointer items-center justify-center rounded-full bg-(--swatch-light) ring-offset-2 ring-offset-card transition outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring focus-visible:outline-solid dark:bg-(--swatch-dark) {selected
 							? 'ring-2 ring-foreground'
 							: 'hover:ring-2 hover:ring-border'}"
-						style="background: {accent.swatch}"
+						style="--swatch-light: {accent.light.swatch}; --swatch-dark: {accent.dark.swatch}"
 					>
 						{#if selected}
-							<CheckIcon class="size-4" style="color: {accent.foreground}" />
+							<CheckIcon
+								class="size-4 text-(--on-light) dark:text-(--on-dark)"
+								style="--on-light: {accent.light.foreground}; --on-dark: {accent.dark.foreground}"
+							/>
 						{/if}
-					</button>
+					</RadioGroup.Item>
 				{/each}
-			</div>
+			</RadioGroup.Root>
 		</SettingRow>
 		<SettingRow label={m.settings_font()} hint={m.settings_font_hint()}>
 			<Select.Root

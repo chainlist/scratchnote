@@ -26,7 +26,7 @@
 			});
 			if (typeof picked === 'string') onchange(picked);
 		} catch (e) {
-			onerror(String(e));
+			onerror(m.error_pick_folder({ reason: String(e) }));
 		}
 	}
 </script>

@@ -55,15 +55,23 @@
 	<Dialog.Content
 		class="h-[min(640px,85vh)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[min(56rem,calc(100%-2rem))]"
 	>
-		<Tabs.Root value={titles[0]} orientation="vertical" class="h-full min-h-0 gap-0">
-			<aside class="flex w-48 shrink-0 flex-col gap-4 border-r bg-muted/40 p-3">
-				<Dialog.Title class="px-2 pt-1">{m.whats_new_title()}</Dialog.Title>
+		<!-- In a narrow window the kinds keep only their icons, named on hover. -->
+		<Tabs.Root value={titles[0]} orientation="vertical" class="@container h-full min-h-0 gap-0">
+			<aside
+				class="flex w-48 shrink-0 flex-col gap-4 border-r bg-muted/40 p-3 @max-[36rem]:w-auto @max-[36rem]:p-2"
+			>
+				<Dialog.Title class="px-2 pt-1 @max-[36rem]:sr-only">{m.whats_new_title()}</Dialog.Title>
 				<Tabs.List class="w-full gap-0.5 bg-transparent p-0">
 					{#each titles as title (title)}
 						{@const Icon = KINDS[title]?.icon ?? ListIcon}
-						<Tabs.Trigger value={title} class="h-8 w-full flex-none justify-start gap-2 px-2">
+						{@const label = KINDS[title]?.label() ?? title}
+						<Tabs.Trigger
+							value={title}
+							title={label}
+							class="h-8 w-full flex-none justify-start gap-2 px-2 @max-[36rem]:w-8 @max-[36rem]:justify-center @max-[36rem]:px-0"
+						>
 							<Icon />
-							{KINDS[title]?.label() ?? title}
+							<span class="truncate @max-[36rem]:sr-only">{label}</span>
 						</Tabs.Trigger>
 					{/each}
 				</Tabs.List>

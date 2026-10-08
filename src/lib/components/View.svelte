@@ -26,11 +26,19 @@
 
 	const shell = getShell();
 
+	/** The window's title, which a screen reader reads out as the view
+	 *  opens: the view's own, or its name where a heading stands in for it. */
+	const windowTitle = $derived(
+		[header.name ?? header.title, 'Scratchnote'].filter(Boolean).join(' · ')
+	);
+
 	/** A view opens at its top. */
 	function fromTop(node: HTMLElement) {
 		node.closest('main')?.scrollTo({ top: 0 });
 	}
 </script>
+
+<svelte:head><title>{windowTitle}</title></svelte:head>
 
 <!-- A view's column: its title, what the app has to say, and the view. -->
 <div class={fill ? 'flex h-full w-full flex-col' : 'mx-auto w-full max-w-3xl'}>

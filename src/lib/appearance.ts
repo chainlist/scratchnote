@@ -34,46 +34,52 @@ export const FONTS = [
 	{ name: 'system', label: m.settings_font_system, family: SANS }
 ];
 
+const INK = 'oklch(0.205 0 0)';
+const WHITE = 'oklch(0.985 0 0)';
+
 /**
- * Accent presets. Neutral is the palette layout.css
- * already defines; its values here only draw the swatch.
+ * Accent presets, a swatch and the text on it for each theme. The light
+ * theme's are deeper, so the accent reads as text and its fill holds white
+ * text on a near-white page; the dark theme's take dark text. Each pair is at
+ * least 4.5:1 both ways (swatch on the page, text on the swatch). Neutral is
+ * the palette layout.css already defines; its values here only draw the swatch.
  */
 export const ACCENTS = [
 	{
 		name: 'neutral',
 		label: m.settings_accent_neutral,
-		swatch: 'oklch(0.922 0 0)',
-		foreground: 'oklch(0.205 0 0)'
+		dark: { swatch: 'oklch(0.922 0 0)', foreground: INK },
+		light: { swatch: INK, foreground: WHITE }
 	},
 	{
 		name: 'blue',
 		label: m.settings_accent_blue,
-		swatch: 'oklch(0.623 0.214 259.815)',
-		foreground: 'oklch(0.985 0 0)'
+		dark: { swatch: 'oklch(0.623 0.214 259.815)', foreground: INK },
+		light: { swatch: 'oklch(0.55 0.214 259.815)', foreground: WHITE }
 	},
 	{
 		name: 'violet',
 		label: m.settings_accent_violet,
-		swatch: 'oklch(0.606 0.25 292.717)',
-		foreground: 'oklch(0.985 0 0)'
+		dark: { swatch: 'oklch(0.65 0.206 292.717)', foreground: INK },
+		light: { swatch: 'oklch(0.57 0.25 292.717)', foreground: WHITE }
 	},
 	{
 		name: 'green',
 		label: m.settings_accent_green,
-		swatch: 'oklch(0.723 0.219 149.579)',
-		foreground: 'oklch(0.205 0 0)'
+		dark: { swatch: 'oklch(0.723 0.219 149.579)', foreground: INK },
+		light: { swatch: 'oklch(0.52 0.143 149.579)', foreground: WHITE }
 	},
 	{
 		name: 'orange',
 		label: m.settings_accent_orange,
-		swatch: 'oklch(0.705 0.213 47.604)',
-		foreground: 'oklch(0.205 0 0)'
+		dark: { swatch: 'oklch(0.705 0.213 47.604)', foreground: INK },
+		light: { swatch: 'oklch(0.55 0.149 47.604)', foreground: WHITE }
 	},
 	{
 		name: 'rose',
 		label: m.settings_accent_rose,
-		swatch: 'oklch(0.645 0.246 16.439)',
-		foreground: 'oklch(0.985 0 0)'
+		dark: { swatch: 'oklch(0.645 0.246 16.439)', foreground: INK },
+		light: { swatch: 'oklch(0.57 0.228 16.439)', foreground: WHITE }
 	}
 ];
 
@@ -91,6 +97,10 @@ const NEUTRAL_SCALE: [number, number, number][] = [
 	[900, 0.205, 0.018],
 	[950, 0.145, 0.015]
 ];
+
+/** The light theme's own lightness where the mirror falls short: mirrored,
+ *  neutral-900 sits at 0.97 on a 0.985 page, a hover fill no one sees. */
+const LIGHT_LIGHTNESS: Partial<Record<number, number>> = { 900: 0.955 };
 
 export const THEMES: { name: Settings['theme']; label: () => string }[] = [
 	{ name: 'dark', label: m.settings_theme_dark },
@@ -134,21 +144,24 @@ export function applyAppearance(appearance: Appearance) {
 	root.classList.toggle('dark', dark);
 	// An unknown name, say from a hand-edited settings.json, falls back to neutral.
 	const accent = ACCENTS.find((a) => a.name === accentColor && a.name !== 'neutral');
+	const colours = accent?.[dark ? 'dark' : 'light'];
 	const vars: [string, string | undefined][] = [
-		['--primary', accent?.swatch],
-		['--ring', accent?.swatch],
-		['--sidebar-primary', accent?.swatch],
-		['--sidebar-ring', accent?.swatch],
-		['--primary-foreground', accent?.foreground],
-		['--sidebar-primary-foreground', accent?.foreground]
+		['--primary', colours?.swatch],
+		['--ring', colours?.swatch],
+		['--primary-foreground', colours?.foreground],
+		// Toward the text colour, away from the page: the label on it gains contrast.
+		['--primary-hover', colours && `color-mix(in oklch, ${colours.swatch}, var(--foreground) 20%)`]
 	];
 	// Tint the neutral scale with the accent hue. Surfaces take the most
 	// chroma; the steps used for text stay close to grey. Light mode mirrors
 	// the scale, so neutral-950 is the page in both themes and the
-	// components' hardcoded neutral-* classes flip without a light variant.
-	const hue = accent?.swatch.match(/([\d.]+)\)$/)?.[1];
+	// components' hardcoded neutral-* classes flip without a light variant;
+	// the one step the mirror leaves too faint takes its own value.
+	const hue = colours?.swatch.match(/([\d.]+)\)$/)?.[1];
 	NEUTRAL_SCALE.forEach(([step, , chroma], i) => {
-		const lightness = NEUTRAL_SCALE[dark ? i : NEUTRAL_SCALE.length - 1 - i][1];
+		const lightness = dark
+			? NEUTRAL_SCALE[i][1]
+			: (LIGHT_LIGHTNESS[step] ?? NEUTRAL_SCALE[NEUTRAL_SCALE.length - 1 - i][1]);
 		const value = `oklch(${lightness} ${hue ? chroma : 0} ${hue ?? 0})`;
 		vars.push([`--color-neutral-${step}`, dark && !hue ? undefined : value]);
 	});

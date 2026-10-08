@@ -45,10 +45,13 @@
 		class="text-primary hover:text-primary"
 	>
 		<DownloadIcon class={appUpdate.installing ? 'animate-pulse' : ''} />
-		{appUpdate.installing
-			? m.update_installing()
-			: appUpdate.failed
-				? m.update_retry()
-				: m.update_to({ version: appUpdate.update.version })}
+		<!-- Left to the icon and its hint in a narrow top bar. -->
+		<span class="@max-[48rem]:sr-only">
+			{appUpdate.installing
+				? m.update_installing()
+				: appUpdate.failed
+					? m.update_retry()
+					: m.update_to({ version: appUpdate.update.version })}
+		</span>
 	</Button>
 {/if}

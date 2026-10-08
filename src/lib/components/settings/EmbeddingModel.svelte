@@ -39,7 +39,7 @@
 			await downloadEmbeddingModel();
 			settings.say(m.settings_embedding_downloaded());
 		} catch (e) {
-			settings.say(String(e), true);
+			settings.say(m.error_model_download({ reason: String(e) }), true);
 		}
 	}
 </script>
@@ -61,11 +61,13 @@
 				disabled={!embedding || embedding.downloading != null}
 			>
 				<DownloadIcon />
-				{EMBEDDING_SIZE}
+				{m.settings_model_download({ size: EMBEDDING_SIZE })}
 			</Button>
 		{/if}
 	</SettingRow>
 	{#if embedding?.downloading != null}
-		<div class="px-4 py-3"><Progress value={embedding.downloading} /></div>
+		<div class="px-4 py-3">
+			<Progress value={embedding.downloading} aria-label={m.settings_embedding()} />
+		</div>
 	{/if}
 </div>

@@ -104,7 +104,10 @@
 															: ''}">{number}</span
 													>
 													{#if count > 0}
-														<span>{m.tags_notes({ count })}</span>
+														<!-- Whole, unlike the stock cell's faded spans: the
+														     count is read, and a day outside the month is
+														     already in the quiet tone. -->
+														<span class="opacity-100!">{m.tags_notes({ count })}</span>
 													{/if}
 												{/snippet}
 											</Calendar.Day>

@@ -27,6 +27,13 @@
 	/** How many of the others are drawn at a time. */
 	const PAGE = 30;
 
+	/** A name gone quiet reads in the quiet tone, its facts still readable
+	 *  under it; its letter and pulse fade. All come back under the pointer. */
+	const nameTone = (quiet: boolean) =>
+		quiet
+			? 'text-meta transition-colors group-hover:text-neutral-100 group-has-focus-visible:text-neutral-100'
+			: 'text-neutral-100';
+
 	const pinOf = (mention: MentionSummary): Pin => ({
 		kind: 'mention',
 		target: mention.key,
@@ -82,9 +89,13 @@
 </script>
 
 <!-- A name's letter in its own colour. -->
-{#snippet letter(mention: MentionSummary)}
+{#snippet letter(mention: MentionSummary, quiet: boolean)}
 	<span
-		class="name-tint flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold"
+		class={[
+			'name-tint flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold',
+			quiet &&
+				'opacity-50 transition-opacity group-hover:opacity-100 group-has-focus-visible:opacity-100'
+		]}
 	>
 		{[...mention.name][0]?.toUpperCase()}
 	</span>
@@ -92,7 +103,7 @@
 
 <!-- How many notes name it, the day of the last, and how many threads it holds. -->
 {#snippet facts(mention: MentionSummary, quiet: boolean)}
-	<span class="flex items-center gap-3 text-xs text-neutral-500">
+	<span class="flex items-center gap-3 text-xs text-meta">
 		<span class="truncate">
 			{(quiet ? m.mentions_quiet : m.thread_last)({
 				count: mention.notes,
@@ -109,9 +120,14 @@
 
 <!-- A dot a day it came up on a line of the last twelve weeks, ticked every
      four, today at the right end. -->
-{#snippet pulse(at: number[], wide: boolean)}
+{#snippet pulse(at: number[], wide: boolean, quiet: boolean)}
 	<span
-		class={['relative h-3', wide ? 'w-full' : 'w-24 shrink-0']}
+		class={[
+			'relative h-3',
+			wide ? 'w-full' : 'w-24 shrink-0',
+			quiet &&
+				'opacity-50 transition-opacity group-hover:opacity-100 group-has-focus-visible:opacity-100'
+		]}
 		title={m.mentions_pulse()}
 		aria-hidden="true"
 	>
@@ -140,7 +156,7 @@
 		variant="ghost"
 		size="icon-sm"
 		onclick={() => void shell.togglePin(pin)}
-		aria-label={label}
+		aria-label={m.pin_add()}
 		aria-pressed={pinned}
 		title={label}
 		class={[
@@ -162,11 +178,11 @@
      time with Show more and how many are left under it. Each shows its
      letter in its own colour, how many notes name it, the day of the last,
      how many threads it holds and a pin to the left edge. A name gone quiet
-     fades. A box above finds a name: Enter opens the first found, Esc
+     fades, but for its facts. A box above finds a name: Enter opens the first found, Esc
      clears it (SPEC 3.10). -->
 <View back={shell.back} title={m.mentions_title()}>
 	{#if data.mentions.length === 0}
-		<p class="text-base text-neutral-600">{m.mentions_none()}</p>
+		<p class="text-base text-meta">{m.mentions_none()}</p>
 	{:else}
 		{@const headed = shownInHand.length > 0 && shownOthers.length > 0}
 		<InputGroup.Root class="mb-6 h-8">
@@ -191,7 +207,7 @@
 		{#if shownInHand.length > 0}
 			<section class="@container mb-8">
 				{#if headed}
-					<h2 class="mb-2 text-xs font-medium text-neutral-500">{m.mentions_active()}</h2>
+					<h2 class="mb-2 text-xs font-medium text-meta">{m.mentions_active()}</h2>
 				{/if}
 				<ul class="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-3">
 					{#each shownInHand as mention (mention.key)}
@@ -200,19 +216,18 @@
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- mentionHref resolves it -->
 							<a
 								href={mentionHref(mention.name)}
-								class={[
-									'flex h-full flex-col gap-4 rounded-lg border border-neutral-800 p-3 transition-colors hover:border-neutral-700 hover:bg-neutral-900',
-									quiet && 'opacity-50 hover:opacity-100'
-								]}
+								class="flex h-full flex-col gap-4 rounded-lg border border-neutral-800 p-3 transition-colors hover:border-neutral-700 hover:bg-neutral-900 has-focus-visible:border-neutral-700 has-focus-visible:bg-neutral-900"
 							>
 								<span class="flex min-w-0 items-center gap-2.5 pr-7">
-									{@render letter(mention)}
+									{@render letter(mention, quiet)}
 									<span class="min-w-0 flex-1">
-										<span class="block truncate font-medium text-neutral-100">@{mention.name}</span>
+										<span class={['block truncate font-medium', nameTone(quiet)]}
+											>@{mention.name}</span
+										>
 										{@render facts(mention, quiet)}
 									</span>
 								</span>
-								{@render pulse(along(mention.days, SPAN), true)}
+								{@render pulse(along(mention.days, SPAN), true, quiet)}
 							</a>
 							{@render pinButton(mention, 'absolute top-2 right-2')}
 						</li>
@@ -224,31 +239,28 @@
 		{#if shownOthers.length > 0}
 			<section>
 				{#if headed}
-					<h2 class="mb-1 text-xs font-medium text-neutral-500">{m.mentions_others()}</h2>
+					<h2 class="mb-1 text-xs font-medium text-meta">{m.mentions_others()}</h2>
 				{/if}
 				<ul>
 					{#each shownOthers.slice(0, drawn) as mention (mention.key)}
 						{@const quiet = daysAgo(mention.last) > QUIET}
 						{@const at = along(mention.days, SPAN)}
 						<li
-							class="group -mx-2 flex items-center gap-1 rounded hover:bg-neutral-900"
+							class="group -mx-2 flex items-center gap-1 rounded hover:bg-neutral-900 has-focus-visible:bg-neutral-900"
 							style:--hue={mentionHue(mention.key)}
 						>
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- mentionHref resolves it -->
 							<a
 								href={mentionHref(mention.name)}
-								class={[
-									'flex min-w-0 flex-1 items-center gap-3 py-2 pl-2 transition-opacity',
-									quiet && 'opacity-50 group-hover:opacity-100'
-								]}
+								class="flex min-w-0 flex-1 items-center gap-3 py-2 pl-2"
 							>
-								{@render letter(mention)}
+								{@render letter(mention, quiet)}
 								<span class="min-w-0 flex-1">
-									<span class="block truncate text-neutral-100">@{mention.name}</span>
+									<span class={['block truncate', nameTone(quiet)]}>@{mention.name}</span>
 									{@render facts(mention, quiet)}
 								</span>
 								{#if at.length >= 2}
-									{@render pulse(at, false)}
+									{@render pulse(at, false, quiet)}
 								{/if}
 							</a>
 							{@render pinButton(mention, 'mr-1')}
@@ -269,7 +281,7 @@
 		{/if}
 
 		{#if shownInHand.length === 0 && shownOthers.length === 0}
-			<p class="text-sm text-neutral-500">{m.mentions_no_match()}</p>
+			<p class="text-sm text-meta">{m.mentions_no_match()}</p>
 		{/if}
 	{/if}
 </View>

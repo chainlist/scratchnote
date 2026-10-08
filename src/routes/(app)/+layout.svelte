@@ -79,6 +79,20 @@
 		return () => clearTimeout(timer);
 	});
 
+	/** The room beside the ribbon, in px, which the dock and the view share. */
+	let room = $state(0);
+	/** How narrow and how wide the dock goes, as percentages of that room:
+	 *  never under 18rem itself nor leaving the view under 24rem, at any text
+	 *  size, as far as the window allows; in a window too narrow for both,
+	 *  half each. Whole percentages, so the bounds move only now and then. */
+	const dockBounds = $derived.by(() => {
+		const rems = room / shell.textSize;
+		if (!rems) return { min: DOCK_MIN, max: DOCK_MAX };
+		const min = Math.min(50, Math.max(DOCK_MIN, Math.ceil((18 / rems) * 100)));
+		const max = Math.max(min, Math.min(DOCK_MAX, Math.floor(100 - (24 / rems) * 100)));
+		return { min, max };
+	});
+
 	/** Release notes waiting to be read after an update. */
 	let releaseNotes = $state<Release[] | null>(null);
 	/** Until it is known whether they show, any other dialog at launch waits. */
@@ -151,7 +165,7 @@
 				})
 			);
 			// A note saved from the capture window lands in another webview.
-			off.push(onNoteUpdated(() => void shell.refresh()));
+			off.push(onNoteUpdated((id) => void shell.refresh(id)));
 			// The watcher fires this when a daily file is edited outside the app.
 			off.push(onIndexRebuilt(() => void shell.refresh()));
 			off.push(onOpenSettings(() => (shell.settingsOpen = true)));
@@ -207,30 +221,32 @@
 		<!-- The dock goes before or after the view, on the side it was moved
 		     to. The view's pane stays in place, so the view is never mounted
 		     again when the dock opens, closes or moves. -->
-		<Resizable.PaneGroup direction="horizontal" class="min-w-0 flex-1">
-			{#if shell.dockOpen && shell.dockSide === 'left'}
-				{@render dock(1)}
-				<Resizable.Handle class="z-10 after:w-2" />
-			{/if}
-			<Resizable.Pane id="view" order={2} class="relative">
-				<main bind:offsetWidth={shell.width} class="h-full overflow-y-auto px-6 pb-16">
-					{@render children()}
-				</main>
-				{#if loading}
-					<!-- Over the view being left, until the next one is ready. -->
-					<div
-						class="absolute inset-0 z-20 flex items-center justify-center bg-background/60"
-						transition:fade={{ duration: 120 }}
-					>
-						<Spinner class="size-6 text-muted-foreground" aria-label={m.view_loading()} />
-					</div>
+		<div bind:clientWidth={room} class="flex min-w-0 flex-1">
+			<Resizable.PaneGroup direction="horizontal" class="min-w-0 flex-1">
+				{#if shell.dockOpen && shell.dockSide === 'left'}
+					{@render dock(1)}
+					<Resizable.Handle class="z-10 after:w-2" />
 				{/if}
-			</Resizable.Pane>
-			{#if shell.dockOpen && shell.dockSide === 'right'}
-				<Resizable.Handle class="z-10 after:w-2" />
-				{@render dock(3)}
-			{/if}
-		</Resizable.PaneGroup>
+				<Resizable.Pane id="view" order={2} class="relative">
+					<main bind:offsetWidth={shell.width} class="h-full overflow-y-auto px-6 pb-16">
+						{@render children()}
+					</main>
+					{#if loading}
+						<!-- Over the view being left, until the next one is ready. -->
+						<div
+							class="absolute inset-0 z-20 flex items-center justify-center bg-background/60"
+							transition:fade={{ duration: 120 }}
+						>
+							<Spinner class="size-6 text-muted-foreground" aria-label={m.view_loading()} />
+						</div>
+					{/if}
+				</Resizable.Pane>
+				{#if shell.dockOpen && shell.dockSide === 'right'}
+					<Resizable.Handle class="z-10 after:w-2" />
+					{@render dock(3)}
+				{/if}
+			</Resizable.PaneGroup>
+		</div>
 	</div>
 </div>
 
@@ -239,8 +255,8 @@
 		id="dock"
 		{order}
 		defaultSize={shell.dockSize}
-		minSize={DOCK_MIN}
-		maxSize={DOCK_MAX}
+		minSize={dockBounds.min}
+		maxSize={dockBounds.max}
 		onResize={shell.resizeDock}
 	>
 		{#if shell.docked}

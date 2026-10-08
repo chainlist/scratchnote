@@ -87,7 +87,7 @@
 			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 			<div
 				onclick={() => onopen(note)}
-				class="cursor-pointer rounded-lg border border-neutral-800 px-4 py-3 transition-colors duration-300 group-hover:border-neutral-700 group-hover:bg-neutral-900"
+				class="cursor-pointer rounded-lg border border-neutral-800 px-4 py-3 transition-colors duration-300 group-hover:border-neutral-700 group-hover:bg-neutral-900 group-has-focus-visible:border-neutral-700 group-has-focus-visible:bg-neutral-900"
 			>
 				<div class="flex items-baseline gap-3">
 					<button
@@ -111,7 +111,7 @@
 							}}
 							aria-label={m.pages_open_side()}
 							title={m.pages_open_side()}
-							class="cursor-pointer rounded px-1 py-0.5 text-neutral-400 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200"
+							class="-my-1 flex size-6 cursor-pointer items-center justify-center rounded text-neutral-400 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
 						>
 							<PanelRightOpenIcon class="size-3.5" />
 						</button>

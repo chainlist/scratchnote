@@ -69,6 +69,8 @@ export interface ViewTitle {
 	tentative?: boolean;
 	/** In place of the title, told whether it is the small copy in the top bar. */
 	heading?: Snippet<[compact: boolean]>;
+	/** What the window's title calls the view, where `heading` stands in for `title`. */
+	name?: string;
 }
 
 /**
@@ -182,15 +184,28 @@ export class Shell implements WorkspaceHost {
 		history.back();
 	};
 
-	/** Load what the views show again, after a change here or on disk. */
-	refresh = async () => {
+	/** Threads' first notes to read again with the next reload: those changed,
+	 *  or all of them when what changed is not known. */
+	#leadsChanged: Set<string> | 'all' = new Set();
+
+	/** Load what the views show again, after a change here or on disk;
+	 *  `changed` is the note that changed, when only one did. */
+	refresh = async (changed?: string) => {
+		if (changed === undefined) this.#leadsChanged = 'all';
+		else if (this.#leadsChanged !== 'all') this.#leadsChanged.add(changed);
 		// An invalidation aborts a navigation under way, so it waits for one to land.
 		while (navigating.complete) await navigating.complete.catch(() => {});
+		const leads = this.#leadsChanged;
+		this.#leadsChanged = new Set();
 		await invalidate('app:notes');
 		this.reloads++;
 		// A note edited may be a thread's first: its name is read again, the
-		// old one showing meanwhile.
-		this.#readLeads(Object.keys(this.leads), true);
+		// old one showing meanwhile. Only those changed, as a space can name
+		// hundreds of threads by their first notes.
+		this.#readLeads(
+			leads === 'all' ? Object.keys(this.leads) : [...leads].filter((id) => id in this.leads),
+			true
+		);
 		// The plugins' pages and panels load their notes themselves.
 		notesChanged();
 	};
@@ -394,7 +409,7 @@ export class Shell implements WorkspaceHost {
 		try {
 			await clearDayAhead(note.date, note.id);
 			this.#cleared(m.error_clear_day_ahead());
-			await this.refresh();
+			await this.refresh(note.id);
 		} catch (e) {
 			this.fail(m.error_clear_day_ahead(), e, () => this.clearDayAhead(note));
 		}
@@ -631,7 +646,7 @@ export class Shell implements WorkspaceHost {
 				this.saveFailures = Object.fromEntries(
 					Object.entries(this.saveFailures).filter(([id]) => id !== note.id)
 				);
-			await this.refresh();
+			await this.refresh(note.id);
 			return true;
 		} catch (e) {
 			// Shown on the note itself: the editor keeps the text, and its

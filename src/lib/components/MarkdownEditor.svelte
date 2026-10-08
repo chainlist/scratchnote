@@ -331,20 +331,20 @@
 		'.cm-scroller': { fontFamily: 'inherit', lineHeight: 'inherit' },
 		'.cm-content': { padding: '0', minHeight: '100%', caretColor: 'currentColor' },
 		'.cm-line': { padding: '0 0 0 var(--md-indent, 0)' },
-		'.cm-placeholder': { color: 'var(--color-neutral-600)' },
+		'.cm-placeholder': { color: 'var(--color-meta)' },
 		// The names offered as `@` is typed, as the app's menus look.
 		'.cm-tooltip.cm-tooltip-autocomplete': {
 			border: 'none',
-			borderRadius: '0.5rem',
+			borderRadius: 'var(--radius-lg)',
 			padding: '0.25rem',
 			background: 'var(--popover)',
 			color: 'var(--popover-foreground)',
-			boxShadow:
-				'0 4px 12px rgb(0 0 0 / 0.3), 0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent)'
+			// A hairline, not a shadow: the app lifts by tone and border.
+			boxShadow: '0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent)'
 		},
 		'.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'inherit', maxHeight: '14rem' },
 		'.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
-			borderRadius: '0.375rem',
+			borderRadius: 'var(--radius-md)',
 			padding: '0.2rem 0.5rem',
 			lineHeight: '1.4'
 		},
@@ -359,7 +359,7 @@
 			fontStyle: 'normal',
 			fontFamily: 'var(--font-mono)',
 			fontSize: '0.75em',
-			color: 'var(--color-neutral-500)'
+			color: 'var(--color-meta)'
 		}
 	});
 </script>
@@ -447,7 +447,7 @@
 
 	// See-through greys, so the buttons show on every editor's background.
 	const tool =
-		'size-6 min-w-6 px-0 text-neutral-500 hover:bg-neutral-500/15 hover:text-neutral-200 dark:hover:bg-neutral-500/15 aria-pressed:bg-neutral-500/25 aria-pressed:text-neutral-100 data-[state=on]:bg-neutral-500/25';
+		'size-6 min-w-6 px-0 text-neutral-400 hover:bg-neutral-500/15 hover:text-neutral-200 aria-pressed:bg-neutral-500/25 aria-pressed:text-neutral-100 data-[state=on]:bg-neutral-500/25';
 	const divider = 'mx-1 h-4 bg-neutral-500/30 data-vertical:self-center';
 
 	/** A toolbar button: the text keeps the focus, so the next one acts on it too. */
@@ -471,7 +471,7 @@
 			view.dispatch(view.state.replaceSelection(attached.map(attachmentLink).join('\n')));
 			onattach?.(attached, into);
 		} catch (e) {
-			onerror(String(e));
+			onerror(m.error_attach({ reason: String(e) }));
 		}
 	}
 

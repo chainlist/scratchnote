@@ -26,7 +26,8 @@
 
 	let draft = $state('');
 	let saving = $state(false);
-	let error = $state<string | null>(null);
+	/** What failed in plain words, and the error as it came for its tooltip. */
+	let error = $state<{ what: string; detail?: string } | null>(null);
 	let saved = $state(false);
 	let spaces = $state<SpacesView | null>(null);
 	/** The space picked for this draft; until then it goes into the open one. */
@@ -120,7 +121,7 @@
 			}
 			await hideCapture();
 		} catch (e) {
-			error = String(e);
+			error = { what: m.error_save_note(), detail: String(e) };
 		} finally {
 			saving = false;
 		}
@@ -138,7 +139,7 @@
 			forget();
 			error = null;
 		} catch (e) {
-			error = String(e);
+			error = { what: m.error_capture_page(), detail: String(e) };
 		} finally {
 			saving = false;
 		}
@@ -176,10 +177,11 @@
 </script>
 
 <!-- The frame and the footer drag the window; the buttons in the footer
-     still click, as Tauri skips them. -->
+     still click, as Tauri skips them. A window sized too short for the
+     formatting buttons and a few lines keeps the lines. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-	class="flex h-screen flex-col gap-2 border border-neutral-700 bg-neutral-900 p-3 text-neutral-100"
+	class="@container-size flex h-screen flex-col gap-2 border border-neutral-700 bg-neutral-900 p-3 text-neutral-100"
 	onkeydown={onKeydown}
 	data-tauri-drag-region
 >
@@ -189,18 +191,28 @@
 		placeholder={m.capture_placeholder()}
 		label={m.capture_placeholder()}
 		space={attachedIn ?? (target || undefined)}
-		onerror={(message) => (error = message)}
+		onerror={(message) => (error = { what: message })}
 		onattach={onAttach}
 		class="min-h-0 flex-1 rounded bg-neutral-800 p-2 text-sm leading-relaxed [--md-image-height:6rem]"
+		toolbarClass="[@container(max-height:8rem)]:hidden"
 	/>
 
+	<!-- On a line of its own, so a narrow window still says what went wrong. -->
+	{#if error}
+		<p
+			role="alert"
+			class="line-clamp-2 text-[0.6875rem] break-words text-destructive"
+			title={error.detail}
+		>
+			{error.what}
+		</p>
+	{/if}
+
 	<div
-		class="flex items-center justify-between gap-2 text-[0.6875rem] text-neutral-500"
+		class="flex items-center justify-between gap-2 text-[0.6875rem] text-meta"
 		data-tauri-drag-region="deep"
 	>
-		{#if error}
-			<span class="min-w-0 truncate text-red-400" title={error}>{error}</span>
-		{:else}
+		{#if !error}
 			<!-- An old note on the same thing, once one stands out, in place of
 			     the hint (SPEC 6.3). Reading it keeps the draft. -->
 			<Recall
@@ -216,8 +228,8 @@
 				<span class="min-w-0 truncate">{m.capture_hint()}</span>
 			</Recall>
 		{/if}
-		<span class="flex shrink-0 items-center gap-2">
-			<span>{saved ? m.capture_saved() : saving ? m.capture_saving() : ''}</span>
+		<span class="ml-auto flex shrink-0 items-center gap-2">
+			<span aria-live="polite">{saved ? m.capture_saved() : saving ? m.capture_saving() : ''}</span>
 			{#if spaces && spaces.spaces.length > 1}
 				<!-- Where the note goes: the open space unless another is picked,
 				     which stands out. Picked, the text takes the focus back. -->

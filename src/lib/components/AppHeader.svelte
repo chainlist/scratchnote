@@ -31,23 +31,26 @@
 
 <header
 	data-tauri-drag-region="deep"
-	class={['relative flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}
+	class={['@container relative flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}
 >
 	<SpaceSwitcher view={spaces} />
 	{#if title}
 		<!-- Rises into place as the page's own title leaves, and sinks back out.
 		     Centred on the window, it keeps clear of the bar's two ends, the
-		     wider being the window's buttons, and is cut short in a narrow one. -->
+		     wider being the window's buttons, and is cut short in a narrow one.
+		     In a narrower one still it stays away rather than cover them. -->
 		<div
 			inert={!titleShown}
-			class="absolute left-1/2 flex max-w-[calc(100%-28rem)] -translate-x-1/2 items-center gap-1 transition duration-200 ease-out {titleShown
+			class="absolute left-1/2 flex max-w-[calc(100%-28rem)] min-w-0 -translate-x-1/2 items-center gap-1 overflow-hidden transition duration-200 ease-out @max-[42rem]:hidden {titleShown
 				? 'translate-y-0 opacity-100'
-				: 'pointer-events-none translate-y-2 opacity-0'}"
+				: 'pointer-events-none translate-y-2 opacity-0 motion-reduce:translate-y-0'}"
 		>
 			{@render title()}
 		</div>
 	{/if}
-	<div class="ml-auto flex items-center gap-1">
+	<!-- The window's buttons never leave the bar: in a narrow one the others
+	     keep only their icons. -->
+	<div class="ml-auto flex shrink-0 items-center gap-1">
 		<AppUpdate />
 		<Button
 			variant="ghost"
@@ -58,7 +61,7 @@
 			class="text-muted-foreground hover:text-foreground"
 		>
 			<SearchIcon />
-			<kbd class="font-mono text-xs">{mac ? '⌘' : 'Ctrl'} /</kbd>
+			<kbd class="font-mono text-xs @max-[36rem]:hidden">{mac ? '⌘' : 'Ctrl'} /</kbd>
 		</Button>
 		<Button
 			variant="ghost"

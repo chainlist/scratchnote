@@ -33,7 +33,8 @@
 		ondelete,
 		onsimilar,
 		onmove,
-		onopennote
+		onopennote,
+		own = false
 	}: {
 		/** The page to open, or null for a new one. */
 		id: string | null;
@@ -49,6 +50,9 @@
 		onmove?: (page: Note) => void;
 		/** Show an old note the text is about, where it is. */
 		onopennote?: (note: Note) => void;
+		/** Open as a view of its own, not in the dock: its title is then the
+		 *  view's heading and the window's title. */
+		own?: boolean;
 	} = $props();
 
 	/** The page as last saved or read, null until a new one has a title. */
@@ -60,7 +64,8 @@
 	/** The text the view opened with: recall waits for it to change. */
 	let openedWith = $state('');
 	let loading = $state(true);
-	let error = $state<string | null>(null);
+	/** What failed in plain words, and the error as it came for its tooltip. */
+	let error = $state<{ what: string; detail?: string } | null>(null);
 	let saving = $state(false);
 	/** Something was saved since the view opened, which the status then says. */
 	let saved = $state(false);
@@ -99,7 +104,7 @@
 				load(await getPage(id));
 				openedWith = body;
 			} catch (e) {
-				error = String(e);
+				error = { what: m.error_load_page(), detail: String(e) };
 			}
 			loading = false;
 			await tick();
@@ -188,7 +193,7 @@
 			saved = true;
 			error = null;
 		} catch (e) {
-			error = String(e);
+			error = { what: m.error_save_page(), detail: String(e) };
 		} finally {
 			saving = false;
 		}
@@ -228,7 +233,7 @@
 			saved = true;
 			error = null;
 		} catch (e) {
-			error = String(e);
+			error = { what: m.error_save_page(), detail: String(e) };
 		} finally {
 			saving = false;
 		}
@@ -267,7 +272,7 @@
 
 	const status = $derived(
 		error
-			? error
+			? error.what
 			: saving
 				? m.common_saving()
 				: !page && body.trim()
@@ -278,8 +283,15 @@
 	);
 </script>
 
+<svelte:head>
+	{#if own}<title>{title.trim() || m.pages_untitled()} · Scratchnote</title>{/if}
+</svelte:head>
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="flex flex-col gap-4 pb-16" onkeydown={onKeydown}>
+	<!-- The title is a field; the view's heading, for a screen reader's list
+	     of them, says the same. -->
+	{#if own}<h1 class="sr-only">{title.trim() || m.pages_untitled()}</h1>{/if}
 	<div class="flex items-start gap-2">
 		<input
 			bind:this={titleInput}
@@ -294,7 +306,7 @@
 			placeholder={m.pages_title_placeholder()}
 			aria-label={m.pages_title_label()}
 			disabled={loading}
-			class="min-w-0 flex-1 bg-transparent text-2xl font-semibold tracking-tight text-neutral-100 outline-none placeholder:text-neutral-700"
+			class="min-w-0 flex-1 border-b border-transparent bg-transparent text-2xl font-semibold tracking-tight text-neutral-100 outline-none placeholder:text-meta focus-visible:border-ring"
 		/>
 		{#if page}
 			{@const current = page}
@@ -302,7 +314,7 @@
 				<DropdownMenu.Trigger
 					aria-label={m.note_actions()}
 					title={m.note_actions()}
-					class="mt-1.5 cursor-pointer rounded px-1 py-0.5 text-neutral-500 hover:bg-neutral-800 hover:text-neutral-200 data-[state=open]:bg-neutral-800 data-[state=open]:text-neutral-200"
+					class="mt-0.5 flex size-7 cursor-pointer items-center justify-center rounded text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200 data-[state=open]:bg-neutral-800 data-[state=open]:text-neutral-200"
 				>
 					<EllipsisIcon class="size-4" />
 				</DropdownMenu.Trigger>
@@ -346,11 +358,13 @@
 		{/if}
 	</div>
 
-	<div class="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-600">
+	<div class="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-meta">
 		{#if page}<span class="font-mono">{page.date} {page.time}</span>{/if}
 		<span>{m.pages_words({ count: words })}</span>
 		{#if page?.on}<DayAhead on={page.on} />{/if}
-		<span class={error ? 'text-red-400' : ''} aria-live="polite">{status}</span>
+		<span class={error ? 'text-destructive' : ''} title={error?.detail} aria-live="polite"
+			>{status}</span
+		>
 		{#if !loading}
 			<Recall
 				text={body}
@@ -369,7 +383,7 @@
 			bind:value={body}
 			placeholder={m.pages_body_placeholder()}
 			label={m.pages_body_label()}
-			onerror={(message) => (error = message)}
+			onerror={(message) => (error = { what: message })}
 			class="min-h-[50vh] text-base leading-7 text-neutral-200"
 			toolbarClass="sticky top-0 z-10 bg-neutral-950"
 		/>

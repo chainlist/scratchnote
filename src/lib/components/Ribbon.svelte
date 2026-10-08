@@ -16,7 +16,7 @@
 	import * as ContextMenu from '#lib/components/ui/context-menu/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { coreIds } from '#lib/plugins/loader.js';
-	import { monogram, pinColour, pinHref, pinPage } from '#lib/pins.js';
+	import { monogram, pinHref, pinHue, pinPage } from '#lib/pins.js';
 	import { threadScope } from '#lib/threads.js';
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -127,7 +127,12 @@
 	}
 </script>
 
-<div class="flex shrink-0 flex-col items-center gap-1 px-2 pt-3">
+<!-- Many pins in a short window scroll here, without a scrollbar, rather
+     than take the whole window with them. -->
+<nav
+	aria-label={m.ribbon_label()}
+	class="flex shrink-0 [scrollbar-width:none] flex-col items-center gap-1 overflow-y-auto px-2 py-3"
+>
 	<Button
 		variant="ghost"
 		size="icon-sm"
@@ -182,7 +187,7 @@
 			<RouteIcon />
 			{#if shell.suggested}
 				<span
-					class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-[color-mix(in_oklab,var(--primary)_78%,black)] px-1 text-[0.6rem] leading-none font-semibold text-primary-foreground"
+					class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] leading-none font-semibold text-primary-foreground ring-2 ring-neutral-950"
 				>
 					{shell.suggested > 9 ? '9+' : shell.suggested}
 				</span>
@@ -215,7 +220,7 @@
 			{@render pinButton(pin, label, title, index)}
 		{/each}
 	{/if}
-</div>
+</nav>
 
 <!-- The bar beside a button whose view is shown, at the rail's edge. A
      Button's border is left out of where it is placed from, so the bar
@@ -231,7 +236,6 @@
 	{@const href = pinHref(pin)}
 	{@const active = isHere(pin, href)}
 	{@const below = threadsOf(pin)}
-	{@const colour = pinColour(pin.target)}
 	<ContextMenu.Root>
 		<ContextMenu.Trigger>
 			{#snippet child({ props })}
@@ -245,16 +249,15 @@
 					aria-label={title}
 					aria-current={active ? 'page' : undefined}
 					{title}
-					class="relative flex size-7 items-center justify-center rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+					class="relative flex size-7 items-center justify-center rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
 				>
 					{@render marker(active, false)}
 					<span
 						class={[
-							'flex size-7 items-center justify-center rounded-md text-[0.7rem] leading-none font-semibold transition-opacity',
+							'name-tint flex size-7 items-center justify-center rounded-md text-[0.7rem] leading-none font-semibold transition-opacity',
 							active ? 'opacity-100' : 'opacity-85 hover:opacity-100'
 						]}
-						style:color={colour}
-						style:background-color="color-mix(in oklab, {colour} 18%, transparent)"
+						style:--hue={pinHue(pin)}
 					>
 						{monogram(label)}
 					</span>

@@ -32,7 +32,7 @@
 
 	/** Rename, Select notes and Merge into, in a row under the title. */
 	const action =
-		'-mx-1.5 flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-[3px] focus-visible:ring-ring/50';
+		'-mx-1.5 flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-ring';
 
 	/** The thread's notes in the order the settings ask for. They come
 	 *  oldest first, so a day's are together either way. */
@@ -144,10 +144,11 @@
 	     Renaming, choosing and merging wait until the thread is the user's. -->
 		{#if !thread.kept}
 			<div
-				class="mb-6 flex items-center justify-between gap-4 rounded-lg border border-neutral-800 px-4 py-3 text-sm text-neutral-400"
+				class="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-lg border border-neutral-800 px-4 py-3 text-sm text-neutral-400"
 			>
-				<span>{m.thread_suggested_banner()}</span>
-				<span class="flex shrink-0 gap-2">
+				<!-- The buttons go under the words when the two do not fit, as in the dock. -->
+				<span class="min-w-0 flex-1 basis-48">{m.thread_suggested_banner()}</span>
+				<span class="ml-auto flex shrink-0 gap-2">
 					<Button variant="ghost" size="sm" onclick={() => void shell.keepThread(thread.id, false)}>
 						{m.thread_dismiss()}
 					</Button>
@@ -240,7 +241,7 @@
 		<p class="text-base text-meta">{m.thread_gone()}</p>
 		<a
 			href={resolve('threads/')}
-			class="mt-3 inline-flex items-center gap-1.5 rounded text-sm text-neutral-300 outline-none hover:text-neutral-100 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+			class="mt-3 inline-flex items-center gap-1.5 rounded text-sm text-neutral-300 outline-none hover:text-neutral-100 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
 		>
 			{m.thread_gone_link()}<ArrowRightIcon class="size-3.5" />
 		</a>
@@ -300,11 +301,11 @@
 						<button
 							type="button"
 							onclick={() => void shell.blink(note.id, root, { focus: true })}
-							class="-mx-1.5 flex w-full min-w-0 cursor-pointer items-center gap-3 rounded px-1.5 py-1 text-left outline-none hover:bg-neutral-900 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+							class="-mx-1.5 flex w-full min-w-0 cursor-pointer items-center gap-3 rounded px-1.5 py-1 text-left outline-none hover:bg-neutral-900 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
 						>
 							<span
 								aria-hidden="true"
-								class="size-3.5 shrink-0 rounded-[3px] border border-neutral-600"
+								class="size-3.5 shrink-0 rounded-[0.25em] border border-neutral-500"
 							></span>
 							<span class="min-w-0 flex-1 text-neutral-200">{task}</span>
 							<span class="shrink-0 text-xs text-meta tabular-nums">{shortDay(note.date)}</span>

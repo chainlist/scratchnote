@@ -298,6 +298,7 @@ fn build_capture_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     WebviewWindowBuilder::new(app, CAPTURE, WebviewUrl::App("capture/".into()))
         .title("Scratchnote capture")
         .inner_size(620.0, 200.0)
+        // At 16px text; the webview grows it with the text size setting.
         .min_inner_size(420.0, 150.0)
         .decorations(false)
         .always_on_top(true)

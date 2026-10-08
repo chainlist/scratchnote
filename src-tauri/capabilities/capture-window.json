@@ -1,11 +1,12 @@
 {
   "identifier": "capture-window",
-  "description": "lets the capture window drag itself",
+  "description": "lets the capture window drag itself and keep a floor that grows with the text size",
   "local": true,
   "windows": [
     "capture"
   ],
   "permissions": [
-    "core:window:allow-start-dragging"
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-min-size"
   ]
 }

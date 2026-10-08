@@ -7,6 +7,7 @@
 </script>
 
 <script lang="ts">
+	import type { HTMLInputAttributes } from 'svelte/elements';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 
@@ -14,8 +15,9 @@
 		id,
 		value,
 		onchange,
-		class: className = ''
-	}: {
+		class: className = '',
+		...rest
+	}: Pick<HTMLInputAttributes, 'aria-labelledby' | 'aria-describedby'> & {
 		id?: string;
 		/** An accelerator, as the global-shortcut plugin reads it. */
 		value: string;
@@ -73,6 +75,7 @@
 <svelte:window onkeydowncapture={cancelRecording} />
 
 <Input
+	{...rest}
 	{id}
 	readonly
 	value={recording ? m.settings_hotkey_recording() : prettyHotkey(value)}

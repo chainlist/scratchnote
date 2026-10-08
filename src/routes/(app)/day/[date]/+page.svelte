@@ -93,7 +93,7 @@
 	]}
 >
 	{#if columns > 1}{@render besideDay(data.previous)}{/if}
-	<View key={data.date}>
+	<View key={data.date} name={dayHeading(data.date)}>
 		{#snippet heading(compact: boolean)}
 			<!-- Side by side ahead of the title, so they stay put while its width
 			     changes from one day to the next. -->
@@ -125,14 +125,14 @@
 			     it says it can be clicked. -->
 			<svelte:element
 				this={compact ? 'span' : 'h1'}
-				class={compact ? 'text-sm font-semibold whitespace-nowrap' : 'text-2xl font-medium'}
+				class={compact ? 'min-w-0 text-sm font-semibold whitespace-nowrap' : 'text-2xl font-medium'}
 			>
 				<a
 					href={resolve('calendar/')}
 					title={m.calendar_pick()}
-					class="group/date -mx-1.5 inline-flex items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none dark:hover:bg-muted/50"
+					class="group/date -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
 				>
-					<span>
+					<span class={compact ? 'min-w-0 truncate' : undefined}>
 						{#if compact}{dayHeading(data.date, true)}{:else}{@render dayName(data.date)}{/if}
 					</span>
 					<CalendarIcon
@@ -160,7 +160,7 @@
 								type="button"
 								onclick={() => void shell.openCited(note)}
 								title={m.day_written_on({ date: dayHeading(note.date) })}
-								class="group -mx-3 grid w-[calc(100%+1.5rem)] cursor-pointer grid-cols-[4.5rem_1fr] items-baseline gap-x-6 rounded-lg px-3 py-1.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+								class="group -mx-3 grid w-[calc(100%+1.5rem)] cursor-pointer grid-cols-[4.5rem_1fr] items-baseline gap-x-6 rounded-lg px-3 py-1.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
 							>
 								<!-- The day it was written, which brightens with a tick of the
 								     accent, as a note's time does. -->

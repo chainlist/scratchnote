@@ -3,11 +3,10 @@
 	import type { Thread } from '#lib/api.js';
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
 	import { daysAgo } from '#lib/days.js';
-	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadHref } from '#lib/threads.js';
+	import { threadHref, threadHue } from '#lib/threads.js';
 
 	const shell = getShell();
 
@@ -91,7 +90,7 @@
 		aria-hidden="true"
 	>
 		<span></span>
-		<span class="relative h-7 text-xs text-neutral-500">
+		<span class="relative h-7 text-xs text-meta">
 			{@render gridlines()}
 			<span class="absolute top-1/2 left-1 -translate-y-1/2">{shortDay(first)}</span>
 			{#each months as month (month.at)}
@@ -105,13 +104,14 @@
 	</div>
 	<ul class="divide-y divide-neutral-800">
 		{#each threads as thread (thread.id)}
-			{@const mark = thread.scope !== null ? 'name-mark' : 'bg-primary'}
 			<li
-				class="relative grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 px-3 transition-colors hover:bg-neutral-900"
-				style:--hue={thread.scope && mentionHue(thread.scope)}
+				class="relative grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 px-3 transition-colors hover:bg-neutral-900 has-focus-visible:bg-neutral-900"
+				style:--hue={threadHue(thread.id)}
 			>
-				<div class="flex min-w-0 items-center gap-2 py-2.5">
-					<div class="min-w-0 flex-1">
+				<!-- The actions go under the name when the two do not fit, so the
+				     name never shrinks to nothing. -->
+				<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 py-2.5">
+					<div class="min-w-0 flex-1 basis-32">
 						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
 						<a
 							href={threadHref(thread.id)}
@@ -123,7 +123,7 @@
 									>@{thread.mention}</span
 								>{/if}{name(thread)}
 						</a>
-						<span class="block truncate text-xs text-neutral-500">
+						<span class="block truncate text-xs text-meta">
 							{m.thread_last({ count: thread.notes.length, date: shortDay(thread.until) })}
 							{#if !thread.kept}· {m.threads_suggested()}{/if}
 						</span>
@@ -139,14 +139,14 @@
 					{@render gridlines()}
 					<span class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-neutral-800"></span>
 					<span
-						class={['absolute top-1/2 h-0.5 -translate-y-1/2 rounded-full opacity-40', mark]}
+						class="name-mark absolute top-1/2 h-0.5 -translate-y-1/2 rounded-full opacity-40"
 						style:left={x(along(thread.since))}
 						style:width="calc({along(thread.until) - Math.max(0, along(thread.since))} * (100% - 0.5rem))"
 					></span>
 					{#each thread.days as day (day)}
 						{#if along(day) >= 0}
 							<span
-								class={['absolute top-1/2 size-2 -translate-1/2 rounded-full', mark]}
+								class="name-mark absolute top-1/2 size-2 -translate-1/2 rounded-full"
 								style:left={x(along(day))}
 							></span>
 						{/if}

@@ -1,20 +1,14 @@
 import { resolve } from '$app/paths';
 import type { Pin } from '#lib/api.js';
-import { mentionHref } from '#lib/mentions.js';
-import { threadHref } from '#lib/threads.js';
+import { hueOf, mentionHref, mentionHue } from '#lib/mentions.js';
+import { threadHref, threadHue } from '#lib/threads.js';
 
-/** A colour per thread or page by its id, the same from one launch to the
- *  next: a thread's dots on the map, and its pin on the left edge. */
-export function colourOf(id: string) {
-	let hash = 0;
-	for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-	return `hsl(${hash % 360} 70% 58%)`;
-}
-
-/** The same colour for a pin's letters, darker on a light page so they
- *  stay readable on its tint there, through `--pin-lightness`. */
-export function pinColour(id: string) {
-	return colourOf(id).replace('58%)', 'var(--pin-lightness))');
+/** A pin's hue (oklch), drawn as a name's tint: a thread's own, a name's
+ *  own, or a page's from its type and query. */
+export function pinHue(pin: Pin) {
+	if (pin.kind === 'thread') return threadHue(pin.target);
+	if (pin.kind === 'mention') return mentionHue(pin.target);
+	return hueOf(pin.target);
 }
 
 /** Two letters for a pin on the left edge: a title's first two words'

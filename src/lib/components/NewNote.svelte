@@ -98,7 +98,7 @@
 	}
 
 	const action =
-		'cursor-pointer rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50';
+		'cursor-pointer rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200 disabled:opacity-50';
 
 	function onKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -163,7 +163,7 @@
 					onclick={start}
 					aria-keyshortcuts="N"
 					title="{excerpt ? m.note_draft_continue() : m.page_add_note()} (N)"
-					class="-mx-1.5 flex min-w-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300"
+					class="-mx-1.5 flex min-w-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
 				>
 					{#if excerpt}
 						<PencilLineIcon class="size-3.5 shrink-0" />
@@ -179,7 +179,7 @@
 						onclick={discard}
 						aria-label={m.note_draft_discard_title()}
 						title={m.note_draft_discard_title()}
-						class="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300"
+						class="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
 					>
 						<XIcon class="size-3.5" />{m.note_draft_discard()}
 					</button>
@@ -187,7 +187,7 @@
 				<button
 					type="button"
 					onclick={onpage}
-					class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300"
+					class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
 				>
 					<FileTextIcon class="size-3.5" />{m.pages_new()}
 				</button>

@@ -53,13 +53,13 @@
 
 	// Once the list changes under them, as a suggestion is kept or dismissed,
 	// the ones moving up into view need their notes too.
-	$effect(() => void readFirst(shown).catch((e) => shell.showError(String(e))));
+	$effect(() => void readFirst(shown).catch((e) => shell.fail(m.error_load_threads(), e)));
 
 	async function showMore() {
 		try {
 			await readFirst(shown + SUGGESTED_PAGE);
 		} catch (e) {
-			shell.showError(String(e));
+			shell.fail(m.error_load_threads(), e);
 		}
 		shown += SUGGESTED_PAGE;
 	}
@@ -74,7 +74,7 @@
      line. -->
 <View back={shell.back} title={m.threads_all()}>
 	{#if data.threads.length === 0}
-		<p class="text-base text-neutral-600">{m.threads_none()}</p>
+		<p class="text-base text-meta">{m.threads_none()}</p>
 	{:else}
 		<SectionTabs
 			bind:value={tab}
@@ -87,18 +87,18 @@
 			{#if yours.length}
 				<ThreadLanes threads={yours} {name} />
 			{:else}
-				<p class="text-sm text-neutral-500">{m.threads_yours_none()}</p>
+				<p class="text-sm text-meta">{m.threads_yours_none()}</p>
 			{/if}
 		{:else}
 			{#if suggested.length}
-				<p class="mb-4 text-sm text-neutral-500">{m.threads_suggested_hint()}</p>
+				<p class="mb-4 text-sm text-meta">{m.threads_suggested_hint()}</p>
 				<ul class="flex flex-col gap-3">
 					{#each drawn as thread (thread.id)}
 						<li
-							class="relative rounded-lg border border-neutral-800 px-4 py-3 transition-colors hover:border-neutral-700 hover:bg-neutral-900"
+							class="relative rounded-lg border border-neutral-800 px-4 py-3 transition-colors hover:border-neutral-700 hover:bg-neutral-900 has-focus-visible:border-neutral-700 has-focus-visible:bg-neutral-900"
 						>
 							<div class="flex items-center gap-2">
-								<span class="min-w-0 flex-1 truncate text-xs text-neutral-500">
+								<span class="min-w-0 flex-1 truncate text-xs text-meta">
 									{#if thread.mention}<span
 											class="name-tint mr-1.5 rounded-md px-1 font-medium"
 											style:--hue={thread.scope && mentionHue(thread.scope)}>@{thread.mention}</span
@@ -111,6 +111,7 @@
 										size="sm"
 										class="h-7 px-2 text-xs"
 										onclick={() => void shell.keepThread(thread.id, false)}
+										aria-label={m.thread_dismiss_label({ name: shell.nameOf(thread) })}
 									>
 										{m.thread_dismiss()}
 									</Button>
@@ -119,6 +120,7 @@
 										size="sm"
 										class="h-7 px-2 text-xs"
 										onclick={() => void shell.keepThread(thread.id, true)}
+										aria-label={m.thread_keep_label({ name: shell.nameOf(thread) })}
 									>
 										{m.thread_keep()}
 									</Button>
@@ -142,7 +144,7 @@
 					</div>
 				{/if}
 			{:else}
-				<p class="text-sm text-neutral-500">{m.threads_suggested_none()}</p>
+				<p class="text-sm text-meta">{m.threads_suggested_none()}</p>
 			{/if}
 		{/if}
 	{/if}

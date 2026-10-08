@@ -14,7 +14,7 @@
 		border-color 150ms,
 		background-color 150ms;
 }
-.md-task:hover:not(:disabled) {
+.md-task:is(:hover, :focus-visible):not(:disabled) {
 	border-color: var(--color-neutral-300);
 }
 .md-task:disabled {

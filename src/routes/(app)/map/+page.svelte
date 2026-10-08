@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { goto, invalidate } from '$app/navigation';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { SvelteMap } from 'svelte/reactivity';
 	import ScanIcon from '@lucide/svelte/icons/scan';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import XIcon from '@lucide/svelte/icons/x';
 	import {
 		getNote,
+		getNotes,
 		mapLinks,
 		mapSearch,
 		onMapChanged,
@@ -22,11 +23,11 @@
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import View from '#lib/components/View.svelte';
 	import { shortDay } from '#lib/components/ViewHeader.svelte';
+	import { noteTitle } from '#lib/markdown.js';
 	import { mentionHref, mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { colourOf } from '#lib/pins.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadHref } from '#lib/threads.js';
+	import { threadHref, threadHue } from '#lib/threads.js';
 	import { graph, samePlaces, type Graph, type GraphNode } from './graph.js';
 
 	let { data } = $props();
@@ -50,6 +51,8 @@
 	const DIM = 0.12;
 	/** How many bars show how the notes spread over time. */
 	const BARS = 40;
+	/** How many found notes are listed under the search. */
+	const FOUND_SHOWN = 8;
 	const DAY_MS = 86_400_000;
 
 	/** A day as a number of days, which the dates shown are measured in. */
@@ -59,6 +62,10 @@
 	let canvas = $state<HTMLCanvasElement>();
 	let width = $state(0);
 	let height = $state(0);
+	/** The hover card's own size, which grows with the text size, to keep it
+	 *  beside the dot and inside the map. */
+	let tipWidth = $state(0);
+	let tipHeight = $state(0);
 	/** From the map to the canvas: `x * scale + left`, `y * scale + top`. */
 	let view = $state({ scale: 1, left: 0, top: 0 });
 	/** The scale with every note in view, which zooming is measured against. */
@@ -131,6 +138,11 @@
 		};
 		return new Set(data.notes.filter(through).map((note) => note.id));
 	});
+	/** The first notes the search finds and the rest lets through, as buttons
+	 *  under it: the keyboard's way to a note, as the canvas is the pointer's. */
+	const foundShown = $derived(
+		found && lit ? [...found].filter((id) => lit.has(id)).slice(0, FOUND_SHOWN) : []
+	);
 	/** How many notes each stretch of time holds, highest at 1, and the days
 	 *  it covers, for the bars above the dates. */
 	const bars = $derived.by(() => {
@@ -261,8 +273,9 @@
 		};
 	});
 
-	/** A colour per thread, the same from one launch to the next. */
-	const colour = (thread: Thread) => colourOf(thread.id);
+	/** A thread's own colour, as `.name-mark` draws it in the lists. */
+	const colour = (thread: Thread, dark: boolean) =>
+		`oklch(${dark ? '0.72 0.12' : '0.62 0.13'} ${threadHue(thread.id)})`;
 
 	/** Where a note is drawn: its place on the map, or in the graph. */
 	function place(note: MapNote): { x: number; y: number } {
@@ -324,6 +337,7 @@
 
 		const style = getComputedStyle(canvas);
 		const grey = style.getPropertyValue('--muted-foreground').trim() || 'gray';
+		const dark = document.documentElement.classList.contains('dark');
 		const { scale, left, top } = view;
 		const radius = Math.min(6, DOT * Math.max(1, scale / fitScale) ** 0.3);
 		const dots = (notes: MapNote[], r: number) => {
@@ -348,7 +362,7 @@
 			for (const { thread, shown } of parts) {
 				if (!thread || shown.length < 2) continue;
 				context.globalAlpha = focusThread && thread !== focusThread ? 0.04 : 0.1;
-				context.fillStyle = colour(thread);
+				context.fillStyle = colour(thread, dark);
 				dots(shown, halo);
 			}
 		} else {
@@ -380,7 +394,7 @@
 		// under the rest.
 		context.globalAlpha = DIM;
 		for (const { thread, left } of parts) {
-			context.fillStyle = thread ? colour(thread) : grey;
+			context.fillStyle = thread ? colour(thread, dark) : grey;
 			if (left.length) dots(left, radius);
 		}
 		// Pointing at a name or a thread, or at or clicking a note of a thread,
@@ -388,13 +402,13 @@
 		const focusing = pointedName !== null || !!focusThread;
 		for (const { thread, shown } of parts) {
 			context.globalAlpha = focusing ? 0.25 : thread ? 0.9 : 0.55;
-			context.fillStyle = thread ? colour(thread) : grey;
+			context.fillStyle = thread ? colour(thread, dark) : grey;
 			dots(focusing ? shown.filter((note) => !inFocus(note)) : shown, radius);
 		}
 		context.globalAlpha = 1;
 		if (focusing) {
 			for (const { thread, shown } of parts) {
-				context.fillStyle = thread ? colour(thread) : grey;
+				context.fillStyle = thread ? colour(thread, dark) : grey;
 				dots(shown.filter(inFocus), radius + 1);
 			}
 		}
@@ -416,11 +430,13 @@
 		// first; then the title of each thread wide enough on screen, the same
 		// way, the biggest first. A label that would cover one already shown
 		// is left out.
+		// In rem, as the lists around the map are: labels grow with the text size.
+		const rem = shell.textSize;
 		const labelBox = (text: string, at: { x: number; minY: number; maxY: number }, pad: number) => {
 			const x = at.x * scale + left;
-			const half = context.measureText(text).width / 2 + pad;
-			return [at.minY * scale + top - 6, at.maxY * scale + top + 26]
-				.map((y) => ({ x0: x - half, x1: x + half, y0: y - 20, y1: y }))
+			const half = context.measureText(text).width / 2 + pad * rem;
+			return [at.minY * scale + top - 0.375 * rem, at.maxY * scale + top + 1.625 * rem]
+				.map((y) => ({ x0: x - half, x1: x + half, y0: y - 1.25 * rem, y1: y }))
 				.find(
 					(box) =>
 						box.x1 > 0 &&
@@ -430,21 +446,22 @@
 						!labels.some((o) => box.x0 < o.x1 && o.x0 < box.x1 && box.y0 < o.y1 && o.y0 < box.y1)
 				);
 		};
-		const dark = document.documentElement.classList.contains('dark');
-		context.font = `500 12px ${style.fontFamily}`;
+		context.font = `500 ${0.75 * rem}px ${style.fontFamily}`;
+		const chipRadius = (parseFloat(style.getPropertyValue('--radius')) || 0) * 0.8 * rem;
 		context.textAlign = 'center';
 		context.textBaseline = 'middle';
 		for (const name of spots.names) {
 			if (name.count < 2 || (pickedName !== null && pickedName !== name.key)) continue;
 			const text = nameOf(name.key);
-			const box = labelBox(text, name, 6);
+			const box = labelBox(text, name, 0.375);
 			if (!box) continue;
 			labels.push({ ...box, name: name.key });
 			const hue = mentionHue(name.key);
 			context.globalAlpha = pointedName === null || pointedName === name.key ? 1 : 0.5;
 			context.fillStyle = dark ? `oklch(0.32 0.06 ${hue})` : `oklch(0.92 0.05 ${hue})`;
 			context.beginPath();
-			context.roundRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, 6);
+			// The chips' corners follow the radius setting, as rounded-md does.
+			context.roundRect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, chipRadius);
 			context.fill();
 			context.fillStyle = dark ? `oklch(0.86 0.09 ${hue})` : `oklch(0.42 0.1 ${hue})`;
 			context.fillText(text, (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2);
@@ -459,7 +476,7 @@
 			if (lit && !thread.notes.some((id) => lit.has(id))) continue;
 			const title = thread.title!;
 			const text = title.length > 40 ? `${title.slice(0, 39)}…` : title;
-			const box = labelBox(text, spotted, 4);
+			const box = labelBox(text, spotted, 0.25);
 			if (!box) continue;
 			labels.push({ ...box, thread });
 			context.globalAlpha = focusThread && focusThread !== thread ? 0.4 : 0.85;
@@ -537,6 +554,8 @@
 	}
 
 	function move(event: PointerEvent) {
+		// The button let go where the canvas never heard of it.
+		if (drag && !(event.buttons & 1)) end();
 		if (drag) {
 			const dx = event.clientX - drag.x;
 			const dy = event.clientY - drag.y;
@@ -575,21 +594,32 @@
 			else if (label?.thread) void goto(threadHref(label.thread.id));
 			else selectedId = nearest(x, y)?.id ?? null;
 		}
+		end();
+	}
+
+	/** The press over, with no click: let go of the note held in the graph.
+	 *  Also when the pointer is lost, as to Alt+Tab or a dialog mid-drag,
+	 *  so the map never keeps moving under a pointer no longer pressed. */
+	function end() {
 		if (drag?.node) graphed?.release(drag.node);
 		drag = null;
 		dragging = false;
 	}
 
-	/** The wheel zooms about the pointer. Not passive, to keep the page still. */
+	/** The wheel zooms about the pointer. Not passive, to keep the page still.
+	 *  A touchpad sends several turns between two frames: they add up and
+	 *  the map zooms once a frame, so it is drawn once rather than for each. */
 	function zoomable(node: HTMLCanvasElement) {
-		const wheel = (event: WheelEvent) => {
-			event.preventDefault();
-			following = false;
-			const point = at(event);
+		let turned = 0;
+		let point = { x: 0, y: 0 };
+		let frame = 0;
+		const zoom = () => {
+			frame = 0;
 			const scale = Math.min(
 				fitScale * 200,
-				Math.max(fitScale / 2, view.scale * Math.exp(-event.deltaY * 0.0015))
+				Math.max(fitScale / 2, view.scale * Math.exp(-turned * 0.0015))
 			);
+			turned = 0;
 			const by = scale / view.scale;
 			view = {
 				scale,
@@ -598,8 +628,18 @@
 			};
 			pointAt(point.x, point.y);
 		};
+		const wheel = (event: WheelEvent) => {
+			event.preventDefault();
+			following = false;
+			turned += event.deltaY;
+			point = at(event);
+			frame ||= requestAnimationFrame(zoom);
+		};
 		node.addEventListener('wheel', wheel, { passive: false });
-		return () => node.removeEventListener('wheel', wheel);
+		return () => {
+			node.removeEventListener('wheel', wheel);
+			cancelAnimationFrame(frame);
+		};
 	}
 
 	/** Show only the notes of the name with this key, or every note again. */
@@ -659,11 +699,42 @@
 					if (run === searchRun) found = new Set(ids);
 				})
 				.catch((e) => {
-					if (run === searchRun) shell.showError(String(e));
+					if (run === searchRun) shell.fail(m.error_search(), e);
 				});
 		}, 200);
 		return () => clearTimeout(timer);
 	});
+
+	// The text of the notes listed under the search, read together, once.
+	$effect(() => {
+		const missing = foundShown.filter((id) => !untrack(() => previews.has(id)));
+		if (!missing.length) return;
+		for (const id of missing) previews.set(id, null);
+		void getNotes(missing).then((notes) => {
+			for (const note of notes) previews.set(note.id, note);
+		});
+	});
+
+	/** The Open button of the note shown, which a note picked from the list focuses. */
+	let openButton = $state<HTMLElement | null>(null);
+
+	/** A note picked from the list: the map moves to it, and its card opens
+	 *  with Open in focus, so Enter again opens it. */
+	async function pickFound(id: string) {
+		selectedId = id;
+		const note = data.notes.find((other) => other.id === id);
+		if (note) {
+			const at = place(note);
+			following = false;
+			view = {
+				...view,
+				left: width / 2 - at.x * view.scale,
+				top: height / 2 - at.y * view.scale
+			};
+		}
+		await tick();
+		openButton?.focus();
+	}
 
 	// The text of the notes pointed at or clicked, read once.
 	$effect(() => {
@@ -677,7 +748,11 @@
 	onMount(() => {
 		const off = onMapChanged(() => void invalidate('app:map'));
 		const themes = new MutationObserver(() => theme++);
-		themes.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+		// The theme is a class on the root; the accent, the font and the size are its style.
+		themes.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ['class', 'style']
+		});
 		return () => {
 			themes.disconnect();
 			graphed?.close();
@@ -688,11 +763,13 @@
 
 <!-- Every note of the space by meaning, notes about the same thing close
      together, coloured by thread, with the names they mention (SPEC 6.5). -->
+<svelte:window onblur={end} />
+
 <View back={shell.back} title={m.map_title()} fill>
 	{#if data.notes.length === 0}
-		<p class="mx-auto max-w-3xl text-base text-neutral-600">{m.map_empty()}</p>
+		<p class="mx-auto max-w-3xl text-base text-meta">{m.map_empty()}</p>
 	{:else}
-		<div class="relative h-full min-h-80" bind:clientWidth={width} bind:clientHeight={height}>
+		<div class="@container relative h-full" bind:clientWidth={width} bind:clientHeight={height}>
 			<canvas
 				bind:this={canvas}
 				{@attach zoomable}
@@ -704,16 +781,21 @@
 							? 'cursor-pointer'
 							: 'cursor-grab'
 				]}
-				aria-label={m.map_title()}
+				aria-hidden="true"
 				onpointerdown={down}
 				onpointermove={move}
 				onpointerup={up}
+				onpointercancel={end}
+				onlostpointercapture={end}
 				onpointerleave={() => {
 					if (drag) return;
 					hovered = pointedThread = null;
 					pointedName = null;
 				}}
 			></canvas>
+			<!-- The map is a picture for the pointer; the keyboard and a screen
+			     reader reach its notes through the search beside it. -->
+			<p class="sr-only">{m.map_canvas({ count: data.notes.length })}</p>
 			<div class="absolute top-2 right-2 flex items-center gap-2">
 				<ToggleGroup.Root
 					type="single"
@@ -735,9 +817,14 @@
 					<ScanIcon />
 				</Button>
 			</div>
+			<!-- In a narrow map the names go under the buttons, and a note clicked
+			     opens along the bottom rather than over them. -->
 			<Card.Root
 				size="sm"
-				class="absolute top-2 left-2 z-10 max-h-[calc(100%-1rem)] w-64 gap-2 shadow-sm"
+				class={[
+					'absolute top-2 left-2 z-10 max-h-[calc(100%-1rem)] w-64 max-w-[calc(100%-1rem)] gap-2 @max-[38rem]:top-12 @max-[38rem]:max-h-[calc(100%-3.5rem)]',
+					selected && '@max-[38rem]:max-h-[calc(55%-3.5rem)]'
+				]}
 			>
 				<Card.Content class="flex flex-col gap-3">
 					<div class="flex flex-col gap-1">
@@ -751,14 +838,42 @@
 									if (event.key === 'Escape' && query) {
 										event.preventDefault();
 										query = '';
+									} else if (event.key === 'Enter' && foundShown[0]) {
+										event.preventDefault();
+										void pickFound(foundShown[0]);
 									}
 								}}
 							/>
 						</InputGroup.Root>
-						{#if found}
-							<p class="px-1 text-xs text-muted-foreground" aria-live="polite">
+						<!-- Kept in the page while empty, so its first count is read out too. -->
+						<p class="px-1 text-xs text-muted-foreground empty:sr-only" aria-live="polite">
+							{#if found}
 								{lit?.size ? m.page_results({ count: lit.size }) : m.page_no_match()}
-							</p>
+							{/if}
+						</p>
+						{#if foundShown.length}
+							<!-- The first notes found, each opening its card on the map. -->
+							<ul class="-mx-1 flex flex-col" aria-label={m.map_found()}>
+								{#each foundShown as id (id)}
+									{@const note = previews.get(id)}
+									<li>
+										<button
+											type="button"
+											onclick={() => void pickFound(id)}
+											aria-current={selectedId === id ? 'true' : undefined}
+											class={[
+												'flex w-full min-w-0 items-baseline gap-2 rounded-md px-1 py-1 text-left text-sm transition-colors outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid',
+												selectedId === id && 'bg-muted'
+											]}
+										>
+											<span class="shrink-0 text-xs text-muted-foreground tabular-nums">
+												{shortDay(data.notes.find((other) => other.id === id)?.date ?? '')}
+											</span>
+											<span class="min-w-0 flex-1 truncate">{note ? noteTitle(note) : ''}</span>
+										</button>
+									</li>
+								{/each}
+							</ul>
 						{/if}
 					</div>
 					{#if extent[1] > extent[0]}
@@ -783,6 +898,8 @@
 								value={[from, to]}
 								onValueChange={([first, last]) =>
 									(span = first <= extent[0] && last >= extent[1] ? null : [first, last])}
+								thumbLabel={(index) => (index === 0 ? m.map_dates_from() : m.map_dates_to())}
+								valueText={(day) => shortDay(dateOf(day))}
 							/>
 							<div class="flex h-5 items-center justify-between text-xs text-muted-foreground">
 								<span>{shortDay(dateOf(from))}</span>
@@ -846,7 +963,7 @@
 				{@const thread = selectedThread}
 				<Card.Root
 					size="sm"
-					class="absolute top-12 right-2 z-10 max-h-[calc(100%-3.5rem)] w-80 shadow-sm"
+					class="absolute top-12 right-2 z-10 max-h-[calc(100%-3.5rem)] w-80 @max-[38rem]:top-auto @max-[38rem]:bottom-2 @max-[38rem]:left-2 @max-[38rem]:max-h-[calc(45%-1rem)] @max-[38rem]:w-auto"
 				>
 					<Card.Header>
 						<Card.Description class="text-xs">{shortDay(note.date)}</Card.Description>
@@ -884,7 +1001,10 @@
 					{/if}
 					<Card.Content class="flex items-center gap-2">
 						{#if thread}
-							<span class="size-2.5 shrink-0 rounded-full" style:background={colour(thread)}></span>
+							<span
+								class="name-mark size-2.5 shrink-0 rounded-full"
+								style:--hue={threadHue(thread.id)}
+							></span>
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->
 							<a
 								href={threadHref(thread.id)}
@@ -893,7 +1013,12 @@
 								{shell.nameOf(thread)}
 							</a>
 						{/if}
-						<Button size="sm" class="ml-auto" onclick={() => void shell.openCited(note)}>
+						<Button
+							bind:ref={openButton}
+							size="sm"
+							class="ml-auto"
+							onclick={() => void shell.openCited(note)}
+						>
 							{m.map_open()}
 						</Button>
 					</Card.Content>
@@ -901,10 +1026,19 @@
 			{/if}
 			{#if hovered && hoveredAt && !dragging && hovered.id !== selected?.id}
 				{@const thread = hoveredThread}
+				<!-- Below and right of the dot, or on whichever side has the room. -->
 				<div
-					class="pointer-events-none absolute z-10 w-72 rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
-					style:left="{hoveredAt.x > width - 300 ? hoveredAt.x - 300 : hoveredAt.x + 14}px"
-					style:top="{hoveredAt.y > height - 140 ? hoveredAt.y - 120 : hoveredAt.y + 14}px"
+					bind:offsetWidth={tipWidth}
+					bind:offsetHeight={tipHeight}
+					class="pointer-events-none absolute z-10 w-72 max-w-[calc(100%-1rem)] rounded-md border bg-popover px-3 py-2 text-sm text-popover-foreground"
+					style:left="{Math.max(
+						0,
+						hoveredAt.x + 14 + tipWidth > width ? hoveredAt.x - 14 - tipWidth : hoveredAt.x + 14
+					)}px"
+					style:top="{Math.max(
+						0,
+						hoveredAt.y + 14 + tipHeight > height ? hoveredAt.y - 14 - tipHeight : hoveredAt.y + 14
+					)}px"
 				>
 					<p class="text-xs text-muted-foreground">{shortDay(hovered.date)}</p>
 					{#if preview?.kind === 'page' && preview.subject}
@@ -925,7 +1059,10 @@
 					{/if}
 					{#if thread}
 						<p class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-							<span class="size-2 shrink-0 rounded-full" style:background={colour(thread)}></span>
+							<span
+								class="name-mark size-2 shrink-0 rounded-full"
+								style:--hue={threadHue(thread.id)}
+							></span>
 							<span class="truncate">{shell.nameOf(thread)}</span>
 						</p>
 					{/if}

@@ -168,7 +168,7 @@
 										size="icon-sm"
 										onclick={() => (removing = manifest)}
 										disabled={busy === id}
-										aria-label={m.plugins_uninstall()}
+										aria-label={m.plugins_uninstall_label({ name: manifest.name })}
 										title={m.plugins_uninstall()}
 										class="text-muted-foreground hover:text-destructive"
 									>
@@ -194,7 +194,7 @@
 	<Dialog.Content showCloseButton={false}>
 		<Dialog.Header>
 			<Dialog.Title class="flex items-center gap-2">
-				<ShieldAlertIcon class="size-5 text-amber-500" />{m.plugins_trust_title()}
+				<ShieldAlertIcon class="size-5 text-warning" />{m.plugins_trust_title()}
 			</Dialog.Title>
 			<Dialog.Description>{m.plugins_trust_description()}</Dialog.Description>
 		</Dialog.Header>

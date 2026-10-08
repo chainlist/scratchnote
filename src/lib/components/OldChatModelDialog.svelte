@@ -64,7 +64,7 @@
 			await removeOldChatModel();
 			bytes = null;
 		} catch (e) {
-			onerror(String(e));
+			onerror(m.error_old_model({ reason: String(e) }));
 		} finally {
 			removing = false;
 		}

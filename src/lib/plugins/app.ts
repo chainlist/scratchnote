@@ -32,7 +32,7 @@ export interface WorkspaceHost {
 	/** A page open in the page view or the dock, which releases it on closing. */
 	isPageOpen(id: string): boolean;
 	/** Load what the views show again. */
-	refresh(): Promise<void>;
+	refresh(changed?: string): Promise<void>;
 	/** Say what went wrong, above the view. */
 	showError(message: string): void;
 }
@@ -100,7 +100,7 @@ export const app: App = {
 			} else {
 				await updateNote(note.date, note.id, body);
 			}
-			await host?.refresh();
+			await host?.refresh(note.id);
 		},
 		async create(body, date) {
 			const note = await saveNote(body, date);

@@ -147,7 +147,7 @@
 			variant="ghost"
 			size="icon-sm"
 			onclick={() => void shell.togglePin(pin)}
-			aria-label={label}
+			aria-label={m.pin_add()}
 			aria-pressed={pinned}
 			title={label}
 			class={[

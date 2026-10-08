@@ -19,7 +19,7 @@
 	});
 
 	const button =
-		'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-input/30 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:size-3.5';
+		'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-input/30 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-ring [&_svg]:size-3.5';
 </script>
 
 <div class="flex items-center gap-1">

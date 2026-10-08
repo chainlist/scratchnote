@@ -74,7 +74,7 @@
 						!(asked.kind === 'merge' && fromKept && !thread.kept)
 				);
 			})
-			.catch((e) => (error = String(e)));
+			.catch((e) => (error = `${m.error_load_threads()} (${String(e)})`));
 	});
 
 	/** A new thread takes two notes at least: one alone is no thread. */
@@ -153,6 +153,6 @@
 		{/each}
 	</Command.List>
 	{#if error}
-		<p class="border-t px-4 py-2 text-sm text-destructive">{error}</p>
+		<p role="alert" class="border-t px-4 py-2 text-sm text-destructive">{error}</p>
 	{/if}
 </Command.Dialog>

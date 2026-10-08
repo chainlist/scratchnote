@@ -6,11 +6,14 @@
 
 	/**
 	 * One item of a timeline, as the day draws its notes: the time hanging in
-	 * the margin, the body in the column. A day reads as a page that breathes
-	 * with time: the room above an item grows with the time since the one
-	 * before it, and the first item of a part of the day names it in the
-	 * margin. Every timeline of the app is made of these, the plugins' too
-	 * (through `Timeline` in the plugin API), so they all look alike.
+	 * the margin, the rail with the item's mark on it in the gutter, the body
+	 * in the column. A day reads as a page that breathes with time: the room
+	 * above an item grows with the time since the one before it, so the rail
+	 * runs long through a quiet afternoon, and the first item of a part of the
+	 * day names it in the margin. Every timeline of the app is made of these,
+	 * the plugins' too (through `Timeline` in the plugin API), so they all
+	 * look alike. Each sits in an `li` of the list, which is how the first and
+	 * last know to stop the rail at their mark.
 	 */
 	let {
 		time,
@@ -33,9 +36,9 @@
 		/** Makes the time a button, such as to the note on its day. */
 		ontime?: () => void;
 		timeTitle?: string;
-		/** A small mark before the time, as a page has. */
+		/** A mark in a box on the rail, as a page has, in place of the dot. */
 		icon?: Snippet;
-		/** The time brightens, with a tick of the accent, while the pointer or the focus is in it. */
+		/** The time brightens and the mark takes the accent while the pointer or the focus is in it. */
 		hover?: boolean;
 		/** The part of the day this item opens, named above it in the margin. */
 		part?: DayPart;
@@ -53,6 +56,10 @@
 	/** The room above for the time since the item before; a part's name,
 	 *  two rem with its own room, stands in for that much of it. */
 	const room = $derived(Math.max(0, gapRoom(gapMinutes) - (part ? 2 : 0)));
+
+	/** Where the mark sits, in rem from the top: below the room and the part's
+	 *  name, level with the first line of the time. */
+	const markTop = $derived(room + (part ? 2 : 0) + 1.625);
 
 	/** The time as software reads it, `09:05`, when it is a clock's. */
 	const datetime = $derived.by(() => {
@@ -72,14 +79,30 @@
 	// In the user's font, with figures of one width so the times still line up.
 	// In a narrow container, as a docked thread, the time heads the body instead.
 	const when = $derived([
-		'relative self-start pt-1 text-right text-xs leading-5 text-meta tabular-nums transition-colors @max-[24rem]:pt-0 @max-[24rem]:text-left',
+		'self-start pt-1 text-right text-xs leading-5 text-meta tabular-nums transition-colors @max-[24rem]:pt-0 @max-[24rem]:text-left',
 		hover && 'group-focus-within:text-neutral-300 group-hover:text-neutral-300'
 	]);
 </script>
 
 <!-- The room above stands for the time since the item before; a part of the
-     day is named where it begins, in the margin over its first time. -->
-<div style:padding-top={room ? `${room}rem` : undefined}>
+     day is named where it begins, in the margin over its first time. The
+     item measures its own width, so it folds to one column wherever it is
+     narrow: a docked view, a plugin's panel, a thread's day. -->
+<div class="@container relative" style:padding-top={room ? `${room}rem` : undefined}>
+	<!-- The rail in the gutter, through the room and the part's name: each item
+	     draws the segments above and below its mark, and the first and last
+	     leave off the outer ends so the rail stops at their marks. In a narrow
+	     container the time heads the body and there is no gutter for it. -->
+	<span
+		aria-hidden="true"
+		class="absolute top-0 left-[5.25rem] w-px -translate-x-1/2 bg-neutral-800 @max-[24rem]:hidden [li:first-child_&]:hidden"
+		style:height="{markTop}rem"
+	></span>
+	<span
+		aria-hidden="true"
+		class="absolute bottom-0 left-[5.25rem] w-px -translate-x-1/2 bg-neutral-800 @max-[24rem]:hidden [li:last-child_&]:hidden"
+		style:top="{markTop}rem"
+	></span>
 	{#if part}
 		<div
 			role="heading"
@@ -103,6 +126,28 @@
 		{#if aside}
 			<div class="absolute top-3.5 right-[calc(100%+0.25rem)] flex">{@render aside()}</div>
 		{/if}
+		<!-- The item's mark on the rail: a dot, or its icon in a box. -->
+		{#if icon}
+			<span
+				aria-hidden="true"
+				class={[
+					'absolute top-[1.625rem] left-24 flex size-4.5 -translate-1/2 items-center justify-center rounded border border-neutral-700 bg-neutral-950 text-meta transition-colors @max-[24rem]:hidden',
+					hover &&
+						'group-focus-within:border-primary group-focus-within:text-primary group-hover:border-primary group-hover:text-primary'
+				]}
+			>
+				{@render icon()}
+			</span>
+		{:else}
+			<span
+				aria-hidden="true"
+				class={[
+					'absolute top-[1.625rem] left-24 size-2 -translate-1/2 rounded-full border border-neutral-700 bg-neutral-950 transition-colors @max-[24rem]:hidden',
+					hover &&
+						'group-focus-within:border-primary group-focus-within:bg-primary group-hover:border-primary group-hover:bg-primary'
+				]}
+			></span>
+		{/if}
 		{#if ontime}
 			<button
 				type="button"
@@ -119,17 +164,11 @@
 	</article>
 </div>
 
-<!-- The date for a timeline spanning days, a mark such as a page's, the time,
-     and the hover's tick of the accent in the gutter beside it. -->
+<!-- The date for a timeline spanning days, then the time. In a narrow
+     container, with no rail, a mark such as a page's leads the time. -->
 {#snippet stamp()}
 	{#if date}<span class="block">{date}</span>{/if}
-	{#if icon}<span aria-hidden="true" class="mr-1 inline-block align-[-0.125em]"
+	{#if icon}<span aria-hidden="true" class="mr-1 hidden align-[-0.125em] @max-[24rem]:inline-block"
 			>{@render icon()}</span
 		>{/if}{time}
-	{#if hover}
-		<span
-			aria-hidden="true"
-			class="absolute top-[calc(50%+2px)] -right-3 h-3 w-0.5 -translate-y-1/2 rounded-full bg-primary opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 @max-[24rem]:hidden"
-		></span>
-	{/if}
 {/snippet}

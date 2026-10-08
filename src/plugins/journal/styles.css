@@ -121,6 +121,13 @@
 	--primary: #2c4674;
 	--primary-foreground: var(--paper);
 	--border: rgb(120 88 45 / 0.3);
+	/* The app's text and focus tones, which are set on the root and so would
+	   stay grey: the ink's darkest step, its quiet one, and the blue ink for
+	   the focus ring, which holds on cream where the app's own would not. */
+	--foreground: var(--color-neutral-100);
+	--muted-foreground: color-mix(in oklab, var(--color-neutral-400), var(--color-neutral-500));
+	--color-meta: var(--muted-foreground);
+	--ring: var(--primary);
 	position: absolute;
 	inset: 0;
 }
@@ -247,14 +254,14 @@
 }
 .journal-time {
 	display: block;
-	color: var(--color-neutral-500);
+	color: var(--color-neutral-400);
 	font-family: var(--hand);
 	font-size: 1.1rem;
 	line-height: 1.4;
 	break-after: avoid;
 	cursor: pointer;
 }
-.journal-time:hover {
+.journal-time:is(:hover, :focus-visible) {
 	color: var(--color-neutral-200);
 	text-decoration: underline;
 	text-underline-offset: 3px;
@@ -411,7 +418,7 @@
 .journal-head,
 .journal-folio {
 	position: absolute;
-	color: var(--color-neutral-500);
+	color: var(--color-neutral-400);
 	pointer-events: none;
 }
 .journal-head {
@@ -568,7 +575,7 @@
 		background-color 150ms,
 		color 150ms;
 }
-.journal-arrow:hover:not(:disabled) {
+.journal-arrow:is(:hover, :focus-visible):not(:disabled) {
 	background: var(--color-neutral-900);
 	color: var(--color-neutral-100);
 }
@@ -582,14 +589,14 @@
 }
 .journal-when {
 	min-width: 15rem;
-	border-radius: 0.375rem;
+	border-radius: var(--radius-sm);
 	padding: 0.25rem 0.75rem;
 	color: var(--color-neutral-400);
 	font-size: 0.875rem;
 	cursor: pointer;
 	transition: color 150ms;
 }
-.journal-when:hover {
+.journal-when:is(:hover, :focus-visible) {
 	color: var(--color-neutral-100);
 }
 .journal-when::first-letter {

@@ -100,6 +100,7 @@
 							size="sm"
 							class="h-7 px-2 text-xs"
 							onclick={() => void shell.keepThread(thread.id, false)}
+							aria-label={m.thread_dismiss_label({ name: shell.nameOf(thread) })}
 						>
 							{m.thread_dismiss()}
 						</Button>
@@ -108,6 +109,7 @@
 							size="sm"
 							class="mr-1 h-7 px-2 text-xs"
 							onclick={() => void shell.keepThread(thread.id, true)}
+							aria-label={m.thread_keep_label({ name: shell.nameOf(thread) })}
 						>
 							{m.thread_keep()}
 						</Button>
@@ -115,11 +117,11 @@
 				{/snippet}
 			</ThreadLanes>
 		{:else}
-			<p class="text-base text-neutral-600">{m.mention_threads_none()}</p>
+			<p class="text-base text-meta">{m.mention_threads_none()}</p>
 		{/if}
 	{:else if notes.length}
 		<NotesByDay {notes} {...shell.cardActions} />
 	{:else}
-		<p class="text-base text-neutral-600">{m.mentions_nothing({ name: `@${name}` })}</p>
+		<p class="text-base text-meta">{m.mentions_nothing({ name: `@${name}` })}</p>
 	{/if}
 </View>

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "window-controls",
-  "description": "lets the main window drag itself and drive its own window controls",
+  "description": "lets the main window drag itself, drive its own window controls and keep a floor that grows with the text size",
   "platforms": [
     "macOS",
     "windows",
@@ -15,6 +15,7 @@
     "core:window:allow-internal-toggle-maximize",
     "core:window:allow-is-maximized",
     "core:window:allow-minimize",
+    "core:window:allow-set-min-size",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close"
   ]

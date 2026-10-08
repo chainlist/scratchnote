@@ -132,7 +132,7 @@ components:
 
 **Creative North Star: "The Breathing Page"**
 
-Scratchnote reads like a journal page, not a dashboard. A day is one column of notes at reading measure, with a margin to its left where the quiet facts hang: each note's time in small tabular figures, and the name of each part of the day (Morning, Afternoon, Evening, Night) where it begins. The space above a note grows with the time since the one before it, so a busy hour reads close and a quiet afternoon reads as room. Every timeline in the app, including plugin timelines, is drawn from the same item, so they all breathe alike.
+Scratchnote reads like a journal page, not a dashboard. A day is one column of notes at reading measure, with a margin to its left where the quiet facts hang: each note's time in small tabular figures, and the name of each part of the day (Morning, Afternoon, Evening, Night) where it begins. A hairline rail runs down the gutter between the margin and the column, with a small dot on it for each note. The space above a note grows with the time since the one before it, so a busy hour reads close and a quiet afternoon reads as room, a long stretch of rail. Every timeline in the app, including plugin timelines, is drawn from the same item, so they all breathe alike.
 
 The look belongs to the user. Theme (light, dark, system), one of nine bundled fonts, an accent preset, the corner radius and the text size are settings, and every surface must hold under every combination. The values in the frontmatter are therefore the defaults (dark theme, Inter, neutral accent, 0.625rem radius, 16px), not brand constants: build with the roles and tokens, never with the literal values. The neutral scale is tinted with the accent hue and mirrored in light mode, so the page is the darkest step in dark and the lightest in light, from one set of token names.
 
@@ -151,7 +151,7 @@ The surface is flat, near-monochrome and quiet. Colour is reserved for the accen
 A tinted neutral scale carries almost everything; the user's accent appears only where it means something.
 
 ### Primary
-- **The User's Accent** (`--primary`, default neutral `{colors.accent}`; presets blue, violet, green, orange, rose): primary buttons, the selected ribbon button and its edge bar, the 2px tick beside a timeline time on hover or focus, link underlines (70% mix, full on hover), mention chips (18% mix, 30% on hover), the pulse of a note opened from a link (16% mix), focus rings (`--ring` follows the accent).
+- **The User's Accent** (`--primary`, default neutral `{colors.accent}`; presets blue, violet, green, orange, rose): primary buttons, the selected ribbon button and its edge bar, a timeline item's mark on the rail on hover or focus, link underlines (70% mix, full on hover), mention chips (18% mix, 30% on hover), the pulse of a note opened from a link (16% mix), focus rings (`--ring` follows the accent). Each preset has a swatch per theme: deeper in light, with white text on it, and lighter in dark, with dark text on it, so the accent holds at least 4.5:1 as text on the page and under its own label in both.
 
 ### Neutral
 - **Page** (`neutral-950`, `{colors.page}`): the window and page background in both themes (mirrored to near-white in light mode).
@@ -164,14 +164,19 @@ A tinted neutral scale carries almost everything; the user's accent appears only
 - **Body Text** (`neutral-200`, `{colors.body-text}`): note bodies at rest.
 - **Strong Text** (`neutral-100`, `{colors.strong-text}`): page card titles, text being edited.
 
+### Status
+- **Destructive** (`--destructive`, `text-destructive`): errors and the controls that delete. Deeper than shadcn's default in light mode so an error also reads on the capture window's surface.
+- **Warning** (`--warning`, `text-warning`): what needs a second look but has not failed, such as a restart to come. Amber, deep in light mode and bright in dark.
+- Never a Tailwind palette colour (`red-400`, `amber-500`) for status text: those hold in one theme only.
+
 ### Named Rules
-**The Meta Tone Rule.** All quiet text uses `--color-meta`, tuned to about 5.7:1 on the page in both themes. Never reach for neutral-600 or lower for readable text; it measured 2.5:1.
+**The Meta Tone Rule.** All quiet text uses `--color-meta`, tuned to about 5.7:1 on the page in both themes; shadcn's `--muted-foreground` points at it, so `text-muted-foreground` and `text-meta` are one tone. Never reach for neutral-500 (4.2:1) or lower for readable text; neutral-600 measured 2.5:1.
 
-**The Earned Accent Rule.** The accent marks what can be clicked or what has the pointer or focus. It never colours the user's own emphasis, headings, or decoration.
+**The Earned Accent Rule.** The accent marks what can be clicked or what has the pointer or focus. It never colours the user's own emphasis, headings, or decoration. Two exceptions: it shades counts in heatmaps (the calendar's days, the Stats plugin's weeks, the startup timings), and it marks the onboarding steps, where the app introduces itself.
 
-**The Mirrored Scale Rule.** Use the neutral steps (`neutral-950` page to `neutral-100` text), never light/dark variants: the scale flips with the theme, so one class holds in both.
+**The Mirrored Scale Rule.** Use the neutral steps (`neutral-950` page to `neutral-100` text), never light/dark variants: the scale flips with the theme, so one class holds in both. One step is not a straight mirror: in light mode `neutral-900` sits at 0.955 rather than 0.97, so a hover or selection fill shows on the 0.985 page.
 
-**The Own Hue Rule.** A name or thread carries its own hue (`--hue`): a tint behind its letter or chip and a mark for its activity, light in light mode and dark in dark mode. These are the only per-item colours.
+**The Own Hue Rule.** A name or thread carries its own hue (`--hue`, oklch): a tint behind its letter or chip (`.name-tint`) and a mark for its activity (`.name-mark`), light in light mode and dark in dark mode, at a fixed lightness so every hue reads alike. A thread takes its name's hue when it was found among a name's notes, else one from its id (`threadHue`), and keeps it everywhere: its arc, its lane, its dots on the map and its pin. A pin wears its target's tint. These are the only per-item colours.
 
 ## Typography
 
@@ -199,7 +204,7 @@ A tinted neutral scale carries almost everything; the user's accent appears only
 
 A view is a single centred column (max 48rem). On the day page, a wider window shows the previous day to the left, and a wide one the next day to the right too, each column up to 48rem with 2rem between; neighbours open by their date and have no new-note field.
 
-Every timeline item is a two-column grid: a 4.5rem margin column and the body column, 1.5rem apart, with 0.75rem of padding pulled back into the gutter by a matching negative margin so text aligns with the view's edge. The body is held to 70ch. Below a 24rem container width (as in a docked thread), the grid collapses to one column: the time heads the body, left-aligned, and the accent tick is hidden.
+Every timeline item is a two-column grid: a 4.5rem margin column and the body column, 1.5rem apart, with 0.75rem of padding pulled back into the gutter by a matching negative margin so text aligns with the view's edge. The body is held to 70ch. Below 24rem of the item's own width (a docked view, a plugin's panel, a thread's day), the grid collapses to one column: the time heads the body, left-aligned, and the rail and its marks are hidden; a page's icon then leads its time.
 
 Room above an item follows the time since the previous item on the same day: none within 20 minutes, then 1rem per hour after that, capped at 4rem. A part-of-day label, which takes 2rem with its own room, counts against that room rather than adding to it. Items spanning days get no gap room and no part labels; their dates separate them. Parts of the day: Morning 05:00 to 12:00, Afternoon 12:00 to 17:00, Evening 17:00 to 22:00, Night otherwise.
 
@@ -217,7 +222,7 @@ The app is flat. No component in the app's own code uses a box shadow; depth com
 
 ## Shapes
 
-Corners follow the user's radius setting (0, 0.375, 0.625 or 0.875rem) through `--radius`; the scale derives from it (sm 0.6x, md 0.8x, lg 1x, xl 1.4x), so a "none" setting squares the whole interface. Small inline controls (quiet actions, the note editor's field, inline code) use a fixed 0.25rem. Pills and dots (the accent tick, badges, thread-arc dots, the scrollbar thumb) are fully round. Borders are 1px hairlines; a missing page's card uses a dashed one.
+Corners follow the user's radius setting (0, 0.375, 0.625 or 0.875rem) through `--radius`; the scale derives from it (sm 0.6x, md 0.8x, lg 1x, xl 1.4x), so a "none" setting squares the whole interface. Small inline controls (quiet actions, the note editor's field, inline code, mention chips) use a fixed 0.25rem. Pills and dots (a timeline item's dot, badges, thread-arc dots, the scrollbar thumb) are fully round. Borders are 1px hairlines; a missing page's card uses a dashed one.
 
 ## Components
 
@@ -225,9 +230,9 @@ Quiet at rest, legible on approach: controls brighten or fill one tonal step on 
 
 ### Buttons
 - **Shape:** the user's radius (`{rounded.lg}`), 2rem tall by default, 1.75rem for the small icon buttons in headers.
-- **Primary:** the accent fill with its own foreground; hover drops it to 80%.
+- **Primary:** the accent fill with its own foreground; hover moves it away from the page (`--primary-hover`), toward the text colour for a coloured accent and toward its own label for the neutral one, so the label keeps its contrast.
 - **Ghost:** no fill; hover fills with the muted tone. Header navigation (previous and next day, back) uses muted text that turns foreground on hover.
-- **Hover / Focus:** a 3px focus ring at 50% of the accent-following ring colour; a 1px press nudge.
+- **Hover / Focus:** a 3px focus ring at 50% of the accent-following ring colour around a 1px solid edge in the full ring colour (shadcn's `border-ring`, or `outline-ring` where a control has no border), so the focus holds 3:1 with every accent; a 1px press nudge. The neutral ring is neutral-500 in light and neutral-400 in dark for the same reason.
 - **Quiet actions** (Save, Cancel, a note's menu items in the timeline): 0.75rem text, part-label tone, fixed 0.25rem corners, filling with the raised tone and brightening on hover. Save is the word, not an icon.
 
 ### Inputs / Fields
@@ -244,7 +249,7 @@ Quiet at rest, legible on approach: controls brighten or fill one tonal step on 
 - **Missing page:** the same frame with a dashed border and muted text.
 
 ### Timeline Item (signature)
-The unit every timeline is built from (`TimelineItem`, exposed to plugins as `Timeline`). The time hangs in the margin, right-aligned, in the meta tone; while the pointer or focus is anywhere in the item the time brightens to neutral-300 and a 2px by 0.75rem accent tick fades in just right of it, in the gutter. That tick and that brightening are the only hover and focus cue: the row itself is never filled. A time can be a button (to the note on its day). An optional date stacks above the time for timelines that span days; an optional small icon leads it, as a page has. The first item of a part of the day carries the part's name above it in the margin. "Double-click to edit" appears only under keyboard focus.
+The unit every timeline is built from (`TimelineItem`, exposed to plugins as `Timeline`). The time hangs in the margin, right-aligned, in the meta tone. A 1px neutral-800 rail runs down the middle of the gutter, through the room above each item and the part names, and stops at the first and last items' marks. Each item's mark sits on the rail level with its time's first line: an 8px round dot with a neutral-700 hairline, or for an item with an icon (a page, a plugin's item) the icon in a 1.125rem box with the same hairline. While the pointer or focus is anywhere in the item the time brightens to neutral-300 and the mark takes the accent (dot filled, box edge and icon). That brightening and that mark are the only hover and focus cue: the row itself is never filled. A time can be a button (to the note on its day). An optional date stacks above the time for timelines that span days. The first item of a part of the day carries the part's name above it in the margin. "Double-click to edit" appears only under keyboard focus.
 
 ### Thread Arc
 A thread's span in time: a hairline axis with one round dot per day that holds notes, sized by count, in the thread's own hue, with the first and last dates in tabular meta text below. Suggested threads draw at half opacity. Dots grow 1.5x on hover and take the focus ring.
@@ -254,7 +259,7 @@ A thread's span in time: a hairline axis with one round dot per day that holds n
 - **Note pulse** (1.2s): two soft accent pulses on a note opened from a link. Reduced motion: one slow fade.
 - **Calendar wave** (500ms, 30ms per row plus column): days rise into place. Reduced motion: a 300ms fade.
 - **Search glow** (2.4s loop): text being searched by meaning breathes from the meta tone to the accent and back. Reduced motion: still, in the meta tone.
-- State changes (colour, opacity, border) use 150 to 300ms transitions.
+- **Overlays** (menus, popovers, dialogs): shadcn's stock zoom and slide. Reduced motion: the fade alone.
 
 ## Do's and Don'ts
 
@@ -267,7 +272,7 @@ A thread's span in time: a hairline axis with one round dot per day that holds n
 - **Do** leave room for the longest of the six languages: truncate or wrap labels, never fix widths to English.
 
 ### Don't:
-- **Don't** draw a rail, dots or a ruled gutter down the side of a timeline, or fill the whole row on hover; the time's tick is the cue.
+- **Don't** fill the whole row on hover, or draw a second rail or ruled gutter beside the timeline's own; the mark on the rail is the cue.
 - **Don't** use an hour grid or absolute positions for notes; space comes from `gapRoom`.
 - **Don't** colour parts of the day with bands or tints; they are named in the margin, not painted.
 - **Don't** use neutral-600 or darker for text meant to be read.

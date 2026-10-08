@@ -38,7 +38,7 @@
 		const read = ++latest;
 		getThread(id).then(
 			(next) => read === latest && (found = next),
-			(e) => shell.showError(String(e))
+			(e) => shell.fail(m.error_load_view(), e)
 		);
 	});
 </script>

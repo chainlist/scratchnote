@@ -2,9 +2,11 @@
 	import type { ComponentProps } from 'svelte';
 	import type { Note } from '#lib/api.js';
 	import NoteList from '#lib/components/NoteList.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import { dayHeading } from '#lib/components/ViewHeader.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { RESULTS_STEP } from '#lib/query.js';
 
 	let {
 		notes,
@@ -14,34 +16,58 @@
 		notes: Note[];
 	} = $props();
 
-	/** The notes by month, then by day, in the order they come. */
+	/** How many notes are drawn: a stretch at first, as many more on asking,
+	 *  so a name or a thread of thousands opens at once (each card costs
+	 *  about a millisecond to draw). */
+	let drawn = $state(RESULTS_STEP);
+	/** As far as the note brought into sight, when it lies past those drawn,
+	 *  as a thread's arc or a task still open leads to. */
+	const reach = $derived(
+		list.blinking ? notes.findIndex((note) => note.id === list.blinking) + 1 : 0
+	);
+	// And kept drawn once the note stops blinking.
+	$effect(() => {
+		if (reach > drawn) drawn = Math.ceil(reach / RESULTS_STEP) * RESULTS_STEP;
+	});
+	const count = $derived(Math.max(drawn, reach));
+
+	/** The notes by month, then by day, in the order they come; a month
+	 *  counts all of its notes, drawn or not yet. */
 	const months = $derived.by(() => {
 		const months: { month: string; count: number; days: { date: string; notes: Note[] }[] }[] = [];
-		for (const note of notes) {
+		for (const [i, note] of notes.entries()) {
 			const month = note.date.slice(0, 7);
 			if (months.at(-1)?.month !== month) months.push({ month, count: 0, days: [] });
 			const into = months.at(-1)!;
 			into.count++;
+			if (i >= count) continue;
 			const day = into.days.at(-1);
 			if (day?.date === note.date) day.notes.push(note);
 			else into.days.push({ date: note.date, notes: [note] });
 		}
-		return months;
+		return months.filter((month) => month.days.length);
 	});
+
+	/** The formats made, by language and kind: making one takes far longer
+	 *  than using it, and every day drawn uses one. */
+	const formats: Record<string, Intl.DateTimeFormat> = {};
+	const format = (kind: string, options: Intl.DateTimeFormatOptions) =>
+		(formats[`${getLocale()} ${kind}`] ??= new Intl.DateTimeFormat(getLocale(), options));
 
 	/** A month as its heading reads, its year left out in this one. */
 	function monthHeading(month: string) {
 		const day = new Date(`${month}-01T00:00:00`);
 		const thisYear = day.getFullYear() === new Date().getFullYear();
-		const name = new Intl.DateTimeFormat(getLocale(), {
-			month: 'long',
-			...(thisYear ? {} : { year: 'numeric' })
-		}).format(day);
+		const name = (
+			thisYear
+				? format('month', { month: 'long' })
+				: format('month year', { month: 'long', year: 'numeric' })
+		).format(day);
 		return name.charAt(0).toLocaleUpperCase(getLocale()) + name.slice(1);
 	}
 
 	const weekday = (date: string) =>
-		new Intl.DateTimeFormat(getLocale(), { weekday: 'short' }).format(new Date(`${date}T00:00:00`));
+		format('weekday', { weekday: 'short' }).format(new Date(`${date}T00:00:00`));
 </script>
 
 <!-- Notes across days, as a calendar reads: each month under its name with
@@ -53,7 +79,7 @@
 	<section class="mb-10 last:mb-0">
 		<h2 class="mb-1 flex items-baseline gap-2">
 			<span class="text-base font-semibold text-neutral-200">{monthHeading(month)}</span>
-			<span class="text-xs text-neutral-500 tabular-nums">{m.tags_notes({ count })}</span>
+			<span class="text-xs text-meta tabular-nums">{m.tags_notes({ count })}</span>
 		</h2>
 		{#each days as day (day.date)}
 			<section
@@ -65,7 +91,7 @@
 						<span class="text-2xl leading-6 font-semibold text-neutral-100 tabular-nums">
 							{Number(day.date.slice(8))}
 						</span>
-						<span class="mt-1 text-xs text-neutral-500">{weekday(day.date)}</span>
+						<span class="mt-1 text-xs text-meta">{weekday(day.date)}</span>
 					</span>
 				</h3>
 				<NoteList notes={day.notes} empty="" {...list} />
@@ -73,3 +99,11 @@
 		{/each}
 	</section>
 {/each}
+{#if count < notes.length}
+	<div class="mt-8 flex justify-center">
+		<Button variant="outline" size="sm" onclick={() => (drawn = count + RESULTS_STEP)}>
+			{m.search_show_more()}
+			<span class="text-xs text-muted-foreground tabular-nums">{notes.length - count}</span>
+		</Button>
+	</div>
+{/if}

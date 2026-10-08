@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import {
 		createSpace,
 		deleteSpace,
@@ -8,6 +9,7 @@
 		type SpaceSummary,
 		type SpacesView
 	} from '#lib/api.js';
+	import InlineError from '#lib/components/InlineError.svelte';
 	import { sidebarItem } from '#lib/components/sidebar.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
@@ -57,7 +59,7 @@
 	const manage = $derived(onpick === undefined);
 
 	let open = $state(false);
-	let error = $state<string | null>(null);
+	let error = $state<{ what: string; detail: string } | null>(null);
 	let newName = $state('');
 	/** The space whose name is being edited, and the draft. */
 	let renaming = $state<string | null>(null);
@@ -75,14 +77,15 @@
 		}
 	});
 
-	/** Runs an action; the page hears the outcome from `spaces-changed`. */
-	async function act(action: () => Promise<unknown>): Promise<boolean> {
+	/** Runs an action; the page hears the outcome from `spaces-changed`. A
+	 *  failure says what failed, the error as it came under Details. */
+	async function act(what: string, action: () => Promise<unknown>): Promise<boolean> {
 		try {
 			await action();
 			error = null;
 			return true;
 		} catch (e) {
-			error = String(e);
+			error = { what, detail: String(e) };
 			return false;
 		}
 	}
@@ -97,12 +100,12 @@
 			open = false;
 			return;
 		}
-		if (await act(() => setActiveSpace(space.name))) open = false;
+		if (await act(m.error_space_open(), () => setActiveSpace(space.name))) open = false;
 	}
 
 	async function create() {
 		if (newName.trim() === '') return;
-		if (await act(() => createSpace(newName))) open = false;
+		if (await act(m.error_space_create(), () => createSpace(newName))) open = false;
 	}
 
 	function startRename(space: SpaceSummary) {
@@ -116,18 +119,33 @@
 		if (!from) return;
 		if (draft.trim() === '' || draft.trim() === from) {
 			renaming = null;
+			void focusSpace(from);
 			return;
 		}
-		if (await act(() => renameSpace(from, draft))) renaming = null;
+		if (await act(m.error_space_rename(), () => renameSpace(from, draft))) {
+			renaming = null;
+			void focusSpace(draft.trim());
+		}
 	}
+
+	/** The confirming Delete button, which takes the focus from the bin it replaces. */
+	let confirmButton = $state<HTMLElement | null>(null);
 
 	async function remove(space: SpaceSummary) {
 		if (confirming !== space.name) {
 			renaming = null;
 			confirming = space.name;
+			await tick();
+			confirmButton?.focus();
 			return;
 		}
-		if (await act(() => deleteSpace(space.name))) confirming = null;
+		if (await act(m.error_space_delete(), () => deleteSpace(space.name))) confirming = null;
+	}
+
+	/** The focus back on a space's row, once the field renaming it has gone. */
+	async function focusSpace(name: string) {
+		await tick();
+		document.querySelector<HTMLElement>(`[data-space="${CSS.escape(name)}"]`)?.focus();
 	}
 
 	const icon = 'size-6 text-muted-foreground hover:text-foreground';
@@ -189,6 +207,7 @@
 										event.preventDefault();
 										event.stopPropagation();
 										renaming = null;
+										void focusSpace(space.name);
 									}
 								}}
 							/>
@@ -209,7 +228,12 @@
 							</kbd>
 						</button>
 					{:else}
-						<button type="button" onclick={() => void pick(space)} class="{sidebarItem(on)} pr-20">
+						<button
+							type="button"
+							data-space={space.name}
+							onclick={() => void pick(space)}
+							class="{sidebarItem(on)} pr-20"
+						>
 							<span class="truncate">{space.name}</span>
 							<span class="ml-auto font-mono text-xs text-muted-foreground group-hover:invisible">
 								{space.notes ?? ''}
@@ -225,9 +249,11 @@
 						>
 							{#if confirming === space.name}
 								<Button
+									bind:ref={confirmButton}
 									variant="destructive"
 									size="sm"
 									class="h-6 px-2 text-xs"
+									aria-label={m.spaces_delete_label({ name: space.name })}
 									onclick={() => void remove(space)}
 								>
 									{m.common_delete()}
@@ -236,7 +262,8 @@
 								<button
 									type="button"
 									class={icon}
-									onclick={() => void act(() => openSpaceFolder(space.name))}
+									onclick={() =>
+										void act(m.error_space_folder(), () => openSpaceFolder(space.name))}
 									aria-label={m.spaces_open_folder_label({ name: space.name })}
 									title={m.spaces_open_folder()}
 								>
@@ -304,7 +331,7 @@
 		{/if}
 
 		{#if error}
-			<p class="px-2 pt-1.5 text-xs text-red-400">{error}</p>
+			<InlineError class="px-2 pt-1.5" message={error.what} detail={error.detail} />
 		{/if}
 	</Popover.Content>
 </Popover.Root>

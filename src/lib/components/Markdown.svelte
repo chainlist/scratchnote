@@ -76,7 +76,12 @@
 							type="button"
 							class="md-image-button"
 							onclick={(event) => openFile(event, path)}
-							><img src={attachmentUrl(path)} alt={name} class="md-image" /></button
+							><img
+								src={attachmentUrl(path)}
+								alt={name}
+								decoding="async"
+								class="md-image"
+							/></button
 						>{:else}<button
 							type="button"
 							class="md-file"

@@ -61,7 +61,7 @@
 				onerror={(message) => settings.say(message, true)}
 			/>
 			{#if restartNeeded}
-				<p class="text-xs text-amber-500">
+				<p class="text-xs text-warning">
 					{m.settings_restart_needed({ path: view.activeRoot })}
 				</p>
 			{/if}

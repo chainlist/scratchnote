@@ -48,33 +48,28 @@ body {
 	--secondary: var(--color-neutral-900);
 	--secondary-foreground: oklch(0.205 0 0);
 	--muted: var(--color-neutral-900);
-	--muted-foreground: var(--color-neutral-500);
+	/* Quiet text, the tone of `text-meta`, in both themes. */
+	--muted-foreground: var(--color-meta);
 	--accent: var(--color-neutral-900);
 	--accent-foreground: oklch(0.205 0 0);
-	--destructive: oklch(0.577 0.245 27.325);
+	/* Deeper than shadcn's 0.577 so an error reads on the capture window's
+	   surface too, not only on the page. */
+	--destructive: oklch(0.55 0.22 27.325);
 	--border: var(--color-neutral-800);
 	--input: var(--color-neutral-800);
-	--ring: oklch(0.708 0 0);
-	--chart-1: oklch(0.87 0 0);
-	--chart-2: oklch(0.556 0 0);
-	--chart-3: oklch(0.439 0 0);
-	--chart-4: oklch(0.371 0 0);
-	--chart-5: oklch(0.269 0 0);
+	--ring: oklch(0.556 0 0);
 	--radius: 0.625rem;
-	--sidebar: var(--color-neutral-950);
-	--sidebar-foreground: oklch(0.145 0 0);
-	--sidebar-primary: oklch(0.205 0 0);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: var(--color-neutral-900);
-	--sidebar-accent-foreground: oklch(0.205 0 0);
-	--sidebar-border: var(--color-neutral-800);
-	--sidebar-ring: oklch(0.708 0 0);
-	/* A pin's letters on its tint (`pinColour`): darker on a light page. */
-	--pin-lightness: 34%;
+	/* What needs a second look but has not failed, such as a restart to
+	   come: amber, deep enough to read on a light page. */
+	--warning: oklch(0.53 0.118 65);
+	/* A primary button under the pointer. The neutral accent steps toward
+	   its own text, still far apart; applyAppearance moves a coloured one
+	   away from the page instead, so its text never loses contrast. */
+	--primary-hover: color-mix(in oklch, var(--primary) 80%, var(--primary-foreground));
 }
 
 .dark {
-	--pin-lightness: 58%;
+	--warning: oklch(0.828 0.189 84.429);
 	--background: var(--color-neutral-950);
 	--foreground: oklch(0.985 0 0);
 	--card: var(--color-neutral-900);
@@ -86,46 +81,23 @@ body {
 	--secondary: var(--color-neutral-800);
 	--secondary-foreground: oklch(0.985 0 0);
 	--muted: var(--color-neutral-800);
-	--muted-foreground: var(--color-neutral-400);
+	--muted-foreground: var(--color-meta);
 	--accent: var(--color-neutral-800);
 	--accent-foreground: oklch(0.985 0 0);
 	--destructive: oklch(0.704 0.191 22.216);
-	--border: oklch(1 0 0 / 10%);
+	/* The hairline, as in the light theme: one tone for shadcn's borders and
+	   the app's own neutral-800 lines. */
+	--border: var(--color-neutral-800);
 	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.556 0 0);
-	--chart-1: oklch(0.87 0 0);
-	--chart-2: oklch(0.556 0 0);
-	--chart-3: oklch(0.439 0 0);
-	--chart-4: oklch(0.371 0 0);
-	--chart-5: oklch(0.269 0 0);
-	--sidebar: var(--color-neutral-900);
-	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.488 0.243 264.376);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: var(--color-neutral-800);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
-	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.556 0 0);
+	--ring: oklch(0.708 0 0);
 }
 
 @theme inline {
-	--color-sidebar-ring: var(--sidebar-ring);
-	--color-sidebar-border: var(--sidebar-border);
-	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-	--color-sidebar-accent: var(--sidebar-accent);
-	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-	--color-sidebar-primary: var(--sidebar-primary);
-	--color-sidebar-foreground: var(--sidebar-foreground);
-	--color-sidebar: var(--sidebar);
-	--color-chart-5: var(--chart-5);
-	--color-chart-4: var(--chart-4);
-	--color-chart-3: var(--chart-3);
-	--color-chart-2: var(--chart-2);
-	--color-chart-1: var(--chart-1);
 	--color-ring: var(--ring);
 	--color-input: var(--input);
 	--color-border: var(--border);
 	--color-destructive: var(--destructive);
+	--color-warning: var(--warning);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-accent: var(--accent);
 	--color-muted-foreground: var(--muted-foreground);
@@ -134,6 +106,7 @@ body {
 	--color-secondary: var(--secondary);
 	--color-primary-foreground: var(--primary-foreground);
 	--color-primary: var(--primary);
+	--color-primary-hover: var(--primary-hover);
 	--color-popover-foreground: var(--popover-foreground);
 	--color-popover: var(--popover);
 	--color-card-foreground: var(--card-foreground);
@@ -253,6 +226,31 @@ body {
 	}
 }
 
+/* Work under way, as a spinner or a download: with reduced motion a
+   spinner turns slowly, still alive, and a pulse holds still. */
+@media (prefers-reduced-motion: reduce) {
+	.animate-spin {
+		animation-duration: 3s;
+	}
+	.animate-pulse {
+		animation: none;
+	}
+	/* Menus, popovers and dialogs (tw-animate-css) open and close with a
+	   fade alone, without their zoom or slide. */
+	:is(.animate-in, .animate-out) {
+		--tw-enter-scale: 1;
+		--tw-exit-scale: 1;
+		--tw-enter-translate-x: 0;
+		--tw-enter-translate-y: 0;
+		--tw-exit-translate-x: 0;
+		--tw-exit-translate-y: 0;
+		--tw-enter-rotate: 0deg;
+		--tw-exit-rotate: 0deg;
+		--tw-enter-blur: 0;
+		--tw-exit-blur: 0;
+	}
+}
+
 /* Markdown in a note, the same in the editor and in the read-only view.
    Colours are inherited: the accent marks what can be clicked, as a link's
    underline, never the user's own emphasis.
@@ -293,7 +291,7 @@ a.md-link:hover {
 }
 /* A mention, `@name` (SPEC 3.10): a button on a card, which opens its notes. */
 .mention {
-	border-radius: 0.375rem;
+	border-radius: 0.25rem;
 	padding: 0 0.3em;
 	background: color-mix(in oklab, var(--primary) 18%, transparent);
 	color: inherit;
@@ -357,7 +355,7 @@ button.mention:hover {
 }
 /* Markup the editor shows on the line being edited. */
 .md-markup {
-	color: var(--color-neutral-500);
+	color: var(--color-meta);
 }
 /* An attached image. The capture window, a small one, lowers
    --md-image-height. */
@@ -365,7 +363,7 @@ button.mention:hover {
 	display: inline-block;
 	max-width: 100%;
 	max-height: var(--md-image-height, 20rem);
-	border-radius: 0.375rem;
+	border-radius: var(--radius-sm);
 	vertical-align: top;
 }
 .md-image-button {
@@ -387,7 +385,7 @@ button.mention:hover {
 	margin: 0.125em 0;
 	padding: 0.3125em 0.875em 0.3125em 0.3125em;
 	border: 1px solid var(--color-neutral-800);
-	border-radius: 0.5rem;
+	border-radius: var(--radius-md);
 	background: var(--color-neutral-900);
 	vertical-align: top;
 	text-align: left;
@@ -410,7 +408,7 @@ button.md-file:hover {
 	justify-content: center;
 	width: 3.25em;
 	height: 2.5em;
-	border-radius: 0.375rem;
+	border-radius: var(--radius-sm);
 	background: var(--color-neutral-800);
 	color: var(--color-neutral-300);
 	font-size: 0.75em;
@@ -459,6 +457,11 @@ button.md-file:hover .md-file-type {
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
+	}
+	/* The browser's own focus ring, on whatever draws none of its own, in
+	   the full ring colour: at half strength it fell under 3:1 on the page. */
+	:focus-visible {
+		outline-color: var(--ring);
 	}
 	body {
 		@apply bg-background text-foreground;

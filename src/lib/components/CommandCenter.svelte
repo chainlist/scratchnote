@@ -2,6 +2,7 @@
 	import { tick, type Component } from 'svelte';
 	import type { EditorView } from '@codemirror/view';
 	import { search, searchMeaning, type Note } from '#lib/api.js';
+	import InlineError from '#lib/components/InlineError.svelte';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import * as Command from '#lib/components/ui/command/index.js';
 	import AtSignIcon from '@lucide/svelte/icons/at-sign';
@@ -283,7 +284,7 @@
 				</Command.Group>
 			{/if}
 			{#if error}
-				<p class="px-3 py-2 text-sm text-red-400">{error}</p>
+				<InlineError class="px-3 py-2" message={m.error_search()} detail={error} />
 			{:else if !meaningPending}
 				<!-- Only once both searches have answered: said earlier, it would
 				     claim nothing matches while the one by meaning still looks. -->
@@ -291,4 +292,13 @@
 			{/if}
 		{/if}
 	</Command.List>
+	<!-- What the searches found, read out once both have answered, as the
+	     list itself is not. -->
+	<p class="sr-only" aria-live="polite">
+		{#if trimmed && !meaningPending && !error}
+			{total + related.length
+				? m.page_results({ count: total + related.length })
+				: m.page_no_match()}
+		{/if}
+	</p>
 </Command.Dialog>

@@ -532,6 +532,8 @@ class JournalView extends ItemView {
 		const article = element('article', 'journal-note');
 		const time = this.#button('journal-time', () => app.workspace.openNote(note));
 		time.textContent = note.time;
+		// The time names it; this says, on hover and read after it, where it leads.
+		time.title = m.journal_open_day();
 		article.append(time);
 		if (note.kind === 'page' && note.subject)
 			article.append(element('h3', 'journal-title', note.subject));

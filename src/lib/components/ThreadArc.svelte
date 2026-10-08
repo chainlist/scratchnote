@@ -2,8 +2,8 @@
 	import type { Note, Thread } from '#lib/api.js';
 	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
 	import { daysAgo } from '#lib/days.js';
-	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { threadHue } from '#lib/threads.js';
 
 	let {
 		thread,
@@ -72,8 +72,6 @@
 	/** A dot with more notes is larger. */
 	const size = (notes: number) => (notes >= 4 ? 'size-3' : notes >= 2 ? 'size-2.5' : 'size-2');
 
-	const mark = $derived(thread.scope !== null ? 'name-mark' : 'bg-neutral-400');
-
 	/** The dot Tab lands on, the latest until the arrows move it: the lane is
 	 *  one stop, its days one arrow apart, as a toolbar's buttons are. */
 	let current = $state<number | null>(null);
@@ -102,7 +100,7 @@
 <!-- The thread's shape in time: one dot a day it holds notes, from its first
      day to today, so how long it ran, how often it came up and how long it
      has been quiet read at a glance. A dot brings its day into sight. -->
-<div class="mb-6" style:--hue={thread.scope && mentionHue(thread.scope)}>
+<div class="mb-6" style:--hue={threadHue(thread.id)}>
 	<!-- Fainter while only suggested, as its lane is among the threads. -->
 	<div
 		role="toolbar"
@@ -115,7 +113,7 @@
 	>
 		<span class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-neutral-800"></span>
 		<span
-			class={['absolute top-1/2 h-0.5 -translate-y-1/2 rounded-full opacity-40', mark]}
+			class="name-mark absolute top-1/2 h-0.5 -translate-y-1/2 rounded-full opacity-40"
 			style:left="{at(thread.since)}%"
 			style:right="{100 - at(thread.until)}%"
 		></span>
@@ -128,14 +126,13 @@
 				onfocus={() => (current = i)}
 				aria-label={label(dot)}
 				title={label(dot)}
-				class="group absolute top-1/2 flex size-5 -translate-1/2 cursor-pointer items-center justify-center rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+				class="group absolute top-1/2 flex size-5 -translate-1/2 cursor-pointer items-center justify-center rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
 				style:left="{dot.at}%"
 			>
 				<span
 					class={[
-						'rounded-full ring-2 ring-background transition-transform group-hover:scale-150',
-						size(dot.notes),
-						mark
+						'name-mark rounded-full ring-2 ring-background transition-transform group-hover:scale-150',
+						size(dot.notes)
 					]}
 				></span>
 			</button>

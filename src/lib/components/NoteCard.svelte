@@ -159,9 +159,9 @@
 	}
 
 	const action =
-		'cursor-pointer rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-50';
+		'cursor-pointer rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200 disabled:opacity-50';
 	const menuButton =
-		'cursor-pointer rounded px-1 py-0.5 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 data-[state=open]:bg-neutral-800 data-[state=open]:text-neutral-200';
+		'flex size-6 cursor-pointer items-center justify-center rounded text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200 data-[state=open]:bg-neutral-800 data-[state=open]:text-neutral-200';
 
 	function onEditKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -290,7 +290,7 @@
 		<!-- The note's menu in the margin, beside the time it acts on; over the
 		     text's right end when the time heads the text, in a narrow container. -->
 		<div
-			class="absolute top-3.5 left-2 flex transition group-hover:opacity-100 focus-within:opacity-100 @max-[24rem]:top-2.5 @max-[24rem]:right-3 @max-[24rem]:left-auto {menuOpen
+			class="absolute top-3.5 left-1.5 flex transition group-hover:opacity-100 focus-within:opacity-100 @max-[24rem]:top-2.5 @max-[24rem]:right-3 @max-[24rem]:left-auto {menuOpen
 				? 'opacity-100'
 				: 'opacity-0'}"
 		>

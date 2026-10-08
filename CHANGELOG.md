@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0](https://github.com/chainlist/scratchnote/compare/v0.6.0...v0.7.0) (2026-10-08)
+
+
+### Features
+
+* draw threads and names on the map, open the calendar from a day's date ([c0c52f5](https://github.com/chainlist/scratchnote/commit/c0c52f503e1bf8178fe16cf52ddd5b4d05e42b23))
+* fit any window and text size, reach every view by keyboard, and say what failed ([3fd7007](https://github.com/chainlist/scratchnote/commit/3fd7007f0bb6a96a3bed41b02a10159207e76d82))
+* read a day as a journal page, times in the margin and gaps to scale ([869e6cd](https://github.com/chainlist/scratchnote/commit/869e6cd3a29b1e84818f25c8ed37ffd94d5c4b03))
+* show a thread's shape over time on its page ([121cf7c](https://github.com/chainlist/scratchnote/commit/121cf7c9487c857a402a170b3108771e6dd71d24))
+* show the selected ribbon button in the accent colour ([3a2afd2](https://github.com/chainlist/scratchnote/commit/3a2afd27ad7815878d04f92a65e793a2ada47c7d))
+* undo a change to threads, and name threads alike everywhere ([e2ece12](https://github.com/chainlist/scratchnote/commit/e2ece122ddd40928521f589593d6ed22735ac6a4))
+
+
+### Performance Improvements
+
+* draw only the tab shown and suggested threads 30 at a time ([1bdce29](https://github.com/chainlist/scratchnote/commit/1bdce29ad90f823eb5f1e930c9e42ed1ec23dc99))
+
 ## [0.6.0](https://github.com/chainlist/scratchnote/compare/v0.5.0...v0.6.0) (2026-10-05)
 
 

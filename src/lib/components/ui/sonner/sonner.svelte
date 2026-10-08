@@ -25,7 +25,10 @@
 	style="--normal-bg: var(--color-popover); --normal-text: var(--color-popover-foreground); --normal-border: var(--color-border);"
 	toastOptions={{
 		classes: {
-			toast: 'cn-toast'
+			toast: 'cn-toast',
+			// Sonner paints the action in the toast's own colours, inverted; the
+			// app's buttons take the accent. Its rule outranks a plain class.
+			actionButton: 'bg-primary! text-primary-foreground! hover:bg-primary-hover!'
 		}
 	}}
 	{...restProps}

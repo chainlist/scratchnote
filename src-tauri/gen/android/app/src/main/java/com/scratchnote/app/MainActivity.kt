@@ -1,6 +1,8 @@
 package com.scratchnote.app
 
 import android.os.Bundle
+import android.webkit.JavascriptInterface
+import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -22,4 +24,15 @@ class MainActivity : TauriActivity() {
     }
   }
 
+  // The WebView scales only the text by the system font size, leaving icons
+  // and spacing behind. The page takes the scale into its root font size
+  // instead (#lib/appearance.ts), so everything sized in rem grows with it.
+  // A font size change recreates the activity, so the scale read here holds.
+  override fun onWebViewCreate(webView: WebView) {
+    val scale = resources.configuration.fontScale
+    webView.settings.textZoom = 100
+    webView.addJavascriptInterface(object {
+      @JavascriptInterface fun fontScale(): Float = scale
+    }, "AndroidText")
+  }
 }

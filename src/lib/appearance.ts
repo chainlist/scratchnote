@@ -11,6 +11,16 @@ import { m } from '#lib/paraglide/messages.js';
 
 type Appearance = Pick<Settings, 'accentColor' | 'fontFamily' | 'fontSize' | 'radius' | 'theme'>;
 
+/** Android's system font size, which MainActivity.kt hands over in place of
+ *  scaling the text alone; 1 everywhere else. */
+const systemScale: number =
+	(window as { AndroidText?: { fontScale(): number } }).AndroidText?.fontScale() ?? 1;
+
+/** The root font size the text size setting comes to, in pixels: the rem. */
+export function remPixels(fontSize: number) {
+	return fontSize * systemScale;
+}
+
 const SANS = 'ui-sans-serif, system-ui, sans-serif';
 
 /**
@@ -172,7 +182,7 @@ export function applyAppearance(appearance: Appearance) {
 	// Tailwind's font-sans reads this variable. An unknown name gets the default.
 	const font = FONTS.find((f) => f.name === fontFamily) ?? FONTS[0];
 	style.setProperty('--font-sans', font.family);
-	style.fontSize = `${fontSize}px`;
+	style.fontSize = `${remPixels(fontSize)}px`;
 	style.setProperty('--radius', `${radius}rem`);
 	// app.html restores this at the next launch, before the settings arrive.
 	localStorage.setItem('appearance', JSON.stringify({ dark, style: style.cssText }));

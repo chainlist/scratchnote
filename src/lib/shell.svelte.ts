@@ -104,7 +104,8 @@ export class Shell implements WorkspaceHost {
 	pins = $state.raw<Pin[]>([]);
 	/** The notes taken out of threads. */
 	alone = $state.raw<string[]>([]);
-	/** The text size setting, in pixels: the rem the day's columns are sized in. */
+	/** The rem in pixels, the text size setting times Android's font scale: what
+	 *  the day's columns are sized in. */
 	textSize = $state(16);
 	/** The thread order setting: which of a thread's notes its view lists first. */
 	threadOrder = $state<ThreadOrder>('oldest');

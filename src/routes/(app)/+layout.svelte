@@ -44,6 +44,7 @@
 	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import { Spinner } from '#lib/components/ui/spinner/index.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { remPixels } from '#lib/appearance.js';
 	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
 	import { DOCK_MAX, DOCK_MIN } from '#lib/dock.js';
 	import { bindWorkspace } from '#lib/plugins/app.js';
@@ -158,12 +159,12 @@
 				.catch((e) => shell.showError(String(e)))
 				.finally(() => (checkingNews = false));
 
-			shell.textSize = settings.fontSize;
+			shell.textSize = remPixels(settings.fontSize);
 			shell.threadOrder = settings.threadOrder;
 			shell.captureHotkey = android ? '' : settings.captureHotkey;
 			off.push(
 				onSettingsChanged((changed) => {
-					shell.textSize = changed.fontSize;
+					shell.textSize = remPixels(changed.fontSize);
 					shell.threadOrder = changed.threadOrder;
 					shell.captureHotkey = android ? '' : changed.captureHotkey;
 				})

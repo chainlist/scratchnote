@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.0](https://github.com/chainlist/scratchnote/compare/v0.7.0...v0.8.0) (2026-10-09)
+
+
+### Features
+
+* fix sizes for phone screens ([1d50f24](https://github.com/chainlist/scratchnote/commit/1d50f243ac6454d2c418b8aa4f56a56cbb5d2fe5))
+* keep the embedding model out of the notes folder ([9d78cc9](https://github.com/chainlist/scratchnote/commit/9d78cc9ebcaf24503027e3aed92db241dce5c49b))
+* label each note with its part of life and job family ([f7e1c3b](https://github.com/chainlist/scratchnote/commit/f7e1c3b235dc7cab797191fa6ecb06f4b08660b3))
+* run on Android ([1a6ed41](https://github.com/chainlist/scratchnote/commit/1a6ed417f4b7884b647e022f11e3c214ffcc9f5f))
+* show what the embedder is doing in a dev build's status bar ([f7516e4](https://github.com/chainlist/scratchnote/commit/f7516e4f27092a7c435bb28f4c26b56dbce31d9a))
+
+
+### Bug Fixes
+
+* give toast action buttons the accent colour ([3476770](https://github.com/chainlist/scratchnote/commit/347677005d7e73834f3e96c7516c592723f7d5ee))
+* grow icons and spacing with the phone's text size ([9c665f4](https://github.com/chainlist/scratchnote/commit/9c665f4cbda02e8808fd1e6bb7f9914783e859a9))
+
 ## [0.7.0](https://github.com/chainlist/scratchnote/compare/v0.6.0...v0.7.0) (2026-10-08)
 
 

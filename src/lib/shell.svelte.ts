@@ -32,6 +32,7 @@ import {
 	type ThreadOrder
 } from '#lib/api.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
+import { onGuard } from '#lib/back.svelte.js';
 import { addToPageDraft } from '#lib/page-draft.js';
 import { editable } from '#lib/components/settings/state.svelte.js';
 import { m } from '#lib/paraglide/messages.js';
@@ -148,6 +149,10 @@ export class Shell implements WorkspaceHost {
 	settingsOpen = $state(false);
 	/** The space switcher's list, open from the command center too. */
 	spacesOpen = $state(false);
+	/** On a phone, the ribbon drawn out from the left edge. */
+	ribbonOpen = $state(false);
+	/** The views' scrolling element, which takes the day's swipes. */
+	main = $state<HTMLElement | null>(null);
 	/** Counts the times the notes or threads were read again, for a view
 	 *  outside the routes, which loads what it shows itself. */
 	reloads = $state(0);
@@ -182,9 +187,12 @@ export class Shell implements WorkspaceHost {
 	 *  behind it, or no way to tell, it follows its link. */
 	goBack = (event: MouseEvent) => {
 		const index = 'navigation' in window ? window.navigation.currentEntry?.index : undefined;
-		if (index === undefined || this.#firstEntry === undefined || index <= this.#firstEntry) return;
+		// Past the entry Android's Back keeps while something is open, such as the dock.
+		const kept = onGuard() ? 1 : 0;
+		if (index === undefined || this.#firstEntry === undefined || index - kept <= this.#firstEntry)
+			return;
 		event.preventDefault();
-		history.back();
+		history.go(-1 - kept);
 	};
 
 	/** Threads' first notes to read again with the next reload: those changed,

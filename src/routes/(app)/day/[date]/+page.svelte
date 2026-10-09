@@ -15,6 +15,7 @@
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
+	import { inText, onSwipe, phone } from '#lib/swipe.js';
 	import type { Day } from './+page';
 
 	let { data } = $props();
@@ -79,6 +80,36 @@
 		const day = event.key === 'ArrowLeft' ? data.previous : data.next;
 		if (day) void goto(dayHref(day.date));
 	}
+
+	// A swipe goes to the day before or after, as the arrows do: the view
+	// follows the finger, and holds back where there is no day to go to.
+	$effect(() => {
+		const main = shell.main;
+		if (!main) return;
+		const slide = (x: number, animate: boolean) => {
+			main.style.transition = animate ? 'transform 150ms ease-out, opacity 150ms ease-out' : '';
+			main.style.transform = x ? `translateX(${x}px)` : '';
+			main.style.opacity = x ? String(1 - Math.min(0.5, Math.abs(x) / 600)) : '';
+		};
+		const toward = (x: number) => (x > 0 ? data.previous : data.next);
+		const stop = onSwipe(main, {
+			axis: 'x',
+			// The left edge draws out the ribbon on a phone.
+			accept: (touch, target) => !inText(target) && !(phone.current && touch.clientX < 24),
+			move: (x) => slide(toward(x) ? x * 0.5 : x * 0.15, false),
+			end: (x, speed) => {
+				const day = toward(x);
+				if (day && (Math.abs(x) > 80 || (Math.abs(x) > 30 && Math.abs(speed) > 0.4))) {
+					slide(0, false);
+					void goto(dayHref(day.date));
+				} else slide(0, true);
+			}
+		});
+		return () => {
+			stop();
+			slide(0, false);
+		};
+	});
 </script>
 
 <svelte:window onkeydown={onWindowKeydown} />

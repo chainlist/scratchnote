@@ -5,7 +5,10 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			/** The entry Android's Back leaves to close what is open (#lib/back.svelte.ts). */
+			overlay?: boolean;
+		}
 		// interface Platform {}
 	}
 }

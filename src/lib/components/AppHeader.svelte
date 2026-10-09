@@ -5,6 +5,7 @@
 	import SpaceSwitcher from '#lib/components/SpaceSwitcher.svelte';
 	import WindowControls from '#lib/components/WindowControls.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import MenuIcon from '@lucide/svelte/icons/menu';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import { m } from '#lib/paraglide/messages.js';
@@ -12,6 +13,7 @@
 	let {
 		spaces,
 		spacesOpen = $bindable(false),
+		onmenu,
 		onsearch,
 		onsettings,
 		title,
@@ -20,6 +22,8 @@
 		spaces: SpacesView | null;
 		/** The space switcher's list, open. */
 		spacesOpen?: boolean;
+		/** Draw out the ribbon, on a phone, where it waits off screen. */
+		onmenu?: () => void;
 		onsearch: () => void;
 		onsettings: () => void;
 		/** Centred in the bar, for what the page has scrolled out of view. */
@@ -38,6 +42,18 @@
 	data-tauri-drag-region="deep"
 	class={['@container relative flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}
 >
+	{#if onmenu}
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			onclick={onmenu}
+			aria-label={m.ribbon_label()}
+			title={m.ribbon_label()}
+			class="-ml-2 text-muted-foreground hover:text-foreground"
+		>
+			<MenuIcon />
+		</Button>
+	{/if}
 	<SpaceSwitcher view={spaces} bind:open={spacesOpen} />
 	{#if title}
 		<!-- Rises into place as the page's own title leaves, and sinks back out.

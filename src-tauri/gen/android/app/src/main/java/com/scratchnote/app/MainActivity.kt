@@ -1,5 +1,6 @@
 package com.scratchnote.app
 
+import android.graphics.Rect
 import android.os.Bundle
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
@@ -34,5 +35,25 @@ class MainActivity : TauriActivity() {
     webView.addJavascriptInterface(object {
       @JavascriptInterface fun fontScale(): Float = scale
     }, "AndroidText")
+    claimLeftEdge(webView)
+  }
+
+  // On a phone a swipe in from the left edge draws out the ribbon
+  // (RibbonDrawer.svelte), but with gesture navigation that edge is the
+  // system's Back. Android lets an app take back at most 200dp of each edge:
+  // the middle of the left one goes to the page. A screen wide enough for the
+  // ribbon (40rem, 640dp at the default text size) keeps all of its Back.
+  private fun claimLeftEdge(webView: WebView) {
+    webView.addOnLayoutChangeListener { view, _, top, _, bottom, _, _, _, _ ->
+      val density = resources.displayMetrics.density
+      val phone = view.width / density < 640
+      val band = (200 * density).toInt()
+      val middle = (bottom - top) / 2
+      ViewCompat.setSystemGestureExclusionRects(
+        view,
+        if (phone) listOf(Rect(0, middle - band / 2, (32 * density).toInt(), middle + band / 2))
+        else emptyList()
+      )
+    }
   }
 }

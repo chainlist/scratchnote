@@ -18,6 +18,7 @@
 	import { mentionHref } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
+	import { closeOnBack } from '#lib/back.svelte.js';
 
 	let {
 		found
@@ -112,6 +113,12 @@
 		const back = [selectButton, menuButton].find((el) => el?.checkVisibility());
 		back?.focus();
 	}
+
+	// Android's Back too.
+	closeOnBack(
+		() => chosen !== null,
+		() => void stopChoosing()
+	);
 
 	/** Escape stops choosing, as Cancel does, unless something open inside
 	 *  the view, such as an editor or a menu, takes it first. */

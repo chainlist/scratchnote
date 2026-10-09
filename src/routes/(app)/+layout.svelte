@@ -34,6 +34,7 @@
 	import PageView from '#lib/components/PageView.svelte';
 	import PluginPanel from '#lib/components/PluginPanel.svelte';
 	import Ribbon from '#lib/components/Ribbon.svelte';
+	import RibbonDrawer from '#lib/components/RibbonDrawer.svelte';
 	import Settings from '#lib/components/settings/Settings.svelte';
 	import ThreadDock from '#lib/components/ThreadDock.svelte';
 	import ThreadPicker from '#lib/components/ThreadPicker.svelte';
@@ -51,6 +52,8 @@
 	import { matchesHotkey, runCommand } from '#lib/plugins/commands.js';
 	import { registry } from '#lib/plugins/registry.svelte.js';
 	import { setShell, Shell } from '#lib/shell.svelte.js';
+	import { closeOnBack, startBackGuard } from '#lib/back.svelte.js';
+	import { inText, onSwipe, phone } from '#lib/swipe.js';
 
 	let { data, children } = $props();
 
@@ -126,6 +129,43 @@
 			if (target.isContentEditable || target.closest('input, textarea')) event.preventDefault();
 		}
 	}
+
+	// Android's Back closes what is open before it leaves the view.
+	startBackGuard();
+	closeOnBack(
+		() => shell.dockOpen,
+		() => {
+			shell.docked = null;
+			shell.panel = null;
+			shell.dockedThread = null;
+		}
+	);
+
+	// On a phone the settings take the whole screen, and pulling them down
+	// from their top closes them, as their X does.
+	$effect(() => {
+		const dialog = settingsDialog;
+		if (!dialog || !phone.current) return;
+		const slide = (y: number, animate: boolean) => {
+			dialog.style.transition = animate ? 'transform 150ms ease-out' : '';
+			dialog.style.transform = y ? `translateY(${y}px)` : '';
+		};
+		return onSwipe(dialog, {
+			axis: 'y',
+			// Only from the top: a list scrolled down scrolls back up first.
+			accept: (_, target) => {
+				if (inText(target)) return false;
+				for (let el: Element | null = target; el && el !== dialog; el = el.parentElement)
+					if (el.scrollTop > 0) return false;
+				return true;
+			},
+			move: (y) => slide(Math.max(0, y), false),
+			end: (y, speed) => {
+				if (y > 120 || (y > 30 && speed > 0.5)) shell.settingsOpen = false;
+				else slide(0, true);
+			}
+		});
+	});
 
 	/**
 	 * A plugin's command with this hotkey, run. Those on the text are the
@@ -219,6 +259,7 @@
 	<AppHeader
 		spaces={data.spaces}
 		bind:spacesOpen={shell.spacesOpen}
+		onmenu={phone.current ? () => (shell.ribbonOpen = true) : undefined}
 		onsearch={shell.openPalette}
 		onsettings={() => (shell.settingsOpen = true)}
 		titleShown={shell.titleCollapsed}
@@ -229,7 +270,8 @@
 	</AppHeader>
 
 	<div class="flex min-h-0 flex-1">
-		<Ribbon />
+		<!-- On a phone the ribbon waits off screen, for the room. -->
+		{#if phone.current}<RibbonDrawer />{:else}<Ribbon />{/if}
 		<!-- The dock goes before or after the view, on the side it was moved
 		     to. The view's pane stays in place, so the view is never mounted
 		     again when the dock opens, closes or moves. -->
@@ -240,7 +282,11 @@
 					<Resizable.Handle class="z-10 after:w-2" />
 				{/if}
 				<Resizable.Pane id="view" order={2} class="relative">
-					<main bind:offsetWidth={shell.width} class="h-full overflow-y-auto px-6 pb-16">
+					<main
+						bind:this={shell.main}
+						bind:offsetWidth={shell.width}
+						class="h-full overflow-y-auto px-6 pb-16"
+					>
 						{@render children()}
 					</main>
 					{#if loading}

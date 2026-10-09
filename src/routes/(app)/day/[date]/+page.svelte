@@ -96,53 +96,58 @@
 	<View key={data.date} name={dayHeading(data.date)}>
 		{#snippet heading(compact: boolean)}
 			<!-- Side by side ahead of the title, so they stay put while its width
-			     changes from one day to the next. -->
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				href={data.previous && dayHref(data.previous.date)}
-				disabled={!data.previous}
-				aria-label={m.calendar_previous_day()}
-				aria-keyshortcuts="Alt+ArrowLeft"
-				title="{m.calendar_previous_day()} ({mac ? '⌥←' : 'Alt+←'})"
-				class="text-muted-foreground hover:text-foreground"
-			>
-				<ChevronLeftIcon />
-			</Button>
-			<Button
-				variant="ghost"
-				size="icon-sm"
-				href={data.next && dayHref(data.next.date)}
-				disabled={!data.next}
-				aria-label={m.calendar_next_day()}
-				aria-keyshortcuts="Alt+ArrowRight"
-				title="{m.calendar_next_day()} ({mac ? '⌥→' : 'Alt+→'})"
-				class="text-muted-foreground hover:text-foreground"
-			>
-				<ChevronRightIcon />
-			</Button>
-			<!-- The date opens the calendar, on the day's month; the calendar after
-			     it says it can be clicked. -->
-			<svelte:element
-				this={compact ? 'span' : 'h1'}
-				class={compact ? 'min-w-0 text-sm font-semibold whitespace-nowrap' : 'text-2xl font-medium'}
-			>
-				<a
-					href={resolve('calendar/')}
-					title={m.calendar_pick()}
-					class="group/date -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+			     changes from one day to the next. On a screen too narrow for the
+			     date on one line beside them, the title goes under them. -->
+			<div class={compact ? 'contents' : 'flex min-w-0 flex-1 flex-wrap items-center gap-2'}>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					href={data.previous && dayHref(data.previous.date)}
+					disabled={!data.previous}
+					aria-label={m.calendar_previous_day()}
+					aria-keyshortcuts="Alt+ArrowLeft"
+					title="{m.calendar_previous_day()} ({mac ? '⌥←' : 'Alt+←'})"
+					class="text-muted-foreground hover:text-foreground"
 				>
-					<span class={compact ? 'min-w-0 truncate' : undefined}>
-						{#if compact}{dayHeading(data.date, true)}{:else}{@render dayName(data.date)}{/if}
-					</span>
-					<CalendarIcon
-						class={[
-							'shrink-0 text-muted-foreground transition-colors group-hover/date:text-foreground',
-							compact ? 'size-3.5' : 'size-4.5'
-						]}
-					/>
-				</a>
-			</svelte:element>
+					<ChevronLeftIcon />
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					href={data.next && dayHref(data.next.date)}
+					disabled={!data.next}
+					aria-label={m.calendar_next_day()}
+					aria-keyshortcuts="Alt+ArrowRight"
+					title="{m.calendar_next_day()} ({mac ? '⌥→' : 'Alt+→'})"
+					class="text-muted-foreground hover:text-foreground"
+				>
+					<ChevronRightIcon />
+				</Button>
+				<!-- The date opens the calendar, on the day's month; the calendar after
+				     it says it can be clicked. -->
+				<svelte:element
+					this={compact ? 'span' : 'h1'}
+					class={compact
+						? 'min-w-0 text-sm font-semibold whitespace-nowrap'
+						: 'grow basis-0 text-2xl font-medium max-sm:text-xl'}
+				>
+					<a
+						href={resolve('calendar/')}
+						title={m.calendar_pick()}
+						class="group/date -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+					>
+						<span class={compact ? 'min-w-0 truncate' : undefined}>
+							{#if compact}{dayHeading(data.date, true)}{:else}{@render dayName(data.date)}{/if}
+						</span>
+						<CalendarIcon
+							class={[
+								'shrink-0 text-muted-foreground transition-colors group-hover/date:text-foreground',
+								compact ? 'size-3.5' : 'size-4.5'
+							]}
+						/>
+					</a>
+				</svelte:element>
+			</div>
 		{/snippet}
 
 		<!-- What earlier notes said about this day (SPEC 5.3). -->

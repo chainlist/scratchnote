@@ -470,3 +470,12 @@ button.md-file:hover .md-file-type {
 		@apply font-sans;
 	}
 }
+
+/* A finger is wider than a pointer: on a touch screen the icons are drawn a
+   quarter larger, whatever size they were given, and the icon buttons grow
+   with them (button.svelte). */
+@media (pointer: coarse) {
+	svg.lucide-icon {
+		zoom: 1.25;
+	}
+}

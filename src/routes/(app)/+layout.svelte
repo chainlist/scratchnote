@@ -96,6 +96,8 @@
 		return { min, max };
 	});
 
+	let settingsDialog = $state<HTMLElement | null>(null);
+
 	/** Release notes waiting to be read after an update. */
 	let releaseNotes = $state<Release[] | null>(null);
 	/** Until it is known whether they show, any other dialog at launch waits. */
@@ -110,6 +112,10 @@
 			event.preventDefault();
 			if (shell.paletteOpen) shell.paletteOpen = false;
 			else shell.openPalette();
+		} else if (matchesHotkey(event, 'Mod-,')) {
+			event.preventDefault();
+			shell.paletteOpen = false;
+			shell.settingsOpen = true;
 		} else if (runPluginHotkey(event)) {
 			event.preventDefault();
 		} else if (!mac && event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
@@ -212,6 +218,7 @@
 <div class="flex h-screen flex-col bg-neutral-950 text-neutral-100">
 	<AppHeader
 		spaces={data.spaces}
+		bind:spacesOpen={shell.spacesOpen}
 		onsearch={shell.openPalette}
 		onsettings={() => (shell.settingsOpen = true)}
 		titleShown={shell.titleCollapsed}
@@ -308,6 +315,7 @@
 	onpages={() => void shell.showPages()}
 	onmentions={() => void shell.showMentions()}
 	onthreads={shell.canSimilar ? () => void shell.showThreads() : undefined}
+	onspaces={() => (shell.spacesOpen = true)}
 	onsettings={() => (shell.settingsOpen = true)}
 />
 
@@ -321,9 +329,17 @@
 <WhatsNew bind:releases={releaseNotes} />
 <OldChatModelDialog waiting={checkingNews || releaseNotes !== null} onerror={shell.showError} />
 
+<!-- The whole screen on a phone. The focus goes to the dialog itself rather
+     than the first tab, which opened by Ctrl+, would show its focus ring; Tab
+     goes on to the tabs. -->
 <Dialog.Root bind:open={shell.settingsOpen}>
 	<Dialog.Content
-		class="h-[min(1000px,85vh)] grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[min(1100px,calc(100%-2rem))]"
+		bind:ref={settingsDialog}
+		onOpenAutoFocus={(event) => {
+			event.preventDefault();
+			settingsDialog?.focus();
+		}}
+		class="h-dvh max-w-full grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden rounded-none p-0 ring-0 sm:h-[min(1000px,85vh)] sm:max-w-[min(1100px,calc(100%-2rem))] sm:rounded-xl sm:ring-1"
 	>
 		<Settings />
 	</Dialog.Content>

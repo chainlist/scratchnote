@@ -11,12 +11,15 @@
 
 	let {
 		spaces,
+		spacesOpen = $bindable(false),
 		onsearch,
 		onsettings,
 		title,
 		titleShown = false
 	}: {
 		spaces: SpacesView | null;
+		/** The space switcher's list, open. */
+		spacesOpen?: boolean;
 		onsearch: () => void;
 		onsettings: () => void;
 		/** Centred in the bar, for what the page has scrolled out of view. */
@@ -35,7 +38,7 @@
 	data-tauri-drag-region="deep"
 	class={['@container relative flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}
 >
-	<SpaceSwitcher view={spaces} />
+	<SpaceSwitcher view={spaces} bind:open={spacesOpen} />
 	{#if title}
 		<!-- Rises into place as the page's own title leaves, and sinks back out.
 		     Centred on the window, it keeps clear of the bar's two ends, the

@@ -146,6 +146,8 @@ export class Shell implements WorkspaceHost {
 	query = $state('');
 	paletteOpen = $state(false);
 	settingsOpen = $state(false);
+	/** The space switcher's list, open from the command center too. */
+	spacesOpen = $state(false);
 	/** Counts the times the notes or threads were read again, for a view
 	 *  outside the routes, which loads what it shows itself. */
 	reloads = $state(0);

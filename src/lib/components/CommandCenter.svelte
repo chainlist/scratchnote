@@ -5,6 +5,7 @@
 	import InlineError from '#lib/components/InlineError.svelte';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import * as Command from '#lib/components/ui/command/index.js';
+	import ArrowRightLeftIcon from '@lucide/svelte/icons/arrow-right-left';
 	import AtSignIcon from '@lucide/svelte/icons/at-sign';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import FilePlusIcon from '@lucide/svelte/icons/file-plus';
@@ -32,6 +33,7 @@
 		onpages,
 		onmentions,
 		onthreads,
+		onspaces,
 		onsettings
 	}: {
 		open: boolean;
@@ -56,6 +58,8 @@
 		onmentions: () => void;
 		/** List the space's threads, while there are threads (SPEC 6.4). */
 		onthreads?: () => void;
+		/** Open the list of spaces, to switch to another. */
+		onspaces: () => void;
 		onsettings: () => void;
 	} = $props();
 
@@ -81,6 +85,8 @@
 		value: string;
 		name: string;
 		icon?: Component;
+		/** The app's own shortcut for it; a plugin's command has its own. */
+		hotkey?: string;
 		plugin?: CommandEntry;
 		run: () => void;
 	};
@@ -94,7 +100,14 @@
 		...(onthreads
 			? [{ value: 'threads', name: m.threads_all(), icon: RouteIcon, run: onthreads }]
 			: []),
-		{ value: 'settings', name: m.common_settings(), icon: SettingsIcon, run: onsettings }
+		{ value: 'switch-space', name: m.spaces_switch(), icon: ArrowRightLeftIcon, run: onspaces },
+		{
+			value: 'settings',
+			name: m.common_settings(),
+			icon: SettingsIcon,
+			hotkey: 'Mod-,',
+			run: onsettings
+		}
 	]);
 
 	/** The plugins' commands; those on text only when opened from an editor still there. */
@@ -189,11 +202,12 @@
 </script>
 
 {#snippet actionItem(action: Action)}
+	{@const hotkey = action.hotkey ?? action.plugin?.hotkey}
 	<Command.Item value={action.value} onSelect={() => run(action.run)}>
 		{#if action.icon}<action.icon />{:else}<PluginIcon icon={action.plugin?.icon} />{/if}
 		{action.name}
-		{#if action.plugin?.hotkey}
-			<Command.Shortcut>{formatHotkey(action.plugin.hotkey)}</Command.Shortcut>
+		{#if hotkey}
+			<Command.Shortcut>{formatHotkey(hotkey)}</Command.Shortcut>
 		{/if}
 	</Command.Item>
 {/snippet}

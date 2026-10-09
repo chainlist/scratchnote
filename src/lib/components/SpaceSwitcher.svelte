@@ -26,6 +26,7 @@
 
 	let {
 		view,
+		open = $bindable(false),
 		chosen,
 		onpick,
 		hotkey,
@@ -35,6 +36,8 @@
 		class: className
 	}: {
 		view: SpacesView | null;
+		/** Bound to open the list from elsewhere, as the command center does. */
+		open?: boolean;
 		/** The space shown as the one in use: the open one unless another is given. */
 		chosen?: string;
 		/**
@@ -58,7 +61,6 @@
 	/** Making, renaming and deleting spaces, which a list that only picks leaves out. */
 	const manage = $derived(onpick === undefined);
 
-	let open = $state(false);
 	let error = $state<{ what: string; detail: string } | null>(null);
 	let newName = $state('');
 	/** The space whose name is being edited, and the draft. */

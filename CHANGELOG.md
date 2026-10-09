@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/chainlist/scratchnote/compare/v0.8.0...v0.9.0) (2026-10-09)
+
+
+### Features
+
+* close what is open with Android's Back, and swipe on phones ([1e4d4d6](https://github.com/chainlist/scratchnote/commit/1e4d4d6186c977604dcde884d8ada4fc4734e355))
+* switch space from the command center and open settings with Ctrl+, ([dffe727](https://github.com/chainlist/scratchnote/commit/dffe72736a55e639b86d169922186fdcec880daa))
+
 ## [0.8.0](https://github.com/chainlist/scratchnote/compare/v0.7.0...v0.8.0) (2026-10-09)
 
 

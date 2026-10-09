@@ -13,6 +13,16 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// The key release builds are signed with, which CI writes from its secrets
+// (.github/workflows/build.yml). Without the file a release build is left
+// unsigned, and debug builds never use it.
+val keystoreFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystoreFile.exists()) {
+        keystoreFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 36
     namespace = "com.scratchnote.app"
@@ -23,6 +33,16 @@ android {
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    if (keystoreFile.exists()) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("password")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("password")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -38,6 +58,7 @@ android {
             }
         }
         getByName("release") {
+            if (keystoreFile.exists()) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

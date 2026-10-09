@@ -72,3 +72,83 @@ jobs:
           uploadWorkflowArtifacts: ${{ !inputs.tag }}
           # Only this build signs update files (SPEC 3.6), so local builds need no key.
           args: '--config {"bundle":{"createUpdaterArtifacts":true}}'
+
+  # Android has no Tauri updater: a new version is the APK from the release,
+  # which installs over the last one as both are signed with the same key.
+  android:
+    name: Android
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.13.1
+          cache: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Phones only: every one since about 2017 is arm64.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v4
+
+      - name: Install the NDK and Ninja
+        run: |
+          sdkmanager --install "ndk;28.2.13676358"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          # For llama.cpp's CMake build.
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+
+      - run: pnpm install --frozen-lockfile
+
+      # The upload key, from the repository's secrets; never in the repository.
+      - name: Write the signing key
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$ANDROID_KEY_BASE64" ]; then
+            echo "::error::The ANDROID_KEY_BASE64, ANDROID_KEY_PASSWORD and ANDROID_KEY_ALIAS secrets are not set."
+            exit 1
+          fi
+          echo "$ANDROID_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/upload.jks"
+            echo "password=$ANDROID_KEY_PASSWORD"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+          } > src-tauri/gen/android/keystore.properties
+
+      - run: pnpm tauri android build --apk --aab --target aarch64
+
+      - name: Name the files after the version
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          outputs=src-tauri/gen/android/app/build/outputs
+          mkdir android
+          cp "$(find $outputs/apk -name '*.apk' | head -n 1)" "android/Scratchnote_${version}_android_arm64.apk"
+          cp "$(find $outputs/bundle -name '*.aab' | head -n 1)" "android/Scratchnote_${version}_android_arm64.aab"
+          ls -l android
+
+      - name: Attach to the release
+        if: inputs.tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ inputs.tag }}" android/* --clobber
+
+      - if: ${{ !inputs.tag }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: android/

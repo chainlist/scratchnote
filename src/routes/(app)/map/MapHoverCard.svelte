@@ -5,7 +5,7 @@
 	import { mentionHue } from '#lib/mentions.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { threadHue } from '#lib/threads.js';
-	import type { Point } from './layout.js';
+	import type { Point } from './map-data.js';
 
 	let {
 		note,

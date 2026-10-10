@@ -2,7 +2,7 @@ import type { MapNote, Thread } from '#lib/api.js';
 import { mentionHue } from '#lib/mentions.js';
 import { threadHue } from '#lib/threads.js';
 import type { Graph } from './graph.js';
-import type { Point } from './layout.js';
+import type { Point } from './map-data.js';
 
 /** A dot's radius, in CSS pixels, with every note in view. */
 const DOT = 2.5;

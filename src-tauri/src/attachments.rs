@@ -21,6 +21,8 @@ use tauri::{AppHandle, Manager};
 
 use crate::spaces::Space;
 use crate::state::AppState;
+use crate::storage::paths::{numbered, safe_part};
+use crate::Result;
 
 /// The folder in a space that holds its attachments.
 const DIR: &str = "attachments";
@@ -45,27 +47,6 @@ pub struct Attachment {
     pub path: String,
 }
 
-/// `part` of a file name made safe everywhere: the characters Windows
-/// forbids, and the `#` and `%` that break a link in other editors, become
-/// spaces. Whitespace collapses, and it is cut to `max` characters without
-/// trailing dots or spaces.
-fn clean(part: &str, max: usize) -> String {
-    let spaced: String = part
-        .chars()
-        .map(|c| {
-            if c.is_control() || r#"<>:"/\|?*#%"#.contains(c) {
-                ' '
-            } else {
-                c
-            }
-        })
-        .collect();
-    let collapsed = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
-    let cut: String = collapsed.chars().take(max).collect();
-    cut.trim_end_matches(|c: char| c == '.' || c.is_whitespace())
-        .to_string()
-}
-
 /// A file name split before its extension, when it has one: a short run of
 /// letters and digits after the last dot, with a name before it.
 fn split_extension(name: &str) -> (&str, Option<&str>) {
@@ -82,26 +63,13 @@ fn split_extension(name: &str) -> (&str, Option<&str>) {
     }
 }
 
-/// `stem` and `extension` put back together, with ` 2`, ` 3` and so on
-/// before the extension for `n` above 1.
-fn numbered(stem: &str, extension: Option<&str>, n: usize) -> String {
-    let suffix = if n > 1 {
-        format!(" {n}")
-    } else {
-        String::new()
-    };
-    match extension {
-        Some(ext) => format!("{stem}{suffix}.{ext}"),
-        None => format!("{stem}{suffix}"),
-    }
-}
-
 /// The file name for `original` attached on `date`: `<date> <name>.<ext>`,
 /// with ` 2`, ` 3` and so on before the extension for `n` above 1, when the
 /// plain name is taken.
 pub fn file_name(date: &str, original: &str, n: usize) -> String {
     let (stem, extension) = split_extension(original);
-    let stem = clean(stem, MAX_STEM);
+    // `#` and `%` would break a link to it in other editors.
+    let stem = safe_part(stem, MAX_STEM, "#%");
     let stem = if stem.is_empty() { "attachment" } else { &stem };
     numbered(&format!("{date} {stem}"), extension, n)
 }
@@ -349,6 +317,15 @@ pub fn carry(from: &Path, to: &Path, text: &str) -> io::Result<(String, Vec<Stri
     }
     let text = relink(text, &moved);
     Ok((text, moved.into_keys().collect()))
+}
+
+/// `carry` off the async runtime, for a note or a page moving to the space
+/// at `to`.
+pub async fn carry_async(from: &Path, to: &Path, text: &str) -> Result<(String, Vec<String>)> {
+    let (from, to, text) = (from.to_path_buf(), to.to_path_buf(), text.to_string());
+    crate::commands::blocking(move || carry(&from, &to, &text))
+        .await?
+        .map_err(|e| format!("could not take its attachments along: {e}").into())
 }
 
 /// Remove the files a note took to another space (`carry`) from `space`,

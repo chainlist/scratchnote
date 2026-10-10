@@ -5,7 +5,8 @@ use percent_encoding::percent_decode_str;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::space_db::{to_string, SpaceDb};
+use crate::storage::space_db::SpaceDb;
+use crate::Result;
 
 /// The most a space holds, so the edge never needs a scrollbar of its own.
 pub const MAX_PINS: usize = 24;
@@ -55,10 +56,7 @@ pub struct Pin {
 /// The pins in their order. A kind a later version added is passed over,
 /// and pins that cannot be read pin nothing.
 pub fn load(db: &SpaceDb) -> Vec<Pin> {
-    read(db.conn()).unwrap_or_else(|e| {
-        log::warn!("could not read the pins: {e}");
-        Vec::new()
-    })
+    SpaceDb::load_or_default(read(db.conn()), "the pins")
 }
 
 fn read(conn: &Connection) -> rusqlite::Result<Vec<Pin>> {
@@ -133,23 +131,19 @@ pub fn tidy(pins: Vec<Pin>) -> Vec<Pin> {
 }
 
 /// Save these in place of the pins saved before.
-pub fn save(db: &mut SpaceDb, pins: &[Pin]) -> Result<(), String> {
+pub fn save(db: &mut SpaceDb, pins: &[Pin]) -> Result<()> {
     db.transaction(|tx| {
-        tx.execute("DELETE FROM pins", []).map_err(to_string)?;
-        let mut statement = tx
-            .prepare_cached(
-                "INSERT INTO pins (position, kind, target, label) VALUES (?1, ?2, ?3, ?4)",
-            )
-            .map_err(to_string)?;
+        tx.execute("DELETE FROM pins", [])?;
+        let mut statement = tx.prepare_cached(
+            "INSERT INTO pins (position, kind, target, label) VALUES (?1, ?2, ?3, ?4)",
+        )?;
         for (position, pin) in pins.iter().enumerate() {
-            statement
-                .execute(rusqlite::params![
-                    position as i64,
-                    pin.kind.as_str(),
-                    pin.target,
-                    pin.label
-                ])
-                .map_err(to_string)?;
+            statement.execute(rusqlite::params![
+                position as i64,
+                pin.kind.as_str(),
+                pin.target,
+                pin.label
+            ])?;
         }
         Ok(())
     })

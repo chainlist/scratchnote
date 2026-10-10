@@ -5,7 +5,7 @@
 //! `Réunion`. The words are looked for in `search.db`, which holds the text;
 //! the order and the stretch asked for come from the index in memory.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use serde::Serialize;
 use unicode_normalization::char::is_combining_mark;
@@ -14,6 +14,7 @@ use unicode_normalization::UnicodeNormalization;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{Index, IndexEntry};
 use crate::storage::search_db::SearchDb;
+use crate::Result;
 
 /// Lowercase with accents stripped: decompose, then drop the combining marks.
 pub fn fold(text: &str) -> String {
@@ -41,7 +42,7 @@ impl Query {
 
     /// The notes whose text holds every word, or `None` for a query without
     /// words, which every note passes.
-    fn matched(&self, db: &SearchDb) -> Result<Option<HashSet<String>>, String> {
+    fn matched(&self, db: &SearchDb) -> Result<Option<HashSet<String>>> {
         if self.words.is_empty() {
             return Ok(None);
         }
@@ -51,14 +52,14 @@ impl Query {
 
 /// Whether `matched`, from `Query::matched`, lets `entry` through.
 fn passes(matched: &Option<HashSet<String>>, entry: &IndexEntry) -> bool {
-    matched.as_ref().map_or(true, |ids| ids.contains(&entry.id))
+    matched.as_ref().is_none_or(|ids| ids.contains(&entry.id))
 }
 
 /// `entries` as notes, their text read from `db`.
 pub fn with_bodies<'a>(
     db: &SearchDb,
     entries: impl IntoIterator<Item = &'a IndexEntry>,
-) -> Result<Vec<Note>, String> {
+) -> Result<Vec<Note>> {
     let entries: Vec<&IndexEntry> = entries.into_iter().collect();
     let mut bodies = db.bodies(entries.iter().map(|entry| entry.id.as_str()))?;
     Ok(entries
@@ -70,10 +71,6 @@ pub fn with_bodies<'a>(
         .collect())
 }
 
-fn newest_first(hits: &mut [&IndexEntry]) {
-    hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
-}
-
 /// Up to `k` notes of `hits`, best first, that do not match the query's
 /// words: what search by meaning adds under the word matches.
 pub fn by_meaning(
@@ -82,16 +79,12 @@ pub fn by_meaning(
     raw: &str,
     hits: &[(String, f32)],
     k: usize,
-) -> Result<Vec<Note>, String> {
+) -> Result<Vec<Note>> {
     let query = Query::parse(raw);
     let matched = query.matched(db)?;
-    let entries: HashMap<&str, &IndexEntry> = index
-        .entries()
-        .map(|entry| (entry.id.as_str(), entry))
-        .collect();
-    let found: Vec<&IndexEntry> = hits
-        .iter()
-        .filter_map(|(id, _)| entries.get(id.as_str()).copied())
+    let found: Vec<&IndexEntry> = index
+        .pick(hits.iter().map(|(id, _)| id.as_str()))
+        .into_iter()
         .filter(|entry| !passes(&matched, entry))
         .take(k)
         .collect();
@@ -114,7 +107,7 @@ pub fn search(
     raw: &str,
     offset: usize,
     limit: usize,
-) -> Result<Found, String> {
+) -> Result<Found> {
     let query = Query::parse(raw);
     if query.is_empty() {
         return Ok(Found::default());
@@ -125,7 +118,7 @@ pub fn search(
         .entries()
         .filter(|entry| passes(&matched, entry))
         .collect();
-    newest_first(&mut hits);
+    hits.sort_by(|a, b| IndexEntry::newest_first(a, b));
     Ok(Found {
         total: hits.len(),
         notes: with_bodies(db, hits.into_iter().skip(offset).take(limit))?,
@@ -135,7 +128,7 @@ pub fn search(
 /// The ids of the notes and pages whose text holds every word, in the
 /// index's order, for the map to light them up: no text is read out. None
 /// for a query without words.
-pub fn matching_ids(index: &Index, db: &SearchDb, raw: &str) -> Result<Vec<String>, String> {
+pub fn matching_ids(index: &Index, db: &SearchDb, raw: &str) -> Result<Vec<String>> {
     let Some(matched) = Query::parse(raw).matched(db)? else {
         return Ok(Vec::new());
     };
@@ -150,13 +143,13 @@ pub fn matching_ids(index: &Index, db: &SearchDb, raw: &str) -> Result<Vec<Strin
 /// A plugin asks for the markup it reads, `[ ]` and `[x]` for the tasks
 /// view (SPEC 3.8), and parses the markdown itself to keep the real ones.
 /// An empty needle matches every note.
-pub fn containing(index: &Index, db: &SearchDb, needles: &[String]) -> Result<Vec<Note>, String> {
+pub fn containing(index: &Index, db: &SearchDb, needles: &[String]) -> Result<Vec<Note>> {
     let ids = db.containing(needles)?;
     let mut hits: Vec<&IndexEntry> = index
         .entries()
         .filter(|entry| ids.contains(&entry.id))
         .collect();
-    newest_first(&mut hits);
+    hits.sort_by(|a, b| IndexEntry::newest_first(a, b));
     with_bodies(db, hits)
 }
 

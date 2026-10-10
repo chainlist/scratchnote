@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 
 use super::model::{model_file, models_dir, Catalogued};
+use crate::Result;
 
 /// What the registry says about the file we are about to fetch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,11 +69,10 @@ pub fn is_installed(root: &Path, model: impl Catalogued) -> bool {
 }
 
 /// Ask the registry which revision is current and what the file should hash to.
-pub async fn lookup(model: impl Catalogued) -> Result<RemoteModel, String> {
+pub async fn lookup(model: impl Catalogued) -> Result<RemoteModel> {
     let repo = model.repo();
     let info: RepoInfo = crate::http::client()
-        .build()
-        .map_err(|e| e.to_string())?
+        .build()?
         .get(format!(
             "https://huggingface.co/api/models/{repo}?blobs=true"
         ))
@@ -125,7 +125,7 @@ pub async fn fetch<F>(
     model: impl Catalogued,
     remote: &RemoteModel,
     on_progress: F,
-) -> Result<(), String>
+) -> Result<()>
 where
     F: FnMut(u8),
 {
@@ -145,7 +145,7 @@ async fn download_verified<F>(
     model: impl Catalogued,
     remote: &RemoteModel,
     mut on_progress: F,
-) -> Result<(), String>
+) -> Result<()>
 where
     F: FnMut(u8),
 {
@@ -165,10 +165,7 @@ where
     }
 
     if done < remote.size {
-        let mut request = crate::http::client()
-            .build()
-            .map_err(|e| e.to_string())?
-            .get(&remote.url);
+        let mut request = crate::http::client().build()?.get(&remote.url);
         if done > 0 {
             request = request.header(reqwest::header::RANGE, format!("bytes={done}-"));
         }
@@ -212,14 +209,15 @@ where
         return Err(format!(
             "the download did not match its hash (expected {}, got {actual})",
             remote.sha256
-        ));
+        )
+        .into());
     }
     on_progress(100);
     Ok(())
 }
 
 /// Move a verified `.part` over the model and record its revision.
-async fn install(root: &Path, model: impl Catalogued, remote: &RemoteModel) -> Result<(), String> {
+async fn install(root: &Path, model: impl Catalogued, remote: &RemoteModel) -> Result<()> {
     let part = part_path(root, model);
     let target = model_file(root, model);
     tokio::fs::rename(&part, &target)
@@ -232,7 +230,7 @@ async fn install(root: &Path, model: impl Catalogued, remote: &RemoteModel) -> R
         revision: remote.revision.clone(),
         sha256: remote.sha256.clone(),
     };
-    let sidecar = serde_json::to_string_pretty(&record).map_err(|e| e.to_string())?;
+    let sidecar = serde_json::to_string_pretty(&record)?;
     tokio::fs::write(sidecar_path(root, model), sidecar)
         .await
         .map_err(|e| format!("could not record which model this is: {e}"))?;
@@ -246,7 +244,7 @@ pub fn percent_of(done: u64, total: u64) -> u8 {
     ((done.min(total) as f64 / total as f64) * 100.0).round() as u8
 }
 
-async fn hash_file(path: &Path) -> Result<String, String> {
+async fn hash_file(path: &Path) -> Result<String> {
     use tokio::io::AsyncReadExt;
 
     let mut file = tokio::fs::File::open(path)
@@ -264,11 +262,7 @@ async fn hash_file(path: &Path) -> Result<String, String> {
         }
         hasher.update(&buffer[..read]);
     }
-    Ok(hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect())
+    Ok(crate::storage::hex(&hasher.finalize()))
 }
 
 #[cfg(test)]

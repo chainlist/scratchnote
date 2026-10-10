@@ -66,7 +66,7 @@ impl<'a> Progress<'a> {
     pub fn tick(&mut self, done: usize, total: usize) {
         let due = self
             .sent
-            .map_or(true, |sent| sent.elapsed() >= Duration::from_millis(200));
+            .is_none_or(|sent| sent.elapsed() >= Duration::from_millis(200));
         if total == 0 || !(due || done == total) {
             return;
         }

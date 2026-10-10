@@ -14,6 +14,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use super::{valid_id, Manifest};
+use crate::Result;
 
 /// The repository that lists every community plugin.
 pub const REPO: &str = "chainlist/scratchnote-plugins";
@@ -59,7 +60,7 @@ impl Source {
     /// A folder named by `SCRATCHNOTE_PLUGIN_REGISTRY` if there is one.
     /// Otherwise a dev build reads the repository's own `plugin-registry/`
     /// and a release build reads GitHub.
-    pub fn current() -> Result<Self, String> {
+    pub fn current() -> Result<Self> {
         if let Some(dir) = std::env::var_os(FOLDER_VAR) {
             return Ok(Source::Folder(PathBuf::from(dir)));
         }
@@ -73,14 +74,13 @@ impl Source {
         let client = crate::http::client()
             .user_agent(concat!("Scratchnote/", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(30))
-            .build()
-            .map_err(|e| e.to_string())?;
+            .build()?;
         Ok(Source::GitHub(client))
     }
 
     /// Every plugin the registry lists. Lines that are not well formed are
     /// left out rather than failing the whole list.
-    pub async fn list(&self) -> Result<Vec<Entry>, String> {
+    pub async fn list(&self) -> Result<Vec<Entry>> {
         let raw = self
             .get(&raw_url(REPO, "community-plugins.json"))
             .await?
@@ -94,7 +94,7 @@ impl Source {
             .collect())
     }
 
-    pub async fn details(&self, repo: &str) -> Result<Details, String> {
+    pub async fn details(&self, repo: &str) -> Result<Details> {
         check_repo(repo)?;
         let manifest = self.latest(repo).await?;
         let readme = self
@@ -106,21 +106,21 @@ impl Source {
 
     /// The manifest at the head of a plugin's repository, which names its
     /// latest version.
-    pub async fn latest(&self, repo: &str) -> Result<Manifest, String> {
+    pub async fn latest(&self, repo: &str) -> Result<Manifest> {
         check_repo(repo)?;
         let raw = self
             .get(&raw_url(repo, "manifest.json"))
             .await?
             .ok_or_else(|| format!("{repo} has no manifest.json"))?;
         serde_json::from_slice(&raw)
-            .map_err(|e| format!("the manifest of {repo} is not readable: {e}"))
+            .map_err(|e| format!("the manifest of {repo} is not readable: {e}").into())
     }
 
     /// The files a release carries. `styles.css` is optional.
-    pub async fn release(&self, repo: &str, version: &str) -> Result<Release, String> {
+    pub async fn release(&self, repo: &str, version: &str) -> Result<Release> {
         check_repo(repo)?;
         if !valid_version(version) {
-            return Err(format!("{version} is not a version"));
+            return Err(format!("{version} is not a version").into());
         }
         let file = |name: &str| release_url(repo, version, name);
         let missing = |name: &str| format!("release {version} of {repo} has no {name}");
@@ -138,7 +138,7 @@ impl Source {
     }
 
     /// The file at `url`, or None when it is not there.
-    async fn get(&self, url: &str) -> Result<Option<Vec<u8>>, String> {
+    async fn get(&self, url: &str) -> Result<Option<Vec<u8>>> {
         match self {
             Source::GitHub(client) => {
                 let response = client
@@ -153,11 +153,11 @@ impl Source {
                     .error_for_status()
                     .map_err(|e| format!("GitHub refused {url}: {e}"))?;
                 if response.content_length().unwrap_or(0) > MAX_FILE as u64 {
-                    return Err(format!("{url} is too large"));
+                    return Err(format!("{url} is too large").into());
                 }
-                let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+                let bytes = response.bytes().await?;
                 if bytes.len() > MAX_FILE {
-                    return Err(format!("{url} is too large"));
+                    return Err(format!("{url} is too large").into());
                 }
                 Ok(Some(bytes.to_vec()))
             }
@@ -165,16 +165,16 @@ impl Source {
                 let path = local_path(dir, url)?;
                 match tokio::fs::metadata(&path).await {
                     Ok(meta) if meta.len() > MAX_FILE as u64 => {
-                        return Err(format!("{} is too large", path.display()))
+                        return Err(format!("{} is too large", path.display()).into())
                     }
                     Ok(_) => {}
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-                    Err(e) => return Err(format!("{}: {e}", path.display())),
+                    Err(e) => return Err(format!("{}: {e}", path.display()).into()),
                 }
-                tokio::fs::read(&path)
+                let bytes = tokio::fs::read(&path)
                     .await
-                    .map(Some)
-                    .map_err(|e| format!("{}: {e}", path.display()))
+                    .map_err(|e| format!("{}: {e}", path.display()))?;
+                Ok(Some(bytes))
             }
         }
     }
@@ -193,14 +193,14 @@ pub fn release_url(repo: &str, version: &str, file: &str) -> String {
 /// Where a local registry keeps the file GitHub serves at `url`: the host,
 /// then the path, one folder per segment. Every segment was validated on
 /// the way in; this checks again, so no URL reaches outside the folder.
-fn local_path(dir: &Path, url: &str) -> Result<PathBuf, String> {
+fn local_path(dir: &Path, url: &str) -> Result<PathBuf> {
     let rest = url
         .strip_prefix("https://")
         .ok_or_else(|| format!("not an https URL: {url}"))?;
     let mut path = dir.to_path_buf();
     for segment in rest.split('/') {
         if !safe_segment(segment) {
-            return Err(format!("not a registry URL: {url}"));
+            return Err(format!("not a registry URL: {url}").into());
         }
         path.push(segment);
     }
@@ -225,11 +225,11 @@ pub fn valid_repo(repo: &str) -> bool {
     )
 }
 
-fn check_repo(repo: &str) -> Result<(), String> {
+fn check_repo(repo: &str) -> Result<()> {
     if valid_repo(repo) {
         Ok(())
     } else {
-        Err(format!("{repo} is not a GitHub repository"))
+        Err(format!("{repo} is not a GitHub repository").into())
     }
 }
 

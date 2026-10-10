@@ -12,6 +12,7 @@ pub mod classify;
 pub mod download;
 pub mod llama;
 pub mod map;
+pub mod math;
 pub mod model;
 #[cfg(test)]
 pub mod samples;
@@ -26,6 +27,7 @@ use tauri::{AppHandle, Manager};
 use crate::state::AppState;
 use activity::Activity;
 use model::{model_file, EmbeddingModel};
+use crate::Result;
 
 /// A model that turns text into vectors.
 pub trait Embedder: Send + Sync {
@@ -35,10 +37,10 @@ pub trait Embedder: Send + Sync {
     fn model_id(&self) -> &str;
     fn dims(&self) -> usize;
     /// A note, embedded as it is.
-    fn embed_document(&self, text: &str) -> Result<Vec<f32>, String>;
+    fn embed_document(&self, text: &str) -> Result<Vec<f32>>;
     /// A question. EmbeddingGemma frames queries and documents differently,
     /// hence a method of its own.
-    fn embed_query(&self, text: &str) -> Result<Vec<f32>, String>;
+    fn embed_query(&self, text: &str) -> Result<Vec<f32>>;
 }
 
 /// The model that embeds notes, or `None` while there is none. Loaded on
@@ -70,17 +72,6 @@ pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
             }
         }
     })
-}
-
-/// Scale to unit length, so similarity is a plain dot product. A zero vector
-/// has no direction and is left as it is: it scores zero against anything.
-pub fn normalize(vector: &mut [f32]) {
-    let norm = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm > 0.0 {
-        for x in vector {
-            *x /= norm;
-        }
-    }
 }
 
 /// The embedding model for the tests that need real weights: the file
@@ -124,7 +115,7 @@ impl StubEmbedder {
             word.hash(&mut hasher);
             vector[(hasher.finish() % Self::DIMS as u64) as usize] += 1.0;
         }
-        normalize(&mut vector);
+        math::normalize(&mut vector);
         vector
     }
 }
@@ -139,11 +130,11 @@ impl Embedder for StubEmbedder {
         Self::DIMS
     }
 
-    fn embed_document(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn embed_document(&self, text: &str) -> Result<Vec<f32>> {
         Ok(self.embed(text))
     }
 
-    fn embed_query(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn embed_query(&self, text: &str) -> Result<Vec<f32>> {
         Ok(self.embed(text))
     }
 }

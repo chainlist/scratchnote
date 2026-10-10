@@ -1,13 +1,18 @@
 pub mod daily_file;
 pub mod index;
+pub mod markdown;
 pub mod page_file;
+pub mod paths;
 pub mod pins;
 pub mod search_db;
 pub mod space_db;
+mod sqlite;
 pub mod writer;
 
 use std::path::{Path, PathBuf};
 
+use crate::Result;
+use chrono::Local;
 use sha2::{Digest, Sha256};
 
 /// Path of a day's markdown file relative to the notes root, e.g.
@@ -20,9 +25,24 @@ pub fn day_path(root: &Path, date: &str) -> PathBuf {
     root.join(relative_day_path(date))
 }
 
+/// Today's date on this computer, `YYYY-MM-DD`.
+pub fn today() -> String {
+    Local::now().format("%Y-%m-%d").to_string()
+}
+
+/// Today's date and the time, `HH:MM`, read off the clock once so they
+/// agree, as a note or a page written now takes them.
+pub fn date_and_time() -> (String, String) {
+    let now = Local::now();
+    (
+        now.format("%Y-%m-%d").to_string(),
+        now.format("%H:%M").to_string(),
+    )
+}
+
 /// Guards the `YYYY-MM-DD` shape the file layout is built on, so a bad date
 /// can neither reach into the filesystem nor panic `relative_day_path`.
-pub fn check_date(date: &str) -> Result<(), String> {
+pub fn check_date(date: &str) -> Result<()> {
     let ok = date.len() == 10
         && date.as_bytes()[4] == b'-'
         && date.as_bytes()[7] == b'-'
@@ -36,15 +56,19 @@ pub fn check_date(date: &str) -> Result<(), String> {
     if ok {
         Ok(())
     } else {
-        Err(format!("not a YYYY-MM-DD date: {date}"))
+        Err(format!("not a YYYY-MM-DD date: {date}").into())
     }
 }
 
 /// Full SHA-256 of a file's contents, used to tell the app's own writes apart
 /// from somebody editing the file in another editor.
 pub fn fingerprint(contents: &str) -> String {
-    let digest = Sha256::digest(contents.as_bytes());
-    digest.iter().map(|b| format!("{b:02x}")).collect()
+    hex(&Sha256::digest(contents.as_bytes()))
+}
+
+/// `bytes` in lowercase hex, two digits each, as a SHA-256 is written.
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]

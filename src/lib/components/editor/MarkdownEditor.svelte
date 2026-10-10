@@ -17,7 +17,7 @@
 	import { acceptDrops } from '#lib/codemirror/drops.js';
 	import { formatKeys, links, plugged, theme } from '#lib/codemirror/extensions.js';
 	import { attachmentSpace } from '#lib/codemirror/live-preview.js';
-	import EditorToolbar from '#lib/components/EditorToolbar.svelte';
+	import EditorToolbar from '#lib/components/editor/EditorToolbar.svelte';
 	import { errorText } from '#lib/errors.js';
 	import { attachmentLink } from '#lib/markdown.js';
 	import { formats } from '#lib/markdown/commands.js';

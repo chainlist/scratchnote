@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount, tick } from 'svelte';
 	import type { Note } from '#lib/api.js';
-	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
+	import MarkdownEditor from '#lib/components/editor/MarkdownEditor.svelte';
 	import DayAhead from '#lib/components/note/DayAhead.svelte';
 	import NoteActionItems from '#lib/components/note/NoteActionItems.svelte';
 	import Recall from '#lib/components/note/Recall.svelte';

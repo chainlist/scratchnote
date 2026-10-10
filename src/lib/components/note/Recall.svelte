@@ -3,7 +3,7 @@
 	import type { Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { draftHints, type Note } from '#lib/api.js';
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import { dayHeading, shortDay } from '#lib/dates.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Popover from '#lib/components/ui/popover/index.js';

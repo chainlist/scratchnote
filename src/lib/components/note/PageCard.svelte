@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
 	import type { Note } from '#lib/api.js';
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import DayAhead from '#lib/components/note/DayAhead.svelte';
 	import ThreadLine from '#lib/components/ThreadLine.svelte';
 	import TimelineItem from '#lib/components/note/TimelineItem.svelte';

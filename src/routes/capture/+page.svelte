@@ -15,7 +15,7 @@
 		type Attachment,
 		type SpacesView
 	} from '#lib/api.js';
-	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
+	import MarkdownEditor from '#lib/components/editor/MarkdownEditor.svelte';
 	import Recall from '#lib/components/note/Recall.svelte';
 	import SpaceSwitcher from '#lib/components/layout/SpaceSwitcher.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';

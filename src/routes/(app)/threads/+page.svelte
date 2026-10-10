@@ -3,7 +3,7 @@
 	import { getNotes, type Note, type Thread, type ThreadCard } from '#lib/api.js';
 	import MentionChip from '#lib/components/MentionChip.svelte';
 	import KeepThreadButtons from '#lib/components/KeepThreadButtons.svelte';
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import SectionTabs from '#lib/components/layout/SectionTabs.svelte';
 	import ShowMore from '#lib/components/ShowMore.svelte';
 	import View from '#lib/components/layout/View.svelte';

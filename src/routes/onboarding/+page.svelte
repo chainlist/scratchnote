@@ -22,7 +22,7 @@
 	import LanguagesIcon from '@lucide/svelte/icons/languages';
 	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import { LANGUAGE_NAMES, LANGUAGES, type Language } from '#lib/i18n.svelte.js';
+	import { languageName, LANGUAGES } from '#lib/i18n.svelte.js';
 	import { clearResumeStep, resumeStep, setResumeStep } from '#lib/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { android, mac } from '#lib/platform.js';
@@ -125,10 +125,6 @@
 			working = false;
 		}
 	}
-
-	/** Languages are named in their own tongue; only System follows the open one. */
-	const languageName = (language: Language) =>
-		language === 'system' ? m.settings_language_system() : LANGUAGE_NAMES[language];
 </script>
 
 <div class="flex h-screen flex-col bg-background text-foreground">

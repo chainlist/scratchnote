@@ -33,7 +33,6 @@
 	} from '#lib/api.js';
 	import { attachmentUrl } from '#lib/attachments.svelte.js';
 	import { bold, bullets, formats, italic, link } from '#lib/markdown/commands.js';
-
 	import {
 		attachmentLink,
 		cardName,
@@ -378,6 +377,7 @@
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import { Toggle } from '#lib/components/ui/toggle/index.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { android } from '#lib/platform.js';
 	import { Editor } from '#lib/plugins/editor.js';
 	import { labelText, type ToolbarEntry } from '#lib/plugins/registry.svelte.js';
 
@@ -511,7 +511,6 @@
 	 * Android's picker hands out content URIs, which the backend cannot read
 	 * as paths, so the files go over as bytes, as a paste does.
 	 */
-	const android = navigator.userAgent.includes('Android');
 	function pickFileBytes(): Promise<File[]> {
 		return new Promise((done) => {
 			const input = document.createElement('input');

@@ -50,7 +50,9 @@
 	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
 	import { DOCK_MAX, DOCK_MIN } from '#lib/dock.js';
 	import { bindWorkspace } from '#lib/plugins/app.js';
-	import { matchesHotkey, runCommand } from '#lib/plugins/commands.js';
+	import { matchesHotkey } from '#lib/hotkeys.js';
+	import { android, mac } from '#lib/platform.js';
+	import { runCommand } from '#lib/plugins/commands.js';
 	import { registry } from '#lib/plugins/registry.svelte.js';
 	import { setShell, Shell } from '#lib/shell.svelte.js';
 	import { closeOnBack, startBackGuard } from '#lib/back.svelte.js';
@@ -106,10 +108,6 @@
 	let releaseNotes = $state<Release[] | null>(null);
 	/** Until it is known whether they show, any other dialog at launch waits. */
 	let checkingNews = $state(true);
-
-	const mac = navigator.userAgent.includes('Mac');
-	// Android has no capture window, so no hotkey brings it up.
-	const android = navigator.userAgent.includes('Android');
 
 	function onWindowKeydown(event: KeyboardEvent) {
 		if (event.key === '/' && (event.ctrlKey || event.metaKey)) {
@@ -208,6 +206,7 @@
 
 			shell.textSize = remPixels(settings.fontSize);
 			shell.threadOrder = settings.threadOrder;
+			// Android has no capture window, so no hotkey brings it up.
 			shell.captureHotkey = android ? '' : settings.captureHotkey;
 			off.push(
 				onSettingsChanged((changed) => {

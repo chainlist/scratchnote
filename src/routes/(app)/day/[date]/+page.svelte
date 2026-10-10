@@ -7,7 +7,8 @@
 	import { noteTitle } from '#lib/markdown.js';
 	import View from '#lib/components/View.svelte';
 	import { dayHeading, dayTitle, shortDay } from '#lib/dates.js';
-	import { prettyHotkey } from '#lib/components/settings/HotkeyInput.svelte';
+	import { prettyHotkey } from '#lib/hotkeys.js';
+	import { mac } from '#lib/platform.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
@@ -21,7 +22,6 @@
 	let { data } = $props();
 
 	const shell = getShell();
-	const mac = navigator.userAgent.includes('Mac');
 
 	// The day shown is the one the other views go back to.
 	$effect(() => {

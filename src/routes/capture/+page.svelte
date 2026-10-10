@@ -23,7 +23,8 @@
 	import { relink } from '#lib/markdown.js';
 	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { formatHotkey } from '#lib/plugins/commands.js';
+	import { formatHotkey } from '#lib/hotkeys.js';
+	import { mac } from '#lib/platform.js';
 
 	let draft = $state('');
 	let saving = $state(false);
@@ -46,7 +47,6 @@
 	let hideImmediately = true;
 	let input: MarkdownEditor;
 
-	const mac = navigator.userAgent.includes('Mac');
 	/** The shortcut that picks the nth space, counting from 1. */
 	const spaceHotkey = (n: number) => formatHotkey(`Mod-${n}`);
 

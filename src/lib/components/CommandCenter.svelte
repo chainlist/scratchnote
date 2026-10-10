@@ -17,7 +17,8 @@
 	import SunIcon from '@lucide/svelte/icons/sun';
 	import { hasEvery, queryWords } from '#lib/matching.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { formatHotkey, runCommand } from '#lib/plugins/commands.js';
+	import { formatHotkey } from '#lib/hotkeys.js';
+	import { runCommand } from '#lib/plugins/commands.js';
 	import { labelText, registry, type CommandEntry } from '#lib/plugins/registry.svelte.js';
 
 	let {

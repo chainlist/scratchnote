@@ -26,8 +26,7 @@
 	import { LANGUAGE_NAMES, LANGUAGES, type Language } from '#lib/i18n.svelte.js';
 	import { clearResumeStep, resumeStep, setResumeStep } from '#lib/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
-
-	const android = navigator.userAgent.includes('Android');
+	import { android, mac } from '#lib/platform.js';
 
 	/**
 	 * The first-run walkthrough. The main page sends a fresh install here;
@@ -131,12 +130,10 @@
 	/** Languages are named in their own tongue; only System follows the open one. */
 	const languageName = (language: Language) =>
 		language === 'system' ? m.settings_language_system() : LANGUAGE_NAMES[language];
-
-	// macOS keeps its native traffic lights over the top left corner.
-	const mac = navigator.userAgent.includes('Mac');
 </script>
 
 <div class="flex h-screen flex-col bg-background text-foreground">
+	<!-- macOS keeps its native traffic lights over the top left corner. -->
 	<header
 		data-tauri-drag-region="deep"
 		class={['flex h-12 shrink-0 items-center gap-3 pr-2', mac ? 'pl-20' : 'pl-4']}

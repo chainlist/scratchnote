@@ -4,7 +4,7 @@
 	import { appUpdate } from '#lib/app-update.svelte.js';
 	import { releases, type Release } from '#lib/changelog.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import WhatsNew from '#lib/components/WhatsNew.svelte';
+	import WhatsNew from '#lib/components/dialogs/WhatsNew.svelte';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import { m } from '#lib/paraglide/messages.js';

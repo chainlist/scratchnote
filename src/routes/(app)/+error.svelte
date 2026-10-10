@@ -2,6 +2,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
+	import ErrorDetails from '#lib/components/ErrorDetails.svelte';
 	import View from '#lib/components/View.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -28,12 +29,7 @@
 			<CircleAlertIcon class="size-4 shrink-0 text-destructive" />{m.error_load_view()}
 		</p>
 		{#if page.error?.message}
-			<details class="max-w-full text-xs text-meta">
-				<summary class="cursor-pointer">{m.error_details()}</summary>
-				<p class="mt-1 font-mono break-all whitespace-pre-wrap select-text">
-					{page.error.message}
-				</p>
-			</details>
+			<ErrorDetails class="max-w-full text-xs text-meta" detail={page.error.message} />
 		{/if}
 		<!-- Nothing to try again for a view that does not exist. -->
 		{#if page.status !== 404}

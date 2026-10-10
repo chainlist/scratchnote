@@ -4,25 +4,7 @@
 	import { dev } from '$app/env';
 	import { afterNavigate } from '$app/navigation';
 	import { navigating } from '$app/state';
-	import {
-		embeddingModelInfo,
-		getSettings,
-		onEmbeddingStatus,
-		onIndexRebuilt,
-		onNewPage,
-		onNoteUpdated,
-		onOpenSettings,
-		onPinsChanged,
-		onRevealNote,
-		onSettingsChanged,
-		onSpacesChanged,
-		onThreadsChanged,
-		setSettings,
-		setTrayLabels,
-		stopAll,
-		today,
-		type SettingsView
-	} from '#lib/api.js';
+	import { getSettings, setSettings, setTrayLabels, today, type SettingsView } from '#lib/api.js';
 	import AppHeader from '#lib/components/AppHeader.svelte';
 	import CommandCenter from '#lib/components/CommandCenter.svelte';
 	import EmbedderBar from '#lib/components/EmbedderBar.svelte';
@@ -35,29 +17,24 @@
 	import PluginPanel from '#lib/components/PluginPanel.svelte';
 	import Ribbon from '#lib/components/Ribbon.svelte';
 	import RibbonDrawer from '#lib/components/RibbonDrawer.svelte';
-	import Settings from '#lib/components/settings/Settings.svelte';
+	import SettingsDialog from '#lib/components/SettingsDialog.svelte';
 	import ThreadDock from '#lib/components/ThreadDock.svelte';
 	import ThreadPicker from '#lib/components/ThreadPicker.svelte';
 	import ViewHeader from '#lib/components/ViewHeader.svelte';
 	import WhatsNew from '#lib/components/WhatsNew.svelte';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Resizable from '#lib/components/ui/resizable/index.js';
 	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import { Spinner } from '#lib/components/ui/spinner/index.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { remPixels } from '#lib/appearance.js';
 	import { FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
 	import { compareVersions } from '#lib/versions.js';
 	import { DOCK_MAX, DOCK_MIN } from '#lib/dock.js';
 	import { app, bindWorkspace } from '#lib/plugins/app.js';
-	import { matchesHotkey } from '#lib/hotkeys.js';
-	import { android, mac } from '#lib/platform.js';
-	import { runCommand } from '#lib/plugins/commands.js';
-	import { registry } from '#lib/plugins/registry.svelte.js';
 	import { setShell, Shell } from '#lib/shell.svelte.js';
 	import { closeOnBack, startBackGuard } from '#lib/back.svelte.js';
-	import { inText, typesText } from '#lib/dom.js';
-	import { onSwipe, phone } from '#lib/swipe.js';
+	import { phone } from '#lib/swipe.js';
+	import { followApp } from './app-events.js';
+	import { windowKeydown } from './window-keys.js';
 
 	let { data, children } = $props();
 
@@ -67,6 +44,8 @@
 	// The plugins reach the views through it from the start, their pages
 	// included, which mount before this layout does.
 	onDestroy(bindWorkspace(shell));
+
+	const onWindowKeydown = windowKeydown(shell);
 
 	// The back arrow goes back no further than the view the app opened on.
 	afterNavigate(shell.markFirstEntry);
@@ -103,31 +82,10 @@
 		return { min, max };
 	});
 
-	let settingsDialog = $state<HTMLElement | null>(null);
-
 	/** Release notes waiting to be read after an update. */
 	let releaseNotes = $state<Release[] | null>(null);
 	/** Until it is known whether they show, any other dialog at launch waits. */
 	let checkingNews = $state(true);
-
-	function onWindowKeydown(event: KeyboardEvent) {
-		if (event.key === '/' && (event.ctrlKey || event.metaKey)) {
-			event.preventDefault();
-			if (shell.paletteOpen) shell.paletteOpen = false;
-			else shell.openPalette();
-		} else if (matchesHotkey(event, 'Mod-,')) {
-			event.preventDefault();
-			shell.paletteOpen = false;
-			shell.settingsOpen = true;
-		} else if (runPluginHotkey(event)) {
-			event.preventDefault();
-		} else if (!mac && event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
-			// Alt+arrows take the webview through its history, which holds the
-			// views. In text they would leave a note or a page half written.
-			// On macOS they move by word instead, and the text keeps them.
-			if (typesText(event.target as HTMLElement)) event.preventDefault();
-		}
-	}
 
 	// Android's Back closes what is open before it leaves the view.
 	startBackGuard();
@@ -139,48 +97,6 @@
 			shell.dockedThread = null;
 		}
 	);
-
-	// On a phone the settings take the whole screen, and pulling them down
-	// from their top closes them, as their X does.
-	$effect(() => {
-		const dialog = settingsDialog;
-		if (!dialog || !phone.current) return;
-		const slide = (y: number, animate: boolean) => {
-			dialog.style.transition = animate ? 'transform 150ms ease-out' : '';
-			dialog.style.transform = y ? `translateY(${y}px)` : '';
-		};
-		return onSwipe(dialog, {
-			axis: 'y',
-			// Only from the top: a list scrolled down scrolls back up first.
-			accept: (_, target) => {
-				if (inText(target)) return false;
-				for (let el: Element | null = target; el && el !== dialog; el = el.parentElement)
-					if (el.scrollTop > 0) return false;
-				return true;
-			},
-			move: (y) => slide(Math.max(0, y), false),
-			end: (y, speed) => {
-				if (y > 120 || (y > 30 && speed > 0.5)) shell.settingsOpen = false;
-				else slide(0, true);
-			}
-		});
-	});
-
-	/**
-	 * A plugin's command with this hotkey, run. Those on the text are the
-	 * editor's own keys, and one the editor already took is left to it.
-	 */
-	function runPluginHotkey(event: KeyboardEvent) {
-		if (event.defaultPrevented) return false;
-		// A key without a modifier types, in text.
-		const typing = typesText(event.target as HTMLElement);
-		if (typing && !(event.ctrlKey || event.metaKey || event.altKey)) return false;
-		const command = registry.commands.find(
-			(entry) => entry.hotkey && entry.callback && matchesHotkey(event, entry.hotkey)
-		);
-		if (command) runCommand(command);
-		return command !== undefined;
-	}
 
 	/**
 	 * After an update, the notes of every release since the version last
@@ -196,49 +112,15 @@
 	}
 
 	onMount(() => {
-		const off: Promise<() => void>[] = [];
+		let stop = () => {};
 		void (async () => {
 			const settings = await getSettings();
 			void showReleaseNotes(settings)
 				.catch((e) => shell.showError(String(e)))
 				.finally(() => (checkingNews = false));
-
-			shell.textSize = remPixels(settings.fontSize);
-			shell.threads.threadOrder = settings.threadOrder;
-			// Android has no capture window, so no hotkey brings it up.
-			shell.captureHotkey = android ? '' : settings.captureHotkey;
-			off.push(
-				onSettingsChanged((changed) => {
-					shell.textSize = remPixels(changed.fontSize);
-					shell.threads.threadOrder = changed.threadOrder;
-					shell.captureHotkey = android ? '' : changed.captureHotkey;
-				})
-			);
-			// A note saved from the capture window lands in another webview.
-			off.push(onNoteUpdated((id) => void shell.refresh(id)));
-			// The watcher fires this when a daily file is edited outside the app.
-			off.push(onIndexRebuilt(() => void shell.refresh()));
-			off.push(onOpenSettings(() => (shell.settingsOpen = true)));
-			off.push(onNewPage((body) => shell.takeCaptureDraft(body)));
-			// The capture window's recall, showing the old note a draft is about.
-			off.push(onRevealNote((note) => void shell.openCited(note)));
-			// The embed task placing notes in threads, or a thread renamed.
-			off.push(onThreadsChanged(() => void shell.threads.loadThreads()));
-			void shell.threads.loadThreads();
-			off.push(onPinsChanged(() => void shell.loadPins()));
-			void shell.loadPins();
-			off.push(
-				onSpacesChanged((view) =>
-					view.active !== data.spaces.active ? void shell.switchSpace() : void shell.refresh()
-				)
-			);
-
-			shell.embeddingInstalled = (await embeddingModelInfo()).installed;
-			off.push(
-				onEmbeddingStatus((status) => (shell.embeddingInstalled = status.state === 'installed'))
-			);
+			stop = followApp(shell, settings, () => data.spaces.active);
 		})();
-		return () => stopAll(...off)();
+		return () => stop();
 	});
 
 	// The tray menu lives in Rust; the main window keeps it in the open language.
@@ -377,21 +259,7 @@
 <WhatsNew bind:releases={releaseNotes} />
 <OldChatModelDialog waiting={checkingNews || releaseNotes !== null} onerror={shell.showError} />
 
-<!-- The whole screen on a phone. The focus goes to the dialog itself rather
-     than the first tab, which opened by Ctrl+, would show its focus ring; Tab
-     goes on to the tabs. -->
-<Dialog.Root bind:open={shell.settingsOpen}>
-	<Dialog.Content
-		bind:ref={settingsDialog}
-		onOpenAutoFocus={(event) => {
-			event.preventDefault();
-			settingsDialog?.focus();
-		}}
-		class="h-dvh max-w-full grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden rounded-none p-0 ring-0 sm:h-[min(1000px,85vh)] sm:max-w-[min(1100px,calc(100%-2rem))] sm:rounded-xl sm:ring-1"
-	>
-		<Settings />
-	</Dialog.Content>
-</Dialog.Root>
+<SettingsDialog bind:open={shell.settingsOpen} />
 
 <!-- Says when a command keeps the window waiting (#lib/slow-calls.js), under
      the header (h-12) and its window controls. -->

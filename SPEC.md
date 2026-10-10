@@ -641,7 +641,7 @@ Community plugins come from GitHub, as Obsidian's do.
 ### 5.3 The day ahead
 
 - A note that looks forward to a later day, an appointment, a deadline, a plan, comes back on that day: "Dentist Tuesday 3pm", "rappeler le comptable dans 15 jours", "Abgabe am Freitag". Its card names the day, which opens it, and that day lists the notes that looked forward to it at its top, under Earlier notes about this day, each by the day it was written. Not about that day, in a note's menu and the page view's, forgets a day read wrong for good: the note's marker gets `ahead=off` (4.2), and no day is read in it again, even once its text changes.
-- The day is read off the note's words by rules (`ahead.rs`), in the six languages, each time the note is parsed, and worked out from the day the note was written. A page's is read off its title and its text. Nothing is stored but `ahead=off`, so a change to the rules applies to every note at the next rebuild.
+- The day is read off the note's words by rules (`ahead/`), in the six languages, each time the note is parsed, and worked out from the day the note was written. A page's is read off its title and its text. Nothing is stored but `ahead=off`, so a change to the rules applies to every note at the next rebuild.
 - The text is split into clauses at `.`, `!`, `?`, `;`, `:`, `,`, brackets and line ends. A clause holding a word that puts it in the past is passed over: "last", "yesterday", "ago", "since", "was", "met", "dernier", "hier", "depuis", "ayer", "pasado" (not in "pasado mañana"), "gestern", "letzte", "war", "ieri", "scorso", "ontem" and the like. The first day named in the first other clause wins.
 - Read as days: tomorrow (`manana` and `morgen` not after a word that makes them the morning, as in "por la mañana" or "heute Morgen"); the day after tomorrow; a count ahead after "in", "dans", "en", "tra", "fra", "em", "daqui a" or "dentro de", in figures or words up to 99, of days, weeks, fortnights or months; a weekday, the first to come after the note's day, a week on when it is the same, or that day of the following week when the clause says next week, and not after "every" or "chaque"; Portuguese `segunda` to `sexta` only before `feira`; a weekday followed by a date is the date; next week (its Monday) or next month (its 1st), "semaine prochaine", "nächste Woche", "la semana que viene", but not a weekend; a day and a month named, either way round, with "of" or "de" between or not, and a year after or not: "12th of October", "le 27 septembre", "October 3", "12. März"; figures `2026-10-06`, `12.03` and `12.03.2026` (day first), and `25/12` or `12/25/2026` only when one reading alone is a date; and a day of the month after "by", "before", "until", "on", "avant", "bis", "am", "entro", "hasta", "até" and the like, with an article or an ordinal between ("by the 5th", "avant le 5"), the next such day to come.
 - Left alone, as a wrong day is worse than none: `12/03`, which could be either, `24/7`, `1.2`, `3.50`, versions and addresses, figures without a year that no word leads to (`12.10` may be a price), "by 5" (a time), and a month without a day.
@@ -799,14 +799,19 @@ Events emitted to the frontend: `note-updated { id }`, `index-rebuilt`, `embeddi
 ```
 src-tauri/src/
   main.rs
-  lib.rs             # setup, windows, tray; their four commands (hide_capture, capture_to_page, reveal_note, set_tray_labels)
+  lib.rs             # setup and the windows; their commands (hide_capture, capture_to_page, reveal_note)
+  desktop.rs         # the tray, the capture window and its hotkey (set_tray_labels)
+  error.rs           # the one error type, sent to the webview as its message
+  events.rs          # the events sent to the windows, by name
   commands/ (notes.rs, pages.rs, search.rs, settings.rs, models.rs, spaces.rs, threads.rs,
              attachments.rs, plugins.rs)   # every other Tauri command
-  storage/ (daily_file.rs parser+writer, page_file.rs, index.rs, search_db.rs, space_db.rs, writer.rs)
-  embed/   (model.rs, download.rs, llama.rs, sync.rs, vectors.rs, threads.rs)
-  ahead.rs           # the day ahead, read off a note's words
+  storage/ (daily_file/ parser+writer, page_file.rs, markdown.rs, paths.rs, index/, search_db.rs,
+            space_db.rs, sqlite.rs, writer.rs)
+  embed/   (model.rs, download.rs, llama.rs, sync.rs, math.rs, vectors/, threads/, map/)
+  ahead/             # the day ahead, read off a note's words (words.rs the vocabulary)
   watcher.rs
-  spaces.rs
+  spaces/            # each space and its caches (registry, migration, text, decisions)
+  notes.rs           # what capturing, editing and moving a note does to the files
   search.rs
   settings.rs
   pages.rs           # a page's file and its stub

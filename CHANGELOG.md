@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/chainlist/scratchnote/compare/v0.9.0...v0.9.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* slide the next day in beside the current one on a swipe ([5d79aab](https://github.com/chainlist/scratchnote/commit/5d79aab70d970296b9d756245ff2a4dce40dbca4))
+
 ## [0.9.0](https://github.com/chainlist/scratchnote/compare/v0.8.0...v0.9.0) (2026-10-09)
 
 

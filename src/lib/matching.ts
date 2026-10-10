@@ -1,5 +1,5 @@
 /** Folded for matching: `é` finds `e`, and case does not count. */
-export const fold = (text: string) =>
+const fold = (text: string) =>
 	text
 		.normalize('NFD')
 		.replace(/\p{Diacritic}/gu, '')

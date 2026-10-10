@@ -16,7 +16,7 @@
 		type SpacesView
 	} from '#lib/api.js';
 	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
-	import Recall from '#lib/components/Recall.svelte';
+	import Recall from '#lib/components/note/Recall.svelte';
 	import SpaceSwitcher from '#lib/components/layout/SpaceSwitcher.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Note } from '#lib/api.js';
-	import DayAhead from '#lib/components/DayAhead.svelte';
+	import DayAhead from '#lib/components/note/DayAhead.svelte';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import ThreadLine from '#lib/components/ThreadLine.svelte';
 	import type { NoteChip } from '#lib/plugins/api.js';

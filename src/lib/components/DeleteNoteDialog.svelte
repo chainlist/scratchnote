@@ -2,7 +2,7 @@
 	import { isPage, type Note } from '#lib/api.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import NotePreview from '#lib/components/NotePreview.svelte';
+	import NotePreview from '#lib/components/note/NotePreview.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {

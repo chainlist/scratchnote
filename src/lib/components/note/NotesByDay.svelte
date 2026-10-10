@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
 	import type { Note } from '#lib/api.js';
-	import NoteList from '#lib/components/NoteList.svelte';
+	import NoteList from '#lib/components/note/NoteList.svelte';
 	import ShowMore from '#lib/components/ShowMore.svelte';
 	import { dayHeading, monthHeading, weekday } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';

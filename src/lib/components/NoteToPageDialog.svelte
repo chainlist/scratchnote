@@ -4,7 +4,7 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import NotePreview from '#lib/components/NotePreview.svelte';
+	import NotePreview from '#lib/components/note/NotePreview.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {

@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { saveNote } from '#lib/api.js';
 	import NewNote from './NewNote.svelte';
-	import NoteList from '#lib/components/NoteList.svelte';
+	import NoteList from '#lib/components/note/NoteList.svelte';
 	import View from '#lib/components/layout/View.svelte';
 	import { dayHeading } from '#lib/dates.js';
 	import { prettyHotkey } from '#lib/hotkeys.js';

@@ -17,6 +17,10 @@ pub enum Error {
     Http(#[from] reqwest::Error),
     #[error(transparent)]
     Tauri(#[from] tauri::Error),
+    /// A call to the app's own Android code failed (`android.rs`).
+    #[cfg(mobile)]
+    #[error(transparent)]
+    Mobile(#[from] tauri::plugin::mobile::PluginInvokeError),
     /// A thread panicked while it held this lock.
     #[error("{0} lock poisoned")]
     Poisoned(&'static str),

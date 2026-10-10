@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Note } from '#lib/api.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import { aheadLabel } from '#lib/dates.js';
+	import { aheadLabel } from '#lib/helpers/dates.js';
 	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FolderInputIcon from '@lucide/svelte/icons/folder-input';

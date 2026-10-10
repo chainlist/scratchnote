@@ -3,7 +3,7 @@
 	import { getThread, type Note, type Thread } from '#lib/api.js';
 	import Dock from '#lib/components/layout/Dock.svelte';
 	import ThreadView from '#lib/components/thread/ThreadView.svelte';
-	import { shortDay } from '#lib/dates.js';
+	import { shortDay } from '#lib/helpers/dates.js';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

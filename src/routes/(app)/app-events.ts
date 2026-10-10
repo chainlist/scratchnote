@@ -14,7 +14,7 @@ import {
 	type Settings
 } from '#lib/api.js';
 import { remPixels } from '#lib/appearance.js';
-import { android } from '#lib/platform.js';
+import { android } from '#lib/helpers/platform.js';
 import type { Shell } from '#lib/shell.svelte.js';
 
 /** What the shell takes from the settings, as they are read and as they change. */

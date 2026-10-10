@@ -27,12 +27,12 @@
 	import { Spinner } from '#lib/components/ui/spinner/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
-	import { compareVersions } from '#lib/versions.js';
+	import { compareVersions } from '#lib/helpers/versions.js';
 	import { DOCK_MAX, DOCK_MIN } from '#lib/dock.js';
 	import { app, bindWorkspace } from '#lib/plugins/app.js';
 	import { setShell, Shell } from '#lib/shell.svelte.js';
 	import { closeOnBack, startBackGuard } from '#lib/back.svelte.js';
-	import { phone } from '#lib/swipe.js';
+	import { phone } from '#lib/helpers/swipe.js';
 	import { followApp } from './app-events.js';
 	import { windowKeydown } from './window-keys.js';
 

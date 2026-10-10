@@ -1,8 +1,8 @@
-import { matchesHotkey } from '#lib/hotkeys.js';
-import { mac } from '#lib/platform.js';
+import { matchesHotkey } from '#lib/helpers/hotkeys.js';
+import { mac } from '#lib/helpers/platform.js';
 import { runCommand } from '#lib/plugins/commands.js';
 import { registry } from '#lib/plugins/registry.svelte.js';
-import { typesText } from '#lib/dom.js';
+import { typesText } from '#lib/helpers/dom.js';
 import type { Shell } from '#lib/shell.svelte.js';
 
 /**

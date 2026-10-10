@@ -1,4 +1,4 @@
-import { errorText } from '#lib/errors.js';
+import { errorText } from '#lib/helpers/errors.js';
 import { app, reportError } from './app';
 import type { ViewEntry } from './registry.svelte';
 import { onHeaderChange, type ItemView } from './views';

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { ClassValue, HTMLAttributes } from 'svelte/elements';
-	import { clockMinutes, clockTime, gapRoom, type DayPart } from '#lib/dates.js';
+	import { clockMinutes, clockTime, gapRoom, type DayPart } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	/**

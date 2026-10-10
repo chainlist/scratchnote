@@ -5,7 +5,7 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { readJson, writeJson } from '#lib/storage.js';
+	import { readJson, writeJson } from '#lib/helpers/storage.js';
 
 	let {
 		waiting,

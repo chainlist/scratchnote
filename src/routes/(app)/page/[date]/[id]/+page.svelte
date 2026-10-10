@@ -5,7 +5,7 @@
 	import type { Note } from '#lib/api.js';
 	import PageEditor from '#lib/components/page/PageEditor.svelte';
 	import View from '#lib/components/layout/View.svelte';
-	import { dayHeading } from '#lib/dates.js';
+	import { dayHeading } from '#lib/helpers/dates.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
 	let { params } = $props();

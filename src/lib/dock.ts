@@ -1,4 +1,4 @@
-import { readJson, writeJson } from '#lib/storage.js';
+import { readJson, writeJson } from '#lib/helpers/storage.js';
 
 /**
  * Which side of the view the dock sits on and how wide it is, kept between

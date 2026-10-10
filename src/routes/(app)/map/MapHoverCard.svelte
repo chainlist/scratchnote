@@ -2,7 +2,7 @@
 	import type { MapNote, Note, Thread } from '#lib/api.js';
 	import MentionChip from '#lib/components/common/MentionChip.svelte';
 	import Markdown from '#lib/components/editor/Markdown.svelte';
-	import { shortDay } from '#lib/dates.js';
+	import { shortDay } from '#lib/helpers/dates.js';
 	import { mentionHue } from '#lib/mentions.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { threadHue } from '#lib/threads.js';

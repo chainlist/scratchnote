@@ -19,10 +19,10 @@
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import ExternalLinkIcon from '@lucide/svelte/icons/external-link';
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
-	import { hasEvery, queryWords } from '#lib/matching.js';
+	import { hasEvery, queryWords } from '#lib/helpers/matching.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { adopt, coreIds, plugins, setCommunityPlugin } from '#lib/plugins/loader.js';
-	import { older } from '#lib/versions.js';
+	import { older } from '#lib/helpers/versions.js';
 	import type { SettingsState } from './state.svelte';
 	import { hint } from './styles';
 

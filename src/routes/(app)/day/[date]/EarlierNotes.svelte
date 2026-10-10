@@ -1,7 +1,7 @@
 <script lang="ts">
 	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
 	import type { Note } from '#lib/api.js';
-	import { dayHeading, shortDay } from '#lib/dates.js';
+	import { dayHeading, shortDay } from '#lib/helpers/dates.js';
 	import { noteTitle } from '#lib/markdown.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

@@ -6,7 +6,7 @@
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import SmartphoneIcon from '@lucide/svelte/icons/smartphone';
 	import { m } from '#lib/paraglide/messages.js';
-	import { android } from '#lib/platform.js';
+	import { android } from '#lib/helpers/platform.js';
 
 	let {
 		value,

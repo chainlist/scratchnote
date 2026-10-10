@@ -2,7 +2,7 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import type { Note } from '#lib/api.js';
 	import * as InputGroup from '#lib/components/ui/input-group/index.js';
-	import { shortDay } from '#lib/dates.js';
+	import { shortDay } from '#lib/helpers/dates.js';
 	import { noteTitle } from '#lib/markdown.js';
 	import { m } from '#lib/paraglide/messages.js';
 

@@ -4,7 +4,7 @@
 	import { appUpdate } from '#lib/app-update.svelte.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
-	import { android } from '#lib/platform.js';
+	import { android } from '#lib/helpers/platform.js';
 
 	/**
 	 * Offers a newer release of the app in the top bar (SPEC 3.6). Checks at

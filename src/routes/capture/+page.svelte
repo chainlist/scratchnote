@@ -23,8 +23,8 @@
 	import { relink } from '#lib/markdown.js';
 	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { formatHotkey } from '#lib/hotkeys.js';
-	import { mac } from '#lib/platform.js';
+	import { formatHotkey } from '#lib/helpers/hotkeys.js';
+	import { mac } from '#lib/helpers/platform.js';
 
 	let draft = $state('');
 	let saving = $state(false);

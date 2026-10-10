@@ -1,5 +1,5 @@
 import changelog from '../../CHANGELOG.md?raw';
-import { compareVersions } from '#lib/versions.js';
+import { compareVersions } from '#lib/helpers/versions.js';
 
 /** The one release that did not record the version last opened. */
 export const FIRST_RELEASE = '0.1.0';

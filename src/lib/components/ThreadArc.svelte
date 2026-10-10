@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Note, Thread } from '#lib/api.js';
-	import { dayHeading, shortDay } from '#lib/components/ViewHeader.svelte';
-	import { daysAgo } from '#lib/days.js';
+	import { dayHeading, daysAgo, isoDay, shortDay } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { threadHue } from '#lib/threads.js';
 
@@ -28,14 +27,12 @@
 	 *  that went quiet shows it; two weeks at least, so a young one's dots
 	 *  do not sit on top of each other. */
 	const span = $derived(Math.max(14, daysAgo(thread.since)));
-	// The local day as YYYY-MM-DD, as the days of notes are written.
-	const local = (date: Date) => date.toLocaleDateString('en-CA');
-	const today = local(new Date());
+	const today = isoDay(new Date());
 	/** The lane's first day, which its left end names: two weeks back for a
 	 *  young thread rather than its own first day, which sits further in. */
 	const start = $derived.by(() => {
 		const now = new Date();
-		return local(new Date(now.getFullYear(), now.getMonth(), now.getDate() - span));
+		return isoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - span));
 	});
 	/** Where a day falls along the lane, in percent from its left. A note
 	 *  written on a day ahead sits at today's end. */

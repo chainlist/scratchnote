@@ -1,21 +1,5 @@
-<script lang="ts" module>
-	import { getLocale } from '#lib/paraglide/runtime.js';
-
-	/** A day ahead in a few characters, its weekday first: the year only when it is not this one. */
-	export function aheadLabel(date: string) {
-		const day = new Date(`${date}T00:00:00`);
-		const thisYear = day.getFullYear() === new Date().getFullYear();
-		return day.toLocaleDateString(getLocale(), {
-			weekday: 'short',
-			day: 'numeric',
-			month: 'short',
-			...(thisYear ? {} : { year: 'numeric' })
-		});
-	}
-</script>
-
 <script lang="ts">
-	import { dayHeading } from '#lib/components/ViewHeader.svelte';
+	import { aheadLabel, dayHeading } from '#lib/dates.js';
 	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

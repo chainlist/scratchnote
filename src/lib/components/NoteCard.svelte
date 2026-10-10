@@ -5,13 +5,13 @@
 	import TimelineItem from '#lib/components/TimelineItem.svelte';
 	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
 	import InlineError from '#lib/components/InlineError.svelte';
-	import DayAhead, { aheadLabel } from '#lib/components/DayAhead.svelte';
+	import DayAhead from '#lib/components/DayAhead.svelte';
 	import Recall from '#lib/components/Recall.svelte';
 	import ThreadLine from '#lib/components/ThreadLine.svelte';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import type { NoteChip } from '#lib/plugins/api.js';
 	import { registry } from '#lib/plugins/registry.svelte.js';
-	import { shortDay } from '#lib/components/ViewHeader.svelte';
+	import { aheadLabel, shortDay } from '#lib/dates.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';

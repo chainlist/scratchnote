@@ -23,7 +23,7 @@
 	import { Slider } from '#lib/components/ui/slider/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import View from '#lib/components/View.svelte';
-	import { shortDay } from '#lib/components/ViewHeader.svelte';
+	import { dayNumber, dayOfNumber, shortDay } from '#lib/dates.js';
 	import { noteTitle } from '#lib/markdown.js';
 	import { mentionHref, mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -54,11 +54,6 @@
 	const BARS = 40;
 	/** How many found notes are listed under the search. */
 	const FOUND_SHOWN = 8;
-	const DAY_MS = 86_400_000;
-
-	/** A day as a number of days, which the dates shown are measured in. */
-	const dayNumber = (date: string) => Math.round(Date.parse(`${date}T00:00:00Z`) / DAY_MS);
-	const dateOf = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
 	let canvas = $state<HTMLCanvasElement>();
 	let width = $state(0);
@@ -900,10 +895,10 @@
 								onValueChange={([first, last]) =>
 									(span = first <= extent[0] && last >= extent[1] ? null : [first, last])}
 								thumbLabel={(index) => (index === 0 ? m.map_dates_from() : m.map_dates_to())}
-								valueText={(day) => shortDay(dateOf(day))}
+								valueText={(day) => shortDay(dayOfNumber(day))}
 							/>
 							<div class="flex h-5 items-center justify-between text-xs text-muted-foreground">
-								<span>{shortDay(dateOf(from))}</span>
+								<span>{shortDay(dayOfNumber(from))}</span>
 								{#if span}
 									<Button
 										variant="ghost"
@@ -915,7 +910,7 @@
 										<XIcon />
 									</Button>
 								{/if}
-								<span>{shortDay(dateOf(to))}</span>
+								<span>{shortDay(dayOfNumber(to))}</span>
 							</div>
 						</div>
 					{/if}

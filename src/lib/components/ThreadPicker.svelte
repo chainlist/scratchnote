@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { threadCards, threadsForNote, type ThreadCard } from '#lib/api.js';
 	import * as Command from '#lib/components/ui/command/index.js';
-	import { shortDay } from '#lib/components/ViewHeader.svelte';
+	import { shortDay } from '#lib/dates.js';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import { m } from '#lib/paraglide/messages.js';

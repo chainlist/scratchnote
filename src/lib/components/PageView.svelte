@@ -12,7 +12,8 @@
 		type Note
 	} from '#lib/api.js';
 	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
-	import DayAhead, { aheadLabel } from '#lib/components/DayAhead.svelte';
+	import DayAhead from '#lib/components/DayAhead.svelte';
+	import { aheadLabel } from '#lib/dates.js';
 	import Recall from '#lib/components/Recall.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';

@@ -4,12 +4,12 @@
 	import favicon from '#lib/assets/favicon.svg';
 	import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 	import { getSettings, onSettingsChanged, stopAll, type Settings } from '#lib/api.js';
-	import { applyAppearance } from '#lib/appearance.js';
+	import { applyAppearance } from '#lib/app/appearance.js';
 	import { followSpace } from '#lib/attachments.svelte.js';
-	import { applyLanguage } from '#lib/i18n.svelte.js';
+	import { applyLanguage } from '#lib/app/i18n.svelte.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { android } from '#lib/helpers/platform.js';
-	import { recordStartup } from '#lib/startup.js';
+	import { recordStartup } from '#lib/app/startup.js';
 
 	let { children } = $props();
 

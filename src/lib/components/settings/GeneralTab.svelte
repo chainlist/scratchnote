@@ -5,7 +5,7 @@
 	import { resolve } from '$app/paths';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
-	import { clearResumeStep } from '#lib/onboarding.js';
+	import { clearResumeStep } from '#lib/app/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { android } from '#lib/helpers/platform.js';
 	import About from './About.svelte';

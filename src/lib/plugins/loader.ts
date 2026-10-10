@@ -199,7 +199,7 @@ export type StartupStep = { ms: number } & (
 
 /**
  * When the plugins' startup began and ended, in ms since the window began
- * loading, and its steps, for the startup times (`#lib/startup.js`).
+ * loading, and its steps, for the startup times (`#lib/app/startup.js`).
  */
 export const pluginStartup = { start: 0, end: 0, steps: [] as StartupStep[] };
 

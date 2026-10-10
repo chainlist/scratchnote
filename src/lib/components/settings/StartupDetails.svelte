@@ -5,7 +5,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { pluginName } from '#lib/plugins/loader.js';
-	import { duration, type StartupRow, type StartupTimes } from '#lib/startup.js';
+	import { duration, type StartupRow, type StartupTimes } from '#lib/app/startup.js';
 
 	/** This window's startup, step by step, as the console logs it. */
 	let { open = $bindable(false), times }: { open: boolean; times: StartupTimes } = $props();

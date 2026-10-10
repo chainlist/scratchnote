@@ -12,7 +12,7 @@ export interface StartupCall {
 
 /**
  * In a dev build, the commands the window calls until its first view is up,
- * for the startup details (`#lib/startup.js`), which close the list then.
+ * for the startup details (`#lib/app/startup.js`), which close the list then.
  */
 export const startupCalls = { open: dev, calls: [] as StartupCall[] };
 

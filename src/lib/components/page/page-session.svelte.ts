@@ -10,7 +10,7 @@ import {
 	type Note
 } from '#lib/api.js';
 import { wordCount } from '#lib/markdown.js';
-import { joinText, pageDraft } from '#lib/page-draft.js';
+import { joinText, pageDraft } from '#lib/shell/page-draft.js';
 import { m } from '#lib/paraglide/messages.js';
 
 /** How long typing has to stop before the text saves itself. */

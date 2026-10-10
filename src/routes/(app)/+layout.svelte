@@ -28,7 +28,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { FIRST_RELEASE, releasesSince, type Release } from '#lib/app/changelog.js';
 	import { compareVersions } from '#lib/helpers/versions.js';
-	import { DOCK_MAX, DOCK_MIN } from '#lib/dock.js';
+	import { DOCK_MAX, DOCK_MIN } from '#lib/shell/dock.js';
 	import { app, bindWorkspace } from '#lib/plugins/app.js';
 	import { setShell, Shell } from '#lib/shell.svelte.js';
 	import { closeOnBack, startBackGuard } from '#lib/app/back.svelte.js';

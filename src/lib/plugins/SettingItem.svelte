@@ -4,7 +4,7 @@
 	import * as Select from '#lib/components/ui/select/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
 	import { hint, section } from '#lib/components/settings/styles.js';
-	import { call, type SettingModel } from './setting.svelte';
+	import { call, type SettingModel } from './setting-model';
 
 	/** One `Setting` of a plugin's tab; the builder changes the model it draws. */
 	let { model }: { model: SettingModel } = $props();

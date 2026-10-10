@@ -1,4 +1,5 @@
 import { mount, unmount } from 'svelte';
+import { clearSettings, track, type Control, type SettingModel } from './setting-model';
 import SettingItem from './SettingItem.svelte';
 
 /**
@@ -15,67 +16,11 @@ import SettingItem from './SettingItem.svelte';
  * ```
  */
 
-export type Control =
-	| { kind: 'toggle'; value: boolean; disabled: boolean; change?: (value: boolean) => unknown }
-	| {
-			kind: 'text';
-			value: string;
-			placeholder: string;
-			disabled: boolean;
-			change?: (value: string) => unknown;
-	  }
-	| {
-			kind: 'dropdown';
-			value: string;
-			options: { value: string; label: string }[];
-			disabled: boolean;
-			change?: (value: string) => unknown;
-	  }
-	| {
-			kind: 'button';
-			text: string;
-			variant: 'secondary' | 'default' | 'destructive';
-			disabled: boolean;
-			click?: () => unknown;
-	  };
-
-export interface SettingModel {
-	name: string;
-	desc: string;
-	heading: boolean;
-	controls: Control[];
-}
-
 /** Rows of one box: the first and last round it off, a heading ends it. */
 const ROW =
 	'flex items-center justify-between gap-6 border-x border-b bg-card px-4 py-3 first:rounded-t-lg first:border-t last:rounded-b-lg [.setting-heading+&]:rounded-t-lg [.setting-heading+&]:border-t [&:has(+.setting-heading)]:rounded-b-lg';
 const HEADING = 'setting-heading mt-6 mb-2 flex items-center justify-between gap-6 first:mt-0';
 const SECTION = 'setting-section mt-6 first:mt-0';
-
-/** What each container holds, to unmount before it is drawn again. */
-const drawn = new WeakMap<HTMLElement, (() => void)[]>();
-
-function track(el: HTMLElement, remove: () => void) {
-	const list = drawn.get(el) ?? [];
-	list.push(remove);
-	drawn.set(el, list);
-}
-
-/** Take away the settings drawn in `el`, and empty it. */
-export function clearSettings(el: HTMLElement) {
-	for (const remove of drawn.get(el) ?? []) remove();
-	drawn.delete(el);
-	el.replaceChildren();
-}
-
-/** Run a plugin's handler, which may be async, and say when it fails. */
-export function call<T>(handler: ((value: T) => unknown) | undefined, value: T) {
-	try {
-		void Promise.resolve(handler?.(value)).catch((e) => console.error(e));
-	} catch (e) {
-		console.error(e);
-	}
-}
 
 export class Setting {
 	readonly settingEl: HTMLElement;

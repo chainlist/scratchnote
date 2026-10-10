@@ -9,7 +9,9 @@ Obsidian's, so an Obsidian plugin's author will find their way around.
 A plugin is trusted code. It runs in the app's webview with the app's own
 access, which is why community plugins stay off until the user turns them on
 (SPEC 3.9). The reference for the API is
-[`src/lib/plugins/api.ts`](src/lib/plugins/api.ts); the core plugins in
+[`src/lib/plugins/api.ts`](src/lib/plugins/api.ts), with its types in
+[`types.ts`](src/lib/plugins/types.ts) beside it; the core plugins in
+
 [`src/plugins/`](src/plugins/) use most of it.
 
 ## The files

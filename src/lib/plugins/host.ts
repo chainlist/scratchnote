@@ -1,4 +1,4 @@
-import { onHeaderChange, type ItemView } from './api';
+import { onHeaderChange, type ItemView } from './views';
 import { app, reportError } from './app';
 import type { ViewEntry } from './registry.svelte';
 

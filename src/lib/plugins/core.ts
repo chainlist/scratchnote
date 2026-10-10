@@ -1,5 +1,6 @@
 import type { PluginManifest } from '#lib/api.js';
-import type { App, Plugin } from './api';
+import type { Plugin } from './component';
+import type { App } from './types';
 
 /**
  * A plugin built into the app (SPEC 3.9), from `src/plugins/`. It is written

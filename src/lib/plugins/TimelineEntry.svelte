@@ -3,7 +3,7 @@
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import TimelineItem from '#lib/components/TimelineItem.svelte';
 	import { dayPart, minutesBetween } from '#lib/days.js';
-	import { call } from './setting.svelte';
+	import { call } from './setting-model';
 	import type { TimelineItemModel } from './timeline.svelte';
 
 	/** One item of a plugin's `Timeline`; the builder changes the model it draws. */

@@ -17,7 +17,7 @@ import {
 import { attachmentUrl } from '#lib/attachments.svelte.js';
 import { fileName, parseMarkdown, preview } from '#lib/markdown.js';
 import { getLocale } from '#lib/paraglide/runtime.js';
-import type { App } from './api';
+import type { App } from './types';
 import { render } from './render.svelte';
 
 /**

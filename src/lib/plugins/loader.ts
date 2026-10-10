@@ -19,20 +19,18 @@ import { m } from '#lib/paraglide/messages.js';
 import { corePlugins } from '../../plugins';
 import {
 	Component,
-	createPlugin,
 	Editor,
 	iconSvg,
 	ItemView,
-	loadPlugin,
 	Plugin,
 	PluginSettingTab,
 	Setting,
 	SettingSection,
 	Timeline,
-	unloadPlugin,
 	type App
 } from './api';
 import { app, describeWindow } from './app';
+import { createPlugin, loadPlugin, unloadPlugin } from './component';
 import type { CorePlugin } from './core';
 import { plugins } from './state.svelte';
 

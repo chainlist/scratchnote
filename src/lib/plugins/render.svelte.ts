@@ -1,6 +1,6 @@
 import { mount, unmount } from 'svelte';
 import Markdown from '#lib/components/Markdown.svelte';
-import type { RenderOptions } from './api';
+import type { RenderOptions } from './types';
 
 /** Draw markdown with the card's own component, into a plugin's element. */
 export function render(el: HTMLElement, text: string, options: RenderOptions = {}) {

@@ -1,14 +1,6 @@
 import type { Extension } from '@codemirror/state';
-import type { Editor } from './editor';
-import type { Note } from '#lib/api.js';
-import type {
-	ItemView,
-	Label,
-	MarkdownSyntax,
-	NoteChip,
-	PluginSettingTab,
-	ToolbarButton
-} from './api';
+import type { Command, Label, MarkdownSyntax, Note, NoteChip, ToolbarButton } from './types';
+import type { ItemView, PluginSettingTab } from './views';
 
 /**
  * Everything the plugins add to this window, as they have it now. The hosts
@@ -17,15 +9,10 @@ import type {
  * the moment it unloads. Each entry names the plugin it came from.
  */
 
-export interface CommandEntry {
+export interface CommandEntry extends Command {
 	plugin: string;
 	/** `<plugin>:<command>`, unique across plugins. */
 	id: string;
-	name: Label;
-	icon?: string;
-	hotkey?: string;
-	callback?: () => unknown;
-	editorCallback?: (editor: Editor) => unknown;
 }
 
 export interface RibbonEntry {

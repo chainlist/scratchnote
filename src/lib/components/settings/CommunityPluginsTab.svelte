@@ -16,7 +16,8 @@
 	import StoreIcon from '@lucide/svelte/icons/store';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { m } from '#lib/paraglide/messages.js';
-	import { adopt, older, plugins, setCommunity, setCommunityPlugin } from '#lib/plugins/loader.js';
+	import { adopt, plugins, setCommunity, setCommunityPlugin } from '#lib/plugins/loader.js';
+	import { older } from '#lib/versions.js';
 	import PluginBrowser from './PluginBrowser.svelte';
 	import PluginOptions from './PluginOptions.svelte';
 	import SettingRow from './SettingRow.svelte';

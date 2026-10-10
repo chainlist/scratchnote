@@ -81,7 +81,3 @@ export function onSwipe(element: HTMLElement | Document, swipe: Swipe) {
 		element.removeEventListener('touchcancel', touchend);
 	};
 }
-
-/** Text and fields keep their own touches. */
-export const inText = (target: Element) =>
-	target.closest('input, textarea, select, [contenteditable="true"], .cm-editor') !== null;

@@ -12,6 +12,7 @@
 	import type { NoteChip } from '#lib/plugins/api.js';
 	import { registry } from '#lib/plugins/registry.svelte.js';
 	import { aheadLabel, shortDay } from '#lib/dates.js';
+	import { typesText } from '#lib/dom.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';
@@ -158,8 +159,7 @@
 	function onCardKeydown(event: KeyboardEvent) {
 		if (editing || event.key.toLowerCase() !== 'e') return;
 		if (event.ctrlKey || event.metaKey || event.altKey) return;
-		const target = event.target as HTMLElement;
-		if (target.isContentEditable || target.closest('input, textarea')) return;
+		if (typesText(event.target as HTMLElement)) return;
 		event.preventDefault();
 		void startEditing();
 	}

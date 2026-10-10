@@ -1,3 +1,5 @@
+import { readJson, writeJson } from '#lib/storage.js';
+
 /**
  * Which side of the view the dock sits on and how wide it is, kept between
  * launches. It is the window's layout rather than a setting. Storage can be
@@ -20,22 +22,12 @@ export const DOCK_MAX = 70;
 const DEFAULT: DockLayout = { side: 'right', size: 40 };
 
 export function loadDock(): DockLayout {
-	try {
-		const saved = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-		const size = Number(saved?.size);
-		return {
-			side: saved?.side === 'left' ? 'left' : 'right',
-			size: Number.isFinite(size) ? Math.min(DOCK_MAX, Math.max(DOCK_MIN, size)) : DEFAULT.size
-		};
-	} catch {
-		return DEFAULT;
-	}
+	const saved = readJson(KEY) as { side?: unknown; size?: unknown } | null;
+	const size = Number(saved?.size);
+	return {
+		side: saved?.side === 'left' ? 'left' : 'right',
+		size: Number.isFinite(size) ? Math.min(DOCK_MAX, Math.max(DOCK_MIN, size)) : DEFAULT.size
+	};
 }
 
-export function saveDock(layout: DockLayout) {
-	try {
-		localStorage.setItem(KEY, JSON.stringify(layout));
-	} catch {
-		// The next launch opens it where it opens by default.
-	}
-}
+export const saveDock = (layout: DockLayout) => writeJson(KEY, layout);

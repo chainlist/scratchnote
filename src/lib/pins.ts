@@ -26,13 +26,20 @@ export function monogram(label: string) {
 	return at ? `@${[...text][0].toUpperCase()}` : text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** A plugin's page from its type and query, `journal?date=2026-09-28`, as a
+ *  view's pin keeps it. resolve() takes no query string, so the query
+ *  follows the path it gives. */
+export function pluginPageHref(target: string) {
+	const at = target.indexOf('?');
+	const type = at < 0 ? target : target.slice(0, at);
+	return `${resolve(`plugin/${type}/`)}${at < 0 ? '' : target.slice(at)}`;
+}
+
 /** The view a pin opens. */
 export function pinHref(pin: Pin) {
 	if (pin.kind === 'thread') return threadHref(pin.target);
 	if (pin.kind === 'mention') return mentionHref(pin.target);
-	const at = pin.target.indexOf('?');
-	const type = at < 0 ? pin.target : pin.target.slice(0, at);
-	return `${resolve(`plugin/${type}/`)}${at < 0 ? '' : pin.target.slice(at)}`;
+	return pluginPageHref(pin.target);
 }
 
 /** The plugin page type a view's pin opens. */

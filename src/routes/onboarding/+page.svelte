@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getVersion } from '@tauri-apps/api/app';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { EMBEDDING_SIZE, restartApp } from '#lib/api.js';
@@ -27,6 +26,7 @@
 	import { clearResumeStep, resumeStep, setResumeStep } from '#lib/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { android, mac } from '#lib/platform.js';
+	import { app } from '#lib/plugins/app.js';
 
 	/**
 	 * The first-run walkthrough. The main page sends a fresh install here;
@@ -116,8 +116,7 @@
 			if (!last) return go(index + 1);
 			// The walkthrough is a new install's introduction, so its release
 			// notes are not shown after it.
-			const lastSeenVersion = await getVersion();
-			if (!(await settings.apply({ onboarded: true, lastSeenVersion }))) return;
+			if (!(await settings.apply({ onboarded: true, lastSeenVersion: app.version }))) return;
 			clearResumeStep();
 			// In place of the walkthrough, so Android's back button cannot
 			// return to it.

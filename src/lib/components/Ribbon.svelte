@@ -17,6 +17,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { coreIds } from '#lib/plugins/loader.js';
 	import { monogram, pinHref, pinHue, pinPage } from '#lib/pins.js';
+	import { errorText } from '#lib/errors.js';
 	import { threadScope } from '#lib/threads.js';
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -117,8 +118,7 @@
 
 	/** One that fails says so above the view. */
 	function run(item: RibbonEntry) {
-		const fail = (e: unknown) =>
-			shell.showError(`${item.plugin}: ${e instanceof Error ? e.message : String(e)}`);
+		const fail = (e: unknown) => shell.showError(`${item.plugin}: ${errorText(e)}`);
 		try {
 			void Promise.resolve(item.callback()).catch(fail);
 		} catch (e) {

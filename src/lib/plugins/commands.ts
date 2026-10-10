@@ -1,4 +1,5 @@
 import type { EditorView } from '@codemirror/view';
+import { errorText } from '#lib/errors.js';
 import { reportError } from './app';
 import { Editor } from './editor';
 import type { CommandEntry } from './registry.svelte';
@@ -9,8 +10,7 @@ import type { CommandEntry } from './registry.svelte';
  * than breaking what called it.
  */
 export function runCommand(entry: CommandEntry, cm?: EditorView | null) {
-	const fail = (e: unknown) =>
-		reportError(`${entry.plugin}: ${e instanceof Error ? e.message : String(e)}`);
+	const fail = (e: unknown) => reportError(`${entry.plugin}: ${errorText(e)}`);
 	try {
 		const result =
 			entry.editorCallback && cm ? entry.editorCallback(new Editor(cm)) : entry.callback?.();

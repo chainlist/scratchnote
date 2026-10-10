@@ -5,6 +5,7 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { readJson, writeJson } from '#lib/storage.js';
 
 	let {
 		waiting,
@@ -26,11 +27,8 @@
 	let removing = $state(false);
 
 	onMount(() => {
-		try {
-			if (localStorage.getItem(KEPT)) return;
-		} catch {
-			// Without storage, ask each launch.
-		}
+		// Without storage, it asks each launch.
+		if (readJson(KEPT)) return;
 		oldChatModel()
 			.then((found) => (bytes = found?.bytes ?? null))
 			.catch((e) => onerror(String(e)));
@@ -49,11 +47,7 @@
 	});
 
 	function keep() {
-		try {
-			localStorage.setItem(KEPT, '1');
-		} catch {
-			// Asked again next launch.
-		}
+		writeJson(KEPT, true);
 		bytes = null;
 	}
 

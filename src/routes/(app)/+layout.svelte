@@ -4,7 +4,6 @@
 	import { dev } from '$app/env';
 	import { afterNavigate } from '$app/navigation';
 	import { navigating } from '$app/state';
-	import { getVersion } from '@tauri-apps/api/app';
 	import {
 		embeddingModelInfo,
 		getSettings,
@@ -47,16 +46,18 @@
 	import { Spinner } from '#lib/components/ui/spinner/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { remPixels } from '#lib/appearance.js';
-	import { compareVersions, FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
+	import { FIRST_RELEASE, releasesSince, type Release } from '#lib/changelog.js';
+	import { compareVersions } from '#lib/versions.js';
 	import { DOCK_MAX, DOCK_MIN } from '#lib/dock.js';
-	import { bindWorkspace } from '#lib/plugins/app.js';
+	import { app, bindWorkspace } from '#lib/plugins/app.js';
 	import { matchesHotkey } from '#lib/hotkeys.js';
 	import { android, mac } from '#lib/platform.js';
 	import { runCommand } from '#lib/plugins/commands.js';
 	import { registry } from '#lib/plugins/registry.svelte.js';
 	import { setShell, Shell } from '#lib/shell.svelte.js';
 	import { closeOnBack, startBackGuard } from '#lib/back.svelte.js';
-	import { inText, onSwipe, phone } from '#lib/swipe.js';
+	import { inText, typesText } from '#lib/dom.js';
+	import { onSwipe, phone } from '#lib/swipe.js';
 
 	let { data, children } = $props();
 
@@ -124,8 +125,7 @@
 			// Alt+arrows take the webview through its history, which holds the
 			// views. In text they would leave a note or a page half written.
 			// On macOS they move by word instead, and the text keeps them.
-			const target = event.target as HTMLElement;
-			if (target.isContentEditable || target.closest('input, textarea')) event.preventDefault();
+			if (typesText(event.target as HTMLElement)) event.preventDefault();
 		}
 	}
 
@@ -173,8 +173,7 @@
 	function runPluginHotkey(event: KeyboardEvent) {
 		if (event.defaultPrevented) return false;
 		// A key without a modifier types, in text.
-		const target = event.target as HTMLElement;
-		const typing = target.isContentEditable || target.closest('input, textarea');
+		const typing = typesText(event.target as HTMLElement);
 		if (typing && !(event.ctrlKey || event.metaKey || event.altKey)) return false;
 		const command = registry.commands.find(
 			(entry) => entry.hotkey && entry.callback && matchesHotkey(event, entry.hotkey)
@@ -188,7 +187,7 @@
 	 * opened. A settings file without one is from 0.1.0, which kept none.
 	 */
 	async function showReleaseNotes(settings: SettingsView) {
-		const current = await getVersion();
+		const current = app.version;
 		const since = settings.lastSeenVersion ?? FIRST_RELEASE;
 		if (compareVersions(current, since) <= 0) return;
 		const news = releasesSince(since, current);

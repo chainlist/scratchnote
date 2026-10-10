@@ -10,7 +10,6 @@ import {
 	deletePage,
 	dismissThread,
 	getNotes,
-	getSettings,
 	isPage,
 	keepOutOfThreads,
 	keepThread,
@@ -20,9 +19,9 @@ import {
 	moveNote,
 	movePage,
 	noteToPage,
+	patchSettings,
 	putInThread,
 	setPins,
-	setSettings,
 	undoThreadChange,
 	updateNote,
 	type Note,
@@ -34,7 +33,6 @@ import {
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { onGuard } from '#lib/back.svelte.js';
 import { addToPageDraft } from '#lib/page-draft.js';
-import { editable } from '#lib/components/settings/state.svelte.js';
 import { m } from '#lib/paraglide/messages.js';
 import { samePin } from '#lib/pins.js';
 import { noteTitle } from '#lib/markdown.js';
@@ -645,7 +643,7 @@ export class Shell implements WorkspaceHost {
 		const was = this.threadOrder;
 		this.threadOrder = order;
 		try {
-			await setSettings({ ...editable(await getSettings()), threadOrder: order });
+			await patchSettings({ threadOrder: order });
 		} catch (e) {
 			this.threadOrder = was;
 			this.fail(m.error_save_setting(), e);

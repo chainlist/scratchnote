@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import favicon from '#lib/assets/favicon.svg';
 	import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
-	import { getSettings, onSettingsChanged, type Settings } from '#lib/api.js';
+	import { getSettings, onSettingsChanged, stopAll, type Settings } from '#lib/api.js';
 	import { applyAppearance } from '#lib/appearance.js';
 	import { followSpace } from '#lib/attachments.svelte.js';
 	import { applyLanguage } from '#lib/i18n.svelte.js';
@@ -39,8 +39,7 @@
 		// After the first view's own mount work too, such as its editor.
 		setTimeout(() => void recordStartup());
 		void getSettings().then(apply);
-		const off = [onSettingsChanged(apply), followSpace()];
-		return () => off.forEach((p) => void p.then((stop) => stop()));
+		return stopAll(onSettingsChanged(apply), followSpace());
 	});
 
 	$effect(() => {

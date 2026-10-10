@@ -5,6 +5,7 @@
 		EMBEDDING_SIZE,
 		embeddingModelInfo,
 		onEmbeddingStatus,
+		stopAll,
 		type EmbeddingModelInfo
 	} from '#lib/api.js';
 	import { Badge } from '#lib/components/ui/badge/index.js';
@@ -31,7 +32,7 @@
 		embeddingModelInfo()
 			.then((info) => (embedding = info))
 			.catch((e) => settings.say(String(e), true));
-		return () => void off.then((stop) => stop());
+		return stopAll(off);
 	});
 
 	async function download() {

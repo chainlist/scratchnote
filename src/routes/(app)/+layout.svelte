@@ -20,6 +20,7 @@
 		onThreadsChanged,
 		setSettings,
 		setTrayLabels,
+		stopAll,
 		today,
 		type SettingsView
 	} from '#lib/api.js';
@@ -239,7 +240,7 @@
 				onEmbeddingStatus((status) => (shell.embeddingInstalled = status.state === 'installed'))
 			);
 		})();
-		return () => off.forEach((p) => void p.then((stop) => stop()));
+		return () => stopAll(...off)();
 	});
 
 	// The tray menu lives in Rust; the main window keeps it in the open language.

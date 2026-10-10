@@ -11,6 +11,7 @@
 		onSpacesChanged,
 		revealNote,
 		saveNote,
+		stopAll,
 		type Attachment,
 		type SpacesView
 	} from '#lib/api.js';
@@ -53,7 +54,7 @@
 		input?.focus();
 		// The window is hidden, never closed, so this component stays mounted
 		// and the draft survives an Esc.
-		const unlisten = [
+		const off = stopAll(
 			onCaptureShown(() => {
 				// A new note starts in the open space; one left half written keeps its own.
 				if (draft.trim() === '') forget();
@@ -61,10 +62,10 @@
 			}),
 			onSettingsChanged((settings) => (hideImmediately = settings.hideImmediately)),
 			onSpacesChanged(followSpaces)
-		];
+		);
 		void listSpaces().then(followSpaces);
 		void getSettings().then((settings) => (hideImmediately = settings.hideImmediately));
-		return () => unlisten.forEach((p) => void p.then((off) => off()));
+		return off;
 	});
 
 	/** A space renamed or deleted from the main window is no longer one to save into. */

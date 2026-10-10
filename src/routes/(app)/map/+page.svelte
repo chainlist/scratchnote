@@ -11,6 +11,7 @@
 		mapLinks,
 		mapSearch,
 		onMapChanged,
+		stopAll,
 		type MapNote,
 		type Note,
 		type Thread
@@ -746,7 +747,7 @@
 	});
 
 	onMount(() => {
-		const off = onMapChanged(() => void invalidate('app:map'));
+		const off = stopAll(onMapChanged(() => void invalidate('app:map')));
 		const themes = new MutationObserver(() => theme++);
 		// The theme is a class on the root; the accent, the font and the size are its style.
 		themes.observe(document.documentElement, {
@@ -756,7 +757,7 @@
 		return () => {
 			themes.disconnect();
 			graphed?.close();
-			void off.then((unlisten) => unlisten());
+			off();
 		};
 	});
 </script>

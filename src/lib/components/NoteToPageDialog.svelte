@@ -17,20 +17,18 @@
 		onconfirm: (note: Note, title: string) => Promise<string | null>;
 	} = $props();
 
-	let title = $state('');
+	// Each note opens the dialog with the title empty and no error.
+	const noteId = $derived(note?.id ?? null);
+	let title = $derived.by(() => {
+		void noteId;
+		return '';
+	});
+	let error = $derived.by((): string | null => {
+		void noteId;
+		return null;
+	});
 	let input = $state<HTMLInputElement | null>(null);
 	let working = $state(false);
-	let error = $state<string | null>(null);
-
-	// The title starts empty.
-	let loaded: string | null = null;
-	$effect(() => {
-		const id = note?.id ?? null;
-		if (id === loaded) return;
-		loaded = id;
-		title = '';
-		error = null;
-	});
 
 	async function confirm(event?: SubmitEvent) {
 		event?.preventDefault();

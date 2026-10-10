@@ -157,10 +157,14 @@ impl Categories {
     /// changed.
     pub fn write(&self, tx: &Connection, before: Option<&Self>) -> Result<(), String> {
         let empty = Self::default();
-        let before = before.unwrap_or_else(|| {
-            let _ = tx.execute_batch("DELETE FROM categories; DELETE FROM category_notes;");
-            &empty
-        });
+        let before = match before {
+            Some(before) => before,
+            None => {
+                tx.execute_batch("DELETE FROM categories; DELETE FROM category_notes;")
+                    .map_err(to_string)?;
+                &empty
+            }
+        };
         SpaceDb::set_meta(tx, "categories_base", &self.base.to_string())?;
         let now: HashMap<i64, &Category> = self.list.iter().map(|c| (c.id, c)).collect();
         let mut gone = tx

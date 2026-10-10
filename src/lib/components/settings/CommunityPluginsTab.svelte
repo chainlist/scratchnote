@@ -20,6 +20,7 @@
 	import { older } from '#lib/versions.js';
 	import PluginBrowser from './PluginBrowser.svelte';
 	import PluginOptions from './PluginOptions.svelte';
+	import PluginRow from './PluginRow.svelte';
 	import SettingRow from './SettingRow.svelte';
 	import type { SettingsState } from './state.svelte';
 	import { group, hint, section } from './styles';
@@ -138,25 +139,18 @@
 							{@const on = plugins.view.enabled.includes(id)}
 							{@const status = plugins.status[id]}
 							{@const newer = updates[id]}
-							<div class="flex items-center justify-between gap-6 px-4 py-3">
-								<div class="flex min-w-0 flex-col gap-0.5">
-									<div class="flex min-w-0 items-center gap-2">
-										<span class="truncate text-sm font-medium">{manifest.name}</span>
-										<Badge variant="secondary" class="font-mono">{manifest.version}</Badge>
-									</div>
-									{#if manifest.author}
-										<p class={hint}>{m.plugins_by({ author: manifest.author })}</p>
-									{/if}
-									{#if manifest.description}
-										<p class="{hint} line-clamp-2">{manifest.description}</p>
-									{/if}
-									{#if status?.state === 'failed'}
-										<p class="text-xs text-destructive">
-											{m.plugins_failed_because({ error: status.error })}
-										</p>
-									{/if}
+							<PluginRow error={status?.state === 'failed' ? status.error : undefined}>
+								<div class="flex min-w-0 items-center gap-2">
+									<span class="truncate text-sm font-medium">{manifest.name}</span>
+									<Badge variant="secondary" class="font-mono">{manifest.version}</Badge>
 								</div>
-								<div class="flex shrink-0 items-center gap-1">
+								{#if manifest.author}
+									<p class={hint}>{m.plugins_by({ author: manifest.author })}</p>
+								{/if}
+								{#if manifest.description}
+									<p class="{hint} line-clamp-2">{manifest.description}</p>
+								{/if}
+								{#snippet actions()}
 									{#if newer}
 										<Button size="sm" onclick={() => update(id)} disabled={busy === id}>
 											<DownloadIcon class={busy === id ? 'animate-pulse' : ''} />
@@ -181,8 +175,8 @@
 										}
 										aria-label={manifest.name}
 									/>
-								</div>
-							</div>
+								{/snippet}
+							</PluginRow>
 						{/each}
 					</div>
 				{/if}

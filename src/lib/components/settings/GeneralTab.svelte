@@ -7,6 +7,7 @@
 	import { Switch } from '#lib/components/ui/switch/index.js';
 	import { clearResumeStep } from '#lib/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { android } from '#lib/platform.js';
 	import About from './About.svelte';
 	import FolderPicker from './FolderPicker.svelte';
 	import HotkeyInput from './HotkeyInput.svelte';
@@ -21,10 +22,9 @@
 	const restartNeeded = $derived(view.root !== view.activeRoot);
 
 	let launchAtLogin = $state(false);
-	// Android has no capture window, hotkey or login to launch at.
-	const android = navigator.userAgent.includes('Android');
 
 	onMount(async () => {
+		// Android has no capture window, hotkey or login to launch at.
 		if (android) return;
 		try {
 			launchAtLogin = await isEnabled();

@@ -6,6 +6,7 @@
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import SmartphoneIcon from '@lucide/svelte/icons/smartphone';
 	import { m } from '#lib/paraglide/messages.js';
+	import { android } from '#lib/platform.js';
 
 	let {
 		value,
@@ -21,15 +22,14 @@
 		onerror: (message: string) => void;
 	} = $props();
 
-	// The dialog plugin cannot pick folders on Android, so the app asks its
-	// own chooser there, which also asks for access to a shared folder.
-	const android = navigator.userAgent.includes('Android');
 	/** Its path means nothing to a phone's owner, so it goes by name. */
 	const inAppStorage = $derived(android && value === appStorage);
 
 	/** The system's folder picker, opened where the current folder is. */
 	async function choose() {
 		try {
+			// The dialog plugin cannot pick folders on Android, so the app asks its
+			// own chooser there, which also asks for access to a shared folder.
 			const picked = android
 				? await pickNotesFolder()
 				: await open({

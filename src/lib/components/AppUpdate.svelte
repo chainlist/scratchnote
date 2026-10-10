@@ -5,6 +5,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import { m } from '#lib/paraglide/messages.js';
+	import { android } from '#lib/platform.js';
 
 	/**
 	 * Offers a newer release of the app in the top bar (SPEC 3.6). Checks at
@@ -24,7 +25,7 @@
 	onMount(() => {
 		// A dev build is not a release, so no release replaces it. Android
 		// gets a new APK rather than updating itself.
-		if (dev || navigator.userAgent.includes('Android')) return;
+		if (dev || android) return;
 		void look();
 		const timer = setInterval(look, DAY);
 		return () => clearInterval(timer);

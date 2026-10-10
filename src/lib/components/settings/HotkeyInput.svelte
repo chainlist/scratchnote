@@ -1,14 +1,8 @@
-<script lang="ts" module>
-	const isMac = navigator.userAgent.includes('Mac');
-
-	/** Shows an accelerator the way the OS spells it, e.g. Ctrl+Shift+Space. */
-	export const prettyHotkey = (accelerator: string) =>
-		accelerator.replace('CommandOrControl', isMac ? '⌘' : 'Ctrl').replace('Super', 'Win');
-</script>
-
 <script lang="ts">
 	import type { HTMLInputAttributes } from 'svelte/elements';
 	import { Input } from '#lib/components/ui/input/index.js';
+	import { prettyHotkey } from '#lib/hotkeys.js';
+	import { mac } from '#lib/platform.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {
@@ -59,8 +53,8 @@
 		if (['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) return;
 
 		const mods: string[] = [];
-		if (isMac ? event.metaKey : event.ctrlKey) mods.push('CommandOrControl');
-		if (isMac ? event.ctrlKey : event.metaKey) mods.push(isMac ? 'Control' : 'Super');
+		if (mac ? event.metaKey : event.ctrlKey) mods.push('CommandOrControl');
+		if (mac ? event.ctrlKey : event.metaKey) mods.push(mac ? 'Control' : 'Super');
 		if (event.altKey) mods.push('Alt');
 		if (event.shiftKey) mods.push('Shift');
 		// A bare key would fire on every keystroke typed anywhere.

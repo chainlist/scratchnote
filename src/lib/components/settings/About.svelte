@@ -11,6 +11,7 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { android } from '#lib/platform.js';
 	import { duration, startupTimes } from '#lib/startup.js';
 	import type { SettingsState } from './state.svelte';
 	import StartupDetails from './StartupDetails.svelte';
@@ -96,7 +97,7 @@
 							? m.update_retry()
 							: m.update_to({ version: appUpdate.update.version })}
 				</Button>
-			{:else if !dev && !navigator.userAgent.includes('Android')}
+			{:else if !dev && !android}
 				<!-- A dev build is not a release, so no release replaces it; Android
 				     gets a new APK rather than updating itself. -->
 				<Button variant="secondary" size="sm" onclick={look} disabled={checking}>

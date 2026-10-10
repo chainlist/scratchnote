@@ -3,8 +3,6 @@ import { reportError } from './app';
 import { Editor } from './editor';
 import type { CommandEntry } from './registry.svelte';
 
-const mac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
-
 /**
  * Run a plugin's command: on the editor it was called from when it acts on
  * text. A command that throws, now or later, says so in the window rather
@@ -20,39 +18,4 @@ export function runCommand(entry: CommandEntry, cm?: EditorView | null) {
 	} catch (e) {
 		fail(e);
 	}
-}
-
-/** The modifiers and the key of a hotkey in CodeMirror's notation, `Mod-Shift-h`. */
-function parse(hotkey: string) {
-	const parts = hotkey.split(/-(?!$)/);
-	const key = parts.pop() ?? '';
-	const mods = new Set(parts.map((part) => part.toLowerCase()));
-	return {
-		key,
-		ctrl: mods.has('ctrl') || (!mac && mods.has('mod')),
-		meta: mods.has('meta') || mods.has('cmd') || (mac && mods.has('mod')),
-		alt: mods.has('alt'),
-		shift: mods.has('shift')
-	};
-}
-
-export function matchesHotkey(event: KeyboardEvent, hotkey: string): boolean {
-	const want = parse(hotkey);
-	return (
-		event.ctrlKey === want.ctrl &&
-		event.metaKey === want.meta &&
-		event.altKey === want.alt &&
-		event.shiftKey === want.shift &&
-		event.key.toLowerCase() === want.key.toLowerCase()
-	);
-}
-
-/** A hotkey as the command center shows it: `Ctrl+Shift+H`, `⌘⇧H` on macOS. */
-export function formatHotkey(hotkey: string): string {
-	const { key, ctrl, meta, alt, shift } = parse(hotkey);
-	const name = key.length === 1 ? key.toUpperCase() : key;
-	if (mac) return `${ctrl ? '⌃' : ''}${alt ? '⌥' : ''}${shift ? '⇧' : ''}${meta ? '⌘' : ''}${name}`;
-	return [ctrl && 'Ctrl', meta && 'Win', alt && 'Alt', shift && 'Shift', name]
-		.filter(Boolean)
-		.join('+');
 }

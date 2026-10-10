@@ -1,6 +1,7 @@
 import { tick, untrack } from 'svelte';
 import { beforeNavigate, pushState } from '$app/navigation';
 import { navigating, page } from '$app/state';
+import { android } from '#lib/platform.js';
 
 /**
  * Android's back button and gesture go back through the webview's history.
@@ -93,7 +94,7 @@ async function reconcile() {
  * so each one opening or closing is heard.
  */
 export function startBackGuard() {
-	if (!navigator.userAgent.includes('Android')) return;
+	if (!android) return;
 	started = true;
 	beforeNavigate(() => void navigations++);
 

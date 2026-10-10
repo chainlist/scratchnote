@@ -9,6 +9,7 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import { m } from '#lib/paraglide/messages.js';
+	import { android, mac } from '#lib/platform.js';
 
 	let {
 		spaces,
@@ -30,14 +31,11 @@
 		title?: Snippet;
 		titleShown?: boolean;
 	} = $props();
-
-	// macOS keeps its native traffic lights over the top left corner;
-	// elsewhere the window is undecorated and draws its own controls.
-	const mac = navigator.userAgent.includes('Mac');
-	// Android shows the app full screen, with no window to control.
-	const android = navigator.userAgent.includes('Android');
 </script>
 
+<!-- macOS keeps its native traffic lights over the top left corner;
+     elsewhere the window is undecorated and draws its own controls.
+     Android shows the app full screen, with no window to control. -->
 <header
 	data-tauri-drag-region="deep"
 	class={['@container relative flex h-12 shrink-0 items-center gap-1 pr-2', mac ? 'pl-20' : 'pl-4']}

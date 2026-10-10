@@ -8,6 +8,7 @@
 	import { followSpace } from '#lib/attachments.svelte.js';
 	import { applyLanguage } from '#lib/i18n.svelte.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { android } from '#lib/platform.js';
 	import { recordStartup } from '#lib/startup.js';
 
 	let { children } = $props();
@@ -20,7 +21,7 @@
 	 *  larger text never leaves a window too small for its own bar. */
 	function fitMinSize(fontSize: number) {
 		// Android shows the app full screen, at the size of the screen.
-		if (navigator.userAgent.includes('Android')) return;
+		if (android) return;
 		const window = getCurrentWindow();
 		const [width, height] = MIN_SIZE[window.label] ?? [0, 0];
 		const scale = fontSize / 16;

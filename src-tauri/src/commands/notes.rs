@@ -373,7 +373,7 @@ pub fn today() -> String {
 /// The notes and pages of the open space that look forward to `date`, oldest
 /// first, for its day to show what was written ahead of it (SPEC 5.3).
 #[tauri::command]
-pub fn notes_about(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
+pub async fn notes_about(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
     check_date(&date)?;
     let space = state.space()?;
     let found = space.read(|idx, db| {

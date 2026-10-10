@@ -10,6 +10,7 @@ mod error;
 mod events;
 mod http;
 mod mentions;
+mod notes;
 mod pages;
 mod plugins;
 mod search;

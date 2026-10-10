@@ -17,10 +17,11 @@ use super::threads::{self, Threads};
 use super::vectors::Vectors;
 use super::Embedder;
 use crate::spaces::Space;
-use crate::state::AppState;
+use crate::state::{lock, read_lock, AppState};
 use crate::storage::index::Index;
 use crate::storage::search_db::SearchDb;
 use crate::storage::space_db::SpaceDb;
+use crate::{Error, Result};
 
 /// Woken when an index changes or the model becomes available.
 pub type Wake = Arc<Notify>;
@@ -261,20 +262,18 @@ pub fn reconcile(
     held: &HashSet<String>,
     keep_going: impl Fn() -> bool,
     mut progress: impl FnMut(usize, usize),
-) -> Result<bool, String> {
+) -> Result<bool> {
     let (model_id, dims) = (embedder.model_id(), embedder.dims());
 
     // The work is cloned out so that neither lock is held while the model
     // runs: the index is wanted by every command, the vectors by search.
     let (mut changed, todo) = {
-        let mut slot = vectors
-            .lock()
-            .map_err(|_| "vectors lock poisoned".to_string())?;
+        let mut slot = lock(vectors, "vectors")?;
         if slot.as_ref().is_some_and(|v| !v.is_from(model_id, dims)) {
             *slot = None;
         }
         if slot.is_none() {
-            let db = db.lock().map_err(|_| "space.db lock poisoned".to_string())?;
+            let db = lock(db, "space.db")?;
             // A space closed meanwhile.
             let Some(db) = db.as_ref() else {
                 return Ok(false);
@@ -283,9 +282,7 @@ pub fn reconcile(
         }
         let store = slot.as_mut().expect("loaded just above");
 
-        let index = index
-            .read()
-            .map_err(|_| "index lock poisoned".to_string())?;
+        let index = read_lock(index, "index")?;
         // A space closed meanwhile holds no notes, which must not read as
         // every note deleted and cost the vectors on disk.
         if index.is_closed() {
@@ -301,12 +298,9 @@ pub fn reconcile(
             .collect();
         drop(index);
 
-        let mut bodies = match texts.lock() {
-            Ok(texts) => match texts.as_ref() {
-                Some(db) => db.bodies(stale.iter().map(|(id, _)| id.as_str()))?,
-                None => return Ok(false),
-            },
-            Err(_) => return Err("search.db lock poisoned".to_string()),
+        let mut bodies = match lock(texts, "search.db")?.as_ref() {
+            Some(db) => db.bodies(stale.iter().map(|(id, _)| id.as_str()))?,
+            None => return Ok(false),
         };
         let todo: Vec<(String, String, String)> = stale
             .into_iter()
@@ -334,9 +328,7 @@ pub fn reconcile(
                 continue;
             }
         };
-        let mut slot = vectors
-            .lock()
-            .map_err(|_| "vectors lock poisoned".to_string())?;
+        let mut slot = lock(vectors, "vectors")?;
         if let Some(store) = slot.as_mut() {
             match store.insert(id.clone(), hash, vector) {
                 Ok(()) => changed = true,
@@ -347,7 +339,7 @@ pub fn reconcile(
             if embedded % SAVE_EVERY == 0 && keep_going() {
                 let saved = match db.lock().as_deref_mut() {
                     Ok(Some(db)) => store.save(db),
-                    _ => Err("the space is closed".to_string()),
+                    _ => Err(Error::SpaceClosed),
                 };
                 match saved {
                     Ok(()) => changed = false,
@@ -396,12 +388,12 @@ mod tests {
             StubEmbedder.dims()
         }
 
-        fn embed_document(&self, text: &str) -> Result<Vec<f32>, String> {
+        fn embed_document(&self, text: &str) -> Result<Vec<f32>> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             StubEmbedder.embed_document(text)
         }
 
-        fn embed_query(&self, text: &str) -> Result<Vec<f32>, String> {
+        fn embed_query(&self, text: &str) -> Result<Vec<f32>> {
             StubEmbedder.embed_query(text)
         }
     }

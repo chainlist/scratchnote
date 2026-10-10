@@ -10,10 +10,11 @@ use crate::pages::{
     drop_stub, emit_updated, entry, free_path, newest_first, read_page, reindex, sync_stub,
     write_new,
 };
-use crate::state::AppState;
+use crate::state::{read_lock, AppState};
 use crate::storage::daily_file::{self, body_hash, Kind, Note, Stub};
 use crate::storage::page_file;
 use crate::storage::{check_date, day_path};
+use crate::Result;
 
 const NO_TITLE: &str = "a page needs a title";
 
@@ -27,7 +28,7 @@ pub async fn create_page(
     title: String,
     body: String,
     date: Option<String>,
-) -> Result<Note, String> {
+) -> Result<Note> {
     let title = page_file::clean_title(&title).ok_or(NO_TITLE)?;
     if let Some(date) = &date {
         check_date(date)?;
@@ -62,13 +63,10 @@ pub async fn create_page(
 
 /// Every page of the open space, for the list of pages (SPEC 3.5).
 #[tauri::command]
-pub async fn list_pages(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
+pub async fn list_pages(state: State<'_, AppState>) -> Result<Vec<Note>> {
     let space = state.space()?;
     let mut pages = {
-        let index = space
-            .index
-            .read()
-            .map_err(|_| "index lock poisoned".to_string())?;
+        let index = read_lock(&space.index, "index")?;
         newest_first(&index)
     };
     space.fill_bodies(&mut pages);
@@ -76,7 +74,7 @@ pub async fn list_pages(state: State<'_, AppState>) -> Result<Vec<Note>, String>
 }
 
 #[tauri::command]
-pub async fn get_page(state: State<'_, AppState>, id: String) -> Result<Note, String> {
+pub async fn get_page(state: State<'_, AppState>, id: String) -> Result<Note> {
     let space = state.space()?;
     read_page(&space, &id).await
 }
@@ -90,7 +88,7 @@ pub async fn update_page(
     state: State<'_, AppState>,
     id: String,
     body: String,
-) -> Result<Note, String> {
+) -> Result<Note> {
     let space = state.space()?;
     space.hold(&id);
     let body = body.trim().to_string();
@@ -110,7 +108,7 @@ pub async fn update_page(
             .await?
     };
     if !written {
-        return Err(format!("{file} no longer holds page {id}"));
+        return Err(format!("{file} no longer holds page {id}").into());
     }
     let page = reindex(&space, &file)?.ok_or_else(|| format!("{file} is gone"))?;
     space.persist_index(&state.writer).await?;
@@ -122,7 +120,7 @@ pub async fn update_page(
 /// The page view closed: the page is released, and the embed task is woken
 /// for it. A page only read was not held and needs nothing.
 #[tauri::command]
-pub async fn finish_page(state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub async fn finish_page(state: State<'_, AppState>, id: String) -> Result<()> {
     let space = state.space()?;
     if space.release(&id) {
         space.index_changed();
@@ -138,7 +136,7 @@ pub async fn rename_page(
     state: State<'_, AppState>,
     id: String,
     title: String,
-) -> Result<Note, String> {
+) -> Result<Note> {
     let title = page_file::clean_title(&title).ok_or(NO_TITLE)?;
     let space = state.space()?;
     space.hold(&id);
@@ -181,7 +179,7 @@ pub async fn delete_page(
     state: State<'_, AppState>,
     date: String,
     id: String,
-) -> Result<(), String> {
+) -> Result<()> {
     check_date(&date)?;
     let space = state.space()?;
     space.release(&id);
@@ -214,20 +212,14 @@ pub async fn move_page(
     date: String,
     id: String,
     space: String,
-) -> Result<(), String> {
+) -> Result<()> {
     check_date(&date)?;
     let from = state.space()?;
     let to = move_target(&state, &space)?;
     let page = read_page(&from, &id).await?;
     let title = page.subject.clone().unwrap_or_default();
 
-    let (body, carried) = {
-        let (from, to, body) = (from.root.clone(), to.root.clone(), page.body.clone());
-        tauri::async_runtime::spawn_blocking(move || crate::attachments::carry(&from, &to, &body))
-            .await
-            .map_err(|e| e.to_string())?
-            .map_err(|e| format!("could not take its attachments along: {e}"))?
-    };
+    let (body, carried) = crate::attachments::carry_async(&from.root, &to.root, &page.body).await?;
     let moved = Note {
         id: free_id(&to, &page.date, &id).await,
         file: free_path(&to, &page.date, &title, None),
@@ -265,7 +257,7 @@ pub async fn note_to_page(
     date: String,
     id: String,
     title: String,
-) -> Result<Note, String> {
+) -> Result<Note> {
     let title = page_file::clean_title(&title).ok_or(NO_TITLE)?;
     check_date(&date)?;
     let space = state.space()?;

@@ -18,7 +18,8 @@ use rusqlite::Connection;
 
 use super::normalize;
 use crate::storage::index::IndexEntry;
-use crate::storage::space_db::{to_string, SpaceDb};
+use crate::storage::space_db::SpaceDb;
+use crate::Result;
 
 const MAGIC: &[u8; 4] = b"SNVB";
 const VERSION: u32 = 1;
@@ -110,27 +111,26 @@ impl Vectors {
     }
 
     /// Write what changed since the last save, all of it in one go.
-    pub fn save(&mut self, db: &mut SpaceDb) -> Result<(), String> {
+    pub fn save(&mut self, db: &mut SpaceDb) -> Result<()> {
         db.transaction(|tx| self.write(tx))?;
         self.unsaved = Unsaved::Notes(HashSet::new());
         Ok(())
     }
 
     /// What `save` writes, in the caller's transaction.
-    pub(crate) fn write(&self, tx: &Connection) -> Result<(), String> {
-        let mut put = tx
-            .prepare_cached("INSERT OR REPLACE INTO vectors (id, hash, vector) VALUES (?1, ?2, ?3)")
-            .map_err(to_string)?;
-        let mut row = |id: &str| -> Result<(), String> {
+    pub(crate) fn write(&self, tx: &Connection) -> Result<()> {
+        let mut put = tx.prepare_cached(
+            "INSERT OR REPLACE INTO vectors (id, hash, vector) VALUES (?1, ?2, ?3)",
+        )?;
+        let mut row = |id: &str| -> Result<()> {
             let (hash, vector) = &self.notes[id];
             let bytes: Vec<u8> = vector.iter().flat_map(|x| x.to_le_bytes()).collect();
-            put.execute(rusqlite::params![id, hash, bytes])
-                .map(|_| ())
-                .map_err(to_string)
+            put.execute(rusqlite::params![id, hash, bytes])?;
+            Ok(())
         };
         match &self.unsaved {
             Unsaved::All => {
-                tx.execute("DELETE FROM vectors", []).map_err(to_string)?;
+                tx.execute("DELETE FROM vectors", [])?;
                 SpaceDb::set_meta(tx, "vectors_model", &self.model_id)?;
                 SpaceDb::set_meta(tx, "vectors_dims", &self.dims.to_string())?;
                 self.notes.keys().try_for_each(|id| row(id))
@@ -139,9 +139,8 @@ impl Vectors {
                 if self.notes.contains_key(id) {
                     row(id)
                 } else {
-                    tx.execute("DELETE FROM vectors WHERE id = ?1", [id])
-                        .map(|_| ())
-                        .map_err(to_string)
+                    tx.execute("DELETE FROM vectors WHERE id = ?1", [id])?;
+                    Ok(())
                 }
             }),
         }
@@ -230,13 +229,14 @@ impl Vectors {
         self.notes.len() != before
     }
 
-    pub fn insert(&mut self, id: String, hash: String, mut vector: Vec<f32>) -> Result<(), String> {
+    pub fn insert(&mut self, id: String, hash: String, mut vector: Vec<f32>) -> Result<()> {
         if vector.len() != self.dims {
             return Err(format!(
                 "expected a vector of {} dimensions, got {}",
                 self.dims,
                 vector.len()
-            ));
+            )
+            .into());
         }
         normalize(&mut vector);
         add(&mut self.sum, &vector, 1.0);

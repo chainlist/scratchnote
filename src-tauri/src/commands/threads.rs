@@ -6,11 +6,13 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use super::blocking;
 use crate::embed::threads::{scope_of, thread_id, when_written, Thread, Threads, When};
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
 use crate::storage::index::IndexEntry;
+use crate::{Error, Result};
 
 /// The longest title a thread takes, in characters.
 const MAX_TITLE: usize = 120;
@@ -43,7 +45,7 @@ pub struct ThreadNotes {
 /// The open space's threads, empty until the embed task has placed its
 /// notes, which it never does without the embedding model.
 #[tauri::command]
-pub async fn list_threads(state: State<'_, AppState>) -> Result<ThreadsView, String> {
+pub async fn list_threads(state: State<'_, AppState>) -> Result<ThreadsView> {
     let space = state.space()?;
     Ok(view(&space))
 }
@@ -99,7 +101,7 @@ fn placed<T>(space: &Space, show: impl FnOnce(&Threads) -> Option<T>) -> Option<
 
 /// A thread and its notes, or `None` once it is gone.
 #[tauri::command]
-pub async fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option<ThreadNotes>, String> {
+pub async fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option<ThreadNotes>> {
     let space = state.space()?;
     let Some(when) = dates(&space) else {
         return Ok(None);
@@ -131,7 +133,7 @@ pub async fn rename_thread(
     state: State<'_, AppState>,
     id: String,
     title: String,
-) -> Result<(), String> {
+) -> Result<()> {
     let space = state.space()?;
     let title: String = title
         .split_whitespace()
@@ -163,7 +165,7 @@ pub async fn keep_out_of_threads(
     state: State<'_, AppState>,
     id: String,
     out: bool,
-) -> Result<(), String> {
+) -> Result<()> {
     let space = state.space()?;
     let before = space.decided();
     let changed = space.change_edits(|edits| {
@@ -183,11 +185,9 @@ pub async fn keep_out_of_threads(
 
 /// Place the notes again at once after the user decided something, rather
 /// than at the next change to the notes.
-async fn place_again(app: &AppHandle, space: &Arc<Space>) -> Result<(), String> {
+async fn place_again(app: &AppHandle, space: &Arc<Space>) -> Result<()> {
     let placing = space.clone();
-    tauri::async_runtime::spawn_blocking(move || crate::embed::sync::sync_threads(&placing))
-        .await
-        .map_err(|e| e.to_string())?;
+    blocking(move || crate::embed::sync::sync_threads(&placing)).await?;
     let _ = app.emit(
         "threads-changed",
         serde_json::json!({ "space": space.name }),
@@ -211,7 +211,7 @@ pub async fn keep_thread(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
-) -> Result<(), String> {
+) -> Result<()> {
     let space = state.space()?;
     let notes = notes_of(&space, &id);
     if notes.is_empty() {
@@ -235,7 +235,7 @@ pub async fn dismiss_thread(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
-) -> Result<(), String> {
+) -> Result<()> {
     let space = state.space()?;
     let notes = notes_of(&space, &id);
     if notes.is_empty() {
@@ -261,9 +261,9 @@ pub async fn put_in_thread(
     notes: Vec<String>,
     into: Option<String>,
     scope: Option<String>,
-) -> Result<String, String> {
+) -> Result<String> {
     let space = state.space()?;
-    let when = dates(&space).ok_or("the space is closed")?;
+    let when = dates(&space).ok_or(Error::SpaceClosed)?;
     let mut notes: Vec<String> = notes
         .into_iter()
         .filter(|id| when.contains_key(id))
@@ -303,13 +303,13 @@ pub async fn merge_threads(
     state: State<'_, AppState>,
     from: String,
     into: String,
-) -> Result<(), String> {
+) -> Result<()> {
     let space = state.space()?;
     if from == into {
         return Ok(());
     }
     if scope_of(&from) != scope_of(&into) {
-        return Err("threads of two different names cannot become one".to_string());
+        return Err("threads of two different names cannot become one".into());
     }
     let before = space.decided();
     // A thread pinned to the left edge stays pinned as the one it went into.
@@ -342,7 +342,7 @@ pub async fn merge_threads(
 pub async fn undo_thread_change(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<bool, String> {
+) -> Result<bool> {
     let space = state.space()?;
     let Some(pins_changed) = space.undo_threads()? else {
         return Ok(false);
@@ -356,7 +356,7 @@ pub async fn undo_thread_change(
 
 /// Every thread of the open space with its first notes, newest first.
 #[tauri::command]
-pub async fn thread_cards(state: State<'_, AppState>) -> Result<Vec<ThreadCard>, String> {
+pub async fn thread_cards(state: State<'_, AppState>) -> Result<Vec<ThreadCard>> {
     let space = state.space()?;
     let mut threads = view(&space).threads;
     threads.sort_by(|a, b| (&b.until, &b.id).cmp(&(&a.until, &a.id)));
@@ -364,7 +364,7 @@ pub async fn thread_cards(state: State<'_, AppState>) -> Result<Vec<ThreadCard>,
 }
 
 /// `threads` with their first notes.
-fn cards(space: &Space, threads: Vec<Thread>) -> Result<Vec<ThreadCard>, String> {
+fn cards(space: &Space, threads: Vec<Thread>) -> Result<Vec<ThreadCard>> {
     let first = space.read(|idx, db| {
         let entries: HashMap<&str, &IndexEntry> =
             idx.entries().map(|e| (e.id.as_str(), e)).collect();
@@ -396,7 +396,7 @@ fn cards(space: &Space, threads: Vec<Thread>) -> Result<Vec<ThreadCard>, String>
 
 /// The threads a note could be put in, the one it fits best first.
 #[tauri::command]
-pub async fn threads_for_note(state: State<'_, AppState>, id: String) -> Result<Vec<ThreadCard>, String> {
+pub async fn threads_for_note(state: State<'_, AppState>, id: String) -> Result<Vec<ThreadCard>> {
     let space = state.space()?;
     let Some(when) = dates(&space) else {
         return Ok(Vec::new());

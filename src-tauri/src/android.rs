@@ -2,6 +2,7 @@
 //! which the dialog plugin cannot do there, and relaunching the app, which
 //! Tauri's restart cannot. `StoragePlugin.kt` in `gen/android` answers.
 
+use crate::Result;
 use serde::Deserialize;
 use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
 use tauri::{AppHandle, Manager, Wry};
@@ -25,13 +26,12 @@ struct Picked {
 
 /// The folder the user chose, as a full path, once the app may write
 /// there. None when they back out.
-pub async fn pick_folder(app: &AppHandle) -> Result<Option<String>, String> {
+pub async fn pick_folder(app: &AppHandle) -> Result<Option<String>> {
     let picked: Picked = app
         .state::<Storage>()
         .0
         .run_mobile_plugin_async("pickFolder", ())
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     Ok(picked.path)
 }
 

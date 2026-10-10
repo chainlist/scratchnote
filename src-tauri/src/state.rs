@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, PoisonError, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::embed::activity::Activity;
 use crate::embed::sync::Wake;
@@ -7,6 +7,7 @@ use crate::embed::Embedder;
 use crate::settings::Settings;
 use crate::spaces::{Registry, Space};
 use crate::storage::writer::Writer;
+use crate::{Error, Result};
 
 pub struct AppState {
     /// The notes root for this run. A new one chosen in settings applies on
@@ -39,6 +40,25 @@ pub struct AppState {
     pub embedder_activity: Mutex<Activity>,
 }
 
+/// `mutex` locked, or `Error::Poisoned` naming it as `what` when a thread
+/// panicked holding it. Code that can carry on regardless locks it itself.
+pub fn lock<'a, T>(mutex: &'a Mutex<T>, what: &'static str) -> Result<MutexGuard<'a, T>> {
+    mutex.lock().map_err(|_| Error::Poisoned(what))
+}
+
+/// `lock` for reading through a `RwLock`.
+pub fn read_lock<'a, T>(lock: &'a RwLock<T>, what: &'static str) -> Result<RwLockReadGuard<'a, T>> {
+    lock.read().map_err(|_| Error::Poisoned(what))
+}
+
+/// `lock` for writing through a `RwLock`.
+pub fn write_lock<'a, T>(
+    lock: &'a RwLock<T>,
+    what: &'static str,
+) -> Result<RwLockWriteGuard<'a, T>> {
+    lock.write().map_err(|_| Error::Poisoned(what))
+}
+
 /// What `slot` holds, or else what `load` makes, which is stored there. One
 /// load runs at a time under `loading`: a caller that comes while one runs
 /// waits for it, then finds its model in the slot instead of loading another
@@ -66,28 +86,27 @@ pub fn load_once<T: ?Sized>(
 
 impl AppState {
     /// The open space, which every note command acts on.
-    pub fn space(&self) -> Result<Arc<Space>, String> {
-        let active = self
-            .registry
-            .read()
-            .map_err(|_| "spaces lock poisoned".to_string())?
-            .active
-            .clone();
+    pub fn space(&self) -> Result<Arc<Space>> {
+        let active = read_lock(&self.registry, "registry")?.active.clone();
         // At least one space is always there.
         self.find_space(&active)
             .or_else(|| self.spaces.read().ok()?.first().cloned())
-            .ok_or_else(|| "no space is open".to_string())
+            .ok_or_else(|| "no space is open".into())
     }
 
     /// The space named, or the open one when no name is given, as for a note
     /// the capture window sends to another space.
-    pub fn space_or_open(&self, name: Option<&str>) -> Result<Arc<Space>, String> {
+    pub fn space_or_open(&self, name: Option<&str>) -> Result<Arc<Space>> {
         match name {
-            Some(name) => self
-                .find_space(name)
-                .ok_or_else(|| format!("no space {name}")),
+            Some(name) => self.named_space(name),
             None => self.space(),
         }
+    }
+
+    /// The space named, or why there is none.
+    pub fn named_space(&self, name: &str) -> Result<Arc<Space>> {
+        self.find_space(name)
+            .ok_or_else(|| format!("no space {name}").into())
     }
 
     pub fn find_space(&self, name: &str) -> Option<Arc<Space>> {

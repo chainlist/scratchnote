@@ -17,6 +17,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::daily_file::{self, Note};
 use super::fingerprint;
+use crate::Result;
 
 /// Fingerprint of the last content the app wrote to each path.
 pub type SelfWrites = Arc<Mutex<HashMap<PathBuf, String>>>;
@@ -145,7 +146,7 @@ impl Writer {
         self.self_writes.clone()
     }
 
-    pub async fn append_note(&self, path: PathBuf, date: String, note: Note) -> Result<(), String> {
+    pub async fn append_note(&self, path: PathBuf, date: String, note: Note) -> Result<()> {
         let (reply, response) = oneshot::channel();
         self.send(
             WriteRequest::AppendNote {
@@ -160,19 +161,14 @@ impl Writer {
     }
 
     /// Returns false when the file or the id is not there.
-    pub async fn delete_note(&self, path: PathBuf, id: String) -> Result<bool, String> {
+    pub async fn delete_note(&self, path: PathBuf, id: String) -> Result<bool> {
         let (reply, response) = oneshot::channel();
         self.send(WriteRequest::DeleteNote { path, id, reply }, response)
             .await
     }
 
     /// Returns false when the file or the id is not there.
-    pub async fn replace_body(
-        &self,
-        path: PathBuf,
-        id: String,
-        body: String,
-    ) -> Result<bool, String> {
+    pub async fn replace_body(&self, path: PathBuf, id: String, body: String) -> Result<bool> {
         let (reply, response) = oneshot::channel();
         self.send(
             WriteRequest::ReplaceBody {
@@ -186,7 +182,7 @@ impl Writer {
         .await
     }
 
-    pub async fn write_index(&self, path: PathBuf, contents: String) -> Result<(), String> {
+    pub async fn write_index(&self, path: PathBuf, contents: String) -> Result<()> {
         let (reply, response) = oneshot::channel();
         self.send(
             WriteRequest::WriteIndex {
@@ -199,7 +195,7 @@ impl Writer {
         .await
     }
 
-    pub async fn append_index_line(&self, path: PathBuf, line: String) -> Result<(), String> {
+    pub async fn append_index_line(&self, path: PathBuf, line: String) -> Result<()> {
         let (reply, response) = oneshot::channel();
         self.send(
             WriteRequest::AppendIndexLine { path, line, reply },
@@ -213,7 +209,7 @@ impl Writer {
         &self,
         path: PathBuf,
         edit: impl FnOnce(Option<&str>) -> Option<String> + Send + 'static,
-    ) -> Result<bool, String> {
+    ) -> Result<bool> {
         let (reply, response) = oneshot::channel();
         self.send(
             WriteRequest::Rewrite {
@@ -227,14 +223,14 @@ impl Writer {
     }
 
     /// Fails rather than replace a file already at `to`.
-    pub async fn rename(&self, from: PathBuf, to: PathBuf) -> Result<(), String> {
+    pub async fn rename(&self, from: PathBuf, to: PathBuf) -> Result<()> {
         let (reply, response) = oneshot::channel();
         self.send(WriteRequest::Rename { from, to, reply }, response)
             .await
     }
 
     /// Returns false when the file was not there.
-    pub async fn remove(&self, path: PathBuf) -> Result<bool, String> {
+    pub async fn remove(&self, path: PathBuf) -> Result<bool> {
         let (reply, response) = oneshot::channel();
         self.send(WriteRequest::Remove { path, reply }, response)
             .await
@@ -244,15 +240,14 @@ impl Writer {
         &self,
         request: WriteRequest,
         response: oneshot::Receiver<io::Result<T>>,
-    ) -> Result<T, String> {
+    ) -> Result<T> {
         self.tx
             .send(request)
             .await
-            .map_err(|_| "writer task is gone".to_string())?;
-        response
+            .map_err(|_| "writer task is gone")?;
+        Ok(response
             .await
-            .map_err(|_| "writer task dropped the request".to_string())?
-            .map_err(|e| e.to_string())
+            .map_err(|_| "writer task dropped the request")??)
     }
 }
 

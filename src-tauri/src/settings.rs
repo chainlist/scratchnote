@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
@@ -77,15 +78,16 @@ impl Settings {
     }
 
     /// Check what the settings screen sent before anything is saved.
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<()> {
         if !self.root.is_absolute() {
             return Err(format!(
                 "the notes folder must be a full path, not {}",
                 self.root.display()
-            ));
+            )
+            .into());
         }
         if self.capture_hotkey.trim().is_empty() {
-            return Err("the capture hotkey cannot be empty".to_string());
+            return Err("the capture hotkey cannot be empty".into());
         }
         Ok(())
     }

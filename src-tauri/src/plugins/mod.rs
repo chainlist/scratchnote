@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use crate::state::AppState;
+use crate::Result;
 
 const STATE_FILE: &str = "plugins.json";
 const PLUGINS_DIR: &str = "plugins";
@@ -86,11 +87,11 @@ pub fn valid_id(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-pub fn check_id(id: &str) -> Result<(), String> {
+pub fn check_id(id: &str) -> Result<()> {
     if valid_id(id) {
         Ok(())
     } else {
-        Err(format!("{id} is not a plugin id"))
+        Err(format!("{id} is not a plugin id").into())
     }
 }
 
@@ -151,7 +152,7 @@ pub fn view(root: &Path) -> PluginsView {
 }
 
 /// Ids made valid and unique, in the order given.
-pub fn clean_ids(ids: Vec<String>) -> Result<Vec<String>, String> {
+pub fn clean_ids(ids: Vec<String>) -> Result<Vec<String>> {
     let mut seen = Vec::new();
     for id in ids {
         check_id(&id)?;
@@ -166,8 +167,8 @@ pub async fn save_state(
     app: &AppHandle,
     state: &AppState,
     plugins: PluginState,
-) -> Result<PluginsView, String> {
-    let json = serde_json::to_string_pretty(&plugins).map_err(|e| e.to_string())?;
+) -> Result<PluginsView> {
+    let json = serde_json::to_string_pretty(&plugins)?;
     state
         .writer
         .write_index(meta_dir(&state.root).join(STATE_FILE), json)

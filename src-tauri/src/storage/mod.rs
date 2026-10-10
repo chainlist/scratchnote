@@ -8,6 +8,7 @@ pub mod writer;
 
 use std::path::{Path, PathBuf};
 
+use crate::Result;
 use sha2::{Digest, Sha256};
 
 /// Path of a day's markdown file relative to the notes root, e.g.
@@ -22,7 +23,7 @@ pub fn day_path(root: &Path, date: &str) -> PathBuf {
 
 /// Guards the `YYYY-MM-DD` shape the file layout is built on, so a bad date
 /// can neither reach into the filesystem nor panic `relative_day_path`.
-pub fn check_date(date: &str) -> Result<(), String> {
+pub fn check_date(date: &str) -> Result<()> {
     let ok = date.len() == 10
         && date.as_bytes()[4] == b'-'
         && date.as_bytes()[7] == b'-'
@@ -36,7 +37,7 @@ pub fn check_date(date: &str) -> Result<(), String> {
     if ok {
         Ok(())
     } else {
-        Err(format!("not a YYYY-MM-DD date: {date}"))
+        Err(format!("not a YYYY-MM-DD date: {date}").into())
     }
 }
 

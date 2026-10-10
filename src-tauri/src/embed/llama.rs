@@ -17,6 +17,8 @@ use llama_cpp_2::model::{AddBos, LlamaModel};
 use llama_cpp_2::token::LlamaToken;
 
 use super::{normalize, Embedder};
+use crate::state::lock;
+use crate::Result;
 
 /// The longest input, in tokens, and so the context and the batch too: one
 /// batch above n_batch aborts the process instead of returning an error, so
@@ -33,23 +35,23 @@ const POOLING: LlamaPoolingType = LlamaPoolingType::Mean;
 static BACKEND: OnceLock<Result<LlamaBackend, String>> = OnceLock::new();
 
 /// The process's llama.cpp backend, started on first use.
-fn llama_backend() -> Result<&'static LlamaBackend, String> {
+fn llama_backend() -> Result<&'static LlamaBackend> {
     BACKEND
         .get_or_init(|| LlamaBackend::init().map_err(|e| format!("llama.cpp would not start: {e}")))
         .as_ref()
-        .map_err(Clone::clone)
+        .map_err(|e| e.clone().into())
 }
 
 /// Loads a GGUF on the CPU. No devices at all gets llama.cpp's plain CPU
 /// path, with its repacked CPU kernels.
-fn load_model(path: &Path) -> Result<LlamaModel, String> {
+fn load_model(path: &Path) -> Result<LlamaModel> {
     let backend = llama_backend()?;
     let params = LlamaModelParams::default()
         .with_n_gpu_layers(0)
         .with_devices(&[])
         .map_err(|e| format!("could not keep the model off the GPU: {e}"))?;
     LlamaModel::load_from_file(backend, path, &params)
-        .map_err(|e| format!("could not load {}: {e}", path.display()))
+        .map_err(|e| format!("could not load {}: {e}", path.display()).into())
 }
 
 pub struct LlamaEmbedder {
@@ -76,7 +78,7 @@ impl LlamaEmbedder {
     /// the file: about 900 MB against 260 MB on the CPU, where the file is
     /// mapped and only the pages read count. A note takes 31 ms there against
     /// 13 ms on the GPU, quick enough for a search or a draft.
-    pub fn load(path: &Path) -> Result<Self, String> {
+    pub fn load(path: &Path) -> Result<Self> {
         let model = load_model(path)?;
         // The width llama.cpp reads pooled vectors out at.
         let dims = model.n_embd_out() as usize;
@@ -89,7 +91,7 @@ impl LlamaEmbedder {
         })
     }
 
-    fn new_context(&self) -> Result<LlamaContext<'static>, String> {
+    fn new_context(&self) -> Result<LlamaContext<'static>> {
         let params = LlamaContextParams::default()
             .with_embeddings(true)
             .with_pooling_type(POOLING)
@@ -103,10 +105,10 @@ impl LlamaEmbedder {
         let model: &'static LlamaModel = unsafe { &*(&*self.model as *const LlamaModel) };
         model
             .new_context(llama_backend()?, params)
-            .map_err(|e| format!("could not create an embedding context: {e}"))
+            .map_err(|e| format!("could not create an embedding context: {e}").into())
     }
 
-    fn embed(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn embed(&self, text: &str) -> Result<Vec<f32>> {
         // `Always` asks for the model's special tokens, which for this one are
         // a start token before the text and an end-of-text token after it.
         let tokens = self
@@ -115,10 +117,7 @@ impl LlamaEmbedder {
             .map_err(|e| format!("could not tokenise the text: {e}"))?;
         let tokens = fit(tokens, MAX_TOKENS as usize, self.model.token_eos());
 
-        let mut slot = self
-            .context
-            .lock()
-            .map_err(|_| "the embedding model lock is poisoned".to_string())?;
+        let mut slot = lock(&self.context, "embedding model")?;
         let context = match &mut *slot {
             Some(context) => context,
             None => slot.insert(Context(self.new_context()?)),
@@ -219,11 +218,11 @@ impl Embedder for LlamaEmbedder {
         self.dims
     }
 
-    fn embed_document(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn embed_document(&self, text: &str) -> Result<Vec<f32>> {
         self.embed(&document_prompt(text))
     }
 
-    fn embed_query(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn embed_query(&self, text: &str) -> Result<Vec<f32>> {
         self.embed(&query_prompt(text))
     }
 }

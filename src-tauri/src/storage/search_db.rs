@@ -22,6 +22,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use super::daily_file::Note;
 use crate::mentions::mentions;
 use crate::search::fold;
+use crate::Result;
 
 /// Bumped when the tables change: a file of another version is made again.
 const VERSION: i64 = 3;
@@ -118,10 +119,6 @@ pub struct SearchDb {
     conn: Connection,
 }
 
-fn to_string(e: rusqlite::Error) -> String {
-    e.to_string()
-}
-
 /// A word as an FTS5 string, which takes it as typed: `"` is doubled.
 fn quoted(word: &str) -> String {
     format!("\"{}\"", word.replace('"', "\"\""))
@@ -135,12 +132,12 @@ fn indexable(word: &str) -> bool {
 
 impl SearchDb {
     /// The space's file, made again when it cannot be used.
-    pub fn open(root: &Path) -> Result<Self, String> {
+    pub fn open(root: &Path) -> Result<Self> {
         let path = search_db_path(root);
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(parent)?;
         }
-        match Self::set_up(Connection::open(&path).map_err(to_string)?) {
+        match Self::set_up(Connection::open(&path)?) {
             Ok(db) => Ok(db),
             Err(e) => {
                 log::warn!("{} is not usable ({e}), making it again", path.display());
@@ -149,33 +146,28 @@ impl SearchDb {
                     file.push(suffix);
                     let _ = std::fs::remove_file(file);
                 }
-                Self::set_up(Connection::open(&path).map_err(to_string)?)
+                Self::set_up(Connection::open(&path)?)
             }
         }
     }
 
     /// A database held in memory, for when the file cannot be opened at all,
     /// and for tests.
-    pub fn in_memory() -> Result<Self, String> {
-        Self::set_up(Connection::open_in_memory().map_err(to_string)?)
+    pub fn in_memory() -> Result<Self> {
+        Self::set_up(Connection::open_in_memory()?)
     }
 
-    fn set_up(conn: Connection) -> Result<Self, String> {
+    fn set_up(conn: Connection) -> Result<Self> {
         // A derived cache: a crash may lose the last writes, which the next
         // launch reads again, but never leaves the file broken.
-        conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))
-            .map_err(to_string)?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(to_string)?;
-        let version: i64 = conn
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .map_err(to_string)?;
+        conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         if version != VERSION {
-            conn.execute_batch(DROP).map_err(to_string)?;
-            conn.execute_batch(TABLES).map_err(to_string)?;
-            conn.execute_batch(TRIGGERS).map_err(to_string)?;
-            conn.pragma_update(None, "user_version", VERSION)
-                .map_err(to_string)?;
+            conn.execute_batch(DROP)?;
+            conn.execute_batch(TABLES)?;
+            conn.execute_batch(TRIGGERS)?;
+            conn.pragma_update(None, "user_version", VERSION)?;
         }
         Ok(Self { conn })
     }
@@ -225,109 +217,91 @@ impl SearchDb {
     }
 
     /// Forget everything, as a rebuild does.
-    pub fn clear(&mut self) -> Result<(), String> {
-        self.conn.execute_batch(DROP).map_err(to_string)?;
-        self.conn.execute_batch(TABLES).map_err(to_string)?;
-        self.conn.execute_batch(TRIGGERS).map_err(to_string)
+    pub fn clear(&mut self) -> Result<()> {
+        self.conn.execute_batch(DROP)?;
+        self.conn.execute_batch(TABLES)?;
+        Ok(self.conn.execute_batch(TRIGGERS)?)
     }
 
     /// Every day file as it was last read.
-    pub fn days(&self) -> Result<HashMap<String, Stamp>, String> {
-        let mut statement = self
-            .conn
-            .prepare("SELECT day, modified, len FROM days")
-            .map_err(to_string)?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    Stamp {
-                        modified: row.get(1)?,
-                        len: row.get(2)?,
-                    },
-                ))
-            })
-            .map_err(to_string)?;
-        rows.collect::<Result<_, _>>().map_err(to_string)
+    pub fn days(&self) -> Result<HashMap<String, Stamp>> {
+        let mut statement = self.conn.prepare("SELECT day, modified, len FROM days")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                Stamp {
+                    modified: row.get(1)?,
+                    len: row.get(2)?,
+                },
+            ))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Every file under `pages/` as it was last read, by its path relative
     /// to the root.
-    pub fn page_files(&self) -> Result<HashMap<String, Stamp>, String> {
+    pub fn page_files(&self) -> Result<HashMap<String, Stamp>> {
         let mut statement = self
             .conn
-            .prepare("SELECT path, modified, len FROM page_files")
-            .map_err(to_string)?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    Stamp {
-                        modified: row.get(1)?,
-                        len: row.get(2)?,
-                    },
-                ))
-            })
-            .map_err(to_string)?;
-        rows.collect::<Result<_, _>>().map_err(to_string)
+            .prepare("SELECT path, modified, len FROM page_files")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                Stamp {
+                    modified: row.get(1)?,
+                    len: row.get(2)?,
+                },
+            ))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Put a day's notes in place of what it had, and record its file as
     /// read at `stamp`: `None` for a file that is gone.
-    pub fn replace_day(
-        &mut self,
-        date: &str,
-        notes: &[Note],
-        stamp: Option<Stamp>,
-    ) -> Result<(), String> {
-        let tx = self.conn.savepoint().map_err(to_string)?;
-        tx.execute("DELETE FROM texts WHERE day = ?1", [date])
-            .map_err(to_string)?;
+    pub fn replace_day(&mut self, date: &str, notes: &[Note], stamp: Option<Stamp>) -> Result<()> {
+        let tx = self.conn.savepoint()?;
+        tx.execute("DELETE FROM texts WHERE day = ?1", [date])?;
         for note in notes {
             insert(&tx, note, Some(date))?;
         }
         stamp_day(&tx, date, stamp)?;
-        tx.commit().map_err(to_string)
+        Ok(tx.commit()?)
     }
 
     /// A note just added to its day, whose file is now at `stamp`.
-    pub fn add_note(&mut self, note: &Note, stamp: Option<Stamp>) -> Result<(), String> {
-        let tx = self.conn.savepoint().map_err(to_string)?;
-        tx.execute("DELETE FROM texts WHERE id = ?1", [&note.id])
-            .map_err(to_string)?;
+    pub fn add_note(&mut self, note: &Note, stamp: Option<Stamp>) -> Result<()> {
+        let tx = self.conn.savepoint()?;
+        tx.execute("DELETE FROM texts WHERE id = ?1", [&note.id])?;
         insert(&tx, note, Some(&note.date))?;
         stamp_day(&tx, &note.date, stamp)?;
-        tx.commit().map_err(to_string)
+        Ok(tx.commit()?)
     }
 
     /// A page's text in place of what it had, if anything, and its file as
     /// read at `stamp`. The file it was read from before, if another, is
     /// forgotten.
-    pub fn replace_page(&mut self, page: &Note, stamp: Option<Stamp>) -> Result<(), String> {
-        let tx = self.conn.savepoint().map_err(to_string)?;
-        tx.execute("DELETE FROM texts WHERE id = ?1", [&page.id])
-            .map_err(to_string)?;
+    pub fn replace_page(&mut self, page: &Note, stamp: Option<Stamp>) -> Result<()> {
+        let tx = self.conn.savepoint()?;
+        tx.execute("DELETE FROM texts WHERE id = ?1", [&page.id])?;
         tx.execute(
             "DELETE FROM page_files WHERE id = ?1 OR path = ?2",
             [&page.id, &page.file],
-        )
-        .map_err(to_string)?;
+        )?;
         insert(&tx, page, None)?;
         if let Some(stamp) = stamp {
             tx.execute(
                 "INSERT INTO page_files (path, id, modified, len) VALUES (?1, ?2, ?3, ?4)",
                 params![page.file, page.id, stamp.modified, stamp.len],
-            )
-            .map_err(to_string)?;
+            )?;
         }
-        tx.commit().map_err(to_string)
+        Ok(tx.commit()?)
     }
 
     /// A file under `pages/` that holds no page, as read at `stamp`, so it is
     /// not read again while it stays so. `None` forgets it, and it is read
     /// at the next launch.
-    pub fn stamp_page_file(&mut self, path: &str, stamp: Option<Stamp>) -> Result<(), String> {
-        match stamp {
+    pub fn stamp_page_file(&mut self, path: &str, stamp: Option<Stamp>) -> Result<()> {
+        let _ = match stamp {
             Some(stamp) => self.conn.execute(
                 "INSERT INTO page_files (path, id, modified, len) VALUES (?1, NULL, ?2, ?3) \
                  ON CONFLICT(path) DO UPDATE SET id = NULL, modified = excluded.modified, len = excluded.len",
@@ -336,70 +310,56 @@ impl SearchDb {
             None => self
                 .conn
                 .execute("DELETE FROM page_files WHERE path = ?1", [path]),
-        }
-        .map(|_| ())
-        .map_err(to_string)
+        }?;
+        Ok(())
     }
 
     /// A page gone: its text, and its file as read.
-    pub fn remove_page(&mut self, id: &str) -> Result<(), String> {
-        let tx = self.conn.savepoint().map_err(to_string)?;
-        tx.execute("DELETE FROM texts WHERE id = ?1", [id])
-            .map_err(to_string)?;
-        tx.execute("DELETE FROM page_files WHERE id = ?1", [id])
-            .map_err(to_string)?;
-        tx.commit().map_err(to_string)
+    pub fn remove_page(&mut self, id: &str) -> Result<()> {
+        let tx = self.conn.savepoint()?;
+        tx.execute("DELETE FROM texts WHERE id = ?1", [id])?;
+        tx.execute("DELETE FROM page_files WHERE id = ?1", [id])?;
+        Ok(tx.commit()?)
     }
 
     /// Forget the files under `pages/` not among `files`, and the text of the
     /// pages not among `ids`.
-    pub fn retain_pages(
-        &mut self,
-        files: &HashSet<&str>,
-        ids: &HashSet<&str>,
-    ) -> Result<(), String> {
+    pub fn retain_pages(&mut self, files: &HashSet<&str>, ids: &HashSet<&str>) -> Result<()> {
         let known_files = self.ids("SELECT path FROM page_files", &[])?;
         let known_ids = self.ids("SELECT id FROM texts WHERE day IS NULL", &[])?;
-        let tx = self.conn.savepoint().map_err(to_string)?;
+        let tx = self.conn.savepoint()?;
         for path in known_files
             .iter()
             .filter(|path| !files.contains(path.as_str()))
         {
-            tx.execute("DELETE FROM page_files WHERE path = ?1", [path])
-                .map_err(to_string)?;
+            tx.execute("DELETE FROM page_files WHERE path = ?1", [path])?;
         }
         for id in known_ids.iter().filter(|id| !ids.contains(id.as_str())) {
-            tx.execute("DELETE FROM texts WHERE day IS NULL AND id = ?1", [id])
-                .map_err(to_string)?;
+            tx.execute("DELETE FROM texts WHERE day IS NULL AND id = ?1", [id])?;
         }
-        tx.commit().map_err(to_string)
+        Ok(tx.commit()?)
     }
 
     /// Forget the days whose file is gone.
-    pub fn retain_days(&mut self, present: &HashSet<String>) -> Result<(), String> {
+    pub fn retain_days(&mut self, present: &HashSet<String>) -> Result<()> {
         let known: Vec<String> = {
-            let mut statement = self
-                .conn
-                .prepare("SELECT day FROM days UNION SELECT DISTINCT day FROM texts WHERE day IS NOT NULL")
-                .map_err(to_string)?;
-            let rows = statement
-                .query_map([], |row| row.get::<_, String>(0))
-                .map_err(to_string)?;
-            rows.collect::<Result<_, _>>().map_err(to_string)?
+            let mut statement = self.conn.prepare(
+                "SELECT day FROM days UNION SELECT DISTINCT day FROM texts WHERE day IS NOT NULL",
+            )?;
+            let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+            rows.collect::<rusqlite::Result<_>>()?
         };
-        let tx = self.conn.savepoint().map_err(to_string)?;
+        let tx = self.conn.savepoint()?;
         for day in known.iter().filter(|day| !present.contains(*day)) {
-            tx.execute("DELETE FROM texts WHERE day = ?1", [day])
-                .map_err(to_string)?;
-            tx.execute("DELETE FROM days WHERE day = ?1", [day])
-                .map_err(to_string)?;
+            tx.execute("DELETE FROM texts WHERE day = ?1", [day])?;
+            tx.execute("DELETE FROM days WHERE day = ?1", [day])?;
         }
-        tx.commit().map_err(to_string)
+        Ok(tx.commit()?)
     }
 
     /// The ids whose subject and body, folded, hold every one of `words`,
     /// folded as well.
-    pub fn matching(&self, words: &[String]) -> Result<HashSet<String>, String> {
+    pub fn matching(&self, words: &[String]) -> Result<HashSet<String>> {
         let long: Vec<String> = words
             .iter()
             .filter(|w| indexable(w))
@@ -428,7 +388,7 @@ impl SearchDb {
 
     /// The ids whose body holds any of `needles` as typed. An empty needle
     /// matches every note.
-    pub fn containing(&self, needles: &[String]) -> Result<HashSet<String>, String> {
+    pub fn containing(&self, needles: &[String]) -> Result<HashSet<String>> {
         let mut found = HashSet::new();
         for needle in needles {
             let ids = if needle.is_empty() {
@@ -454,45 +414,35 @@ impl SearchDb {
 
     /// Every name mentioned, by the id of the note or page mentioning it:
     /// `(id, key, name)`.
-    pub fn mention_rows(&self) -> Result<Vec<(String, String, String)>, String> {
-        let mut statement = self
-            .conn
-            .prepare("SELECT t.id, m.key, m.name FROM mentions m JOIN texts t ON t.rowid = m.text")
-            .map_err(to_string)?;
-        let rows = statement
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-            .map_err(to_string)?;
-        rows.collect::<Result<_, _>>().map_err(to_string)
+    pub fn mention_rows(&self) -> Result<Vec<(String, String, String)>> {
+        let mut statement = self.conn.prepare(
+            "SELECT t.id, m.key, m.name FROM mentions m JOIN texts t ON t.rowid = m.text",
+        )?;
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// The notes and pages mentioning the name with this key, by id, with
     /// the name as each types it.
-    pub fn mentioning(&self, key: &str) -> Result<HashMap<String, String>, String> {
-        let mut statement = self
-            .conn
-            .prepare("SELECT t.id, m.name FROM mentions m JOIN texts t ON t.rowid = m.text WHERE m.key = ?1")
-            .map_err(to_string)?;
-        let rows = statement
-            .query_map([key], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map_err(to_string)?;
-        rows.collect::<Result<_, _>>().map_err(to_string)
+    pub fn mentioning(&self, key: &str) -> Result<HashMap<String, String>> {
+        let mut statement = self.conn.prepare(
+            "SELECT t.id, m.name FROM mentions m JOIN texts t ON t.rowid = m.text WHERE m.key = ?1",
+        )?;
+        let rows = statement.query_map([key], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// The bodies it holds of `ids`.
     pub fn bodies<'a>(
         &self,
         ids: impl IntoIterator<Item = &'a str>,
-    ) -> Result<HashMap<String, String>, String> {
+    ) -> Result<HashMap<String, String>> {
         let mut statement = self
             .conn
-            .prepare_cached("SELECT body FROM texts WHERE id = ?1")
-            .map_err(to_string)?;
+            .prepare_cached("SELECT body FROM texts WHERE id = ?1")?;
         let mut out = HashMap::new();
         for id in ids {
-            let body: Option<String> = statement
-                .query_row([id], |row| row.get(0))
-                .optional()
-                .map_err(to_string)?;
+            let body: Option<String> = statement.query_row([id], |row| row.get(0)).optional()?;
             if let Some(body) = body {
                 out.insert(id.to_string(), body);
             }
@@ -500,18 +450,16 @@ impl SearchDb {
         Ok(out)
     }
 
-    fn ids(&self, sql: &str, args: &[String]) -> Result<HashSet<String>, String> {
-        let mut statement = self.conn.prepare(sql).map_err(to_string)?;
-        let rows = statement
-            .query_map(rusqlite::params_from_iter(args), |row| {
-                row.get::<_, String>(0)
-            })
-            .map_err(to_string)?;
-        rows.collect::<Result<_, _>>().map_err(to_string)
+    fn ids(&self, sql: &str, args: &[String]) -> Result<HashSet<String>> {
+        let mut statement = self.conn.prepare(sql)?;
+        let rows = statement.query_map(rusqlite::params_from_iter(args), |row| {
+            row.get::<_, String>(0)
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 }
 
-fn insert(conn: &Connection, note: &Note, day: Option<&str>) -> Result<(), String> {
+fn insert(conn: &Connection, note: &Note, day: Option<&str>) -> Result<()> {
     let folded = fold(&format!(
         "{}\n{}",
         note.subject.as_deref().unwrap_or(""),
@@ -520,31 +468,26 @@ fn insert(conn: &Connection, note: &Note, day: Option<&str>) -> Result<(), Strin
     conn.execute(
         "INSERT INTO texts (id, day, body, folded) VALUES (?1, ?2, ?3, ?4)",
         params![note.id, day, note.body, folded],
-    )
-    .map_err(to_string)?;
+    )?;
     let text = conn.last_insert_rowid();
-    let mut statement = conn
-        .prepare_cached("INSERT INTO mentions (text, key, name) VALUES (?1, ?2, ?3)")
-        .map_err(to_string)?;
+    let mut statement =
+        conn.prepare_cached("INSERT INTO mentions (text, key, name) VALUES (?1, ?2, ?3)")?;
     for mention in mentions(&note.body) {
-        statement
-            .execute(params![text, mention.key, mention.name])
-            .map_err(to_string)?;
+        statement.execute(params![text, mention.key, mention.name])?;
     }
     Ok(())
 }
 
-fn stamp_day(conn: &Connection, date: &str, stamp: Option<Stamp>) -> Result<(), String> {
-    match stamp {
+fn stamp_day(conn: &Connection, date: &str, stamp: Option<Stamp>) -> Result<()> {
+    let _ = match stamp {
         Some(stamp) => conn.execute(
             "INSERT INTO days (day, modified, len) VALUES (?1, ?2, ?3) \
              ON CONFLICT(day) DO UPDATE SET modified = excluded.modified, len = excluded.len",
             params![date, stamp.modified, stamp.len],
         ),
         None => conn.execute("DELETE FROM days WHERE day = ?1", [date]),
-    }
-    .map(|_| ())
-    .map_err(to_string)
+    }?;
+    Ok(())
 }
 
 #[cfg(test)]

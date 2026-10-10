@@ -4,10 +4,12 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use super::blocking;
 use crate::embed::activity::Activity;
 use crate::embed::download;
 use crate::embed::model::{self, models_dir, EmbeddingModel, LEGACY_EMBEDDING_FILE};
-use crate::state::AppState;
+use crate::state::{lock, AppState};
+use crate::Result;
 
 /// What the settings screen shows about the embedding model.
 #[derive(Debug, Serialize)]
@@ -18,9 +20,7 @@ pub struct EmbeddingModelInfo {
 }
 
 #[tauri::command]
-pub async fn embedding_model_info(
-    state: State<'_, AppState>,
-) -> Result<EmbeddingModelInfo, String> {
+pub async fn embedding_model_info(state: State<'_, AppState>) -> Result<EmbeddingModelInfo> {
     Ok(EmbeddingModelInfo {
         installed: download::is_installed(&state.local_data, EmbeddingModel),
         downloading: state.embedding_download.lock().ok().and_then(|d| *d),
@@ -41,21 +41,18 @@ pub fn embedder_activity(state: State<'_, AppState>) -> Activity {
 /// recall and threads. The embed task is woken once it is in, loads it and
 /// embeds the notes already there. Progress goes out as `embedding-status`.
 #[tauri::command]
-pub async fn download_embedding_model(app: AppHandle) -> Result<(), String> {
+pub async fn download_embedding_model(app: AppHandle) -> Result<()> {
     fetch_embedding_model(&app).await
 }
 
 /// `download_embedding_model`, also started for an install that still has
 /// the model shipped before.
-async fn fetch_embedding_model(app: &AppHandle) -> Result<(), String> {
+async fn fetch_embedding_model(app: &AppHandle) -> Result<()> {
     let state = app.state::<AppState>();
     {
-        let mut running = state
-            .embedding_download
-            .lock()
-            .map_err(|_| "download lock poisoned".to_string())?;
+        let mut running = lock(&state.embedding_download, "download")?;
         if running.is_some() {
-            return Err("the embedding model is already downloading".to_string());
+            return Err("the embedding model is already downloading".into());
         }
         *running = Some(0);
     }
@@ -104,14 +101,17 @@ pub struct OldChatModel {
 /// The old chat models still on disk, if any, for the main window to offer
 /// removing them.
 #[tauri::command]
-pub async fn old_chat_model(state: State<'_, AppState>) -> Result<Option<OldChatModel>, String> {
-    Ok(model::old_chat_bytes(&state.local_data).map(|bytes| OldChatModel { bytes }))
+pub async fn old_chat_model(state: State<'_, AppState>) -> Result<Option<OldChatModel>> {
+    let local_data = state.local_data.clone();
+    let bytes = blocking(move || model::old_chat_bytes(&local_data)).await?;
+    Ok(bytes.map(|bytes| OldChatModel { bytes }))
 }
 
 /// Remove the old chat models, once the user said so.
 #[tauri::command]
-pub async fn remove_old_chat_model(state: State<'_, AppState>) -> Result<(), String> {
-    model::remove_old_chat_models(&state.local_data)
+pub async fn remove_old_chat_model(state: State<'_, AppState>) -> Result<()> {
+    let local_data = state.local_data.clone();
+    blocking(move || model::remove_old_chat_models(&local_data)).await?
 }
 
 /// An install from before EmbeddingGemma still has Qwen3-Embedding on disk.

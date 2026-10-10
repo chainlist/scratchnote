@@ -4,7 +4,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::settings::Settings;
-use crate::state::AppState;
+use crate::state::{read_lock, write_lock, AppState};
+use crate::Result;
 
 /// Settings as saved, plus the root this run is actually using, so the screen
 /// can say when a new root is waiting on a restart.
@@ -20,7 +21,7 @@ pub struct SettingsView {
 }
 
 #[tauri::command]
-pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<SettingsView, String> {
+pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<SettingsView> {
     Ok(SettingsView {
         settings: current_settings(&state)?,
         active_root: state.root.clone(),
@@ -35,7 +36,7 @@ pub async fn set_settings(
     app: AppHandle,
     state: State<'_, AppState>,
     settings: Settings,
-) -> Result<SettingsView, String> {
+) -> Result<SettingsView> {
     settings.validate()?;
     let old = current_settings(&state)?;
 
@@ -77,37 +78,30 @@ pub fn restart_app(app: AppHandle) {
 /// Android's folder chooser for the notes root, as a full path: the dialog
 /// plugin cannot pick folders there. None when the user backs out.
 #[tauri::command]
-pub async fn pick_notes_folder(app: AppHandle) -> Result<Option<String>, String> {
+pub async fn pick_notes_folder(app: AppHandle) -> Result<Option<String>> {
     #[cfg(target_os = "android")]
     return crate::android::pick_folder(&app).await;
     #[cfg(not(target_os = "android"))]
     {
         let _ = app;
-        Err("the dialog plugin picks folders on this system".to_string())
+        Err("the dialog plugin picks folders on this system".into())
     }
 }
 
-pub(super) fn current_settings(state: &State<'_, AppState>) -> Result<Settings, String> {
-    Ok(state
-        .settings
-        .read()
-        .map_err(|_| "settings lock poisoned".to_string())?
-        .clone())
+pub(super) fn current_settings(state: &State<'_, AppState>) -> Result<Settings> {
+    Ok(read_lock(&state.settings, "settings")?.clone())
 }
 
 pub(super) async fn save_settings(
     app: &AppHandle,
     state: &State<'_, AppState>,
     settings: Settings,
-) -> Result<(), String> {
+) -> Result<()> {
     state
         .writer
         .write_index(crate::settings::file(app), settings.to_json())
         .await?;
-    *state
-        .settings
-        .write()
-        .map_err(|_| "settings lock poisoned".to_string())? = settings.clone();
+    *write_lock(&state.settings, "settings")? = settings.clone();
     // The capture window reads hideImmediately from this.
     let _ = app.emit("settings-changed", &settings);
     Ok(())

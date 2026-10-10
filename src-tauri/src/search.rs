@@ -14,6 +14,7 @@ use unicode_normalization::UnicodeNormalization;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{Index, IndexEntry};
 use crate::storage::search_db::SearchDb;
+use crate::Result;
 
 /// Lowercase with accents stripped: decompose, then drop the combining marks.
 pub fn fold(text: &str) -> String {
@@ -41,7 +42,7 @@ impl Query {
 
     /// The notes whose text holds every word, or `None` for a query without
     /// words, which every note passes.
-    fn matched(&self, db: &SearchDb) -> Result<Option<HashSet<String>>, String> {
+    fn matched(&self, db: &SearchDb) -> Result<Option<HashSet<String>>> {
         if self.words.is_empty() {
             return Ok(None);
         }
@@ -58,7 +59,7 @@ fn passes(matched: &Option<HashSet<String>>, entry: &IndexEntry) -> bool {
 pub fn with_bodies<'a>(
     db: &SearchDb,
     entries: impl IntoIterator<Item = &'a IndexEntry>,
-) -> Result<Vec<Note>, String> {
+) -> Result<Vec<Note>> {
     let entries: Vec<&IndexEntry> = entries.into_iter().collect();
     let mut bodies = db.bodies(entries.iter().map(|entry| entry.id.as_str()))?;
     Ok(entries
@@ -82,7 +83,7 @@ pub fn by_meaning(
     raw: &str,
     hits: &[(String, f32)],
     k: usize,
-) -> Result<Vec<Note>, String> {
+) -> Result<Vec<Note>> {
     let query = Query::parse(raw);
     let matched = query.matched(db)?;
     let entries: HashMap<&str, &IndexEntry> = index
@@ -114,7 +115,7 @@ pub fn search(
     raw: &str,
     offset: usize,
     limit: usize,
-) -> Result<Found, String> {
+) -> Result<Found> {
     let query = Query::parse(raw);
     if query.is_empty() {
         return Ok(Found::default());
@@ -135,7 +136,7 @@ pub fn search(
 /// The ids of the notes and pages whose text holds every word, in the
 /// index's order, for the map to light them up: no text is read out. None
 /// for a query without words.
-pub fn matching_ids(index: &Index, db: &SearchDb, raw: &str) -> Result<Vec<String>, String> {
+pub fn matching_ids(index: &Index, db: &SearchDb, raw: &str) -> Result<Vec<String>> {
     let Some(matched) = Query::parse(raw).matched(db)? else {
         return Ok(Vec::new());
     };
@@ -150,7 +151,7 @@ pub fn matching_ids(index: &Index, db: &SearchDb, raw: &str) -> Result<Vec<Strin
 /// A plugin asks for the markup it reads, `[ ]` and `[x]` for the tasks
 /// view (SPEC 3.8), and parses the markdown itself to keep the real ones.
 /// An empty needle matches every note.
-pub fn containing(index: &Index, db: &SearchDb, needles: &[String]) -> Result<Vec<Note>, String> {
+pub fn containing(index: &Index, db: &SearchDb, needles: &[String]) -> Result<Vec<Note>> {
     let ids = db.containing(needles)?;
     let mut hits: Vec<&IndexEntry> = index
         .entries()

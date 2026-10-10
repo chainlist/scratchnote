@@ -17,3 +17,11 @@ pub mod search;
 pub mod settings;
 pub mod spaces;
 pub mod threads;
+
+use crate::Result;
+
+/// Run `work` where blocking is fine, as reading many files or running the
+/// model is, so the async runtime goes on meanwhile.
+pub async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Result<T> {
+    Ok(tauri::async_runtime::spawn_blocking(work).await?)
+}

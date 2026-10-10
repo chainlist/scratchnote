@@ -21,7 +21,8 @@ use std::collections::{BTreeSet, HashMap};
 use rusqlite::{params, Connection};
 use serde::Serialize;
 
-use crate::storage::space_db::{to_string, SpaceDb};
+use crate::storage::space_db::SpaceDb;
+use crate::Result;
 
 /// How close, against how far apart notes usually lie, two notes are
 /// joined at the lowest level.
@@ -155,32 +156,27 @@ impl Categories {
 
     /// Save these categories in place of `before`, writing only what
     /// changed.
-    pub fn write(&self, tx: &Connection, before: Option<&Self>) -> Result<(), String> {
+    pub fn write(&self, tx: &Connection, before: Option<&Self>) -> Result<()> {
         let empty = Self::default();
         let before = match before {
             Some(before) => before,
             None => {
-                tx.execute_batch("DELETE FROM categories; DELETE FROM category_notes;")
-                    .map_err(to_string)?;
+                tx.execute_batch("DELETE FROM categories; DELETE FROM category_notes;")?;
                 &empty
             }
         };
         SpaceDb::set_meta(tx, "categories_base", &self.base.to_string())?;
         let now: HashMap<i64, &Category> = self.list.iter().map(|c| (c.id, c)).collect();
-        let mut gone = tx
-            .prepare_cached("DELETE FROM categories WHERE id = ?1")
-            .map_err(to_string)?;
+        let mut gone = tx.prepare_cached("DELETE FROM categories WHERE id = ?1")?;
         for old in &before.list {
             if !now.contains_key(&old.id) {
-                gone.execute([old.id]).map_err(to_string)?;
+                gone.execute([old.id])?;
             }
         }
-        let mut put = tx
-            .prepare_cached(
-                "INSERT OR REPLACE INTO categories (id, parent, low, high, name)
+        let mut put = tx.prepare_cached(
+            "INSERT OR REPLACE INTO categories (id, parent, low, high, name)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-            )
-            .map_err(to_string)?;
+        )?;
         let then: HashMap<i64, &Category> = before.list.iter().map(|c| (c.id, c)).collect();
         for category in &self.list {
             if then.get(&category.id) != Some(&category) {
@@ -190,26 +186,21 @@ impl Categories {
                     category.low,
                     category.high,
                     category.name
-                ])
-                .map_err(to_string)?;
+                ])?;
             }
         }
-        let mut gone = tx
-            .prepare_cached("DELETE FROM category_notes WHERE note = ?1")
-            .map_err(to_string)?;
+        let mut gone = tx.prepare_cached("DELETE FROM category_notes WHERE note = ?1")?;
         for note in before.notes.keys() {
             if !self.notes.contains_key(note) {
-                gone.execute([note]).map_err(to_string)?;
+                gone.execute([note])?;
             }
         }
-        let mut put = tx
-            .prepare_cached(
-                "INSERT OR REPLACE INTO category_notes (note, category) VALUES (?1, ?2)",
-            )
-            .map_err(to_string)?;
+        let mut put = tx.prepare_cached(
+            "INSERT OR REPLACE INTO category_notes (note, category) VALUES (?1, ?2)",
+        )?;
         for (note, &category) in &self.notes {
             if before.notes.get(note) != Some(&category) {
-                put.execute(params![note, category]).map_err(to_string)?;
+                put.execute(params![note, category])?;
             }
         }
         Ok(())

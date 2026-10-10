@@ -21,6 +21,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::spaces::Space;
 use crate::state::AppState;
+use crate::Result;
 
 /// The folder in a space that holds its attachments.
 const DIR: &str = "attachments";
@@ -349,6 +350,15 @@ pub fn carry(from: &Path, to: &Path, text: &str) -> io::Result<(String, Vec<Stri
     }
     let text = relink(text, &moved);
     Ok((text, moved.into_keys().collect()))
+}
+
+/// `carry` off the async runtime, for a note or a page moving to the space
+/// at `to`.
+pub async fn carry_async(from: &Path, to: &Path, text: &str) -> Result<(String, Vec<String>)> {
+    let (from, to, text) = (from.to_path_buf(), to.to_path_buf(), text.to_string());
+    crate::commands::blocking(move || carry(&from, &to, &text))
+        .await?
+        .map_err(|e| format!("could not take its attachments along: {e}").into())
 }
 
 /// Remove the files a note took to another space (`carry`) from `space`,

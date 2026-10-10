@@ -1,5 +1,6 @@
 import { ItemView, Plugin, PluginSettingTab, Setting, type App } from '#lib/plugins/api.js';
 import { m } from '#lib/paraglide/messages.js';
+import { element } from '../dom';
 
 /** Lucide's chart-column. */
 const CHART =
@@ -27,17 +28,6 @@ function after(date: Date, days: number): Date {
 function iso(date: Date): string {
 	const pad = (n: number) => String(n).padStart(2, '0');
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-	tag: K,
-	className?: string,
-	text?: string
-): HTMLElementTagNameMap[K] {
-	const el = document.createElement(tag);
-	if (className) el.className = className;
-	if (text !== undefined) el.textContent = text;
-	return el;
 }
 
 /**

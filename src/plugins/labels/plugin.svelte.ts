@@ -10,6 +10,7 @@ import {
 	type RenderedMarkdown
 } from '#lib/plugins/api.js';
 import { m } from '#lib/paraglide/messages.js';
+import { element } from '../dom';
 
 /** Lucide's tag. */
 const TAG =
@@ -99,17 +100,6 @@ function shown(label: NoteLabel | undefined, sure: number): Shown | null {
 	return job
 		? { life, job, key: `${life}/${job}`, text: `${named(life)} · ${named(job)}` }
 		: { life, job, key: life, text: named(life) };
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-	tag: K,
-	className?: string,
-	text?: string
-): HTMLElementTagNameMap[K] {
-	const el = document.createElement(tag);
-	if (className) el.className = className;
-	if (text !== undefined) el.textContent = text;
-	return el;
 }
 
 /**

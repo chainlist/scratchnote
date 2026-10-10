@@ -7,6 +7,7 @@ import {
 	type RenderedMarkdown
 } from '#lib/plugins/api.js';
 import { m } from '#lib/paraglide/messages.js';
+import { element } from '../dom';
 
 /** Lucide's book-open. */
 const BOOK =
@@ -45,17 +46,6 @@ interface Spread {
 	notes: Note[];
 	sheets: number;
 	sheet: number;
-}
-
-function element<K extends keyof HTMLElementTagNameMap>(
-	tag: K,
-	className?: string,
-	text?: string
-): HTMLElementTagNameMap[K] {
-	const el = document.createElement(tag);
-	if (className) el.className = className;
-	if (text !== undefined) el.textContent = text;
-	return el;
 }
 
 /**

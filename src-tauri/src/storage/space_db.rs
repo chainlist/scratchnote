@@ -446,9 +446,7 @@ mod tests {
         let db = SpaceDb::open(&root).unwrap();
         let edits = Edits::load(&db);
         assert_eq!(
-            edits
-                .put(crate::embed::threads::GENERAL, "01B")
-                .map(String::as_str),
+            edits.put(crate::embed::threads::GENERAL, "01B"),
             Some("01A")
         );
         assert!(edits.pinned_in.is_empty());

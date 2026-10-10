@@ -29,7 +29,7 @@ ulid = "3.0.0"
 notify = "8.2.0"
 sha2 = "0.10.9"
 unicode-normalization = "0.1.25"
-tokio = { version = "1.53.1", features = ["full"] }
+tokio = { version = "1.53.1", features = ["fs", "io-util", "macros", "rt", "rt-multi-thread", "sync", "time"] }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 # The defaults minus android-shared-stdcxx, which Android swaps for the
 # static C++ runtime below.

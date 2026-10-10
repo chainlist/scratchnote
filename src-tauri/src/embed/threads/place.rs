@@ -80,7 +80,7 @@ fn forget_stale(
             && placed.out == alone.contains(id)
             && edits
                 .put(scope, id)
-                .is_none_or(|thread| placed.thread.as_ref() == Some(thread))
+                .is_none_or(|thread| placed.thread.as_deref() == Some(thread))
     });
     // A thread down to one note is no thread: that note is placed again.
     let mut sizes: HashMap<String, usize> = HashMap::new();
@@ -167,7 +167,7 @@ impl<'a> Placing<'a> {
         let choice = if alone.contains(id) {
             None
         } else if let Some(thread) = edits.put(self.scope, id) {
-            Some(Choice::Put(thread.clone()))
+            Some(Choice::Put(thread.to_string()))
         } else {
             let note = self.usual.note(id, vector);
             self.best(&note, written.date)

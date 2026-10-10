@@ -44,12 +44,13 @@ impl Edits {
     }
 
     /// The thread of `scope` the user put `note` in, if any.
-    pub fn put(&self, scope: &str, note: &str) -> Option<&String> {
-        if scope == GENERAL {
+    pub fn put(&self, scope: &str, note: &str) -> Option<&str> {
+        let thread = if scope == GENERAL {
             self.pinned.get(note)
         } else {
             self.pinned_in.get(scope)?.get(note)
-        }
+        };
+        thread.map(String::as_str)
     }
 
     /// Every note the user put in a thread: `(scope, note, thread)`.

@@ -213,15 +213,7 @@ pub fn run() {
             // Every space is listed, but only the open one is read and watched
             // (SPEC 4.6). The others are read when they are opened.
             let state = app.state::<AppState>();
-            let mut found = spaces::discover(&root);
-            if found.is_empty() {
-                let path = spaces::spaces_dir(&root).join(spaces::FIRST_NAME);
-                if let Err(e) = std::fs::create_dir_all(path.join("notes")) {
-                    log::error!("could not create {}: {e}", path.display());
-                }
-                found.push((spaces::FIRST_NAME.to_string(), path));
-            }
-            let mut listed: Vec<_> = found
+            let mut listed: Vec<_> = spaces::discover_or_first(&root)
                 .into_iter()
                 .map(|(name, path)| commands::spaces::add_space(app.handle(), &name, path))
                 .collect();

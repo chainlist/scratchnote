@@ -11,9 +11,10 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use notify::{EventKind, RecursiveMode, Watcher};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc;
 
+use crate::events;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
@@ -103,7 +104,7 @@ async fn process(app: AppHandle, space: Weak<Space>, mut rx: mpsc::UnboundedRece
         if !read.changed {
             continue;
         }
-        let _ = app.emit("index-rebuilt", ());
+        events::index_rebuilt(&app);
 
         for restub in read.stubs {
             restub.write(&state.writer, &space).await;

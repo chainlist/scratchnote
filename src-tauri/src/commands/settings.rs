@@ -99,7 +99,7 @@ pub(super) async fn save_settings(
 ) -> Result<()> {
     state
         .writer
-        .write_index(crate::settings::file(app), settings.to_json())
+        .write(crate::settings::file(app), settings.to_json())
         .await?;
     *write_lock(&state.settings, "settings")? = settings.clone();
     // The capture window reads hideImmediately from this.

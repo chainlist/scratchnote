@@ -94,7 +94,7 @@ async fn spaces_changed(app: &AppHandle, state: &AppState) -> Result<SpacesView>
     let json = read_lock(&state.registry, "registry")?.to_json();
     state
         .writer
-        .write_index(spaces::registry_path(&state.root), json)
+        .write(spaces::registry_path(&state.root), json)
         .await?;
     let view = spaces_view(state)?;
     let _ = app.emit("spaces-changed", &view);

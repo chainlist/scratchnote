@@ -4,9 +4,10 @@
 use tauri::{AppHandle, Emitter, State, Window};
 
 use super::blocking;
+use crate::events;
 use crate::plugins::{
-    changed, check_id, clean_ids, data_path, load_state, older, plugins_dir, put_in_place,
-    registry, save_state, view, Manifest, PluginCode, PluginState, PluginsView,
+    check_id, clean_ids, data_path, load_state, older, plugins_dir, put_in_place, registry,
+    save_state, view, Manifest, PluginCode, PluginState, PluginsView,
 };
 use crate::state::AppState;
 use crate::Result;
@@ -17,6 +18,20 @@ fn check_community(state: &AppState) -> Result<()> {
     } else {
         Err("community plugins are turned off".into())
     }
+}
+
+/// What is installed and on now, told to every window, so each loads and
+/// unloads plugins to match.
+fn changed(app: &AppHandle, state: &AppState) -> PluginsView {
+    let view = view(&state.root);
+    events::plugins_changed(app, &view);
+    view
+}
+
+/// Save `plugins.json`, and tell every window.
+async fn save(app: &AppHandle, state: &AppState, plugins: PluginState) -> Result<PluginsView> {
+    save_state(&state.writer, &state.root, &plugins).await?;
+    Ok(changed(app, state))
 }
 
 #[tauri::command]
@@ -37,7 +52,7 @@ pub async fn set_plugins(
         core_disabled: clean_ids(plugins.core_disabled)?,
         core_enabled: clean_ids(plugins.core_enabled)?,
     };
-    save_state(&app, &state, plugins).await
+    save(&app, &state, plugins).await
 }
 
 /// An enabled community plugin's code. Nothing is handed out while
@@ -91,7 +106,7 @@ pub async fn save_plugin_data(
     let json = serde_json::to_string_pretty(&data)?;
     state
         .writer
-        .write_index(data_path(&state.root, &id, core), json)
+        .write(data_path(&state.root, &id, core), json)
         .await?;
     let _ = app.emit(
         "plugin-data-changed",
@@ -151,7 +166,7 @@ pub async fn install_plugin(
     blocking(move || put_in_place(&plugins_dir(&root), &id, &release))
         .await?
         .map_err(|e| format!("could not install the plugin: {e}"))?;
-    Ok(changed(&app, &state.root))
+    Ok(changed(&app, &state))
 }
 
 /// Remove a community plugin, its data with it, and switch it off.
@@ -170,5 +185,5 @@ pub async fn uninstall_plugin(
     }
     let mut plugins = load_state(&state.root);
     plugins.enabled.retain(|enabled| *enabled != id);
-    save_state(&app, &state, plugins).await
+    save(&app, &state, plugins).await
 }

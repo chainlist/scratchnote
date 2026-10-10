@@ -5,9 +5,9 @@ use tauri::{AppHandle, State};
 use ulid::Ulid;
 
 use super::notes::{free_id, move_target, read_note};
+use crate::events;
 use crate::pages::{
-    drop_stub, emit_updated, entry, free_path, newest_first, read_page, reindex, sync_stub,
-    write_new,
+    drop_stub, entry, free_path, newest_first, read_page, reindex, sync_stub, write_new,
 };
 use crate::state::{read_lock, AppState};
 use crate::storage::daily_file::{self, body_hash, Kind, Note, Stub};
@@ -56,7 +56,7 @@ pub async fn create_page(
     space.persist_index(&state.writer).await?;
     sync_stub(&state.writer, &space, &page).await?;
 
-    emit_updated(&app, &page.id);
+    events::note_updated(&app, &page.id);
     Ok(page)
 }
 
@@ -112,7 +112,7 @@ pub async fn update_page(
     let page = reindex(&space, &file)?.ok_or_else(|| format!("{file} is gone"))?;
     space.persist_index(&state.writer).await?;
 
-    emit_updated(&app, &id);
+    events::note_updated(&app, &id);
     Ok(page)
 }
 
@@ -164,7 +164,7 @@ pub async fn rename_page(
     space.persist_index(&state.writer).await?;
     sync_stub(&state.writer, &space, &page).await?;
 
-    emit_updated(&app, &id);
+    events::note_updated(&app, &id);
     Ok(page)
 }
 
@@ -194,7 +194,7 @@ pub async fn delete_page(
         space.persist_index(&state.writer).await?;
     }
 
-    emit_updated(&app, &id);
+    events::note_updated(&app, &id);
     Ok(())
 }
 
@@ -241,7 +241,7 @@ pub async fn move_page(
     from.release(&id);
     crate::attachments::drop_carried(&from, &carried);
 
-    emit_updated(&app, &id);
+    events::note_updated(&app, &id);
     Ok(())
 }
 
@@ -292,7 +292,7 @@ pub async fn note_to_page(
     space.page_changed(&page)?;
     space.persist_index(&state.writer).await?;
 
-    emit_updated(&app, &id);
-    emit_updated(&app, &page.id);
+    events::note_updated(&app, &id);
+    events::note_updated(&app, &page.id);
     Ok(page)
 }

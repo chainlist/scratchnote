@@ -514,6 +514,18 @@ impl Space {
         Ok(Some(pins))
     }
 
+    /// Change what the user decided about threads, as `change_edits` does,
+    /// and remember the change for `undo_threads` when there was one. Says
+    /// whether there was.
+    pub fn decide(&self, change: impl FnOnce(&mut Edits) -> bool) -> Result<bool> {
+        let before = self.decided();
+        let changed = self.change_edits(change)?;
+        if changed {
+            self.remember_change(before);
+        }
+        Ok(changed)
+    }
+
     /// The thread edits and the pins as they are now.
     pub fn decided(&self) -> Decided {
         (self.edits(), self.pins())
@@ -745,7 +757,7 @@ impl Space {
         // follow it from this one place.
         self.index_changed();
         writer
-            .write_index(index::index_path(&self.root), jsonl)
+            .write(index::index_path(&self.root), jsonl)
             .await
     }
 }

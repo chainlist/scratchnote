@@ -5,6 +5,7 @@ mod attachments;
 mod commands;
 mod embed;
 mod error;
+mod events;
 mod http;
 mod mentions;
 mod pages;

@@ -1,4 +1,8 @@
-//! The only place that writes files under the notes root.
+//! Where the app writes the notes, the pages, the index and its own JSON
+//! files under the notes root. Moving whole folders, copying attachments in,
+//! installing plugins and moving an old root's notes into a space at launch,
+//! before the writer runs, go straight to disk instead: none of those is a
+//! file the user may be editing at the same time.
 //!
 //! Every write is funnelled through one task over an mpsc channel, so two
 //! saves can never interleave on the same file. Each write is atomic:
@@ -23,37 +27,10 @@ use crate::Result;
 pub type SelfWrites = Arc<Mutex<HashMap<PathBuf, String>>>;
 
 enum WriteRequest {
-    AppendNote {
-        path: PathBuf,
-        date: String,
-        note: Box<Note>,
-        reply: oneshot::Sender<io::Result<()>>,
-    },
-    DeleteNote {
-        path: PathBuf,
-        id: String,
-        /// False when the file or the id is not there.
-        reply: oneshot::Sender<io::Result<bool>>,
-    },
-    /// Swap one note's body after the user edits it in the app.
-    ReplaceBody {
-        path: PathBuf,
-        id: String,
-        body: String,
-        /// False when the file or the id is not there.
-        reply: oneshot::Sender<io::Result<bool>>,
-    },
-    /// Whole-file rewrite of index.jsonl, for updates, deletes and rebuilds.
-    WriteIndex {
+    /// The whole file, in place of whatever was there.
+    Write {
         path: PathBuf,
         contents: String,
-        reply: oneshot::Sender<io::Result<()>>,
-    },
-    /// One more line on index.jsonl. A new note is the hot path, and SPEC 4.4
-    /// appends rather than rewriting for exactly that reason.
-    AppendIndexLine {
-        path: PathBuf,
-        line: String,
         reply: oneshot::Sender<io::Result<()>>,
     },
     /// Read a file, `None` when it is missing, and write back what `edit`
@@ -96,34 +73,12 @@ impl Writer {
         tauri::async_runtime::spawn(async move {
             while let Some(request) = rx.recv().await {
                 match request {
-                    WriteRequest::AppendNote {
-                        path,
-                        date,
-                        note,
-                        reply,
-                    } => {
-                        let _ = reply.send(append_note(&path, &date, &note, &seen).await);
-                    }
-                    WriteRequest::DeleteNote { path, id, reply } => {
-                        let _ = reply.send(delete_note(&path, &id, &seen).await);
-                    }
-                    WriteRequest::ReplaceBody {
-                        path,
-                        id,
-                        body,
-                        reply,
-                    } => {
-                        let _ = reply.send(replace_body(&path, &id, &body, &seen).await);
-                    }
-                    WriteRequest::WriteIndex {
+                    WriteRequest::Write {
                         path,
                         contents,
                         reply,
                     } => {
-                        let _ = reply.send(write_index(&path, &contents, &seen).await);
-                    }
-                    WriteRequest::AppendIndexLine { path, line, reply } => {
-                        let _ = reply.send(append_index_line(&path, &line, &seen).await);
+                        let _ = reply.send(write_atomic(&path, &contents, &seen).await);
                     }
                     WriteRequest::Rewrite { path, edit, reply } => {
                         let _ = reply.send(rewrite(&path, edit, &seen).await);
@@ -146,46 +101,43 @@ impl Writer {
         self.self_writes.clone()
     }
 
+    /// Add a note at the end of a day's file, starting the file if there is
+    /// none.
     pub async fn append_note(&self, path: PathBuf, date: String, note: Note) -> Result<()> {
-        let (reply, response) = oneshot::channel();
-        self.send(
-            WriteRequest::AppendNote {
-                path,
-                date,
-                note: Box::new(note),
-                reply,
-            },
-            response,
-        )
-        .await
+        self.rewrite(path, move |existing| {
+            Some(daily_file::append_note(
+                existing.unwrap_or_default(),
+                &note,
+                &date,
+            ))
+        })
+        .await?;
+        Ok(())
     }
 
     /// Returns false when the file or the id is not there.
     pub async fn delete_note(&self, path: PathBuf, id: String) -> Result<bool> {
-        let (reply, response) = oneshot::channel();
-        self.send(WriteRequest::DeleteNote { path, id, reply }, response)
-            .await
-    }
-
-    /// Returns false when the file or the id is not there.
-    pub async fn replace_body(&self, path: PathBuf, id: String, body: String) -> Result<bool> {
-        let (reply, response) = oneshot::channel();
-        self.send(
-            WriteRequest::ReplaceBody {
-                path,
-                id,
-                body,
-                reply,
-            },
-            response,
-        )
+        self.rewrite(path, move |existing| {
+            daily_file::remove_note(existing?, &id)
+        })
         .await
     }
 
-    pub async fn write_index(&self, path: PathBuf, contents: String) -> Result<()> {
+    /// Swap one note's body after the user edits it in the app. Returns
+    /// false when the file or the id is not there.
+    pub async fn replace_body(&self, path: PathBuf, id: String, body: String) -> Result<bool> {
+        self.rewrite(path, move |existing| {
+            daily_file::replace_body(existing?, &id, &body)
+        })
+        .await
+    }
+
+    /// Write the whole file, as the index is written after an update, a
+    /// delete or a rebuild, and as settings and the other JSON files are.
+    pub async fn write(&self, path: PathBuf, contents: String) -> Result<()> {
         let (reply, response) = oneshot::channel();
         self.send(
-            WriteRequest::WriteIndex {
+            WriteRequest::Write {
                 path,
                 contents,
                 reply,
@@ -195,13 +147,20 @@ impl Writer {
         .await
     }
 
+    /// One more line on index.jsonl. A new note is the hot path, and SPEC 4.4
+    /// appends rather than writing the whole index for exactly that reason.
     pub async fn append_index_line(&self, path: PathBuf, line: String) -> Result<()> {
-        let (reply, response) = oneshot::channel();
-        self.send(
-            WriteRequest::AppendIndexLine { path, line, reply },
-            response,
-        )
-        .await
+        self.rewrite(path, move |existing| {
+            let mut contents = existing.unwrap_or_default().to_string();
+            if !contents.is_empty() && !contents.ends_with('\n') {
+                contents.push('\n');
+            }
+            contents.push_str(line.trim_end());
+            contents.push('\n');
+            Some(contents)
+        })
+        .await?;
+        Ok(())
     }
 
     /// Returns false when `edit` left the file alone.
@@ -251,68 +210,8 @@ impl Writer {
     }
 }
 
-async fn append_note(path: &Path, date: &str, note: &Note, seen: &SelfWrites) -> io::Result<()> {
-    let existing = read_or_empty(path).await?;
-    write_atomic(path, &daily_file::append_note(&existing, note, date), seen).await
-}
-
-async fn delete_note(path: &Path, id: &str, seen: &SelfWrites) -> io::Result<bool> {
-    let existing = match tokio::fs::read_to_string(path).await {
-        Ok(contents) => contents,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(e) => return Err(e),
-    };
-    match daily_file::remove_note(&existing, id) {
-        Some(updated) => {
-            write_atomic(path, &updated, seen).await?;
-            Ok(true)
-        }
-        None => Ok(false),
-    }
-}
-
-async fn replace_body(path: &Path, id: &str, body: &str, seen: &SelfWrites) -> io::Result<bool> {
-    rewrite_note(path, seen, |existing| {
-        daily_file::replace_body(existing, id, body)
-    })
-    .await
-}
-
-/// Read, edit one note block, write back. False when the file is missing or
-/// `edit` did not find the note.
-async fn rewrite_note(
-    path: &Path,
-    seen: &SelfWrites,
-    edit: impl FnOnce(&str) -> Option<String>,
-) -> io::Result<bool> {
-    let existing = match tokio::fs::read_to_string(path).await {
-        Ok(contents) => contents,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(e) => return Err(e),
-    };
-    match edit(&existing) {
-        Some(updated) => {
-            write_atomic(path, &updated, seen).await?;
-            Ok(true)
-        }
-        None => Ok(false),
-    }
-}
-
-async fn write_index(path: &Path, contents: &str, seen: &SelfWrites) -> io::Result<()> {
-    write_atomic(path, contents, seen).await
-}
-
-async fn append_index_line(path: &Path, line: &str, seen: &SelfWrites) -> io::Result<()> {
-    let mut contents = read_or_empty(path).await?;
-    if !contents.is_empty() && !contents.ends_with('\n') {
-        contents.push('\n');
-    }
-    contents.push_str(line.trim_end());
-    contents.push('\n');
-    write_atomic(path, &contents, seen).await
-}
-
+/// Read the file, `None` when it is missing, and write back what `edit`
+/// makes of it. False when `edit` left it alone.
 async fn rewrite(path: &Path, edit: Edit, seen: &SelfWrites) -> io::Result<bool> {
     let existing = match tokio::fs::read_to_string(path).await {
         Ok(contents) => Some(contents),
@@ -360,14 +259,6 @@ async fn remove(path: &Path, seen: &SelfWrites) -> io::Result<bool> {
             Ok(true)
         }
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
-        Err(e) => Err(e),
-    }
-}
-
-async fn read_or_empty(path: &Path) -> io::Result<String> {
-    match tokio::fs::read_to_string(path).await {
-        Ok(contents) => Ok(contents),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::new()),
         Err(e) => Err(e),
     }
 }
@@ -570,7 +461,7 @@ mod tests {
         assert_eq!(contents, "{\"id\":\"01AAA\"}\n{\"id\":\"01BBB\"}\n");
 
         writer
-            .write_index(path.clone(), "{\"id\":\"01CCC\"}\n".to_string())
+            .write(path.clone(), "{\"id\":\"01CCC\"}\n".to_string())
             .await
             .unwrap();
         assert_eq!(

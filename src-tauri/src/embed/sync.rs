@@ -9,13 +9,14 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::sync::Notify;
 
 use super::activity::{self, Activity};
 use super::threads::{self, Threads};
 use super::vectors::Vectors;
 use super::Embedder;
+use crate::events;
 use crate::spaces::Space;
 use crate::state::{lock, read_lock, AppState};
 use crate::storage::index::Index;
@@ -68,17 +69,16 @@ pub fn spawn(app: AppHandle, wake: Wake) {
             match pass.await {
                 Ok(spaces) => {
                     for (name, synced) in spaces {
-                        let space = serde_json::json!({ "space": name });
                         // Threads change when the vectors are first read from
                         // disk, so either says the notes' vectors are new.
                         if synced.vectors || synced.threads {
-                            let _ = app.emit("vectors-changed", space.clone());
+                            events::vectors_changed(&app, &name);
                         }
                         if synced.threads {
-                            let _ = app.emit("threads-changed", space.clone());
+                            events::threads_changed(&app, &name);
                         }
                         if synced.map {
-                            let _ = app.emit("map-changed", space);
+                            events::map_changed(&app, &name);
                         }
                     }
                 }

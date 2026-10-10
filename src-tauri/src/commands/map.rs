@@ -6,8 +6,9 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::embed::categories::Category;
-use crate::state::AppState;
+use crate::state::{lock, read_lock, AppState};
 use crate::storage::daily_file::Kind;
+use crate::Result;
 
 /// A note's place on the map, with what opening it takes, the smallest
 /// category it is in, if any, and the keys of the names it mentions.
@@ -25,7 +26,7 @@ pub struct MapNote {
 /// Every note of the open space the embed task has placed on its map, none
 /// until it has. A note deleted since its last pass is left out.
 #[tauri::command]
-pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String> {
+pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>> {
     let space = state.space()?;
     let mut mentions: HashMap<String, Vec<String>> = HashMap::new();
     for (id, key, _) in space.read(|_, db| db.mention_rows())?.unwrap_or_default() {
@@ -35,7 +36,7 @@ pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String
         }
     }
     let places: HashMap<String, ([f32; 2], Option<i64>)> = {
-        let map = space.map.lock().map_err(|_| "map lock poisoned")?;
+        let map = lock(&space.map, "map")?;
         let Some(map) = map.as_ref() else {
             return Ok(Vec::new());
         };
@@ -47,7 +48,7 @@ pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String
             })
             .collect()
     };
-    let index = space.index.read().map_err(|_| "index lock poisoned")?;
+    let index = read_lock(&space.index, "index")?;
     Ok(index
         .entries()
         .filter_map(|entry| {
@@ -69,7 +70,7 @@ pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>, String
 /// id, as search finds them (SPEC 6), for the map to light up. Async, as it
 /// waits on the lock of the notes' text.
 #[tauri::command]
-pub async fn map_search(state: State<'_, AppState>, query: String) -> Result<Vec<String>, String> {
+pub async fn map_search(state: State<'_, AppState>, query: String) -> Result<Vec<String>> {
     let found = state
         .space()?
         .read(|idx, db| crate::search::matching_ids(idx, db, &query))?;
@@ -90,9 +91,9 @@ pub struct MapLinks {
 /// Every note of the open space's map linked to its closest notes, each
 /// pair once, none until the map is laid out.
 #[tauri::command]
-pub async fn map_links(state: State<'_, AppState>) -> Result<MapLinks, String> {
+pub async fn map_links(state: State<'_, AppState>) -> Result<MapLinks> {
     let space = state.space()?;
-    let map = space.map.lock().map_err(|_| "map lock poisoned")?;
+    let map = lock(&space.map, "map")?;
     let Some(map) = map.as_ref() else {
         return Ok(MapLinks::default());
     };
@@ -120,9 +121,9 @@ pub struct MapCategories {
 
 /// The categories of the open space's map, none until they are found.
 #[tauri::command]
-pub async fn map_categories(state: State<'_, AppState>) -> Result<MapCategories, String> {
+pub async fn map_categories(state: State<'_, AppState>) -> Result<MapCategories> {
     let space = state.space()?;
-    let map = space.map.lock().map_err(|_| "map lock poisoned")?;
+    let map = lock(&space.map, "map")?;
     Ok(map
         .as_ref()
         .and_then(|map| map.categories())

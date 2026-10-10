@@ -4,10 +4,11 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::state::AppState;
 use crate::storage::pins::Pin;
+use crate::Result;
 
 /// What the open space has pinned, in its order.
 #[tauri::command]
-pub async fn list_pins(state: State<'_, AppState>) -> Result<Vec<Pin>, String> {
+pub async fn list_pins(state: State<'_, AppState>) -> Result<Vec<Pin>> {
     Ok(state.space()?.pins())
 }
 
@@ -18,7 +19,7 @@ pub async fn set_pins(
     app: AppHandle,
     state: State<'_, AppState>,
     pins: Vec<Pin>,
-) -> Result<Vec<Pin>, String> {
+) -> Result<Vec<Pin>> {
     let space = state.space()?;
     let saved = space
         .change_pins(|old| {

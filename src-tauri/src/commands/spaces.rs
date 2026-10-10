@@ -7,8 +7,10 @@ use chrono::Local;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use super::blocking;
 use crate::spaces::{self, Space};
-use crate::state::AppState;
+use crate::state::{read_lock, write_lock, AppState};
+use crate::Result;
 
 /// One row of the space switcher.
 #[derive(Debug, Clone, Serialize)]
@@ -26,16 +28,10 @@ pub struct SpacesView {
     pub spaces: Vec<SpaceSummary>,
 }
 
-fn spaces_view(state: &AppState) -> Result<SpacesView, String> {
+fn spaces_view(state: &AppState) -> Result<SpacesView> {
     let active = state.space()?.name.clone();
-    let registry = state
-        .registry
-        .read()
-        .map_err(|_| "spaces lock poisoned".to_string())?;
-    let spaces = state
-        .spaces
-        .read()
-        .map_err(|_| "spaces lock poisoned".to_string())?
+    let registry = read_lock(&state.registry, "registry")?;
+    let spaces = read_lock(&state.spaces, "spaces")?
         .iter()
         .map(|s| SpaceSummary {
             name: s.name.clone(),
@@ -76,21 +72,16 @@ pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
 
 /// `load_space` off the async runtime, since it reads every file the cache
 /// does not cover.
-async fn load_space_off_thread(app: &AppHandle, space: &Arc<Space>) -> Result<(), String> {
+async fn load_space_off_thread(app: &AppHandle, space: &Arc<Space>) -> Result<()> {
     let (app, space) = (app.clone(), space.clone());
-    tauri::async_runtime::spawn_blocking(move || load_space(&app, &space))
-        .await
-        .map_err(|e| e.to_string())
+    blocking(move || load_space(&app, &space)).await
 }
 
 /// Close the space being left, and note how many notes it held for the
 /// switcher to show meanwhile.
-fn close_space(state: &AppState, space: &Space) -> Result<(), String> {
+fn close_space(state: &AppState, space: &Space) -> Result<()> {
     if let Some(count) = space.unload() {
-        state
-            .registry
-            .write()
-            .map_err(|_| "spaces lock poisoned".to_string())?
+        write_lock(&state.registry, "registry")?
             .notes
             .insert(space.name.clone(), count);
     }
@@ -98,12 +89,8 @@ fn close_space(state: &AppState, space: &Space) -> Result<(), String> {
 }
 
 /// Record the registry and tell both windows the spaces changed.
-async fn spaces_changed(app: &AppHandle, state: &AppState) -> Result<SpacesView, String> {
-    let json = state
-        .registry
-        .read()
-        .map_err(|_| "spaces lock poisoned".to_string())?
-        .to_json();
+async fn spaces_changed(app: &AppHandle, state: &AppState) -> Result<SpacesView> {
+    let json = read_lock(&state.registry, "registry")?.to_json();
     state
         .writer
         .write_index(spaces::registry_path(&state.root), json)
@@ -114,26 +101,20 @@ async fn spaces_changed(app: &AppHandle, state: &AppState) -> Result<SpacesView,
 }
 
 /// A name no other space has, compared the way Windows compares folder names.
-fn unused_name(state: &AppState, raw: &str, renaming: Option<&str>) -> Result<String, String> {
+fn unused_name(state: &AppState, raw: &str, renaming: Option<&str>) -> Result<String> {
     let name = spaces::check_name(raw)?;
-    let taken = state
-        .spaces
-        .read()
-        .map_err(|_| "spaces lock poisoned".to_string())?
+    let taken = read_lock(&state.spaces, "spaces")?
         .iter()
         .any(|s| Some(s.name.as_str()) != renaming && s.name.to_lowercase() == name.to_lowercase());
     if taken {
-        return Err(format!("there is already a space called {name}"));
+        return Err(format!("there is already a space called {name}").into());
     }
     Ok(name)
 }
 
 /// Swap a space for its replacement, keeping them in name order.
-fn replace_space(state: &AppState, old: &Arc<Space>, new: Arc<Space>) -> Result<(), String> {
-    let mut spaces = state
-        .spaces
-        .write()
-        .map_err(|_| "spaces lock poisoned".to_string())?;
+fn replace_space(state: &AppState, old: &Arc<Space>, new: Arc<Space>) -> Result<()> {
+    let mut spaces = write_lock(&state.spaces, "spaces")?;
     if let Some(slot) = spaces.iter_mut().find(|s| Arc::ptr_eq(s, old)) {
         *slot = new;
     }
@@ -146,7 +127,7 @@ pub fn sort_spaces(spaces: &mut [Arc<Space>]) {
 }
 
 #[tauri::command]
-pub async fn list_spaces(state: State<'_, AppState>) -> Result<SpacesView, String> {
+pub async fn list_spaces(state: State<'_, AppState>) -> Result<SpacesView> {
     spaces_view(&state)
 }
 
@@ -156,11 +137,11 @@ pub async fn create_space(
     app: AppHandle,
     state: State<'_, AppState>,
     name: String,
-) -> Result<SpacesView, String> {
+) -> Result<SpacesView> {
     let name = unused_name(&state, &name, None)?;
     let root = spaces::spaces_dir(&state.root).join(&name);
     if root.exists() {
-        return Err(format!("{} is already there", root.display()));
+        return Err(format!("{} is already there", root.display()).into());
     }
     tokio::fs::create_dir_all(root.join("notes"))
         .await
@@ -170,18 +151,11 @@ pub async fn create_space(
     load_space_off_thread(&app, &space).await?;
     let left = state.space()?;
     {
-        let mut spaces = state
-            .spaces
-            .write()
-            .map_err(|_| "spaces lock poisoned".to_string())?;
+        let mut spaces = write_lock(&state.spaces, "spaces")?;
         spaces.push(space);
         sort_spaces(&mut spaces);
     }
-    state
-        .registry
-        .write()
-        .map_err(|_| "spaces lock poisoned".to_string())?
-        .active = name;
+    write_lock(&state.registry, "registry")?.active = name;
     close_space(&state, &left)?;
     spaces_changed(&app, &state).await
 }
@@ -194,7 +168,7 @@ pub async fn set_active_space(
     app: AppHandle,
     state: State<'_, AppState>,
     name: String,
-) -> Result<SpacesView, String> {
+) -> Result<SpacesView> {
     let space = state
         .find_space(&name)
         .ok_or_else(|| format!("no space {name}"))?;
@@ -205,11 +179,7 @@ pub async fn set_active_space(
     if !space.is_open() {
         load_space_off_thread(&app, &space).await?;
     }
-    state
-        .registry
-        .write()
-        .map_err(|_| "spaces lock poisoned".to_string())?
-        .active = name;
+    write_lock(&state.registry, "registry")?.active = name;
     close_space(&state, &left)?;
     spaces_changed(&app, &state).await
 }
@@ -221,7 +191,7 @@ pub async fn rename_space(
     state: State<'_, AppState>,
     name: String,
     new_name: String,
-) -> Result<SpacesView, String> {
+) -> Result<SpacesView> {
     let old = state
         .find_space(&name)
         .ok_or_else(|| format!("no space {name}"))?;
@@ -241,7 +211,7 @@ pub async fn rename_space(
             load_space_off_thread(&app, &back).await?;
         }
         replace_space(&state, &old, back)?;
-        return Err(format!("could not rename {}: {e}", old.root.display()));
+        return Err(format!("could not rename {}: {e}", old.root.display()).into());
     }
     let renamed = add_space(&app, &new_name, to);
     if was_open {
@@ -250,10 +220,7 @@ pub async fn rename_space(
     replace_space(&state, &old, renamed)?;
 
     {
-        let mut registry = state
-            .registry
-            .write()
-            .map_err(|_| "spaces lock poisoned".to_string())?;
+        let mut registry = write_lock(&state.registry, "registry")?;
         if registry.active == name {
             registry.active = new_name.clone();
         }
@@ -272,18 +239,13 @@ pub async fn delete_space(
     app: AppHandle,
     state: State<'_, AppState>,
     name: String,
-) -> Result<SpacesView, String> {
+) -> Result<SpacesView> {
     let space = state
         .find_space(&name)
         .ok_or_else(|| format!("no space {name}"))?;
-    let last = state
-        .spaces
-        .read()
-        .map_err(|_| "spaces lock poisoned".to_string())?
-        .len()
-        <= 1;
+    let last = read_lock(&state.spaces, "spaces")?.len() <= 1;
     if last {
-        return Err("the last space cannot be deleted".to_string());
+        return Err("the last space cannot be deleted".into());
     }
 
     let was_open = space.is_open();
@@ -300,29 +262,14 @@ pub async fn delete_space(
             load_space_off_thread(&app, &back).await?;
         }
         replace_space(&state, &space, back)?;
-        return Err(format!(
-            "could not move {} to the trash: {e}",
-            space.root.display()
-        ));
+        return Err(format!("could not move {} to the trash: {e}", space.root.display()).into());
     }
 
-    state
-        .spaces
-        .write()
-        .map_err(|_| "spaces lock poisoned".to_string())?
-        .retain(|s| !Arc::ptr_eq(s, &space));
-    let first = state
-        .spaces
-        .read()
-        .map_err(|_| "spaces lock poisoned".to_string())?
-        .first()
-        .cloned();
+    write_lock(&state.spaces, "spaces")?.retain(|s| !Arc::ptr_eq(s, &space));
+    let first = read_lock(&state.spaces, "spaces")?.first().cloned();
     // The open space went: the first one opens in its place.
     let reopen = {
-        let mut registry = state
-            .registry
-            .write()
-            .map_err(|_| "spaces lock poisoned".to_string())?;
+        let mut registry = write_lock(&state.registry, "registry")?;
         registry.notes.remove(&name);
         match first {
             Some(first) if registry.active == name => {
@@ -342,16 +289,12 @@ pub async fn delete_space(
 /// here rather than passed in, so the page can only open folders that are
 /// spaces.
 #[tauri::command]
-pub fn open_space_folder(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    name: String,
-) -> Result<(), String> {
+pub fn open_space_folder(app: AppHandle, state: State<'_, AppState>, name: String) -> Result<()> {
     use tauri_plugin_opener::OpenerExt;
     let space = state
         .find_space(&name)
         .ok_or_else(|| format!("no space {name}"))?;
     app.opener()
         .open_path(space.root.to_string_lossy(), None::<&str>)
-        .map_err(|e| format!("could not open {}: {e}", space.root.display()))
+        .map_err(|e| format!("could not open {}: {e}", space.root.display()).into())
 }

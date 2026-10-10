@@ -13,6 +13,7 @@ use serde::Serialize;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{Index, IndexEntry};
 use crate::storage::search_db::SearchDb;
+use crate::Result;
 
 /// A name as typed in a note, and the key it is found by: case does not
 /// count, so `@Marie` and `@marie` are one name.
@@ -174,7 +175,7 @@ pub struct MentionSummary {
 
 /// Every name the notes of `index` mention, most mentioned first, then the
 /// one mentioned last.
-pub fn list(index: &Index, db: &SearchDb) -> Result<Vec<MentionSummary>, String> {
+pub fn list(index: &Index, db: &SearchDb) -> Result<Vec<MentionSummary>> {
     let entries: HashMap<&str, &IndexEntry> = index.entries().map(|e| (e.id.as_str(), e)).collect();
     // By key: the notes, their days, and the newest one's place and spelling.
     let mut names: HashMap<String, (Vec<&str>, BTreeSet<&str>, (&str, &str), String)> =
@@ -220,7 +221,7 @@ pub struct MentionNotes {
 }
 
 /// The notes and pages that mention `name`, newest first.
-pub fn notes(index: &Index, db: &SearchDb, name: &str) -> Result<MentionNotes, String> {
+pub fn notes(index: &Index, db: &SearchDb, name: &str) -> Result<MentionNotes> {
     let mut names = db.mentioning(&key(name))?;
     let mut hits: Vec<&IndexEntry> = index
         .entries()

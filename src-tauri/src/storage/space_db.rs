@@ -19,6 +19,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction};
 
 use crate::embed::threads::{Edits, Threads};
 use crate::embed::vectors::Vectors;
+use crate::Result;
 
 /// Bumped when the tables change. A later version moves the thread edits
 /// over to its tables, never drops them.
@@ -150,37 +151,31 @@ pub struct SpaceDb {
     conn: Connection,
 }
 
-pub(crate) fn to_string(e: rusqlite::Error) -> String {
-    e.to_string()
-}
-
 impl SpaceDb {
     /// The space's file. Made, the first time, from the files it replaces,
     /// which are then removed. Unlike `search.db`, a file that cannot be
     /// used is left alone: it holds the user's thread edits.
-    pub fn open(root: &Path) -> Result<Self, String> {
+    pub fn open(root: &Path) -> Result<Self> {
         let path = space_db_path(root);
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            std::fs::create_dir_all(parent)?;
         }
-        let mut db = Self::set_up(Connection::open(&path).map_err(to_string)?)?;
+        let mut db = Self::set_up(Connection::open(&path)?)?;
         let version: i64 = db
             .conn
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .map_err(to_string)?;
+            .query_row("PRAGMA user_version", [], |row| row.get(0))?;
         if version == 0 {
             db.make(Some(root))?;
         } else if version < VERSION {
             db.transaction(|tx| {
                 if version < 2 {
-                    tx.execute_batch(CATEGORIES).map_err(to_string)?;
+                    tx.execute_batch(CATEGORIES)?;
                 }
                 if version < 3 {
-                    tx.execute_batch(PINS).map_err(to_string)?;
+                    tx.execute_batch(PINS)?;
                 }
-                tx.execute_batch(SCOPES).map_err(to_string)?;
-                tx.pragma_update(None, "user_version", VERSION)
-                    .map_err(to_string)
+                tx.execute_batch(SCOPES)?;
+                Ok(tx.pragma_update(None, "user_version", VERSION)?)
             })?;
         }
         Ok(db)
@@ -188,31 +183,26 @@ impl SpaceDb {
 
     /// A database held in memory, for when the file cannot be opened, and
     /// for tests.
-    pub fn in_memory() -> Result<Self, String> {
-        let mut db = Self::set_up(Connection::open_in_memory().map_err(to_string)?)?;
+    pub fn in_memory() -> Result<Self> {
+        let mut db = Self::set_up(Connection::open_in_memory()?)?;
         db.make(None)?;
         Ok(db)
     }
 
-    fn set_up(conn: Connection) -> Result<Self, String> {
+    fn set_up(conn: Connection) -> Result<Self> {
         // A vector is about 3 KB, so a 4 KB page holds one and wastes a
         // quarter; a 16 KB page holds five. Only takes on a new file, so
         // before the journal mode, which fixes it.
-        conn.pragma_update(None, "page_size", PAGE_SIZE)
-            .map_err(to_string)?;
-        conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))
-            .map_err(to_string)?;
+        conn.pragma_update(None, "page_size", PAGE_SIZE)?;
+        conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))?;
         // Each save is on disk before it returns, as the files it replaces
         // were: the thread edits cannot be read again from anywhere.
-        conn.pragma_update(None, "synchronous", "FULL")
-            .map_err(to_string)?;
+        conn.pragma_update(None, "synchronous", "FULL")?;
         // The log is copied into the file every 1 MB and cut back to that
         // after, where by default it would keep the size of the largest
         // write, such as reading in a whole `vectors.bin`.
-        conn.pragma_update(None, "wal_autocheckpoint", WAL_BYTES / PAGE_SIZE)
-            .map_err(to_string)?;
-        conn.pragma_update(None, "journal_size_limit", WAL_BYTES)
-            .map_err(to_string)?;
+        conn.pragma_update(None, "wal_autocheckpoint", WAL_BYTES / PAGE_SIZE)?;
+        conn.pragma_update(None, "journal_size_limit", WAL_BYTES)?;
         Ok(Self { conn })
     }
 
@@ -220,7 +210,7 @@ impl SpaceDb {
     /// in one transaction, then remove those files. Should it fail, the
     /// next open tries again: the version is only set with the tables. A
     /// file missing or unreadable is skipped, as it was read as empty.
-    fn make(&mut self, from: Option<&Path>) -> Result<(), String> {
+    fn make(&mut self, from: Option<&Path>) -> Result<()> {
         let old = from.map(|root| {
             let [vectors, threads, edits] = old_files(root);
             (
@@ -230,12 +220,11 @@ impl SpaceDb {
             )
         });
         self.transaction(|tx| {
-            tx.execute_batch(TABLES).map_err(to_string)?;
-            tx.execute_batch(CATEGORIES).map_err(to_string)?;
-            tx.execute_batch(PINS).map_err(to_string)?;
-            tx.execute_batch(SCOPES).map_err(to_string)?;
-            tx.pragma_update(None, "user_version", VERSION)
-                .map_err(to_string)?;
+            tx.execute_batch(TABLES)?;
+            tx.execute_batch(CATEGORIES)?;
+            tx.execute_batch(PINS)?;
+            tx.execute_batch(SCOPES)?;
+            tx.pragma_update(None, "user_version", VERSION)?;
             if let Some((vectors, threads, edits)) = &old {
                 if let Some(vectors) = vectors {
                     vectors.write(tx)?;
@@ -253,8 +242,7 @@ impl SpaceDb {
         // emptied at once rather than at the next write.
         if old.is_some() {
             self.conn
-                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
-                .map_err(to_string)?;
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
         }
         for file in from.iter().flat_map(|root| old_files(root)) {
             match std::fs::remove_file(&file) {
@@ -273,11 +261,11 @@ impl SpaceDb {
     /// Run `write` as one transaction: all of it is saved, or none.
     pub(crate) fn transaction<T>(
         &mut self,
-        write: impl FnOnce(&Transaction) -> Result<T, String>,
-    ) -> Result<T, String> {
-        let tx = self.conn.transaction().map_err(to_string)?;
+        write: impl FnOnce(&Transaction) -> Result<T>,
+    ) -> Result<T> {
+        let tx = self.conn.transaction()?;
         let out = write(&tx)?;
-        tx.commit().map_err(to_string)?;
+        tx.commit()?;
         Ok(out)
     }
 
@@ -291,26 +279,24 @@ impl SpaceDb {
             .flatten()
     }
 
-    pub(crate) fn set_meta(tx: &Connection, key: &str, value: &str) -> Result<(), String> {
+    pub(crate) fn set_meta(tx: &Connection, key: &str, value: &str) -> Result<()> {
         tx.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
             [key, value],
-        )
-        .map(|_| ())
-        .map_err(to_string)
+        )?;
+        Ok(())
     }
 
     /// Forget every vector, as a rebuild does, so each note is embedded
     /// again. Where notes were placed stays: placing again follows the new
     /// vectors.
-    pub fn clear_vectors(&mut self) -> Result<(), String> {
+    pub fn clear_vectors(&mut self) -> Result<()> {
         self.transaction(|tx| {
-            tx.execute("DELETE FROM vectors", []).map_err(to_string)?;
+            tx.execute("DELETE FROM vectors", [])?;
             tx.execute(
                 "DELETE FROM meta WHERE key IN ('vectors_model', 'vectors_dims')",
                 [],
-            )
-            .map_err(to_string)?;
+            )?;
             Ok(())
         })
     }

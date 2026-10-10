@@ -16,6 +16,7 @@ use crate::embed::sync::Wake;
 use crate::embed::map::Map;
 use crate::embed::threads::{Edits, Threads};
 use crate::embed::vectors::Vectors;
+use crate::state::{lock, read_lock, write_lock};
 use crate::storage::day_path;
 use crate::storage::daily_file::Note;
 use crate::storage::index::{self, Index, IndexEntry};
@@ -23,6 +24,7 @@ use crate::storage::pins::{self, Pin};
 use crate::storage::search_db::{SearchDb, Stamp};
 use crate::storage::space_db::SpaceDb;
 use crate::storage::writer::Writer;
+use crate::{Error, Result};
 
 /// Made on first launch, when there is no space yet.
 pub const FIRST_NAME: &str = "Personal";
@@ -163,22 +165,22 @@ pub fn discover(root: &Path) -> Vec<(String, PathBuf)> {
 /// A space name is also a folder name, so on top of being one line and not
 /// too long it must be something every platform accepts as a folder.
 /// Returns the name tidied: surrounding and repeated whitespace dropped.
-pub fn check_name(raw: &str) -> Result<String, String> {
+pub fn check_name(raw: &str) -> Result<String> {
     let name = raw.split_whitespace().collect::<Vec<_>>().join(" ");
     if name.is_empty() {
-        return Err("a space needs a name".to_string());
+        return Err("a space needs a name".into());
     }
     if name.chars().count() > MAX_NAME {
-        return Err(format!("keep the name under {MAX_NAME} characters"));
+        return Err(format!("keep the name under {MAX_NAME} characters").into());
     }
     if let Some(c) = name
         .chars()
         .find(|c| c.is_control() || r#"<>:"/\|?*"#.contains(*c))
     {
-        return Err(format!("a space name cannot contain {c}"));
+        return Err(format!("a space name cannot contain {c}").into());
     }
     if name.starts_with('.') || name.ends_with('.') {
-        return Err("a space name cannot start or end with a dot".to_string());
+        return Err("a space name cannot start or end with a dot".into());
     }
     // Windows refuses these as file names, with or without an extension.
     let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
@@ -187,7 +189,7 @@ pub fn check_name(raw: &str) -> Result<String, String> {
             && stem.len() == 4
             && stem.as_bytes()[3].is_ascii_digit());
     if reserved {
-        return Err(format!("{name} is a name Windows keeps for itself"));
+        return Err(format!("{name} is a name Windows keeps for itself").into());
     }
     Ok(name)
 }
@@ -477,12 +479,9 @@ impl Space {
     /// Change what the user decided about threads, read and saved under
     /// one lock so that two changes never undo each other. `change` says
     /// whether it changed anything, and nothing is saved when it did not.
-    pub fn change_edits(&self, change: impl FnOnce(&mut Edits) -> bool) -> Result<bool, String> {
-        let mut db = self
-            .db
-            .lock()
-            .map_err(|_| "space.db lock poisoned".to_string())?;
-        let db = db.as_mut().ok_or("the space is closed")?;
+    pub fn change_edits(&self, change: impl FnOnce(&mut Edits) -> bool) -> Result<bool> {
+        let mut db = lock(&self.db, "space.db")?;
+        let db = db.as_mut().ok_or(Error::SpaceClosed)?;
         let mut edits = Edits::load(db);
         if !change(&mut edits) {
             return Ok(false);
@@ -504,12 +503,9 @@ impl Space {
     pub fn change_pins(
         &self,
         change: impl FnOnce(&mut Vec<Pin>) -> bool,
-    ) -> Result<Option<Vec<Pin>>, String> {
-        let mut db = self
-            .db
-            .lock()
-            .map_err(|_| "space.db lock poisoned".to_string())?;
-        let db = db.as_mut().ok_or("the space is closed")?;
+    ) -> Result<Option<Vec<Pin>>> {
+        let mut db = lock(&self.db, "space.db")?;
+        let db = db.as_mut().ok_or(Error::SpaceClosed)?;
         let mut pins = pins::load(db);
         if !change(&mut pins) {
             return Ok(None);
@@ -537,13 +533,8 @@ impl Space {
     /// change remembered, once, and only while nothing has changed them
     /// since: a later change is never lost to an older undo. `None` when
     /// there was nothing to take back, else whether the pins changed too.
-    pub fn undo_threads(&self) -> Result<Option<bool>, String> {
-        let Some(undo) = self
-            .undo
-            .lock()
-            .map_err(|_| "undo lock poisoned".to_string())?
-            .take()
-        else {
+    pub fn undo_threads(&self) -> Result<Option<bool>> {
+        let Some(undo) = lock(&self.undo, "undo")?.take() else {
             return Ok(None);
         };
         if self.decided() != undo.after {
@@ -580,18 +571,15 @@ impl Space {
     // opens.
 
     /// The index to change, or `None` while the space is not open.
-    fn index_to_change(&self) -> Result<Option<RwLockWriteGuard<'_, Index>>, String> {
-        let idx = self
-            .index
-            .write()
-            .map_err(|_| "index lock poisoned".to_string())?;
+    fn index_to_change(&self) -> Result<Option<RwLockWriteGuard<'_, Index>>> {
+        let idx = write_lock(&self.index, "index")?;
         Ok((!idx.is_closed()).then_some(idx))
     }
 
     /// Change the text in search.db, if the space is open. A write that fails
     /// is only logged: its file stays marked as read before it, so it is read
     /// again at the next open.
-    fn write_text(&self, change: impl FnOnce(&mut SearchDb) -> Result<(), String>) {
+    fn write_text(&self, change: impl FnOnce(&mut SearchDb) -> Result<()>) {
         let Ok(mut search) = self.search.lock() else {
             return;
         };
@@ -605,9 +593,9 @@ impl Space {
     /// A note just captured: added rather than its day reparsed, and its
     /// line appended to `index.jsonl` rather than the file rewritten, since
     /// capture has a latency budget.
-    pub async fn note_added(&self, writer: &Writer, note: &Note) -> Result<(), String> {
+    pub async fn note_added(&self, writer: &Writer, note: &Note) -> Result<()> {
         let entry = IndexEntry::from(note);
-        let line = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
+        let line = serde_json::to_string(&entry)?;
         let stamp = Stamp::of(&day_path(&self.root, &note.date));
         self.write_text(|db| db.add_note(note, stamp));
         match self.index_to_change()? {
@@ -623,7 +611,7 @@ impl Space {
 
     /// Read a day's file again after it was written, in place of what the
     /// index had for that day.
-    pub fn day_changed(&self, date: &str) -> Result<(), String> {
+    pub fn day_changed(&self, date: &str) -> Result<()> {
         if !self.is_open() {
             return Ok(());
         }
@@ -636,7 +624,7 @@ impl Space {
 
     /// Put `notes`, parsed from a day's file as it was at `stamp`, in place
     /// of that day's.
-    pub fn set_day(&self, date: &str, notes: &[Note], stamp: Option<Stamp>) -> Result<(), String> {
+    pub fn set_day(&self, date: &str, notes: &[Note], stamp: Option<Stamp>) -> Result<()> {
         self.write_text(|db| db.replace_day(date, notes, stamp));
         if let Some(mut idx) = self.index_to_change()? {
             idx.replace_day(date, index::entries(notes));
@@ -645,7 +633,7 @@ impl Space {
     }
 
     /// A page added or changed. Returns what the index had for it before.
-    pub fn page_changed(&self, page: &Note) -> Result<Option<IndexEntry>, String> {
+    pub fn page_changed(&self, page: &Note) -> Result<Option<IndexEntry>> {
         let stamp = Stamp::of(&self.root.join(&page.file));
         self.write_text(|db| db.replace_page(page, stamp));
         Ok(self
@@ -654,7 +642,7 @@ impl Space {
     }
 
     /// A page deleted. Returns what the index had for it.
-    pub fn page_removed(&self, id: &str) -> Result<Option<IndexEntry>, String> {
+    pub fn page_removed(&self, id: &str) -> Result<Option<IndexEntry>> {
         self.write_text(|db| db.remove_page(id));
         Ok(self
             .index_to_change()?
@@ -663,7 +651,7 @@ impl Space {
 
     /// Whatever page the index had at `file`, a path relative to the root,
     /// is gone from there. Returns its entry.
-    pub fn page_file_gone(&self, file: &str) -> Result<Option<IndexEntry>, String> {
+    pub fn page_file_gone(&self, file: &str) -> Result<Option<IndexEntry>> {
         let gone = {
             let Some(mut idx) = self.index_to_change()? else {
                 return Ok(None);
@@ -681,12 +669,9 @@ impl Space {
     /// and drop its vectors, which the embed task then makes again from every
     /// note once the index is written. Blocks for as long as that takes.
     /// Returns how many notes and pages it holds.
-    pub fn rebuild(&self) -> Result<usize, String> {
+    pub fn rebuild(&self) -> Result<usize> {
         let rebuilt = {
-            let mut search = self
-                .search
-                .lock()
-                .map_err(|_| "search.db lock poisoned".to_string())?;
+            let mut search = lock(&self.search, "search.db")?;
             let Some(db) = search.as_mut() else {
                 return Ok(0);
             };
@@ -698,17 +683,9 @@ impl Space {
         }
         // Under the lock, so a pass under way neither stores into the old
         // vectors nor loads them before they are gone.
-        let mut vectors = self
-            .vectors
-            .lock()
-            .map_err(|_| "vectors lock poisoned".to_string())?;
+        let mut vectors = lock(&self.vectors, "vectors")?;
         *vectors = None;
-        if let Some(db) = self
-            .db
-            .lock()
-            .map_err(|_| "space.db lock poisoned".to_string())?
-            .as_mut()
-        {
+        if let Some(db) = lock(&self.db, "space.db")?.as_mut() {
             db.clear_vectors()
                 .map_err(|e| format!("could not remove the vectors: {e}"))?;
         }
@@ -719,16 +696,10 @@ impl Space {
     /// locks go. `None` while the space is not open.
     pub fn read<T>(
         &self,
-        read: impl FnOnce(&Index, &SearchDb) -> Result<T, String>,
-    ) -> Result<Option<T>, String> {
-        let idx = self
-            .index
-            .read()
-            .map_err(|_| "index lock poisoned".to_string())?;
-        let search = self
-            .search
-            .lock()
-            .map_err(|_| "search.db lock poisoned".to_string())?;
+        read: impl FnOnce(&Index, &SearchDb) -> Result<T>,
+    ) -> Result<Option<T>> {
+        let idx = read_lock(&self.index, "index")?;
+        let search = lock(&self.search, "search.db")?;
         match (idx.is_closed(), search.as_ref()) {
             (false, Some(db)) => read(&idx, db).map(Some),
             _ => Ok(None),
@@ -760,15 +731,12 @@ impl Space {
 
     /// Write `index.jsonl` from what is in memory. A space that is not open
     /// holds nothing to write, and its file stays as it was.
-    pub async fn persist_index(&self, writer: &Writer) -> Result<(), String> {
+    pub async fn persist_index(&self, writer: &Writer) -> Result<()> {
         if self.is_retired() {
             return Ok(());
         }
         let jsonl = {
-            let idx = self
-                .index
-                .read()
-                .map_err(|_| "index lock poisoned".to_string())?;
+            let idx = read_lock(&self.index, "index")?;
             if idx.is_closed() {
                 return Ok(());
             }
@@ -925,7 +893,7 @@ mod tests {
             .unwrap();
         *space.vectors.lock().unwrap() = Some(vectors);
 
-        assert_eq!(space.rebuild(), Ok(1));
+        assert_eq!(space.rebuild().unwrap(), 1);
         assert!(space.vectors.lock().unwrap().is_none());
         let saved = Vectors::load(space.db.lock().unwrap().as_ref().unwrap(), "m", 2);
         assert_eq!(saved.len(), 0);

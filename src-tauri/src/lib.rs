@@ -4,6 +4,7 @@ mod android;
 mod attachments;
 mod commands;
 mod embed;
+mod error;
 mod http;
 mod mentions;
 mod pages;
@@ -15,6 +16,8 @@ mod startup;
 mod state;
 mod storage;
 mod watcher;
+
+pub(crate) use error::{Error, Result};
 
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
@@ -305,7 +308,7 @@ async fn capture_to_page(
     state: State<'_, AppState>,
     body: String,
     space: Option<String>,
-) -> Result<(), String> {
+) -> Result<()> {
     if let Some(space) = space {
         commands::spaces::set_active_space(app.clone(), state, space).await?;
     }
@@ -422,10 +425,10 @@ fn tray_menu(app: &AppHandle, labels: &TrayLabels) -> tauri::Result<Menu<tauri::
 
 #[cfg(desktop)]
 #[tauri::command]
-fn set_tray_labels(app: AppHandle, labels: TrayLabels) -> Result<(), String> {
+fn set_tray_labels(app: AppHandle, labels: TrayLabels) -> Result<()> {
     let tray = app.tray_by_id("tray").ok_or("no tray icon")?;
-    let menu = tray_menu(&app, &labels).map_err(|e| e.to_string())?;
-    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+    let menu = tray_menu(&app, &labels)?;
+    Ok(tray.set_menu(Some(menu))?)
 }
 
 /// Android has no tray to label.

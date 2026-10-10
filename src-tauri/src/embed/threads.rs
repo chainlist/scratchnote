@@ -43,7 +43,8 @@ use serde::{Deserialize, Serialize};
 
 use super::vectors::{dot, Vectors};
 use crate::storage::index::Index;
-use crate::storage::space_db::{to_string, SpaceDb};
+use crate::storage::space_db::SpaceDb;
+use crate::Result;
 
 /// Where placing draws its lines.
 #[derive(Debug, Clone, Copy)]
@@ -315,27 +316,25 @@ impl Edits {
     }
 
     /// Save these in place of the edits saved before.
-    pub fn save(&self, db: &mut SpaceDb) -> Result<(), String> {
+    pub fn save(&self, db: &mut SpaceDb) -> Result<()> {
         db.transaction(|tx| self.write(tx))
     }
 
     /// What `save` writes, in the caller's transaction. A suggestion
     /// dismissed with no notes is not kept: holding any note, it is
     /// suggested again anyway.
-    pub(crate) fn write(&self, tx: &Connection) -> Result<(), String> {
+    pub(crate) fn write(&self, tx: &Connection) -> Result<()> {
         tx.execute_batch(
             "DELETE FROM thread_titles; DELETE FROM kept_alone;
              DELETE FROM pinned; DELETE FROM pinned_in; DELETE FROM dismissed;",
-        )
-        .map_err(to_string)?;
-        let run = |sql: &str, a: &str, b: Option<&str>| -> Result<(), String> {
-            let mut statement = tx.prepare_cached(sql).map_err(to_string)?;
-            match b {
+        )?;
+        let run = |sql: &str, a: &str, b: Option<&str>| -> Result<()> {
+            let mut statement = tx.prepare_cached(sql)?;
+            let _ = match b {
                 Some(b) => statement.execute([a, b]),
                 None => statement.execute([a]),
-            }
-            .map(|_| ())
-            .map_err(to_string)
+            }?;
+            Ok(())
         };
         for (thread, title) in &self.titles {
             run(
@@ -354,12 +353,11 @@ impl Edits {
                 Some(thread),
             )?;
         }
-        let mut put = tx
-            .prepare_cached("INSERT INTO pinned_in (scope, note, thread) VALUES (?1, ?2, ?3)")
-            .map_err(to_string)?;
+        let mut put =
+            tx.prepare_cached("INSERT INTO pinned_in (scope, note, thread) VALUES (?1, ?2, ?3)")?;
         for (scope, notes) in &self.pinned_in {
             for (note, thread) in notes {
-                put.execute([scope, note, thread]).map_err(to_string)?;
+                put.execute([scope, note, thread])?;
             }
         }
         for (thread, notes) in &self.dismissed {
@@ -689,7 +687,7 @@ impl Threads {
     }
 
     /// Write the notes placed since the last save, all of it in one go.
-    pub fn save(&mut self, db: &mut SpaceDb) -> Result<(), String> {
+    pub fn save(&mut self, db: &mut SpaceDb) -> Result<()> {
         let changes = self.changes();
         db.transaction(|tx| self.write_changes(tx, changes.as_deref()))?;
         match (changes, self.saved.as_mut()) {
@@ -757,7 +755,7 @@ impl Threads {
     }
 
     /// What `save` writes, in the caller's transaction.
-    pub(crate) fn write(&self, tx: &Connection) -> Result<(), String> {
+    pub(crate) fn write(&self, tx: &Connection) -> Result<()> {
         self.write_changes(tx, self.changes().as_deref())
     }
 
@@ -767,20 +765,16 @@ impl Threads {
         &self,
         tx: &Connection,
         changes: Option<&[((String, String), Option<Placed>)]>,
-    ) -> Result<(), String> {
-        let mut put = tx
-            .prepare_cached(
-                "INSERT OR REPLACE INTO placed (id, hash, thread, out) VALUES (?1, ?2, ?3, ?4)",
-            )
-            .map_err(to_string)?;
-        let mut put_in = tx
-            .prepare_cached(
-                "INSERT OR REPLACE INTO placed_in (scope, id, hash, thread, out) \
+    ) -> Result<()> {
+        let mut put = tx.prepare_cached(
+            "INSERT OR REPLACE INTO placed (id, hash, thread, out) VALUES (?1, ?2, ?3, ?4)",
+        )?;
+        let mut put_in = tx.prepare_cached(
+            "INSERT OR REPLACE INTO placed_in (scope, id, hash, thread, out) \
                  VALUES (?1, ?2, ?3, ?4, ?5)",
-            )
-            .map_err(to_string)?;
-        let mut row = |scope: &str, id: &str, placed: &Placed| -> Result<(), String> {
-            if scope == GENERAL {
+        )?;
+        let mut row = |scope: &str, id: &str, placed: &Placed| -> Result<()> {
+            let _ = if scope == GENERAL {
                 put.execute(rusqlite::params![
                     id,
                     placed.hash,
@@ -795,21 +789,19 @@ impl Threads {
                     placed.thread,
                     placed.out
                 ])
-            }
-            .map(|_| ())
-            .map_err(to_string)
+            }?;
+            Ok(())
         };
-        let forget = |scope: &str, id: &str| -> Result<(), String> {
-            if scope == GENERAL {
+        let forget = |scope: &str, id: &str| -> Result<()> {
+            let _ = if scope == GENERAL {
                 tx.execute("DELETE FROM placed WHERE id = ?1", [id])
             } else {
                 tx.execute(
                     "DELETE FROM placed_in WHERE scope = ?1 AND id = ?2",
                     [scope, id],
                 )
-            }
-            .map(|_| ())
-            .map_err(to_string)
+            }?;
+            Ok(())
         };
         match changes {
             Some(changes) => changes
@@ -819,8 +811,7 @@ impl Threads {
                     None => forget(scope, id),
                 }),
             None => {
-                tx.execute_batch("DELETE FROM placed; DELETE FROM placed_in;")
-                    .map_err(to_string)?;
+                tx.execute_batch("DELETE FROM placed; DELETE FROM placed_in;")?;
                 SpaceDb::set_meta(tx, "threads_version", &self.version.to_string())?;
                 SpaceDb::set_meta(tx, "threads_model", &self.model)?;
                 flat(&self.scopes).try_for_each(|((scope, id), placed)| row(scope, id, placed))

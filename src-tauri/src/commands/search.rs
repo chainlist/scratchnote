@@ -5,11 +5,13 @@ use std::collections::{BTreeMap, HashMap};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
+use super::blocking;
 use crate::search::Found;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
 use crate::storage::index::IndexEntry;
+use crate::Result;
 
 /// Words across every day (SPEC 6): the `limit`
 /// matches from `offset` on, and how many there are in all. Without a limit
@@ -20,7 +22,7 @@ pub async fn search(
     query: String,
     offset: Option<usize>,
     limit: Option<usize>,
-) -> Result<Found, String> {
+) -> Result<Found> {
     let (offset, limit) = (offset.unwrap_or(0), limit.unwrap_or(usize::MAX));
     let found = state
         .space()?
@@ -35,11 +37,35 @@ pub async fn search(
 pub async fn notes_containing(
     state: State<'_, AppState>,
     needles: Vec<String>,
-) -> Result<Vec<Note>, String> {
+) -> Result<Vec<Note>> {
     let found = state
         .space()?
         .read(|idx, db| crate::search::containing(idx, db, &needles))?;
     Ok(found.unwrap_or_default())
+}
+
+/// What a text to embed is, which says how the model frames it.
+enum Framed {
+    Query,
+    Draft,
+}
+
+/// `text` embedded off the async runtime, since loading and running the
+/// model both block. `None` without the embedding model, or when it fails,
+/// which is logged.
+async fn embed_blocking(app: &AppHandle, text: String, framed: Framed) -> Result<Option<Vec<f32>>> {
+    let app = app.clone();
+    blocking(move || {
+        let embedder = crate::embed::embedder(&app)?;
+        let (vector, what) = match framed {
+            Framed::Query => (embedder.embed_query(&text), "the search query"),
+            Framed::Draft => (embedder.embed_document(&text), "the draft"),
+        };
+        vector
+            .map_err(|e| log::warn!("could not embed {what}: {e}"))
+            .ok()
+    })
+    .await
 }
 
 /// How many notes search by meaning adds at most.
@@ -58,25 +84,13 @@ pub async fn search_meaning(
     app: AppHandle,
     state: State<'_, AppState>,
     query: String,
-) -> Result<Vec<Note>, String> {
+) -> Result<Vec<Note>> {
     let words = query.trim().to_string();
     if words.is_empty() {
         return Ok(Vec::new());
     }
     let space = state.space()?;
-
-    // Loading and running the model both block.
-    let embedder_app = app.clone();
-    let vector = tauri::async_runtime::spawn_blocking(move || {
-        let embedder = crate::embed::embedder(&embedder_app)?;
-        embedder
-            .embed_query(&words)
-            .map_err(|e| log::warn!("could not embed the search query: {e}"))
-            .ok()
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    let Some(vector) = vector else {
+    let Some(vector) = embed_blocking(&app, words, Framed::Query).await? else {
         return Ok(Vec::new());
     };
 
@@ -98,7 +112,7 @@ const MIN_SIMILARITY: f32 = 0.28;
 /// The notes closest in meaning to this one, best first. Empty while the note
 /// has no vector yet, or without the embedding model.
 #[tauri::command]
-pub async fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec<Note>, String> {
+pub async fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec<Note>> {
     let space = state.space()?;
     let hits = space.similar(&id, SIMILAR_NOTES, MIN_SIMILARITY);
     notes_of(&space, &hits)
@@ -106,7 +120,7 @@ pub async fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec
 
 /// `hits` as notes with their text, in their order. A hit the index no
 /// longer has is left out.
-fn notes_of(space: &Space, hits: &[(String, f32)]) -> Result<Vec<Note>, String> {
+fn notes_of(space: &Space, hits: &[(String, f32)]) -> Result<Vec<Note>> {
     let found = space.read(|idx, db| {
         let notes: HashMap<&str, &IndexEntry> = idx.entries().map(|e| (e.id.as_str(), e)).collect();
         let found = hits
@@ -148,7 +162,7 @@ pub async fn draft_hints(
     text: String,
     exclude: Option<String>,
     space: Option<String>,
-) -> Result<DraftHints, String> {
+) -> Result<DraftHints> {
     let open = state.space()?;
     if space.is_some_and(|name| name != open.name) {
         return Ok(DraftHints::default());
@@ -158,19 +172,7 @@ pub async fn draft_hints(
         return Ok(DraftHints::default());
     }
     let unnamed = crate::mentions::mentions(&text).is_empty();
-
-    // Loading and running the model both block.
-    let embedder_app = app.clone();
-    let vector = tauri::async_runtime::spawn_blocking(move || {
-        let embedder = crate::embed::embedder(&embedder_app)?;
-        embedder
-            .embed_document(&text)
-            .map_err(|e| log::warn!("could not embed the draft: {e}"))
-            .ok()
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    let Some(vector) = vector else {
+    let Some(vector) = embed_blocking(&app, text, Framed::Draft).await? else {
         return Ok(DraftHints::default());
     };
 
@@ -186,11 +188,7 @@ pub async fn draft_hints(
 
 /// The name whose notes a draft's vector fits, as it is typed: scored as a
 /// note joins a thread, against every name with a few notes.
-fn name_for(
-    space: &Space,
-    vector: &[f32],
-    exclude: Option<&str>,
-) -> Result<Option<String>, String> {
+fn name_for(space: &Space, vector: &[f32], exclude: Option<&str>) -> Result<Option<String>> {
     let Some((rows, listed)) =
         space.read(|idx, db| Ok((db.mention_rows()?, crate::mentions::list(idx, db)?)))?
     else {

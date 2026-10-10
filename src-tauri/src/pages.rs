@@ -12,42 +12,36 @@
 use tauri::{AppHandle, Emitter, State};
 
 use crate::spaces::Space;
-use crate::state::AppState;
+use crate::state::{read_lock, AppState};
 use crate::storage::daily_file::{self, Note, Stub};
 use crate::storage::day_path;
 use crate::storage::index::{Index, IndexEntry};
 use crate::storage::page_file;
 use crate::storage::writer::Writer;
-
-fn lock_poisoned<T>(_: T) -> String {
-    "index lock poisoned".to_string()
-}
+use crate::Result;
 
 /// The page's entry in the index, or why there is none.
-pub fn entry(space: &Space, id: &str) -> Result<IndexEntry, String> {
-    space
-        .index
-        .read()
-        .map_err(lock_poisoned)?
+pub fn entry(space: &Space, id: &str) -> Result<IndexEntry> {
+    read_lock(&space.index, "index")?
         .page(id)
         .cloned()
-        .ok_or_else(|| format!("no page {id}"))
+        .ok_or_else(|| format!("no page {id}").into())
 }
 
 /// A page read afresh from its file.
-pub async fn read_page(space: &Space, id: &str) -> Result<Note, String> {
+pub async fn read_page(space: &Space, id: &str) -> Result<Note> {
     let entry = entry(space, id)?;
     let contents = tokio::fs::read_to_string(space.root.join(&entry.file))
         .await
         .map_err(|e| format!("could not read {}: {e}", entry.file))?;
     page_file::parse_page(&contents, &entry.file)
         .filter(|page| page.id == id)
-        .ok_or_else(|| format!("{} no longer holds page {id}", entry.file))
+        .ok_or_else(|| format!("{} no longer holds page {id}", entry.file).into())
 }
 
 /// Reparse a page's file into the index. `None` when it is gone or no
 /// longer a page, which leaves the index as it was.
-pub fn reindex(space: &Space, file: &str) -> Result<Option<Note>, String> {
+pub fn reindex(space: &Space, file: &str) -> Result<Option<Note>> {
     let page = std::fs::read_to_string(space.root.join(file))
         .ok()
         .and_then(|contents| page_file::parse_page(&contents, file));
@@ -72,7 +66,7 @@ pub fn free_path(space: &Space, date: &str, title: &str, current: Option<&str>) 
 
 /// Give the page's day the stub it should have: added when there is none,
 /// rewritten when it is stale, left alone when it is right.
-pub async fn sync_stub(writer: &Writer, space: &Space, page: &Note) -> Result<(), String> {
+pub async fn sync_stub(writer: &Writer, space: &Space, page: &Note) -> Result<()> {
     if space.is_retired() {
         return Ok(());
     }
@@ -95,12 +89,7 @@ pub async fn sync_stub(writer: &Writer, space: &Space, page: &Note) -> Result<()
 }
 
 /// Take a page's stub out of a day's file. False when it was not there.
-pub async fn drop_stub(
-    writer: &Writer,
-    space: &Space,
-    date: &str,
-    id: &str,
-) -> Result<bool, String> {
+pub async fn drop_stub(writer: &Writer, space: &Space, date: &str, id: &str) -> Result<bool> {
     if space.is_retired() {
         return Ok(false);
     }
@@ -113,7 +102,7 @@ pub async fn drop_stub(
 }
 
 /// Write a new page's file, refusing to replace one that appeared meanwhile.
-pub async fn write_new(writer: &Writer, space: &Space, page: &Note) -> Result<(), String> {
+pub async fn write_new(writer: &Writer, space: &Space, page: &Note) -> Result<()> {
     let rendered = page_file::render_page(page);
     let written = writer
         .rewrite(space.root.join(&page.file), move |existing| {
@@ -121,7 +110,7 @@ pub async fn write_new(writer: &Writer, space: &Space, page: &Note) -> Result<()
         })
         .await?;
     if !written {
-        return Err(format!("{} is already there", page.file));
+        return Err(format!("{} is already there", page.file).into());
     }
     Ok(())
 }
@@ -144,7 +133,7 @@ pub async fn clear_day_ahead(
     state: &State<'_, AppState>,
     space: &Space,
     id: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     let page = read_page(space, id).await?;
     let file = page.file.clone();
     state

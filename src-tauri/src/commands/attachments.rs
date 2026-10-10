@@ -11,8 +11,10 @@ use percent_encoding::percent_decode_str;
 use tauri::ipc::InvokeBody;
 use tauri::{AppHandle, State};
 
+use super::blocking;
 use crate::attachments::{relocate, resolve, store, Attachment};
 use crate::state::AppState;
+use crate::Result;
 
 fn today() -> String {
     Local::now().format("%Y-%m-%d").to_string()
@@ -26,14 +28,14 @@ pub async fn add_attachments(
     state: State<'_, AppState>,
     paths: Vec<String>,
     space: Option<String>,
-) -> Result<Vec<Attachment>, String> {
+) -> Result<Vec<Attachment>> {
     let root = state.space_or_open(space.as_deref())?.root.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    blocking(move || -> Result<Vec<Attachment>> {
         for path in &paths {
             match fs::metadata(path) {
                 Ok(meta) if meta.is_file() => {}
-                Ok(_) => return Err(format!("{path} is not a file")),
-                Err(e) => return Err(format!("could not attach {path}: {e}")),
+                Ok(_) => return Err(format!("{path} is not a file").into()),
+                Err(e) => return Err(format!("could not attach {path}: {e}").into()),
             }
         }
         let date = today();
@@ -51,12 +53,11 @@ pub async fn add_attachments(
                             io::copy(&mut from, to).map(|_| ())
                         })
                     })
-                    .map_err(|e| format!("could not attach {path}: {e}"))
+                    .map_err(|e| format!("could not attach {path}: {e}").into())
             })
             .collect()
     })
-    .await
-    .map_err(|e| e.to_string())?
+    .await?
 }
 
 /// A URI-encoded header of the request, decoded.
@@ -76,21 +77,18 @@ fn header(request: &tauri::ipc::Request<'_>, name: &str) -> Option<String> {
 pub async fn save_attachment(
     state: State<'_, AppState>,
     request: tauri::ipc::Request<'_>,
-) -> Result<Attachment, String> {
+) -> Result<Attachment> {
     let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("expected the file's bytes".to_string());
+        return Err("expected the file's bytes".into());
     };
     let name = header(&request, "x-name").unwrap_or_default();
     let space = header(&request, "x-space");
     let root = state.space_or_open(space.as_deref())?.root.clone();
     let bytes = bytes.clone();
     let original = name.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        store(&root, &today(), &original, |to| to.write_all(&bytes))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| format!("could not attach {name}: {e}"))
+    blocking(move || store(&root, &today(), &original, |to| to.write_all(&bytes)))
+        .await?
+        .map_err(|e| format!("could not attach {name}: {e}").into())
 }
 
 /// Move files a draft attached in one space into another, where the draft
@@ -102,19 +100,18 @@ pub async fn move_attachments(
     from: String,
     to: String,
     paths: Vec<String>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>> {
     let from = state.space_or_open(Some(&from))?.root.clone();
     let to = state.space_or_open(Some(&to))?.root.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    blocking(move || {
         paths
             .iter()
             .map(|path| {
-                relocate(&from, &to, path).map_err(|e| format!("could not move {path}: {e}"))
+                relocate(&from, &to, path).map_err(|e| format!("could not move {path}: {e}").into())
             })
             .collect()
     })
-    .await
-    .map_err(|e| e.to_string())?
+    .await?
 }
 
 /// Open an attachment of the open space in its own app, as a double click
@@ -124,14 +121,14 @@ pub async fn open_attachment(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,
-) -> Result<(), String> {
+) -> Result<()> {
     use tauri_plugin_opener::OpenerExt;
     let file =
         resolve(&state.space()?.root, &path).ok_or_else(|| format!("not an attachment: {path}"))?;
     if !file.is_file() {
-        return Err(format!("{path} is not there"));
+        return Err(format!("{path} is not there").into());
     }
     app.opener()
         .open_path(file.to_string_lossy(), None::<&str>)
-        .map_err(|e| format!("could not open {path}: {e}"))
+        .map_err(|e| format!("could not open {path}: {e}").into())
 }

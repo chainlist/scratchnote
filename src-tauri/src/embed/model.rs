@@ -1,5 +1,6 @@
 //! The embedding model the app fetches, and where it lives.
 
+use crate::Result;
 use std::path::PathBuf;
 
 /// A model the app can fetch from Hugging Face: where it is published and
@@ -128,7 +129,7 @@ pub fn old_chat_bytes(root: &std::path::Path) -> Option<u64> {
 /// Remove the old chat models, the downloads of them not finished and the
 /// records of their downloads. A file already gone is no matter; the first
 /// that cannot be removed says why, once every other was tried.
-pub fn remove_old_chat_models(root: &std::path::Path) -> Result<(), String> {
+pub fn remove_old_chat_models(root: &std::path::Path) -> Result<()> {
     let records = OLD_CHAT_FILES
         .iter()
         .map(|file| models_dir(root).join(format!("{file}.json")));
@@ -142,7 +143,7 @@ pub fn remove_old_chat_models(root: &std::path::Path) -> Result<(), String> {
             }
         }
     }
-    failed.map_or(Ok(()), Err)
+    failed.map_or(Ok(()), |e| Err(e.into()))
 }
 
 #[cfg(test)]

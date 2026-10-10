@@ -30,7 +30,9 @@ use rusqlite::Connection;
 
 use super::categories::Categories;
 use super::vectors::{dot, Vectors};
-use crate::storage::space_db::{to_string, SpaceDb};
+use crate::state::lock;
+use crate::storage::space_db::SpaceDb;
+use crate::Result;
 
 /// The closest notes each note is pulled towards.
 const LINKS: usize = 15;
@@ -401,9 +403,8 @@ impl Map {
     }
 
     /// Write the whole map in place of what is saved.
-    fn write_all(&self, tx: &Connection) -> Result<(), String> {
-        tx.execute_batch("DELETE FROM positions; DELETE FROM links;")
-            .map_err(to_string)?;
+    fn write_all(&self, tx: &Connection) -> Result<()> {
+        tx.execute_batch("DELETE FROM positions; DELETE FROM links;")?;
         SpaceDb::set_meta(tx, "map_model", &self.model)?;
         let slots: Vec<usize> = self.taken().map(|(slot, _, _)| slot).collect();
         self.write_places(tx, &slots)?;
@@ -411,12 +412,10 @@ impl Map {
     }
 
     /// Write what an update changed.
-    fn write_changes(&self, tx: &Connection, changes: &Changes) -> Result<(), String> {
+    fn write_changes(&self, tx: &Connection, changes: &Changes) -> Result<()> {
         for id in &changes.gone {
-            tx.execute("DELETE FROM positions WHERE id = ?1", [id])
-                .map_err(to_string)?;
-            tx.execute("DELETE FROM links WHERE id = ?1", [id])
-                .map_err(to_string)?;
+            tx.execute("DELETE FROM positions WHERE id = ?1", [id])?;
+            tx.execute("DELETE FROM links WHERE id = ?1", [id])?;
         }
         let slots =
             |ids: &[String]| -> Vec<usize> { ids.iter().map(|id| self.slots[id]).collect() };
@@ -424,36 +423,29 @@ impl Map {
         self.write_lists(tx, &slots(&changes.lists))
     }
 
-    fn write_places(&self, tx: &Connection, slots: &[usize]) -> Result<(), String> {
-        let mut put = tx
-            .prepare_cached(
-                "INSERT OR REPLACE INTO positions (id, hash, x, y) VALUES (?1, ?2, ?3, ?4)",
-            )
-            .map_err(to_string)?;
+    fn write_places(&self, tx: &Connection, slots: &[usize]) -> Result<()> {
+        let mut put = tx.prepare_cached(
+            "INSERT OR REPLACE INTO positions (id, hash, x, y) VALUES (?1, ?2, ?3, ?4)",
+        )?;
         for &slot in slots {
             let Some((id, hash)) = &self.notes[slot] else {
                 continue;
             };
             let [x, y] = self.at[slot];
-            put.execute(rusqlite::params![id, hash, x as f64, y as f64])
-                .map_err(to_string)?;
+            put.execute(rusqlite::params![id, hash, x as f64, y as f64])?;
         }
         Ok(())
     }
 
-    fn write_lists(&self, tx: &Connection, slots: &[usize]) -> Result<(), String> {
-        let mut clear = tx
-            .prepare_cached("DELETE FROM links WHERE id = ?1")
-            .map_err(to_string)?;
-        let mut put = tx
-            .prepare_cached("INSERT INTO links (id, other, score) VALUES (?1, ?2, ?3)")
-            .map_err(to_string)?;
+    fn write_lists(&self, tx: &Connection, slots: &[usize]) -> Result<()> {
+        let mut clear = tx.prepare_cached("DELETE FROM links WHERE id = ?1")?;
+        let mut put =
+            tx.prepare_cached("INSERT INTO links (id, other, score) VALUES (?1, ?2, ?3)")?;
         for &slot in slots {
             let id = self.id(slot);
-            clear.execute([id]).map_err(to_string)?;
+            clear.execute([id])?;
             for &(score, to) in &self.near[slot] {
-                put.execute(rusqlite::params![id, self.id(to), score as f64])
-                    .map_err(to_string)?;
+                put.execute(rusqlite::params![id, self.id(to), score as f64])?;
             }
         }
         Ok(())
@@ -472,15 +464,15 @@ pub fn reconcile(
     map: &Mutex<Option<Map>>,
     db: &Mutex<Option<SpaceDb>>,
     bodies: impl FnOnce() -> HashMap<String, String>,
-) -> Result<bool, String> {
+) -> Result<bool> {
     let (mut working, snapshot) = {
-        let held = vectors.lock().map_err(|_| "vectors lock poisoned")?;
+        let held = lock(vectors, "vectors")?;
         let Some(store) = held.as_ref() else {
             return Ok(false);
         };
-        let mut slot = map.lock().map_err(|_| "map lock poisoned")?;
+        let mut slot = lock(map, "map")?;
         if slot.is_none() {
-            let db = db.lock().map_err(|_| "space.db lock poisoned")?;
+            let db = lock(db, "space.db")?;
             let Some(db) = db.as_ref() else {
                 return Ok(false);
             };
@@ -517,7 +509,7 @@ pub fn reconcile(
     };
 
     {
-        let mut db = db.lock().map_err(|_| "space.db lock poisoned")?;
+        let mut db = lock(db, "space.db")?;
         // The space was closed meanwhile.
         let Some(db) = db.as_mut() else {
             return Ok(false);
@@ -539,7 +531,7 @@ pub fn reconcile(
         }
     }
     working.categories = Some(categories);
-    let mut slot = map.lock().map_err(|_| "map lock poisoned")?;
+    let mut slot = lock(map, "map")?;
     // Only this task changes the map; a space closed meanwhile has none.
     if slot.is_some() {
         *slot = Some(working);

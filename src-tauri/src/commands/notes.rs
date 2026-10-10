@@ -8,11 +8,13 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use ulid::Ulid;
 
+use super::blocking;
 use crate::spaces::Space;
-use crate::state::AppState;
+use crate::state::{read_lock, AppState};
 use crate::storage::daily_file::{self, Kind, Note};
 use crate::storage::index::{self, IndexEntry};
 use crate::storage::{check_date, day_path, page_file, relative_day_path};
+use crate::Result;
 
 #[derive(Debug, Serialize)]
 pub struct DaySummary {
@@ -36,7 +38,7 @@ pub async fn save_note(
     body: String,
     date: Option<String>,
     space: Option<String>,
-) -> Result<Option<Note>, String> {
+) -> Result<Option<Note>> {
     let body = body.trim().to_string();
     if body.is_empty() {
         return Ok(None);
@@ -78,21 +80,18 @@ pub async fn save_note(
 /// with their text from search.db, and a stub whose page is gone comes back
 /// as a missing page (SPEC 3.5).
 #[tauri::command]
-pub async fn get_day(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
+pub async fn get_day(state: State<'_, AppState>, date: String) -> Result<Vec<Note>> {
     check_date(&date)?;
     let space = state.space()?;
     let path = day_path(&space.root, &date);
     let contents = match tokio::fs::read_to_string(&path).await {
         Ok(contents) => contents,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return Err(e.into()),
     };
     let mut notes = daily_file::parse_notes(&contents, &date, &relative_day_path(&date));
     let mut pages: Vec<Note> = {
-        let idx = space
-            .index
-            .read()
-            .map_err(|_| "index lock poisoned".to_string())?;
+        let idx = read_lock(&space.index, "index")?;
         for stub in daily_file::parse_stubs(&contents) {
             if idx.page(&stub.id).is_none() {
                 notes.push(missing_page(&date, stub));
@@ -124,12 +123,9 @@ fn missing_page(date: &str, stub: daily_file::Stub) -> Note {
 }
 
 #[tauri::command]
-pub async fn list_days(state: State<'_, AppState>) -> Result<Vec<DaySummary>, String> {
+pub async fn list_days(state: State<'_, AppState>) -> Result<Vec<DaySummary>> {
     let space = state.space()?;
-    let index = space
-        .index
-        .read()
-        .map_err(|_| "index lock poisoned".to_string())?;
+    let index = read_lock(&space.index, "index")?;
     Ok(index
         .days()
         .into_iter()
@@ -144,7 +140,7 @@ pub async fn list_days(state: State<'_, AppState>) -> Result<Vec<DaySummary>, St
 /// One note or page of the open space with its text, `None` once it is
 /// gone, as the map shows a note pointed at (SPEC 6.5).
 #[tauri::command]
-pub async fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<Note>, String> {
+pub async fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<Note>> {
     let space = state.space()?;
     let note = space.read(|idx, db| match idx.entries().find(|entry| entry.id == id) {
         Some(entry) => Ok(crate::search::with_bodies(db, [entry])?.pop()),
@@ -157,7 +153,7 @@ pub async fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<N
 /// asked, leaving out those gone, as the Threads page shows the first notes
 /// of the threads it draws (SPEC 6.4).
 #[tauri::command]
-pub async fn get_notes(state: State<'_, AppState>, ids: Vec<String>) -> Result<Vec<Note>, String> {
+pub async fn get_notes(state: State<'_, AppState>, ids: Vec<String>) -> Result<Vec<Note>> {
     let space = state.space()?;
     let notes = space.read(|idx, db| {
         let entries: HashMap<&str, &IndexEntry> =
@@ -181,12 +177,12 @@ pub async fn delete_note(
     state: State<'_, AppState>,
     date: String,
     id: String,
-) -> Result<(), String> {
+) -> Result<()> {
     check_date(&date)?;
     let space = state.space()?;
     let path = day_path(&space.root, &date);
     if !state.writer.delete_note(path.clone(), id.clone()).await? {
-        return Err(format!("no note {id} in {date}"));
+        return Err(format!("no note {id} in {date}").into());
     }
 
     // A delete rewrites the day file, so the day's entries are reparsed and
@@ -206,12 +202,12 @@ pub async fn update_note(
     date: String,
     id: String,
     body: String,
-) -> Result<Note, String> {
+) -> Result<Note> {
     check_date(&date)?;
     let space = state.space()?;
     let body = body.trim().to_string();
     if body.is_empty() {
-        return Err("a note cannot be empty; delete it instead".to_string());
+        return Err("a note cannot be empty; delete it instead".into());
     }
     let current = read_note(&space, &date, &id).await?;
     if current.body == body {
@@ -220,7 +216,7 @@ pub async fn update_note(
 
     let path = day_path(&space.root, &date);
     if !state.writer.replace_body(path, id.clone(), body).await? {
-        return Err(format!("no note {id} in {date}"));
+        return Err(format!("no note {id} in {date}").into());
     }
     reindex_day(&state, &space, &date).await?;
 
@@ -229,10 +225,10 @@ pub async fn update_note(
 }
 
 /// The space a note or a page of the open space moves to: any other.
-pub(crate) fn move_target(state: &State<'_, AppState>, name: &str) -> Result<Arc<Space>, String> {
+pub(crate) fn move_target(state: &State<'_, AppState>, name: &str) -> Result<Arc<Space>> {
     let to = state.space_or_open(Some(name))?;
     if Arc::ptr_eq(&to, &state.space()?) {
-        return Err(format!("it is already in {name}"));
+        return Err(format!("it is already in {name}").into());
     }
     Ok(to)
 }
@@ -268,19 +264,13 @@ pub async fn move_note(
     date: String,
     id: String,
     space: String,
-) -> Result<(), String> {
+) -> Result<()> {
     check_date(&date)?;
     let from = state.space()?;
     let to = move_target(&state, &space)?;
     let note = read_note(&from, &date, &id).await?;
 
-    let (body, carried) = {
-        let (from, to, body) = (from.root.clone(), to.root.clone(), note.body.clone());
-        tauri::async_runtime::spawn_blocking(move || crate::attachments::carry(&from, &to, &body))
-            .await
-            .map_err(|e| e.to_string())?
-            .map_err(|e| format!("could not take its attachments along: {e}"))?
-    };
+    let (body, carried) = crate::attachments::carry_async(&from.root, &to.root, &note.body).await?;
     let moved = Note {
         id: free_id(&to, &date, &id).await,
         hash: daily_file::body_hash(&body),
@@ -308,18 +298,16 @@ fn is_page(space: &Space, id: &str) -> bool {
     space.index.read().is_ok_and(|idx| idx.page(id).is_some())
 }
 
-pub(crate) async fn read_note(space: &Space, date: &str, id: &str) -> Result<Note, String> {
-    let contents = tokio::fs::read_to_string(day_path(&space.root, date))
-        .await
-        .map_err(|e| e.to_string())?;
+pub(crate) async fn read_note(space: &Space, date: &str, id: &str) -> Result<Note> {
+    let contents = tokio::fs::read_to_string(day_path(&space.root, date)).await?;
     daily_file::parse_notes(&contents, date, &relative_day_path(date))
         .into_iter()
         .find(|note| note.id == id)
-        .ok_or_else(|| format!("no note {id} in {date}"))
+        .ok_or_else(|| format!("no note {id} in {date}").into())
 }
 
 /// After rewriting a day file: reparse the day and write the index back.
-async fn reindex_day(state: &State<'_, AppState>, space: &Space, date: &str) -> Result<(), String> {
+async fn reindex_day(state: &State<'_, AppState>, space: &Space, date: &str) -> Result<()> {
     space.day_changed(date)?;
     space.persist_index(&state.writer).await
 }
@@ -328,13 +316,11 @@ async fn reindex_day(state: &State<'_, AppState>, space: &Space, date: &str) -> 
 /// reparse every markdown file and replace the cache. Returns how many notes
 /// the rebuilt index holds.
 #[tauri::command]
-pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result<usize, String> {
+pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result<usize> {
     let space = state.space()?;
     drop_labels(&state, &space).await?;
     let rebuilding = space.clone();
-    let count = tauri::async_runtime::spawn_blocking(move || rebuilding.rebuild())
-        .await
-        .map_err(|e| e.to_string())??;
+    let count = blocking(move || rebuilding.rebuild()).await??;
     space.persist_index(&state.writer).await?;
 
     let _ = app.emit("index-rebuilt", ());
@@ -344,7 +330,7 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
 /// Write every block and page of the space that still carries the labels a
 /// model wrote as it is written now, without them (SPEC 4.3). The rest of
 /// each file is left as it is.
-async fn drop_labels(state: &State<'_, AppState>, space: &Space) -> Result<(), String> {
+async fn drop_labels(state: &State<'_, AppState>, space: &Space) -> Result<()> {
     for (_, path) in index::daily_files(&space.root) {
         state
             .writer
@@ -373,7 +359,7 @@ pub fn today() -> String {
 /// The notes and pages of the open space that look forward to `date`, oldest
 /// first, for its day to show what was written ahead of it (SPEC 5.3).
 #[tauri::command]
-pub async fn notes_about(state: State<'_, AppState>, date: String) -> Result<Vec<Note>, String> {
+pub async fn notes_about(state: State<'_, AppState>, date: String) -> Result<Vec<Note>> {
     check_date(&date)?;
     let space = state.space()?;
     let found = space.read(|idx, db| {
@@ -395,7 +381,7 @@ pub async fn clear_day_ahead(
     state: State<'_, AppState>,
     date: String,
     id: String,
-) -> Result<(), String> {
+) -> Result<()> {
     check_date(&date)?;
     let space = state.space()?;
     if is_page(&space, &id) {
@@ -410,7 +396,7 @@ pub async fn clear_day_ahead(
         })
         .await?
     {
-        return Err(format!("no note {id} in {date}"));
+        return Err(format!("no note {id} in {date}").into());
     }
     reindex_day(&state, &space, &date).await?;
     let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
@@ -420,16 +406,16 @@ pub async fn clear_day_ahead(
 /// Open a link from a note in the default browser or mail client. Only web
 /// and mail links go through, so a note cannot launch files or programs.
 #[tauri::command]
-pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
+pub fn open_link(app: AppHandle, url: String) -> Result<()> {
     use tauri_plugin_opener::OpenerExt;
     let lower = url.to_ascii_lowercase();
     if !["http://", "https://", "mailto:"]
         .iter()
         .any(|scheme| lower.starts_with(scheme))
     {
-        return Err(format!("not a web or mail link: {url}"));
+        return Err(format!("not a web or mail link: {url}").into());
     }
     app.opener()
         .open_url(&url, None::<&str>)
-        .map_err(|e| format!("could not open {url}: {e}"))
+        .map_err(|e| format!("could not open {url}: {e}").into())
 }

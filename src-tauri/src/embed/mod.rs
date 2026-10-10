@@ -26,6 +26,7 @@ use tauri::{AppHandle, Manager};
 use crate::state::AppState;
 use activity::Activity;
 use model::{model_file, EmbeddingModel};
+use crate::Result;
 
 /// A model that turns text into vectors.
 pub trait Embedder: Send + Sync {
@@ -35,10 +36,10 @@ pub trait Embedder: Send + Sync {
     fn model_id(&self) -> &str;
     fn dims(&self) -> usize;
     /// A note, embedded as it is.
-    fn embed_document(&self, text: &str) -> Result<Vec<f32>, String>;
+    fn embed_document(&self, text: &str) -> Result<Vec<f32>>;
     /// A question. EmbeddingGemma frames queries and documents differently,
     /// hence a method of its own.
-    fn embed_query(&self, text: &str) -> Result<Vec<f32>, String>;
+    fn embed_query(&self, text: &str) -> Result<Vec<f32>>;
 }
 
 /// The model that embeds notes, or `None` while there is none. Loaded on
@@ -139,11 +140,11 @@ impl Embedder for StubEmbedder {
         Self::DIMS
     }
 
-    fn embed_document(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn embed_document(&self, text: &str) -> Result<Vec<f32>> {
         Ok(self.embed(text))
     }
 
-    fn embed_query(&self, text: &str) -> Result<Vec<f32>, String> {
+    fn embed_query(&self, text: &str) -> Result<Vec<f32>> {
         Ok(self.embed(text))
     }
 }

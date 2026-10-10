@@ -1,6 +1,5 @@
 import { ItemView, Plugin, PluginSettingTab, Setting, type App } from '#lib/plugins/api.js';
 import { m } from '#lib/paraglide/messages.js';
-import { getLocale } from '#lib/paraglide/runtime.js';
 
 /** Lucide's chart-column. */
 const CHART =
@@ -75,6 +74,7 @@ export class StatsPlugin extends Plugin {
 	async loadSettings() {
 		const saved = (await this.loadData()) as Partial<StatsSettings> | null;
 		this.settings = { ...DEFAULTS, ...saved };
+		if (!WEEKS.includes(this.settings.weeks)) this.settings.weeks = DEFAULTS.weeks;
 	}
 }
 
@@ -145,7 +145,7 @@ class StatsView extends ItemView {
 		const weeks = Number(this.#plugin.settings.weeks);
 		const busiest = Math.max(1, ...counts.values());
 		const monday = after(today, -((today.getDay() + 6) % 7));
-		const named = new Intl.DateTimeFormat(getLocale(), {
+		const named = new Intl.DateTimeFormat(this.#plugin.app.locale, {
 			weekday: 'short',
 			day: 'numeric',
 			month: 'short'

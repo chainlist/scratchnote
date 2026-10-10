@@ -17,24 +17,34 @@ type Label = () => string;
 /**
  * What the toast calls a command's work. Null for a call that never toasts:
  * one that shows its own progress, or that runs out of sight, such as the
- * recall while a note is written. A command not listed is still working.
+ * hints while a note is written. Every command is listed: `Command` is the
+ * list's keys, so a new one does not build until it is placed here.
  */
-const LABELS: Record<string, Label | null> = {
+const LABELS = {
 	launch_steps: null,
 	hide_capture: null,
 	set_tray_labels: null,
 	restart_app: null,
+	today: null,
 	// Waits on the user in Android's folder chooser.
 	pick_notes_folder: null,
 	old_chat_model: null,
 	download_embedding_model: null,
+	embedder_activity: null,
 	search_meaning: null,
-	recall: null,
+	draft_hints: null,
+	// Asked while an @ is typed.
+	list_mentions: null,
 	map_links: null,
 	plugin_data: null,
 	save_plugin_data: null,
 	browse_plugins: null,
 	plugin_details: null,
+	// Hand the file or link to the system, which shows its own window.
+	open_attachment: null,
+	open_link: null,
+	open_space_folder: null,
+	reveal_note: null,
 
 	save_note: m.slow_saving,
 	update_note: m.slow_saving,
@@ -46,6 +56,7 @@ const LABELS: Record<string, Label | null> = {
 	note_to_page: m.slow_saving,
 	capture_to_page: m.slow_saving,
 	set_settings: m.slow_saving,
+	set_pins: m.slow_saving,
 
 	get_day: m.slow_loading,
 	list_days: m.slow_loading,
@@ -63,6 +74,9 @@ const LABELS: Record<string, Label | null> = {
 	embedding_model_info: m.slow_loading,
 	plugins_view: m.slow_loading,
 	plugin_code: m.slow_loading,
+	list_pins: m.slow_loading,
+	notes_mentioning: m.slow_loading,
+	note_labels: m.slow_loading,
 
 	search: m.slow_searching,
 	similar_notes: m.slow_searching,
@@ -101,10 +115,13 @@ const LABELS: Record<string, Label | null> = {
 	create_space: m.slow_spaces,
 	rename_space: m.slow_spaces,
 	set_active_space: m.slow_spaces
-};
+} satisfies Record<string, Label | null>;
+
+/** A backend command's name. */
+export type Command = keyof typeof LABELS;
 
 interface Call {
-	cmd: string;
+	cmd: Command;
 	start: number;
 	slow: boolean;
 }
@@ -118,7 +135,7 @@ const TOAST = 'slow-calls';
 let ticker: ReturnType<typeof setInterval> | undefined;
 
 /** The call, unchanged, timed until it settles. */
-export function track<T>(cmd: string, call: Promise<T>): Promise<T> {
+export function track<T>(cmd: Command, call: Promise<T>): Promise<T> {
 	if (LABELS[cmd] === null) return call;
 	const id = next++;
 	const entry: Call = { cmd, start: performance.now(), slow: false };

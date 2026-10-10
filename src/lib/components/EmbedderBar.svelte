@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { embedderActivity, onEmbedderActivity, type EmbedderActivity } from '#lib/api.js';
+	import {
+		embedderActivity,
+		onEmbedderActivity,
+		stopAll,
+		type EmbedderActivity
+	} from '#lib/api.js';
 	import { Progress } from '#lib/components/ui/progress/index.js';
 	import { Spinner } from '#lib/components/ui/spinner/index.js';
 
@@ -22,7 +27,7 @@
 		void embedderActivity().then((now) => {
 			if (!heard) activity = now;
 		});
-		return () => void off.then((stop) => stop());
+		return stopAll(off);
 	});
 
 	const busy = $derived(['loading', 'embedding', 'threads', 'map'].includes(activity.state));

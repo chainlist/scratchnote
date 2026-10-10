@@ -1,28 +1,14 @@
 import {
+	editable,
 	getSettings,
 	onSettingsChanged,
 	setSettings,
+	stopAll,
 	type Settings,
 	type SettingsView
 } from '#lib/api.js';
 import { DEFAULT_APPEARANCE } from '#lib/appearance.js';
 import { m } from '#lib/paraglide/messages.js';
-
-/** The fields `setSettings` takes, out of a view that carries more. */
-export const editable = (s: Settings): Settings => ({
-	root: s.root,
-	captureHotkey: s.captureHotkey,
-	hideImmediately: s.hideImmediately,
-	accentColor: s.accentColor,
-	fontFamily: s.fontFamily,
-	fontSize: s.fontSize,
-	radius: s.radius,
-	theme: s.theme,
-	language: s.language,
-	onboarded: s.onboarded,
-	lastSeenVersion: s.lastSeenVersion,
-	threadOrder: s.threadOrder
-});
 
 /**
  * What every settings tab shares: the saved settings, the draft behind the
@@ -55,13 +41,11 @@ export class SettingsState {
 
 	/** Loads the settings and follows changes made elsewhere. Returns the teardown. */
 	start(): () => void {
-		const off = [
-			onSettingsChanged((settings) => {
-				if (!this.view) return;
-				this.view = { ...this.view, ...settings };
-				this.#sync(this.view);
-			})
-		];
+		const off = onSettingsChanged((settings) => {
+			if (!this.view) return;
+			this.view = { ...this.view, ...settings };
+			this.#sync(this.view);
+		});
 		void (async () => {
 			try {
 				this.view = await getSettings();
@@ -70,7 +54,7 @@ export class SettingsState {
 				this.say(String(e), true);
 			}
 		})();
-		return () => off.forEach((p) => void p.then((stop) => stop()));
+		return stopAll(off);
 	}
 
 	say(text: string, error = false) {

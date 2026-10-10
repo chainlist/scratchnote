@@ -7,6 +7,7 @@
 		onIndexRebuilt,
 		onNoteUpdated,
 		renamePage,
+		stopAll,
 		updatePage,
 		type Note
 	} from '#lib/api.js';
@@ -112,11 +113,10 @@
 		})();
 
 		// An edit in another editor.
-		const off = [
+		return stopAll(
 			onNoteUpdated((changed) => void refresh(changed)),
 			onIndexRebuilt(() => void refresh())
-		];
-		return () => off.forEach((p) => void p.then((stop) => stop()));
+		);
 	});
 
 	onDestroy(() => {

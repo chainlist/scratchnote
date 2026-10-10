@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getCurrentWindow } from '@tauri-apps/api/window';
+	import { stopAll } from '#lib/api.js';
 	import MinusIcon from '@lucide/svelte/icons/minus';
 	import SquareIcon from '@lucide/svelte/icons/square';
 	import CopyIcon from '@lucide/svelte/icons/copy';
@@ -14,8 +15,7 @@
 	onMount(() => {
 		const sync = async () => (maximized = await appWindow.isMaximized());
 		void sync();
-		const off = appWindow.onResized(() => void sync());
-		return () => void off.then((stop) => stop());
+		return stopAll(appWindow.onResized(() => void sync()));
 	});
 
 	const button =

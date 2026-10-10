@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { isPage, type Note } from '#lib/api.js';
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {

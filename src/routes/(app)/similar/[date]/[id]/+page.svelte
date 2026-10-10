@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import NoteList from '#lib/components/note/NoteList.svelte';
 	import View from '#lib/components/layout/View.svelte';
 	import { m } from '#lib/paraglide/messages.js';

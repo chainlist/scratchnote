@@ -2,7 +2,7 @@
 	import type { Release } from '#lib/changelog.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
-	import Markdown from '#lib/components/Markdown.svelte';
+	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import BugIcon from '@lucide/svelte/icons/bug';
 	import GaugeIcon from '@lucide/svelte/icons/gauge';
 	import ListIcon from '@lucide/svelte/icons/list';

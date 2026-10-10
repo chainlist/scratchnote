@@ -6,7 +6,7 @@ export const phone = new MediaQuery('(width < 40rem) and (pointer: coarse)');
 /** How far a finger goes before it is a swipe rather than a tap. */
 const SLOP = 10;
 
-export interface Swipe {
+interface Swipe {
 	/** Along which the swipe goes: left and right, or up and down. */
 	axis: 'x' | 'y';
 	/** Whether a touch starting here at this point may become the swipe. */

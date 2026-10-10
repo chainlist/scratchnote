@@ -1,6 +1,6 @@
 import type { PluginsView } from '#lib/api.js';
 
-export type PluginStatus = { state: 'on' } | { state: 'failed'; error: string };
+type PluginStatus = { state: 'on' } | { state: 'failed'; error: string };
 
 /** What the settings show of the plugins: the loader keeps it up to date. */
 class Plugins {

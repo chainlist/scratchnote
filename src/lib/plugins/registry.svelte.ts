@@ -34,7 +34,7 @@ export interface ViewEntry {
 	fill?: boolean;
 }
 
-export interface SettingTabEntry {
+interface SettingTabEntry {
 	plugin: string;
 	tab: PluginSettingTab;
 }
@@ -44,12 +44,12 @@ export interface SyntaxEntry {
 	syntax: MarkdownSyntax;
 }
 
-export interface EditorExtensionEntry {
+interface EditorExtensionEntry {
 	plugin: string;
 	extension: Extension;
 }
 
-export interface ChipEntry {
+interface ChipEntry {
 	plugin: string;
 	chip: (note: Note) => NoteChip | null;
 }

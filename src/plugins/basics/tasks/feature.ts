@@ -7,7 +7,7 @@ import { taskSyntax } from './syntax';
 import { BOX } from './tasks';
 
 /** Lucide's list-todo. */
-export const LIST_TODO =
+const LIST_TODO =
 	'<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><rect x="3" y="4" width="6" height="6" rx="1"/>';
 
 /** The page of open tasks, at `/plugin/tasks/`. */

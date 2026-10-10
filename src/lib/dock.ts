@@ -9,7 +9,7 @@ const KEY = 'dock';
 
 export type DockSide = 'left' | 'right';
 
-export interface DockLayout {
+interface DockLayout {
 	side: DockSide;
 	/** A percentage of the room beside the ribbon. */
 	size: number;

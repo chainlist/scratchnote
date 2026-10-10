@@ -438,9 +438,12 @@ fn set_tray_labels(labels: TrayLabels) {
 #[cfg(desktop)]
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = tray_menu(app, &TrayLabels::default())?;
+    let icon = app
+        .default_window_icon()
+        .ok_or_else(|| tauri::Error::AssetNotFound("the window icon".into()))?;
 
     TrayIconBuilder::with_id("tray")
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(icon.clone())
         .tooltip("Scratchnote")
         .menu(&menu)
         .show_menu_on_left_click(false)

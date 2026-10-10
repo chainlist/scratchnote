@@ -830,9 +830,11 @@ src/
 plugin-registry/      # a local stand-in for the GitHub registry (4.10)
   lib/components/     # by area: layout/, note/, editor/, page/, thread/, dialogs/, common/, settings/; ui/ is shadcn-svelte's
   lib/codemirror/     # the editor's CodeMirror parts: live preview, widgets, keys, drops
-  lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
-  lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy
-  lib/attachments.svelte.ts  # the open space, for the attachment protocol's URLs
+  lib/app/            # the window's life: appearance, language, updates, startup times, onboarding, Android's back
+  lib/notes/          # what notes hold and how they are listed: mentions, threads, attachments, drafts, paging
+  lib/helpers/        # generic helpers that know nothing of the app: dates, platform, hotkeys, storage, versions
+  lib/shell.svelte.ts # the app shell's state, with lib/shell/ (threads, dock, pins, page draft)
+  lib/markdown.ts     # the notes' markdown, from lib/markdown/ (syntax, preview, editor commands)
   lib/api.ts          # typed wrappers around Tauri invoke/listen, from lib/api/, one module per commands/ module
 
 ```

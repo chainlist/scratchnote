@@ -1,5 +1,5 @@
 import type { EditorView } from '@codemirror/view';
-import { isList, isMarked, toggleList, toggleMark } from '#lib/format.js';
+import { isList, isMarked, toggleList, toggleMark } from '#lib/markdown/commands.js';
 
 /**
  * The editor a plugin's command or toolbar button acts on: a note, a page,

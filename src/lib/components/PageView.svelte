@@ -22,6 +22,7 @@
 	import RouteOffIcon from '@lucide/svelte/icons/route-off';
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
+	import { wordCount } from '#lib/markdown.js';
 	import { joinText, pageDraft } from '#lib/page-draft.js';
 	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
@@ -86,7 +87,7 @@
 	}
 
 	const shell = getShell();
-	const words = $derived(body.split(/\s+/).filter(Boolean).length);
+	const words = $derived(wordCount(body));
 	const cleanTitle = (raw: string) => raw.split(/\s+/).filter(Boolean).join(' ');
 
 	onMount(() => {

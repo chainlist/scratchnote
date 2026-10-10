@@ -8,7 +8,7 @@
 	import ThreadArc from '#lib/components/ThreadArc.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { noteTitle } from '#lib/markdown.js';
+	import { openTasks } from '#lib/threads.js';
 	import { resolve } from '$app/paths';
 	import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
@@ -54,14 +54,7 @@
 			: m.settings_thread_order_oldest();
 
 	/** The tasks still open in the thread's notes, as they come: where it stands now. */
-	const open = $derived(
-		(found?.notes ?? []).flatMap((note) =>
-			note.body.split('\n').flatMap((line) => {
-				const task = line.match(/^\s*[-*+]\s+\[ \]\s+(.+)$/)?.[1];
-				return task ? [{ note, task: noteTitle({ subject: null, body: task }) }] : [];
-			})
-		)
-	);
+	const open = $derived(openTasks(found?.notes ?? []));
 
 	/** This view, which a dock and the thread's page may both hold: a note is
 	 *  looked for in its own. */

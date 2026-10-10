@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import ErrorDetails from '#lib/components/ErrorDetails.svelte';
 	import ViewHeader from '#lib/components/ViewHeader.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -67,12 +68,7 @@
 							</Button>
 						{/if}
 						{#if shell.errorDetail}
-							<details class="text-xs text-meta">
-								<summary class="cursor-pointer">{m.error_details()}</summary>
-								<p class="mt-1 font-mono break-all whitespace-pre-wrap select-text">
-									{shell.errorDetail}
-								</p>
-							</details>
+							<ErrorDetails class="text-xs text-meta" detail={shell.errorDetail} />
 						{/if}
 					</div>
 				{/if}

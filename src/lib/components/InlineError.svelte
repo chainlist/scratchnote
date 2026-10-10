@@ -1,6 +1,6 @@
 <script lang="ts">
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import { m } from '#lib/paraglide/messages.js';
+	import ErrorDetails from '#lib/components/ErrorDetails.svelte';
 	import { cn } from '#lib/utils.js';
 
 	let {
@@ -23,10 +23,7 @@
 	<div class="min-w-0">
 		<p>{message}</p>
 		{#if detail}
-			<details class="mt-0.5 text-meta">
-				<summary class="cursor-pointer">{m.error_details()}</summary>
-				<p class="mt-0.5 font-mono break-all whitespace-pre-wrap select-text">{detail}</p>
-			</details>
+			<ErrorDetails class="mt-0.5 text-meta" tight {detail} />
 		{/if}
 	</div>
 </div>

@@ -5,7 +5,7 @@
 	import LinkIcon from '@lucide/svelte/icons/link';
 	import ListIcon from '@lucide/svelte/icons/list';
 	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
-	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import PluginIcon from '#lib/components/common/PluginIcon.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import { Toggle } from '#lib/components/ui/toggle/index.js';

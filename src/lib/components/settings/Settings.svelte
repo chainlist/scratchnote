@@ -12,7 +12,7 @@
 	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import SlidersHorizontalIcon from '@lucide/svelte/icons/sliders-horizontal';
-	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import PluginIcon from '#lib/components/common/PluginIcon.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { coreIds, pluginDescription, pluginName } from '#lib/plugins/loader.js';
 	import { registry } from '#lib/plugins/registry.svelte.js';

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { MapNote, Note, Thread } from '#lib/api.js';
-	import MentionChip from '#lib/components/MentionChip.svelte';
+	import MentionChip from '#lib/components/common/MentionChip.svelte';
 	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';

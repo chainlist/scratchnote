@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Note } from '#lib/api.js';
 	import DayAhead from '#lib/components/note/DayAhead.svelte';
-	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import PluginIcon from '#lib/components/common/PluginIcon.svelte';
 	import ThreadLine from '#lib/components/thread/ThreadLine.svelte';
 	import type { NoteChip } from '#lib/plugins/api.js';
 	import { registry } from '#lib/plugins/registry.svelte.js';

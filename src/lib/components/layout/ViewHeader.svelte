@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '#lib/components/ui/button/index.js';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-	import PinButton from '#lib/components/PinButton.svelte';
+	import PinButton from '#lib/components/common/PinButton.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell, type ViewTitle } from '#lib/shell.svelte.js';
 

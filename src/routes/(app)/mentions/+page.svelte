@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { MentionSummary, Pin } from '#lib/api.js';
 	import View from '#lib/components/layout/View.svelte';
-	import MentionLetter from '#lib/components/MentionLetter.svelte';
-	import PinButton from '#lib/components/PinButton.svelte';
-	import ShowMore from '#lib/components/ShowMore.svelte';
+	import MentionLetter from '#lib/components/common/MentionLetter.svelte';
+	import PinButton from '#lib/components/common/PinButton.svelte';
+	import ShowMore from '#lib/components/common/ShowMore.svelte';
 	import { daysAgo, shortDay } from '#lib/dates.js';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import SearchIcon from '@lucide/svelte/icons/search';

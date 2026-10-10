@@ -1,5 +1,5 @@
 <script lang="ts">
-	import InlineError from '#lib/components/InlineError.svelte';
+	import InlineError from '#lib/components/common/InlineError.svelte';
 	import MarkdownEditor from '#lib/components/editor/MarkdownEditor.svelte';
 	import Recall from '#lib/components/note/Recall.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';

@@ -2,8 +2,8 @@
 	import { tick, type Component } from 'svelte';
 	import type { EditorView } from '@codemirror/view';
 	import { search, searchMeaning, type Note } from '#lib/api.js';
-	import InlineError from '#lib/components/InlineError.svelte';
-	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import InlineError from '#lib/components/common/InlineError.svelte';
+	import PluginIcon from '#lib/components/common/PluginIcon.svelte';
 	import * as Command from '#lib/components/ui/command/index.js';
 	import ArrowRightLeftIcon from '@lucide/svelte/icons/arrow-right-left';
 	import AtSignIcon from '@lucide/svelte/icons/at-sign';

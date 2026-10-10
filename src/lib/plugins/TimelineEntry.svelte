@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Attachment } from 'svelte/attachments';
-	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import PluginIcon from '#lib/components/common/PluginIcon.svelte';
 	import TimelineItem from '#lib/components/note/TimelineItem.svelte';
 	import { dayPart, minutesBetween } from '#lib/dates.js';
 	import { call } from './setting-model';

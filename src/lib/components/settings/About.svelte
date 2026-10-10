@@ -75,19 +75,10 @@
 					size="sm"
 					onclick={() => appUpdate.install()}
 					disabled={appUpdate.installing}
-					title={appUpdate.failed
-						? m.update_failed({ reason: appUpdate.failed })
-						: m.update_hint({
-								version: appUpdate.update.version,
-								current: appUpdate.update.currentVersion
-							})}
+					title={appUpdate.title}
 				>
 					<DownloadIcon class={appUpdate.installing ? 'animate-pulse' : ''} />
-					{appUpdate.installing
-						? m.update_installing()
-						: appUpdate.failed
-							? m.update_retry()
-							: m.update_to({ version: appUpdate.update.version })}
+					{appUpdate.label}
 				</Button>
 			{:else if !dev && !android}
 				<!-- A dev build is not a release, so no release replaces it; Android

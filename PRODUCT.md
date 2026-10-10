@@ -6,7 +6,7 @@
 
 web
 
-A Tauri 2 desktop app: the interface is a SvelteKit SPA in the OS webview, in a borderless window that draws its own frame. Windows first; macOS and Linux are built and released but are not primary test targets. No mobile app.
+A Tauri 2 app: the interface is a SvelteKit SPA in the OS webview. On the desktop it is a borderless window that draws its own frame; Windows first, with macOS and Linux built and released but not primary test targets. Since 0.7.0 (2026-10-08) it also runs on Android phones, the same interface in the system WebView: icons and touch targets grow on a touch screen, text follows the phone's text size, Back closes what is open and swipes move between days, but there is no phone-specific layout yet.
 
 ## Users
 
@@ -33,6 +33,7 @@ Plugins are a capability, not part of the core claim.
 - Used in short bursts on top of other work: the capture window appears over an editor, a browser or a meeting, and must get out of the way.
 - The main window lives in the tray and is opened to read back a day, search, review threads, or write longer pages such as meeting notes.
 - Keyboard-first: capture, save, page handoff, space picking and the command center all work from the keyboard (`Ctrl+Enter` save, `Ctrl+Shift+Enter` page, `Esc` dismiss, `Ctrl+1..9` spaces).
+- On a phone there is no capture hotkey and no tray: the app opens on the day, a note is written there, and touch, Back and swipes stand in for the keys.
 - Spaces keep areas of life apart (work, side projects, personal), each a folder of its own.
 
 ## Capabilities and Constraints

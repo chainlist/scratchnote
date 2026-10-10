@@ -109,11 +109,8 @@ async fn process(app: AppHandle, space: Weak<Space>, mut rx: mpsc::UnboundedRece
         for restub in read.stubs {
             restub.write(&state.writer, &space).await;
         }
-        // Once for the whole batch. Failing to write it is not fatal: the
-        // file is derived, and startup reparses anything newer than it.
-        if let Err(e) = space.persist_index(&state.writer).await {
-            log::warn!("could not persist the index after an external edit: {e}");
-        }
+        // Once for the whole batch.
+        space.index_changed();
     }
 }
 

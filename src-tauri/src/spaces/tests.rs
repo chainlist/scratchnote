@@ -2,7 +2,6 @@ use super::*;
 use crate::storage::daily_file::Note;
 use crate::storage::day_path;
 use crate::storage::pins::{self, Pin};
-use crate::storage::writer::Writer;
 
 fn scratch(name: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("scratchnote-spaces-{name}"));
@@ -101,30 +100,39 @@ fn a_space_is_read_only_while_it_is_open() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-#[tokio::test]
-async fn a_closed_space_drops_changes_and_leaves_its_cache_alone() {
+#[test]
+fn a_closed_space_drops_changes_and_reads_them_when_opened() {
     let root = scratch("closed-writes");
     write_note(&root, "01AAA", "2026-09-22");
-    let writer = Writer::spawn();
-    let (space, _) = Space::open("Test", root.clone(), wake());
-    space.persist_index(&writer).await.unwrap();
-    let cache = index::index_path(&root);
-    let before = std::fs::read_to_string(&cache).unwrap();
-    let old = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
-    filetime::set_file_mtime(&cache, filetime::FileTime::from_system_time(old)).unwrap();
+    let space = Space::open("Test", root.clone(), wake());
 
     // What a job or a late capture does once the space is left.
     space.unload();
     write_note(&root, "01BBB", "2026-09-23");
     space.day_changed("2026-09-23").unwrap();
     let late = write_note(&root, "01CCC", "2026-09-24");
-    space.note_added(&writer, &late).await.unwrap();
-    space.persist_index(&writer).await.unwrap();
-    assert_eq!(std::fs::read_to_string(&cache).unwrap(), before);
+    space.note_added(&late).unwrap();
+    assert_eq!(space.note_count(), None);
 
-    // Opened again, the days written meanwhile are newer than the cache.
+    // Opened again, the days written meanwhile are read from their files.
     space.load();
     assert_eq!(space.note_count(), Some(3));
+    drop(space);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn opening_removes_the_index_file_of_earlier_versions() {
+    let root = scratch("old-index");
+    write_note(&root, "01AAA", "2026-09-22");
+    let old = paths::meta_dir(&root).join("index.jsonl");
+    std::fs::create_dir_all(old.parent().unwrap()).unwrap();
+    std::fs::write(&old, "{}\n").unwrap();
+
+    let space = Space::open("Test", root.clone(), wake());
+    assert!(!old.exists());
+    assert_eq!(space.note_count(), Some(1));
+    drop(space);
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -132,7 +140,7 @@ async fn a_closed_space_drops_changes_and_leaves_its_cache_alone() {
 fn a_rebuild_drops_the_vectors_to_embed_every_note_again() {
     let root = scratch("rebuild-vectors");
     write_note(&root, "01AAA", "2026-09-22");
-    let (space, _) = Space::open("Test", root.clone(), wake());
+    let space = Space::open("Test", root.clone(), wake());
     let mut vectors = Vectors::new("m", 2);
     vectors
         .insert("01AAA".into(), "h".into(), vec![1.0, 0.0])
@@ -162,7 +170,6 @@ fn the_space_at_the_root_moves_into_its_own_folder() {
     std::fs::create_dir_all(root.join("notes").join("2026")).unwrap();
     std::fs::write(root.join("notes/2026/2026-09-22.md"), "x").unwrap();
     std::fs::create_dir_all(root.join(".scratchnote")).unwrap();
-    std::fs::write(index::index_path(&root), "").unwrap();
     std::fs::write(
         registry_path(&root),
         r#"{"active":"Home","defaultName":"Home"}"#,
@@ -175,9 +182,7 @@ fn the_space_at_the_root_moves_into_its_own_folder() {
 
     let to = spaces_dir(&root).join("Home 2");
     assert!(to.join("notes/2026/2026-09-22.md").exists());
-    assert!(index::index_path(&to).exists());
     assert!(!root.join("notes").exists());
-    assert!(!index::index_path(&root).exists());
     assert_eq!(Registry::load(&root).active, "Home 2");
 
     // Nothing left at the root, so a second launch changes nothing.

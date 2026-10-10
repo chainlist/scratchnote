@@ -6,7 +6,6 @@ use std::path::Path;
 use serde::Deserialize;
 
 use super::{check_name, discover, registry_path, spaces_dir, Registry, FIRST_NAME};
-use crate::storage::index;
 use crate::storage::paths::{self, first_free, meta_dir};
 
 /// Before every space had a folder, the first one lived at the notes root,
@@ -50,17 +49,6 @@ pub fn migrate_root(root: &Path) {
         );
         return;
     }
-    let from = index::index_path(root);
-    if from.exists() {
-        if let Err(e) = std::fs::rename(&from, index::index_path(&to)) {
-            log::warn!(
-                "could not move {} into {}: {e}",
-                from.display(),
-                to.display()
-            );
-        }
-    }
-
     let active = if old.active.is_empty() || old.active == old.default_name {
         name.clone()
     } else {

@@ -662,7 +662,7 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, append_note("", &written, date)).unwrap();
         }
-        let (space, _) = Space::open("Test", root.clone(), std::sync::Arc::new(tokio::sync::Notify::new()));
+        let space = Space::open("Test", root.clone(), std::sync::Arc::new(tokio::sync::Notify::new()));
         reconcile(Caches::of(&space), &StubEmbedder, &HashSet::new(), || true, |_, _| {}).unwrap();
 
         assert!(sync_threads(&space), "read for the first time and placed");

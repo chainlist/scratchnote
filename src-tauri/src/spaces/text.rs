@@ -1,6 +1,5 @@
 //! The notes of an open space as the index and search.db hold them: every
-//! change to either goes through here, and the index is written back from
-//! here.
+//! change to either goes through here.
 
 use std::collections::HashMap;
 use std::sync::RwLockWriteGuard;
@@ -11,22 +10,21 @@ use crate::storage::daily_file::Note;
 use crate::storage::day_path;
 use crate::storage::index::{self, Index, IndexEntry};
 use crate::storage::search_db::{SearchDb, Stamp};
-use crate::storage::writer::Writer;
 use crate::Result;
 
 impl Space {
-    /// Tell the embed task the index changed. `persist_index` does it, and
-    /// so does `note_added`, which appends to the index instead.
+    /// Tell the embed task the index changed. Every change to the index
+    /// ends with it, so the vectors follow the index from this one place.
     pub fn index_changed(&self) {
         self.embed_wake.notify_one();
     }
 
     // The index is changed through the methods below only, so search.db
     // follows it from one place. Each writes the text first, then takes the
-    // index lock for its own change; `persist_index` then writes the lot
-    // back once. A space that is not open drops the change: its files are
-    // then newer than both caches, so `index::load` reads them again when it
-    // opens.
+    // index lock for its own change; the caller then calls `index_changed`
+    // once. A space that is not open drops the change: its files are then
+    // not as search.db last read them, so `index::load` reads them again
+    // when it opens.
 
     /// The index to change, or `None` while the space is not open.
     fn index_to_change(&self) -> Result<Option<RwLockWriteGuard<'_, Index>>> {
@@ -48,21 +46,15 @@ impl Space {
         }
     }
 
-    /// A note just captured: added rather than its day reparsed, and its
-    /// line appended to `index.jsonl` rather than the file rewritten, since
+    /// A note just captured: added rather than its day reparsed, since
     /// capture has a latency budget.
-    pub async fn note_added(&self, writer: &Writer, note: &Note) -> Result<()> {
-        let entry = IndexEntry::from(note);
-        let line = serde_json::to_string(&entry)?;
+    pub fn note_added(&self, note: &Note) -> Result<()> {
         let stamp = Stamp::of(&day_path(&self.root, &note.date));
         self.write_text(|db| db.add_note(note, stamp));
         match self.index_to_change()? {
-            Some(mut idx) => idx.push(entry),
+            Some(mut idx) => idx.push(IndexEntry::from(note)),
             None => return Ok(()),
         }
-        writer
-            .append_index_line(index::index_path(&self.root), line)
-            .await?;
         self.index_changed();
         Ok(())
     }
@@ -125,7 +117,7 @@ impl Space {
 
     /// Reparse every file of the space, into the index and search.db alike,
     /// and drop its vectors, which the embed task then makes again from every
-    /// note once the index is written. Blocks for as long as that takes.
+    /// note once told the index changed. Blocks for as long as that takes.
     /// Returns how many notes and pages it holds.
     pub fn rebuild(&self) -> Result<usize> {
         let rebuilt = {
@@ -181,24 +173,5 @@ impl Space {
             .as_ref()
             .and_then(|db| db.bodies(ids).ok())
             .unwrap_or_default()
-    }
-
-    /// Write `index.jsonl` from what is in memory. A space that is not open
-    /// holds nothing to write, and its file stays as it was.
-    pub async fn persist_index(&self, writer: &Writer) -> Result<()> {
-        if self.is_retired() {
-            return Ok(());
-        }
-        let jsonl = {
-            let idx = read_lock(&self.index, "index")?;
-            if idx.is_closed() {
-                return Ok(());
-            }
-            idx.to_jsonl()
-        };
-        // Every change to the index but a capture ends here, so the vectors
-        // follow it from this one place.
-        self.index_changed();
-        writer.write(index::index_path(&self.root), jsonl).await
     }
 }

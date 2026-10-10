@@ -173,18 +173,16 @@ impl Space {
         }
     }
 
-    /// A space read from disk and open. The flag says the index on disk is
-    /// out of date and should be written back.
+    /// A space read from disk and open.
     #[cfg(test)]
-    pub fn open(name: &str, root: PathBuf, embed_wake: Wake) -> (Self, bool) {
+    pub fn open(name: &str, root: PathBuf, embed_wake: Wake) -> Self {
         let space = Self::new(name, root, embed_wake);
-        let stale = space.load();
-        (space, stale)
+        space.load();
+        space
     }
 
-    /// Read the space's notes into memory, as opening it does. The flag says
-    /// the index on disk is out of date and should be written back.
-    pub fn load(&self) -> bool {
+    /// Read the space's notes into memory, as opening it does.
+    pub fn load(&self) {
         let mut db = SearchDb::open(&self.root).unwrap_or_else(|e| {
             log::error!(
                 "could not open the search.db of {}, holding the text in memory: {e}",
@@ -193,7 +191,9 @@ impl Space {
             SearchDb::in_memory().expect("an in-memory database")
         });
         crate::startup::step(format!("Opening the search.db of {}", self.name));
-        let (loaded, stale) = index::load(&self.root, &mut db);
+        let loaded = index::load(&self.root, &mut db);
+        // Left by versions that kept the index in a file of its own.
+        let _ = std::fs::remove_file(paths::meta_dir(&self.root).join("index.jsonl"));
         log::info!("space {} holds {} notes", self.name, loaded.len());
         crate::startup::step(format!(
             "Reading the index of {} ({} notes)",
@@ -220,7 +220,6 @@ impl Space {
         }
         // Its notes may have been written with no model, or by another one.
         self.embed_wake.notify_one();
-        stale
     }
 
     /// Let go of the notes, the vectors and the watcher, as leaving the space

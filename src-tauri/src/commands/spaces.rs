@@ -53,22 +53,11 @@ pub fn add_space(app: &AppHandle, name: &str, root: PathBuf) -> Arc<Space> {
 /// Open a space: read its notes and start watching it. At startup for the
 /// open space, and whenever another one is opened.
 pub fn load_space(app: &AppHandle, space: &Arc<Space>) {
-    let refresh = space.load();
+    space.load();
     if let Err(e) = crate::watcher::start(app.clone(), space) {
         log::error!("could not watch the notes of {}: {e}", space.name);
     }
     crate::startup::step(format!("Watching the folder of {}", space.name));
-    if !refresh {
-        return;
-    }
-    let app = app.clone();
-    let opened = space.clone();
-    tauri::async_runtime::spawn(async move {
-        let state = app.state::<AppState>();
-        if let Err(e) = opened.persist_index(&state.writer).await {
-            log::warn!("could not write the index of {} back: {e}", opened.name);
-        }
-    });
 }
 
 /// `load_space` off the async runtime, since it reads every file the cache

@@ -434,8 +434,7 @@ Root directory, default `~/Scratchnote/`, configurable in settings.
         2026/
           2026-09-22 image.png
       .scratchnote/
-        index.jsonl      # derived cache, rebuildable
-        search.db        # the notes' text for search and the names they mention, SQLite, derived, rebuildable
+        search.db        # the index (4.4), the notes' text for search and the names they mention, SQLite, derived, rebuildable
         space.db         # SQLite: note embeddings for search by meaning, similar notes and threads, the thread each note was placed in, each note's place on the map, its closest notes and the categories they make there, derived, rebuildable; thread titles, notes kept out of threads and pins (3.13), the user's
     Work/
       notes/...
@@ -448,7 +447,7 @@ Day boundaries use the **local timezone** at save time.
 
 ### 4.2 Daily file format (source of truth)
 
-The daily markdown file holds the notes. `index.jsonl` and `search.db` are purely derived caches and must be fully rebuildable from the markdown files.
+The daily markdown file holds the notes. `search.db` is a purely derived cache and must be fully rebuildable from the markdown files.
 
 ```markdown
 # 2026-09-22
@@ -478,28 +477,26 @@ Rules:
 - A `notify` watcher detects external edits to note files. On change: reparse the file and update the index, which wakes the embedding task for any body that changed. Ignore events caused by the app's own writes (track last-written hash per file).
 - It watches `pages/` too. A page file edited outside the app is reindexed the same way, and its stub is rewritten when its title, file name, day or time changed. A page file that disappears leaves the index; its stub stays (3.5).
 
-### 4.4 index.jsonl
+### 4.4 Index
 
-One JSON object per line, one line per note:
+The index is what the app knows of each note and page apart from its text. It is held in memory while a space is open and kept in `search.db` (6) between launches, on the same row as the note's text:
 
-```json
-{
-	"id": "01J8Z3K6Q9X2",
-	"date": "2026-09-22",
-	"time": "14:32",
-	"file": "notes/2026/2026-09-22.md",
-	"subject": null,
-	"hash": "a1b2c3d4",
-	"on": "2026-09-25",
-	"words": 42
-}
-```
+| Column    | Example                    |
+| --------- | -------------------------- |
+| `id`      | `01J8Z3K6Q9X2`             |
+| `date`    | `2026-09-22`               |
+| `time`    | `14:32`                    |
+| `file`    | `notes/2026/2026-09-22.md` |
+| `subject` | NULL                       |
+| `hash`    | `a1b2c3d4`                 |
+| `on_date` | `2026-09-25`               |
+| `words`   | 42                         |
 
-- `words` counts the body's words once, so the day list and its stats never count every body again. A line without it, from before it was counted, gets its day reparsed.
-- A page (4.7) has a line too, with `"kind": "page"`, `file` pointing at the page file and `subject` holding its title. Notes have no `kind`, and no `subject`.
-- `on` is the day ahead read off the body (5.3), left out when there is none.
-- New notes are appended. Updates and deletes rewrite the file (it is small; atomic rewrite is fine).
-- On opening a space: if the index is missing, or any daily file mtime is newer than the index, rebuild the affected entries by parsing the markdown. An index written by a version that labelled notes with a model (its lines carry a `status`) is rebuilt whole. `search.db` records each day file's mtime and length as it last read it, and a day read at another is read again; any other day is not read at all, so opening a space costs a look at each file's date, not a read of its notes. Page files are recorded the same way, by their path: a page new, edited or renamed is read, a page whose file is gone leaves, and a file under `pages/` that holds no page is recorded too, so it is not read again. A copy of a page made by hand is left out and not recorded, so it is taken once the page's own file goes.
+- `words` counts the body's words once, so the day list and its stats never count every body again.
+- A page (4.7) has a row too, with no `day`, `file` pointing at the page file and `subject` holding its title. Notes have no `subject`.
+- `on_date` is the day ahead read off the body (5.3), NULL when there is none.
+- A new note's row is added on its own. An update or a delete rewrites the day file, and the day's rows are replaced from it.
+- On opening a space, the index is read from `search.db` in one query. `search.db` records each day file's mtime and length as it last read it, and a day read at another is read again, its rows replaced; any other day is not read at all, so opening a space costs a look at each file's date, not a read of its notes. Page files are recorded the same way, by their path: a page new, edited or renamed is read, a page whose file is gone leaves, and a file under `pages/` that holds no page is recorded too, so it is not read again. A copy of a page made by hand is left out and not recorded, so it is taken once the page's own file goes. A `search.db` that is missing or from another version is filled by reading every file. Versions up to 0.9.1 kept the index in `.scratchnote/index.jsonl`; opening a space deletes it.
 - Provide a "Rebuild index" button in settings that reparses everything, after writing the labelled blocks and pages of the space without their labels (4.5), and drops the vectors in `space.db`, so every note is embedded again (6).
 
 ### 4.5 Labels from earlier versions
@@ -654,7 +651,7 @@ Community plugins come from GitHub, as Obsidian's do.
 - Case-insensitive, accent-insensitive substring match over bodies and page titles: every word must be in the folded text. A word of three characters or more is found through the trigram index and then checked as a plain substring; a shorter one is looked for by scanning `search.db` on disk. The index in memory gives the order.
 - `notes_containing` matches its needles as typed, case and all: a needle of three folded characters or more narrows through the index, and a shorter one (`@`) scans.
 - SQLite with trigrams rather than `tantivy`: tantivy matches whole words, and substring matching (`offe` finds `coffee`) would need an n-gram index several times larger.
-- Everything else a space derives or decides beside its notes is in `.scratchnote/space.db`, also SQLite, so `search.db` serves search alone: the vectors (one row per note: its id, body hash and little-endian f32 vector), where each note was placed in threads, its place on the map and the categories on it (6.5), and the thread edits. The vectors and placements are held in memory, as every score is over all of them, and a save writes only the rows of the notes changed since the last one: saving one edited note's vector out of 10,269 took 0.5 to 2.4 ms against 32 to 42 ms for rewriting `vectors.bin`, the rest being the sync to disk. Each save is synced to disk before it returns, as the thread edits cannot be rebuilt. Pages are 16 KB, as a vector is about 3 KB, and the write-ahead log is cut back to 1 MB.
+- Everything else a space derives or decides beside its notes is in `.scratchnote/space.db`, also SQLite, so `search.db` holds only the index (4.4) and the text: the vectors (one row per note: its id, body hash and little-endian f32 vector), where each note was placed in threads, its place on the map and the categories on it (6.5), and the thread edits. The vectors and placements are held in memory, as every score is over all of them, and a save writes only the rows of the notes changed since the last one: saving one edited note's vector out of 10,269 took 0.5 to 2.4 ms against 32 to 42 ms for rewriting `vectors.bin`, the rest being the sync to disk. Each save is synced to disk before it returns, as the thread edits cannot be rebuilt. Pages are 16 KB, as a vector is about 3 KB, and the write-ahead log is cut back to 1 MB.
 - `space.db` replaced `vectors.bin`, `threads.json` and `thread-edits.json`: when a space opens without it, those files are read into it in one transaction and then deleted. Read back, they give the very same vectors (bit for bit), placements, threads and edits; reading in 10,269 vectors took 0.2 to 0.3 s, once. A `space.db` that cannot be opened is left alone and the space runs from an empty one in memory, saving nothing it holds.
 - Results sorted by date desc, then time desc.
 - The page asks for a stretch of the results and gets the total with it: the command center the first 50, the results view the first 100 and 100 more at each "Show more". Only that stretch leaves the backend, so a short query matching most of a space does not copy all of it to the page. A plugin's search still gets every match.
@@ -845,7 +842,7 @@ Build in this order; each milestone should be usable on its own.
 
 0. **Scaffold**: follow section 2.1 exactly. No app code until this is committed.
 1. **Capture + storage**: tray, global hotkey, capture window, append to daily file with markers, main window day view, atomic single-writer.
-2. **Parser + index**: robust daily file parser, index.jsonl, rebuild, file watcher for external edits.
+2. **Parser + index**: robust daily file parser, index, rebuild, file watcher for external edits.
 3. **Search**: search by words, then the embedding model: download, search by meaning, similar notes.
 4. **Polish**: settings screen, launch at login.
 

@@ -1,12 +1,13 @@
 //! `search.db`, where a space's note text lives while the space is open, so
-//! the index in memory holds none (SPEC 6).
+//! the index in memory holds none (SPEC 6), and where the index itself is
+//! kept between launches (SPEC 4.4).
 //!
-//! Derived like `index.jsonl`: every row can be made again from the
-//! markdown, so a file that is missing, damaged or from another version is
-//! made again, and every day is read into it anew.
+//! Derived: every row can be made again from the markdown, so a file that
+//! is missing, damaged or from another version is made again, and every day
+//! is read into it anew.
 //!
-//! `texts` holds each note's and page's body, and its subject and body folded
-//! as search matches them. `texts_fts` indexes the folded text with the
+//! `texts` holds each note's and page's body, its subject and body folded as
+//! search matches them, and what the index holds of it. `texts_fts` indexes the folded text with the
 //! trigram tokenizer, which finds any run of three characters or more, so a
 //! search still matches inside words. `days` records each day file's time and
 //! length as last read, and `page_files` each file under `pages/`, which is
@@ -19,7 +20,8 @@ use std::time::UNIX_EPOCH;
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use super::daily_file::Note;
+use super::daily_file::{Kind, Note};
+use super::index::{Index, IndexEntry};
 use super::paths::meta_dir;
 use super::sqlite;
 use crate::mentions::mentions;
@@ -27,7 +29,7 @@ use crate::search::fold;
 use crate::Result;
 
 /// Bumped when the tables change: a file of another version is made again.
-const VERSION: i64 = 3;
+const VERSION: i64 = 4;
 
 /// An id is not unique: a note block copied by hand into another day keeps
 /// its id, and both copies are still found.
@@ -37,6 +39,14 @@ const TABLES: &str = "
         id TEXT NOT NULL,
         -- The day a note is in, or NULL for a page, which has a file of its own.
         day TEXT,
+        -- What the index holds of it (SPEC 4.4), read back at launch.
+        date TEXT NOT NULL,
+        time TEXT NOT NULL,
+        file TEXT NOT NULL,
+        subject TEXT,
+        hash TEXT NOT NULL,
+        on_date TEXT,
+        words INTEGER NOT NULL,
         body TEXT NOT NULL,
         folded TEXT NOT NULL
     );
@@ -218,6 +228,33 @@ impl SearchDb {
         self.conn.execute_batch(DROP)?;
         self.conn.execute_batch(TABLES)?;
         Ok(self.conn.execute_batch(TRIGGERS)?)
+    }
+
+    /// The index as the rows hold it, each day's notes in the order they
+    /// went in, which is their file's.
+    pub fn index(&self) -> Result<Index> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, date, time, file, subject, hash, on_date, words, day IS NULL \
+             FROM texts ORDER BY rowid",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(IndexEntry {
+                id: row.get(0)?,
+                date: row.get(1)?,
+                time: row.get(2)?,
+                file: row.get(3)?,
+                subject: row.get(4)?,
+                hash: row.get(5)?,
+                on: row.get(6)?,
+                words: usize::try_from(row.get::<_, i64>(7)?).unwrap_or(0),
+                kind: if row.get(8)? { Kind::Page } else { Kind::Note },
+            })
+        })?;
+        let mut index = Index::default();
+        for entry in rows {
+            index.push(entry?);
+        }
+        Ok(index)
     }
 
     /// Every day file as it was last read.
@@ -481,9 +518,23 @@ fn insert(conn: &Connection, note: &Note, day: Option<&str>) -> Result<()> {
         note.subject.as_deref().unwrap_or(""),
         note.body
     ));
+    let entry = IndexEntry::from(note);
     conn.execute(
-        "INSERT INTO texts (id, day, body, folded) VALUES (?1, ?2, ?3, ?4)",
-        params![note.id, day, note.body, folded],
+        "INSERT INTO texts (id, day, date, time, file, subject, hash, on_date, words, body, folded) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        params![
+            entry.id,
+            day,
+            entry.date,
+            entry.time,
+            entry.file,
+            entry.subject,
+            entry.hash,
+            entry.on,
+            i64::try_from(entry.words).unwrap_or(i64::MAX),
+            note.body,
+            folded
+        ],
     )?;
     let text = conn.last_insert_rowid();
     let mut statement =

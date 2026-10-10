@@ -618,7 +618,7 @@ mod tests {
         assert!(root.join(&own.path).exists(), "no telling while closed");
         drop(closed);
 
-        let (space, _) = Space::open("Test", root.clone(), wake);
+        let space = Space::open("Test", root.clone(), wake);
         drop_carried(&space, &[shared.path.clone(), own.path.clone()]);
         assert!(root.join(&shared.path).exists());
         assert!(!root.join(&own.path).exists());

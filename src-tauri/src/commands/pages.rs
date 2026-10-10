@@ -53,7 +53,7 @@ pub async fn create_page(
     space.hold(&page.id);
     write_new(&state.writer, &space, &page).await?;
     space.page_changed(&page)?;
-    space.persist_index(&state.writer).await?;
+    space.index_changed();
     sync_stub(&state.writer, &space, &page).await?;
 
     events::note_updated(&app, &page.id);
@@ -110,7 +110,7 @@ pub async fn update_page(
         return Err(format!("{file} no longer holds page {id}").into());
     }
     let page = reindex(&space, &file)?.ok_or_else(|| format!("{file} is gone"))?;
-    space.persist_index(&state.writer).await?;
+    space.index_changed();
 
     events::note_updated(&app, &id);
     Ok(page)
@@ -161,7 +161,7 @@ pub async fn rename_page(
             .await?;
     }
     let page = reindex(&space, &file)?.ok_or_else(|| format!("{file} is gone"))?;
-    space.persist_index(&state.writer).await?;
+    space.index_changed();
     sync_stub(&state.writer, &space, &page).await?;
 
     events::note_updated(&app, &id);
@@ -191,7 +191,7 @@ pub async fn delete_page(
         }
         state.writer.remove(space.root.join(&page.file)).await?;
         space.page_removed(&id)?;
-        space.persist_index(&state.writer).await?;
+        space.index_changed();
     }
 
     events::note_updated(&app, &id);
@@ -228,7 +228,7 @@ pub async fn move_page(
     };
     write_new(&state.writer, &to, &moved).await?;
     to.page_changed(&moved)?;
-    to.persist_index(&state.writer).await?;
+    to.index_changed();
     sync_stub(&state.writer, &to, &moved).await?;
 
     drop_stub(&state.writer, &from, &date, &id).await?;
@@ -237,7 +237,7 @@ pub async fn move_page(
     }
     state.writer.remove(from.root.join(&page.file)).await?;
     from.page_removed(&id)?;
-    from.persist_index(&state.writer).await?;
+    from.index_changed();
     from.release(&id);
     crate::attachments::drop_carried(&from, &carried);
 
@@ -290,7 +290,7 @@ pub async fn note_to_page(
     }
     space.day_changed(&date)?;
     space.page_changed(&page)?;
-    space.persist_index(&state.writer).await?;
+    space.index_changed();
 
     events::note_updated(&app, &id);
     events::note_updated(&app, &page.id);

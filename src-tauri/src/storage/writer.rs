@@ -132,8 +132,7 @@ impl Writer {
         .await
     }
 
-    /// Write the whole file, as the index is written after an update, a
-    /// delete or a rebuild, and as settings and the other JSON files are.
+    /// Write the whole file, as settings and the other JSON files are.
     pub async fn write(&self, path: PathBuf, contents: String) -> Result<()> {
         let (reply, response) = oneshot::channel();
         self.send(
@@ -145,22 +144,6 @@ impl Writer {
             response,
         )
         .await
-    }
-
-    /// One more line on index.jsonl. A new note is the hot path, and SPEC 4.4
-    /// appends rather than writing the whole index for exactly that reason.
-    pub async fn append_index_line(&self, path: PathBuf, line: String) -> Result<()> {
-        self.rewrite(path, move |existing| {
-            let mut contents = existing.unwrap_or_default().to_string();
-            if !contents.is_empty() && !contents.ends_with('\n') {
-                contents.push('\n');
-            }
-            contents.push_str(line.trim_end());
-            contents.push('\n');
-            Some(contents)
-        })
-        .await?;
-        Ok(())
     }
 
     /// Returns false when `edit` left the file alone.
@@ -443,23 +426,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn appends_index_lines_and_rewrites_the_whole_file() {
-        let root = scratch_dir("index-writes");
-        let path = crate::storage::index::index_path(&root);
+    async fn rewrites_the_whole_file() {
+        let root = scratch_dir("whole-writes");
+        let path = root.join(".scratchnote").join("settings.json");
         let writer = Writer::spawn();
 
         writer
-            .append_index_line(path.clone(), r#"{"id":"01AAA"}"#.to_string())
+            .write(path.clone(), "{\"id\":\"01AAA\"}\n".to_string())
             .await
             .unwrap();
-        writer
-            .append_index_line(path.clone(), r#"{"id":"01BBB"}"#.to_string())
-            .await
-            .unwrap();
-
-        let contents = std::fs::read_to_string(&path).unwrap();
-        assert_eq!(contents, "{\"id\":\"01AAA\"}\n{\"id\":\"01BBB\"}\n");
-
         writer
             .write(path.clone(), "{\"id\":\"01CCC\"}\n".to_string())
             .await

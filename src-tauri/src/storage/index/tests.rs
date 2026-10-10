@@ -43,26 +43,6 @@ fn scratch_root(name: &str) -> PathBuf {
     dir
 }
 
-#[test]
-fn the_day_ahead_survives_the_cache() {
-    let mut note = note("01A", "2026-09-22", "09:00", "dentist friday");
-    note.on = Some("2026-09-25".to_string());
-    let mut index = Index::default();
-    index.push(IndexEntry::from(&note));
-    let jsonl = index.to_jsonl();
-    assert!(jsonl.contains(r#""on":"2026-09-25""#), "{jsonl}");
-    let back = Index::from_jsonl(&jsonl);
-    let entry = back.entries().next().unwrap();
-    assert_eq!(entry.on.as_deref(), Some("2026-09-25"));
-    assert_eq!(entry.to_note().on.as_deref(), Some("2026-09-25"));
-
-    // An entry without a day writes none, as before.
-    note.on = None;
-    assert!(!serde_json::to_string(&IndexEntry::from(&note))
-        .unwrap()
-        .contains("\"on\""));
-}
-
 /// Writes a day file the same way the writer would.
 fn write_day(root: &Path, date: &str, notes: &[Note]) {
     let path = super::super::day_path(root, date);
@@ -74,40 +54,41 @@ fn write_day(root: &Path, date: &str, notes: &[Note]) {
     std::fs::write(path, contents).unwrap();
 }
 
+/// What a rebuild puts in search.db is the index the next launch reads.
 #[test]
-fn jsonl_round_trips() {
-    let mut index = Index::default();
-    index.push(IndexEntry::from(&note("01AAA", "2026-09-22", "08:00", "a")));
-    index.push(IndexEntry::from(&note("01BBB", "2026-09-23", "09:00", "b")));
-
-    let back = Index::from_jsonl(&index.to_jsonl());
-    assert_eq!(back.len(), 2);
-    assert_eq!(
-        back.days(),
-        vec![("2026-09-23".into(), 1), ("2026-09-22".into(), 1)]
-    );
-}
-
-#[test]
-fn a_line_matches_the_shape_in_the_spec() {
-    let mut index = Index::default();
-    index.push(IndexEntry::from(&note(
-        "01AAA",
+fn the_index_reads_back_from_search_db() {
+    let root = scratch_root("round-trip");
+    write_day(
+        &root,
         "2026-09-22",
-        "14:32",
-        "body",
-    )));
-    let line = index.to_jsonl();
-    let value: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
-
-    for key in ["id", "date", "time", "file", "subject", "hash"] {
-        assert!(value.get(key).is_some(), "missing {key} in {line}");
-    }
-    assert!(
-        value.get("body").is_none(),
-        "the index must not carry bodies"
+        &[
+            note("01AAA", "2026-09-22", "08:00", "Dentist on Friday"),
+            note(
+                "01BBB",
+                "2026-09-22",
+                "09:00",
+                "# Groceries\n- [ ] buy milk",
+            ),
+        ],
     );
-    assert_eq!(value["file"], "notes/2026/2026-09-22.md");
+    write_page(&root, &page("01PPP", "2026-09-22", "Sync", "the meeting"));
+    let mut db = db();
+    let built = rebuild(&root, &mut db);
+
+    let back = db.index().unwrap();
+    assert_eq!(
+        back.entries().collect::<Vec<_>>(),
+        built.entries().collect::<Vec<_>>()
+    );
+    let dentist = back.get("01AAA").unwrap();
+    assert_eq!(dentist.on.as_deref(), Some("2026-09-25"));
+    assert_eq!(dentist.file, "notes/2026/2026-09-22.md");
+    let sync = back.page("01PPP").unwrap();
+    assert_eq!(sync.kind, Kind::Page);
+    assert_eq!(sync.subject.as_deref(), Some("Sync"));
+    assert_eq!(back.words_on("2026-09-22"), 6);
+
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -119,9 +100,7 @@ fn a_day_as_last_read_is_not_read_again() {
         &[note("01AAA", "2026-09-22", "08:00", "the body")],
     );
     let mut db = db();
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-    std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+    rebuild(&root, &mut db);
 
     // Changed to the same length, its time put back: read again, the day
     // would say otherwise.
@@ -131,53 +110,19 @@ fn a_day_as_last_read_is_not_read_again() {
     std::fs::write(&day, text.replace("the body", "THE BODY")).unwrap();
     filetime::set_file_mtime(&day, filetime::FileTime::from_system_time(modified)).unwrap();
 
-    let (index, changed) = load(&root, &mut db);
-    assert!(!changed, "a fresh cache needs no write back");
+    let index = load(&root, &mut db);
     assert_eq!(index.len(), 1);
+    assert_eq!(index.entries().next().unwrap().hash, body_hash("the body"));
     assert_eq!(db.bodies(["01AAA"]).unwrap()["01AAA"], "the body");
 
     // With search.db gone, the day is read into a new one, and what it now
-    // says reaches the cache too.
+    // says reaches the index too.
     let mut fresh = self::db();
-    let (index, changed) = load(&root, &mut fresh);
-    assert!(changed);
+    let index = load(&root, &mut fresh);
     assert_eq!(fresh.bodies(["01AAA"]).unwrap()["01AAA"], "THE BODY");
     assert_eq!(index.entries().next().unwrap().hash, body_hash("THE BODY"));
 
     let _ = std::fs::remove_dir_all(&root);
-}
-
-#[test]
-fn a_cache_written_with_labels_is_rebuilt_from_the_markdown() {
-    let root = scratch_root("labels-cache");
-    write_day(
-        &root,
-        "2026-09-22",
-        &[note("01AAA", "2026-09-22", "08:00", "Dentist on Friday")],
-    );
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-    std::fs::write(
-        &cache,
-        r#"{"id":"01AAA","date":"2026-09-22","time":"08:00","file":"notes/2026/2026-09-22.md","subject":"Dentist","category":"health","status":"done","hash":"x","on":"2026-10-02"}"#,
-    )
-    .unwrap();
-
-    let (index, changed) = load(&root, &mut db());
-    assert!(changed);
-    let entry = index.entries().next().unwrap();
-    assert_eq!(entry.subject, None);
-    assert_eq!(entry.on.as_deref(), Some("2026-09-25"));
-
-    let _ = std::fs::remove_dir_all(&root);
-}
-
-#[test]
-fn one_bad_line_costs_only_that_entry() {
-    let mut index = Index::default();
-    index.push(IndexEntry::from(&note("01AAA", "2026-09-22", "08:00", "a")));
-    let raw = format!("not json at all\n{}", index.to_jsonl());
-    assert_eq!(Index::from_jsonl(&raw).len(), 1);
 }
 
 #[test]
@@ -219,52 +164,6 @@ fn words_leave_out_pages_and_markdown_marks() {
     assert_eq!(index.words_on("2026-09-23"), 0);
 }
 
-#[test]
-fn words_are_counted_once_and_kept_without_the_body() {
-    let mut index = Index::default();
-    index.push(IndexEntry::from(&note(
-        "01AAA",
-        "2026-09-22",
-        "08:00",
-        "three small words",
-    )));
-    assert_eq!(index.words_on("2026-09-22"), 3);
-
-    let back = Index::from_jsonl(&index.to_jsonl());
-    assert_eq!(back.words_on("2026-09-22"), 3);
-}
-
-#[test]
-fn a_cache_from_before_words_were_counted_has_its_days_counted() {
-    let root = scratch_root("uncounted-cache");
-    write_day(
-        &root,
-        "2026-09-22",
-        &[note("01AAA", "2026-09-22", "08:00", "four words in here")],
-    );
-    // Written after the day file, and search.db read it, so only the
-    // missing count makes it stale.
-    let mut db = db();
-    let old: String = rebuild(&root, &mut db)
-        .to_jsonl()
-        .lines()
-        .map(|line| {
-            let mut value: serde_json::Value = serde_json::from_str(line).unwrap();
-            value.as_object_mut().unwrap().remove("words");
-            format!("{value}\n")
-        })
-        .collect();
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-    std::fs::write(&cache, old).unwrap();
-
-    let (index, changed) = load(&root, &mut db);
-    assert!(changed, "the counts have to be written back");
-    assert_eq!(index.words_on("2026-09-22"), 4);
-
-    let _ = std::fs::remove_dir_all(&root);
-}
-
 /// What a heavy writer's space costs to load, for the memory plan: five
 /// years at 40 notes a day. Not a gate, a measure:
 /// `cargo test --release heavy_writer -- --ignored --nocapture`.
@@ -290,19 +189,16 @@ fn a_heavy_writers_space_loads() {
             .collect();
         write_day(&root, &date, &notes);
     }
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
     let started = std::time::Instant::now();
     let mut db = SearchDb::open(&root).unwrap();
-    std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+    rebuild(&root, &mut db);
     let built = started.elapsed();
     drop(db);
 
     let started = std::time::Instant::now();
     let mut db = SearchDb::open(&root).unwrap();
-    let (index, changed) = load(&root, &mut db);
+    let index = load(&root, &mut db);
     let took = started.elapsed();
-    assert!(!changed);
 
     let timed = |query: &str| {
         let started = std::time::Instant::now();
@@ -317,7 +213,7 @@ fn a_heavy_writers_space_loads() {
         .unwrap()
         .len();
     eprintln!(
-        "{} notes: search.db built in {built:?}, {:.1} MB; fresh caches loaded in {took:?}; \
+        "{} notes: search.db built in {built:?}, {:.1} MB; loaded in {took:?}; \
          'deployment' found {broad_hits} in {broad:?}, '2023-05-14' {one_day_hits} in {one_day:?}, \
          'of' {short_hits} in {short:?}",
         index.len(),
@@ -356,7 +252,7 @@ fn rebuild_reads_every_daily_file() {
 
 /// SPEC 11: deleting `.scratchnote/` and relaunching restores the index.
 #[test]
-fn load_rebuilds_from_markdown_when_the_cache_is_missing() {
+fn load_reads_every_file_into_an_empty_search_db() {
     let root = scratch_root("missing-cache");
     write_day(
         &root,
@@ -364,39 +260,28 @@ fn load_rebuilds_from_markdown_when_the_cache_is_missing() {
         &[note("01AAA", "2026-09-22", "08:00", "first")],
     );
 
-    let (index, changed) = load(&root, &mut db());
-    assert!(changed, "a missing cache has to be written back");
+    let index = load(&root, &mut db());
     assert_eq!(index.len(), 1);
 
     let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
-fn load_reparses_a_day_whose_file_is_newer_than_the_cache() {
-    let root = scratch_root("stale-cache");
+fn load_reads_a_day_written_since() {
+    let root = scratch_root("written-since");
+    let first = note("01AAA", "2026-09-22", "08:00", "first");
+    write_day(&root, "2026-09-22", std::slice::from_ref(&first));
+    let mut db = db();
+    rebuild(&root, &mut db);
+
     write_day(
         &root,
         "2026-09-22",
-        &[note("01AAA", "2026-09-22", "08:00", "first")],
+        &[first, note("01BBB", "2026-09-22", "09:00", "second")],
     );
-
-    // A cache written before the file it describes, and search.db up to
-    // date, so only the cache is stale.
-    let mut db = db();
-    rebuild(&root, &mut db);
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-    std::fs::write(&cache, "").unwrap();
-    let old = SystemTime::now() - std::time::Duration::from_secs(60);
-    filetime::set_file_mtime(&cache, filetime::FileTime::from_system_time(old)).unwrap();
-
-    let (index, changed) = load(&root, &mut db);
-    assert!(changed);
-    assert_eq!(
-        index.len(),
-        1,
-        "the newer day file should have been reparsed"
-    );
+    let index = load(&root, &mut db);
+    assert_eq!(index.len(), 2, "the day should have been reparsed");
+    assert_eq!(db.index().unwrap().len(), 2, "and kept for the next launch");
 
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -447,39 +332,21 @@ fn pages_are_indexed_from_their_files_and_counted_on_their_day() {
 }
 
 #[test]
-fn the_kind_survives_the_cache_and_notes_leave_it_out() {
-    let mut index = Index::default();
-    index.push(IndexEntry::from(&note("01AAA", "2026-09-22", "08:00", "a")));
-    index.push(IndexEntry::from(&page("01PPP", "2026-09-22", "Sync", "b")));
-    let jsonl = index.to_jsonl();
-    let lines: Vec<&str> = jsonl.lines().collect();
-    assert!(!lines[0].contains("kind"), "{}", lines[0]);
-    assert!(lines[1].contains(r#""kind":"page""#), "{}", lines[1]);
-
-    let back = Index::from_jsonl(&jsonl);
-    assert_eq!(back.page("01PPP").map(|p| p.kind), Some(Kind::Page));
-    assert_eq!(back.days(), vec![("2026-09-22".into(), 2)]);
-}
-
-#[test]
 fn load_follows_a_page_renamed_by_hand() {
     let root = scratch_root("renamed-page");
     let sync = page("01PPP", "2026-09-22", "Weekly sync", "the meeting");
     write_page(&root, &sync);
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
     let mut db = db();
-    std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+    rebuild(&root, &mut db);
 
     let from = root.join(&sync.file);
     let to = root.join("pages/2026/sync.md");
     std::fs::rename(&from, &to).unwrap();
-    // A rename keeps the mtime, so the cache still looks fresh.
+    // A rename keeps the mtime, so only the new name tells.
     let old = SystemTime::now() - std::time::Duration::from_secs(60);
     filetime::set_file_mtime(&to, filetime::FileTime::from_system_time(old)).unwrap();
 
-    let (index, changed) = load(&root, &mut db);
-    assert!(changed, "the cache has to be written back");
+    let index = load(&root, &mut db);
     let moved = index.page("01PPP").unwrap();
     assert_eq!(moved.file, "pages/2026/sync.md");
     assert_eq!(db.bodies(["01PPP"]).unwrap()["01PPP"], "the meeting");
@@ -500,9 +367,7 @@ fn a_page_as_last_read_is_not_read_again() {
     // Not a page, and recorded as read all the same.
     std::fs::write(root.join("pages/2026/loose.md"), "# loose\n").unwrap();
     let mut db = db();
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-    std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+    rebuild(&root, &mut db);
     assert!(db.page_files().unwrap().contains_key("pages/2026/loose.md"));
 
     // Changed to the same length, its time put back: read again, the page
@@ -513,14 +378,13 @@ fn a_page_as_last_read_is_not_read_again() {
     std::fs::write(&path, text.replace("the meeting", "THE MEETING")).unwrap();
     filetime::set_file_mtime(&path, filetime::FileTime::from_system_time(modified)).unwrap();
 
-    let (index, changed) = load(&root, &mut db);
-    assert!(!changed, "a fresh cache needs no write back");
+    let index = load(&root, &mut db);
     assert!(index.page("01PPP").is_some());
     assert_eq!(db.bodies(["01PPP"]).unwrap()["01PPP"], "the meeting");
 
     // With search.db gone, the page is read into a new one.
     let mut fresh = self::db();
-    let (index, _) = load(&root, &mut fresh);
+    let index = load(&root, &mut fresh);
     assert_eq!(fresh.bodies(["01PPP"]).unwrap()["01PPP"], "THE MEETING");
     assert_eq!(index.page("01PPP").unwrap().hash, body_hash("THE MEETING"));
 
@@ -534,13 +398,10 @@ fn load_forgets_a_page_whose_file_is_gone() {
     write_page(&root, &sync);
     write_page(&root, &page("01QQQ", "2026-09-24", "Retro", "went well"));
     let mut db = db();
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-    std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+    rebuild(&root, &mut db);
 
     std::fs::remove_file(root.join(&sync.file)).unwrap();
-    let (index, changed) = load(&root, &mut db);
-    assert!(changed);
+    let index = load(&root, &mut db);
     assert!(index.page("01PPP").is_none());
     assert!(index.page("01QQQ").is_some());
     assert!(db.bodies(["01PPP"]).unwrap().is_empty());
@@ -555,13 +416,11 @@ fn a_copy_of_a_page_is_taken_once_the_page_is_gone() {
     let sync = page("01PPP", "2026-09-22", "Weekly sync", "the meeting");
     write_page(&root, &sync);
     let mut db = db();
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-    std::fs::write(&cache, rebuild(&root, &mut db).to_jsonl()).unwrap();
+    rebuild(&root, &mut db);
 
     let copy = "pages/2026/copy.md";
     std::fs::copy(root.join(&sync.file), root.join(copy)).unwrap();
-    let (index, _) = load(&root, &mut db);
+    let index = load(&root, &mut db);
     assert_eq!(index.page("01PPP").unwrap().file, sync.file);
     assert!(
         !db.page_files().unwrap().contains_key(copy),
@@ -569,8 +428,7 @@ fn a_copy_of_a_page_is_taken_once_the_page_is_gone() {
     );
 
     std::fs::remove_file(root.join(&sync.file)).unwrap();
-    let (index, changed) = load(&root, &mut db);
-    assert!(changed);
+    let index = load(&root, &mut db);
     assert_eq!(index.page("01PPP").unwrap().file, copy);
     assert_eq!(db.bodies(["01PPP"]).unwrap()["01PPP"], "the meeting");
 
@@ -580,22 +438,19 @@ fn a_copy_of_a_page_is_taken_once_the_page_is_gone() {
 #[test]
 fn load_forgets_a_day_whose_file_is_gone() {
     let root = scratch_root("vanished-day");
-    std::fs::create_dir_all(root.join("notes")).unwrap();
-
-    let mut stale = Index::default();
-    stale.push(IndexEntry::from(&note(
-        "01AAA",
+    write_day(
+        &root,
         "2026-09-22",
-        "08:00",
-        "gone",
-    )));
-    let cache = index_path(&root);
-    std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
-    std::fs::write(&cache, stale.to_jsonl()).unwrap();
+        &[note("01AAA", "2026-09-22", "08:00", "gone")],
+    );
+    let mut db = db();
+    rebuild(&root, &mut db);
 
-    let (index, changed) = load(&root, &mut db());
-    assert!(changed);
+    std::fs::remove_file(super::super::day_path(&root, "2026-09-22")).unwrap();
+    let index = load(&root, &mut db);
     assert_eq!(index.len(), 0);
+    assert_eq!(db.index().unwrap().len(), 0);
+    assert!(db.days().unwrap().is_empty());
 
     let _ = std::fs::remove_dir_all(&root);
 }

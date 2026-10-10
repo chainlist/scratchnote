@@ -42,7 +42,7 @@ pub async fn add(
     writer
         .append_note(day_path(&space.root, &date), date, note.clone())
         .await?;
-    space.note_added(writer, &note).await?;
+    space.note_added(&note)?;
     Ok(note)
 }
 
@@ -101,14 +101,13 @@ pub async fn read_note(space: &Space, date: &str, id: &str) -> Result<Note> {
 }
 
 /// Remove a note from its day's file. A delete rewrites the day file, so
-/// the day's entries are reparsed and the whole index written back (SPEC
-/// 4.4).
+/// the day's entries are reparsed (SPEC 4.4).
 pub async fn delete(writer: &Writer, space: &Space, date: &str, id: &str) -> Result<()> {
     let path = day_path(&space.root, date);
     if !writer.delete_note(path, id.to_string()).await? {
         return Err(format!("no note {id} in {date}").into());
     }
-    reindex_day(writer, space, date).await
+    reindex_day(space, date)
 }
 
 /// Swap a note's body for `body`, trimmed and not empty. Returns the note
@@ -129,7 +128,7 @@ pub async fn update(
     if !writer.replace_body(path, id.to_string(), body).await? {
         return Err(format!("no note {id} in {date}").into());
     }
-    reindex_day(writer, space, date).await?;
+    reindex_day(space, date)?;
     Ok((read_note(space, date, id).await?, true))
 }
 
@@ -184,12 +183,12 @@ pub async fn move_to(
     writer
         .append_note(day_path(&to.root, date), date.to_string(), moved.clone())
         .await?;
-    to.note_added(writer, &moved).await?;
+    to.note_added(&moved)?;
 
     writer
         .delete_note(day_path(&from.root, date), id.to_string())
         .await?;
-    reindex_day(writer, from, date).await?;
+    reindex_day(from, date)?;
     crate::attachments::drop_carried(from, &carried);
     Ok(())
 }
@@ -210,17 +209,18 @@ pub async fn clear_day_ahead(writer: &Writer, space: &Space, date: &str, id: &st
     {
         return Err(format!("no note {id} in {date}").into());
     }
-    reindex_day(writer, space, date).await
+    reindex_day(space, date)
 }
 
 fn is_page(space: &Space, id: &str) -> bool {
     space.index.read().is_ok_and(|idx| idx.page(id).is_some())
 }
 
-/// After rewriting a day file: reparse the day and write the index back.
-async fn reindex_day(writer: &Writer, space: &Space, date: &str) -> Result<()> {
+/// After rewriting a day file: reparse the day.
+fn reindex_day(space: &Space, date: &str) -> Result<()> {
     space.day_changed(date)?;
-    space.persist_index(writer).await
+    space.index_changed();
+    Ok(())
 }
 
 /// Write the notes and pages a model labelled as they are written now, then
@@ -230,7 +230,7 @@ pub async fn rebuild(writer: &Writer, space: &Arc<Space>) -> Result<usize> {
     drop_labels(writer, space).await?;
     let rebuilding = space.clone();
     let count = blocking(move || rebuilding.rebuild()).await??;
-    space.persist_index(writer).await?;
+    space.index_changed();
     Ok(count)
 }
 

@@ -131,7 +131,8 @@ pub async fn clear_day_ahead(writer: &Writer, space: &Space, id: &str) -> Result
         })
         .await?;
     reindex(space, &page.file)?;
-    space.persist_index(writer).await
+    space.index_changed();
+    Ok(())
 }
 
 #[cfg(test)]
@@ -179,7 +180,6 @@ mod tests {
             root.to_path_buf(),
             Arc::new(tokio::sync::Notify::new()),
         )
-        .0
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! The note embeddings search by meaning reads, held in memory and saved in
 //! the `vectors` table of `space.db`.
 //!
-//! Derived like `index.jsonl`: every vector can be made again from the
+//! Derived like `search.db`: every vector can be made again from the
 //! markdown, so vectors that are missing or from another model load as
 //! empty and the notes are simply embedded again. `vectors.bin`, where they
 //! were saved before, is read by `legacy`.

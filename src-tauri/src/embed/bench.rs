@@ -227,7 +227,7 @@ fn bench_storage() {
     drop(store);
     let mut store = timed(&mut timings, "reopen store", || Store::open(&root));
     let size_before = store.size();
-    let (space, _) = Space::open("bench", root.clone(), Arc::new(tokio::sync::Notify::new()));
+    let space = Space::open("bench", root.clone(), Arc::new(tokio::sync::Notify::new()));
     let mut when = when_written(&space.index.read().unwrap());
     for _ in 0..RUNS {
         timed(&mut timings, "load vectors", || store.load_vectors());

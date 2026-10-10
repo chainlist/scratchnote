@@ -16,7 +16,9 @@ use tokio::sync::mpsc;
 
 use crate::spaces::Space;
 use crate::state::AppState;
+use crate::storage::daily_file::Note;
 use crate::storage::search_db::Stamp;
+use crate::storage::writer::{SelfWrites, Writer};
 use crate::storage::{check_date, fingerprint, index};
 
 /// An editor writing a file emits several events; wait for quiet before
@@ -76,128 +78,144 @@ async fn process(app: AppHandle, space: Weak<Space>, mut rx: mpsc::UnboundedRece
         let Some(space) = space.upgrade().filter(|s| !s.is_retired()) else {
             return;
         };
-        let mut touched = false;
-        for path in batch.drain() {
-            touched |= reindex(&app, &space, &path);
+        let Some(state) = app.try_state::<AppState>() else {
+            batch.clear();
+            continue;
+        };
+        // Reading the files and putting them in search.db both block.
+        let paths: Vec<PathBuf> = batch.drain().collect();
+        let (reading, self_writes) = (space.clone(), state.writer.self_writes());
+        let read = tauri::async_runtime::spawn_blocking(move || {
+            let mut batch = Reindexed::default();
+            for path in &paths {
+                reindex(&reading, &self_writes, path, &mut batch);
+            }
+            batch
+        })
+        .await;
+        let read = match read {
+            Ok(read) => read,
+            Err(e) => {
+                log::warn!("could not read the files edited outside the app: {e}");
+                continue;
+            }
+        };
+        if !read.changed {
+            continue;
         }
-        if touched {
-            let _ = app.emit("index-rebuilt", ());
+        let _ = app.emit("index-rebuilt", ());
+
+        for restub in read.stubs {
+            restub.write(&state.writer, &space).await;
+        }
+        // Once for the whole batch. Failing to write it is not fatal: the
+        // file is derived, and startup reparses anything newer than it.
+        if let Err(e) = space.persist_index(&state.writer).await {
+            log::warn!("could not persist the index after an external edit: {e}");
+        }
+    }
+}
+
+/// What a batch of changed files did to the index: whether it changed at
+/// all, and the stubs to write again for the pages it moved.
+#[derive(Default)]
+struct Reindexed {
+    changed: bool,
+    stubs: Vec<Restub>,
+}
+
+/// A page whose title, file, day or time changed, so its stub follows it.
+struct Restub {
+    page: Note,
+    /// The day it was on before, when it moved to another, whose stub goes.
+    left: Option<String>,
+}
+
+impl Restub {
+    async fn write(self, writer: &Writer, space: &Space) {
+        let Restub { page, left } = self;
+        if let Some(left) = left {
+            if let Err(e) = crate::pages::drop_stub(writer, space, &left, &page.id).await {
+                log::warn!("could not take page {} off {left}: {e}", page.id);
+            }
+        }
+        if let Err(e) = crate::pages::sync_stub(writer, space, &page).await {
+            log::warn!("could not write the stub of page {}: {e}", page.id);
         }
     }
 }
 
 /// Reparse one changed file into the index: a daily file or a page file.
 /// Anything else in the space's folder is not the watcher's business.
-/// Returns whether anything changed.
-fn reindex(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
+fn reindex(space: &Space, self_writes: &SelfWrites, path: &Path, batch: &mut Reindexed) {
     if path.starts_with(space.root.join("pages")) {
-        reindex_page(app, space, path)
+        reindex_page(space, self_writes, path, batch);
     } else if path.starts_with(space.root.join("notes")) {
-        reindex_day(app, space, path)
-    } else {
-        false
+        batch.changed |= reindex_day(space, self_writes, path);
     }
 }
 
 /// Reparse one page file (SPEC 4.3). A page renamed or moved is found again
 /// by its id, and its stub follows it. A page file that is gone leaves the
 /// index, and its stub stays.
-fn reindex_page(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
-    let Some(state) = app.try_state::<AppState>() else {
-        return false;
-    };
-    if wrote_it_ourselves(&state, path) {
-        return false;
+fn reindex_page(space: &Space, self_writes: &SelfWrites, path: &Path, batch: &mut Reindexed) {
+    if wrote_it_ourselves(self_writes, path) {
+        return;
     }
     let Some(file) = index::relative(&space.root, path) else {
-        return false;
+        return;
     };
 
     let parsed = index::parse_page(&space.root, path);
     let before = match &parsed {
         Some(page) => match space.page_changed(page) {
             Ok(before) => before,
-            Err(_) => return false,
+            Err(_) => return,
         },
         // Gone, or no longer a page: whatever page this file held goes.
         None => match space.page_file_gone(&file) {
             Ok(Some(gone)) => Some(gone),
-            _ => return false,
+            _ => return,
         },
     };
-    // The stub follows the page's title, file, day and time.
-    let moved = match (&before, &parsed) {
-        (Some(before), Some(after)) => {
-            before.file != after.file
-                || before.subject != after.subject
-                || before.date != after.date
-                || before.time != after.time
-        }
-        (None, Some(_)) => true,
-        _ => false,
-    };
-
-    let app = app.clone();
-    let owned = space.clone();
-    tauri::async_runtime::spawn(async move {
-        let state = app.state::<AppState>();
-        if let (true, Some(page)) = (moved, parsed) {
-            if let Some(before) = before.filter(|b| b.date != page.date) {
-                if let Err(e) =
-                    crate::pages::drop_stub(&state.writer, &owned, &before.date, &page.id).await
-                {
-                    log::warn!("could not take page {} off {}: {e}", page.id, before.date);
-                }
-            }
-            if let Err(e) = crate::pages::sync_stub(&state.writer, &owned, &page).await {
-                log::warn!("could not write the stub of page {}: {e}", page.id);
-            }
-        }
-        if let Err(e) = owned.persist_index(&state.writer).await {
-            log::warn!("could not persist the index after an external edit: {e}");
-        }
-    });
-
+    batch.changed = true;
     log::info!("reindexed {file} in {} after an external edit", space.name);
-    true
+
+    // The stub follows the page's title, file, day and time.
+    let Some(page) = parsed else {
+        return;
+    };
+    let moved = before.as_ref().is_none_or(|before| {
+        before.file != page.file
+            || before.subject != page.subject
+            || before.date != page.date
+            || before.time != page.time
+    });
+    if moved {
+        let left = before.map(|b| b.date).filter(|date| *date != page.date);
+        batch.stubs.push(Restub { page, left });
+    }
 }
 
 /// Reparse one daily file into the index. Returns whether anything changed.
-fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
+fn reindex_day(space: &Space, self_writes: &SelfWrites, path: &Path) -> bool {
     let Some(date) = path.file_stem().and_then(|s| s.to_str()) else {
         return false;
     };
     if check_date(date).is_err() {
         return false;
     }
-    let date = date.to_string();
-
-    let Some(state) = app.try_state::<AppState>() else {
-        return false;
-    };
-
-    if wrote_it_ourselves(&state, path) {
+    if wrote_it_ourselves(self_writes, path) {
         return false;
     }
 
     // Taken before the file is read, so a write in between makes the day
     // look older than it is, and read again.
     let stamp = Stamp::of(path);
-    let notes = index::parse_day(path, &date);
-    if space.set_day(&date, &notes, stamp).is_err() {
+    let notes = index::parse_day(path, date);
+    if space.set_day(date, &notes, stamp).is_err() {
         return false;
     }
-
-    // Persist the refreshed cache. Failing to write it is not fatal: the file
-    // is derived, and startup reparses anything newer than it.
-    let app = app.clone();
-    let owned = space.clone();
-    tauri::async_runtime::spawn(async move {
-        let state = app.state::<AppState>();
-        if let Err(e) = owned.persist_index(&state.writer).await {
-            log::warn!("could not persist the index after an external edit: {e}");
-        }
-    });
 
     log::info!("reindexed {date} in {} after an external edit", space.name);
     true
@@ -205,15 +223,13 @@ fn reindex_day(app: &AppHandle, space: &Arc<Space>, path: &Path) -> bool {
 
 /// True when the file on disk still matches what the app last wrote there, so
 /// the event came from us rather than from another editor.
-fn wrote_it_ourselves(state: &AppState, path: &Path) -> bool {
+fn wrote_it_ourselves(self_writes: &SelfWrites, path: &Path) -> bool {
     let Ok(contents) = std::fs::read_to_string(path) else {
         // A file that vanished is somebody else's doing, so let it through.
         return false;
     };
     let current = fingerprint(&contents);
-    state
-        .writer
-        .self_writes()
+    self_writes
         .lock()
         .map(|seen| seen.get(path) == Some(&current))
         .unwrap_or(false)

@@ -4,6 +4,7 @@ import {
 	locales,
 	type Locale
 } from '#lib/paraglide/runtime.js';
+import { m } from '#lib/paraglide/messages.js';
 
 /** The language the settings pick, or undefined to follow the OS. */
 let chosen = $state<Locale | undefined>(undefined);
@@ -21,7 +22,7 @@ defineCustomClientStrategy('custom-settings', {
 export type Language = 'system' | Locale;
 
 /** Each language in its own tongue, as a language picker shows them. */
-export const LANGUAGE_NAMES: Record<Locale, string> = {
+const LANGUAGE_NAMES: Record<Locale, string> = {
 	en: 'English',
 	fr: 'Français',
 	es: 'Español',
@@ -31,6 +32,10 @@ export const LANGUAGE_NAMES: Record<Locale, string> = {
 };
 
 export const LANGUAGES: Language[] = ['system', ...locales];
+
+/** Languages are named in their own tongue; only System follows the open one. */
+export const languageName = (language: Language) =>
+	language === 'system' ? m.settings_language_system() : LANGUAGE_NAMES[language];
 
 /** An unknown value, say from a hand-edited settings.json, follows the OS. */
 export function applyLanguage(language: string) {

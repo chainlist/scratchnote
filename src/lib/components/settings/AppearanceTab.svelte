@@ -11,7 +11,7 @@
 		RADII,
 		THEMES
 	} from '#lib/appearance.js';
-	import { LANGUAGE_NAMES, LANGUAGES, type Language } from '#lib/i18n.svelte.js';
+	import { languageName, LANGUAGES, type Language } from '#lib/i18n.svelte.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import Segmented from './Segmented.svelte';
 	import SettingRow from './SettingRow.svelte';
@@ -38,10 +38,6 @@
 			view.radius === DEFAULT_APPEARANCE.radius &&
 			view.theme === DEFAULT_APPEARANCE.theme
 	);
-
-	/** Languages are named in their own tongue; only System follows the open one. */
-	const languageName = (language: Language) =>
-		language === 'system' ? m.settings_language_system() : LANGUAGE_NAMES[language];
 </script>
 
 <div class="flex flex-col gap-4">

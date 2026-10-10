@@ -10,7 +10,7 @@ import type { MarkdownConfig } from '@lezer/markdown';
 import { goto } from '$app/navigation';
 import { resolve } from '$app/paths';
 import { listMentions } from '#lib/api.js';
-import { daysAgo } from '#lib/days.js';
+import { daysAgo } from '#lib/dates.js';
 import type { NodeRender } from '#lib/plugins/types.js';
 import { m } from '#lib/paraglide/messages.js';
 

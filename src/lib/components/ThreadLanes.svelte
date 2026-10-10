@@ -1,10 +1,8 @@
 <script lang="ts" generics="T extends Thread">
 	import type { Snippet } from 'svelte';
 	import type { Thread } from '#lib/api.js';
-	import { shortDay } from '#lib/components/ViewHeader.svelte';
-	import { daysAgo } from '#lib/days.js';
+	import { dateFormat, daysAgo, isoDay, shortDay } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { threadHref, threadHue } from '#lib/threads.js';
 
@@ -44,13 +42,12 @@
 	 *  named just after it. One too near the first day shown is left
 	 *  unnamed, as is one too near the right end for its name to fit. */
 	const months = $derived.by(() => {
-		const format = new Intl.DateTimeFormat(getLocale(), { month: 'short' });
+		const format = dateFormat({ month: 'short' });
 		const marks: { at: number; label: string | null }[] = [];
 		const now = new Date();
 		for (let back = 0; ; back++) {
 			const day = new Date(now.getFullYear(), now.getMonth() - back, 1);
-			const month = String(day.getMonth() + 1).padStart(2, '0');
-			const at = along(`${day.getFullYear()}-${month}-01`);
+			const at = along(isoDay(day));
 			if (at < 0) return marks;
 			marks.push({ at, label: at > 0.15 && at < 0.9 ? format.format(day) : null });
 		}
@@ -59,9 +56,7 @@
 	/** The first day the lanes show. */
 	const first = $derived.by(() => {
 		const now = new Date();
-		const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - span);
-		const pad = (n: number) => String(n).padStart(2, '0');
-		return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+		return isoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - span));
 	});
 
 	const range = (thread: T) =>

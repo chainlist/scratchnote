@@ -9,7 +9,7 @@
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { longDay } from '#lib/dates.js';
 
 	let {
 		releases = $bindable()
@@ -37,13 +37,6 @@
 			(a, b) => rank(a) - rank(b)
 		)
 	);
-
-	const releaseDate = (date: string) =>
-		new Date(`${date}T00:00:00`).toLocaleDateString(getLocale(), {
-			day: 'numeric',
-			month: 'long',
-			year: 'numeric'
-		});
 </script>
 
 <Dialog.Root
@@ -86,7 +79,7 @@
 								<section class="flex flex-col gap-2">
 									<h3 class="flex items-baseline gap-2">
 										<span class="text-base font-semibold">{release.version}</span>
-										<span class="text-xs text-muted-foreground">{releaseDate(release.date)}</span>
+										<span class="text-xs text-muted-foreground">{longDay(release.date)} </span>
 									</h3>
 									<Markdown text={entries.map((e) => `* ${e}`).join('\n')} class="text-sm" />
 								</section>

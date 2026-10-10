@@ -5,7 +5,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import SectionTabs from '#lib/components/SectionTabs.svelte';
 	import View from '#lib/components/View.svelte';
-	import { shortDay } from '#lib/components/ViewHeader.svelte';
+	import { shortDay } from '#lib/dates.js';
 	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

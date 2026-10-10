@@ -6,7 +6,7 @@
 	import NoteList from '#lib/components/NoteList.svelte';
 	import { noteTitle } from '#lib/markdown.js';
 	import View from '#lib/components/View.svelte';
-	import { dayHeading, dayTitle, shortDay } from '#lib/components/ViewHeader.svelte';
+	import { dayHeading, dayTitle, shortDay } from '#lib/dates.js';
 	import { prettyHotkey } from '#lib/components/settings/HotkeyInput.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';

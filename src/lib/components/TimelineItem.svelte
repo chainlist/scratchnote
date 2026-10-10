@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { ClassValue, HTMLAttributes } from 'svelte/elements';
-	import { clockMinutes, gapRoom, type DayPart } from '#lib/days.js';
+	import { clockMinutes, clockTime, gapRoom, type DayPart } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	/**
@@ -64,9 +64,7 @@
 	/** The time as software reads it, `09:05`, when it is a clock's. */
 	const datetime = $derived.by(() => {
 		const minutes = clockMinutes(time);
-		if (minutes === null) return undefined;
-		const pad = (n: number) => String(n).padStart(2, '0');
-		return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+		return minutes === null ? undefined : clockTime(minutes);
 	});
 
 	const partName: Record<DayPart, () => string> = {

@@ -3,9 +3,8 @@
 	import type { Note } from '#lib/api.js';
 	import NoteList from '#lib/components/NoteList.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { dayHeading } from '#lib/components/ViewHeader.svelte';
+	import { dayHeading, monthHeading, weekday } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { RESULTS_STEP } from '#lib/query.js';
 
 	let {
@@ -47,27 +46,6 @@
 		}
 		return months.filter((month) => month.days.length);
 	});
-
-	/** The formats made, by language and kind: making one takes far longer
-	 *  than using it, and every day drawn uses one. */
-	const formats: Record<string, Intl.DateTimeFormat> = {};
-	const format = (kind: string, options: Intl.DateTimeFormatOptions) =>
-		(formats[`${getLocale()} ${kind}`] ??= new Intl.DateTimeFormat(getLocale(), options));
-
-	/** A month as its heading reads, its year left out in this one. */
-	function monthHeading(month: string) {
-		const day = new Date(`${month}-01T00:00:00`);
-		const thisYear = day.getFullYear() === new Date().getFullYear();
-		const name = (
-			thisYear
-				? format('month', { month: 'long' })
-				: format('month year', { month: 'long', year: 'numeric' })
-		).format(day);
-		return name.charAt(0).toLocaleUpperCase(getLocale()) + name.slice(1);
-	}
-
-	const weekday = (date: string) =>
-		format('weekday', { weekday: 'short' }).format(new Date(`${date}T00:00:00`));
 </script>
 
 <!-- Notes across days, as a calendar reads: each month under its name with

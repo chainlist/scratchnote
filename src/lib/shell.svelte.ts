@@ -19,12 +19,12 @@ import {
 	type Pin,
 	type SpacesView
 } from '#lib/api.js';
-import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
+import { loadDock, saveDock, type DockSide } from '#lib/shell/dock.js';
 import { afterNavigation, onGuard } from '#lib/app/back.svelte.js';
-import { addToPageDraft } from '#lib/page-draft.js';
+import { addToPageDraft } from '#lib/shell/page-draft.js';
 import { m } from '#lib/paraglide/messages.js';
 import { errorText } from '#lib/helpers/errors.js';
-import { pluginPageHref, samePin } from '#lib/pins.js';
+import { pluginPageHref, samePin } from '#lib/shell/pins.js';
 import { threadHref } from '#lib/notes/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
 import { ThreadsState } from '#lib/shell/threads.svelte.js';

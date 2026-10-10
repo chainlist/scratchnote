@@ -1,10 +1,9 @@
 <script lang="ts">
 	import type { MentionSummary, Pin } from '#lib/api.js';
 	import View from '#lib/components/View.svelte';
+	import PinButton from '#lib/components/PinButton.svelte';
 	import ShowMore from '#lib/components/ShowMore.svelte';
 	import { daysAgo, shortDay } from '#lib/dates.js';
-	import { Button } from '#lib/components/ui/button/index.js';
-	import PinIcon from '@lucide/svelte/icons/pin';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import { goto } from '$app/navigation';
@@ -149,26 +148,7 @@
 
 <!-- Its pin to the left edge, shown on hover unless pinned. -->
 {#snippet pinButton(mention: MentionSummary, extra: string)}
-	{@const pin = pinOf(mention)}
-	{@const pinned = shell.isPinned(pin)}
-	{@const label = pinned ? m.pin_remove() : m.pin_add()}
-	<Button
-		variant="ghost"
-		size="icon-sm"
-		onclick={() => void shell.togglePin(pin)}
-		aria-label={m.pin_add()}
-		aria-pressed={pinned}
-		title={label}
-		class={[
-			'shrink-0',
-			extra,
-			pinned
-				? 'text-foreground'
-				: 'text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100'
-		]}
-	>
-		<PinIcon class={pinned ? 'fill-current' : undefined} />
-	</Button>
+	<PinButton pin={pinOf(mention)} hoverOnly class={extra} />
 {/snippet}
 
 <!-- Every name mentioned. Those in hand, the pinned and those that came up

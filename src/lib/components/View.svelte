@@ -92,7 +92,9 @@
 	{/if}
 
 	{#key key}
-		<div class={['page-in', fill && 'min-h-0 flex-1']} {@attach fromTop}>
+		<!-- Read once, as it opens: the flag is not state. -->
+		{@const rises = !shell.slid}
+		<div class={[rises && 'page-in', fill && 'min-h-0 flex-1']} {@attach fromTop}>
 			{@render children()}
 		</div>
 	{/key}

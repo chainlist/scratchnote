@@ -81,33 +81,77 @@
 		if (day) void goto(dayHref(day.date));
 	}
 
-	// A swipe goes to the day before or after, as the arrows do: the view
-	// follows the finger, and holds back where there is no day to go to.
+	/** The view's column and what slides with it. */
+	let track = $state<HTMLElement | null>(null);
+	/** The day the finger brings in, beside the view, while it moves. */
+	let sliding = $state<{ day: Day; offset: number; top: number } | null>(null);
+
+	// When the day is alone in the view, a swipe slides in the day before or
+	// after, as the arrows go to: it follows the finger, and lands as the view
+	// opens on it. Where there is no day to go to, the view holds back.
 	$effect(() => {
 		const main = shell.main;
-		if (!main) return;
-		const slide = (x: number, animate: boolean) => {
-			main.style.transition = animate ? 'transform 150ms ease-out, opacity 150ms ease-out' : '';
-			main.style.transform = x ? `translateX(${x}px)` : '';
-			main.style.opacity = x ? String(1 - Math.min(0.5, Math.abs(x) / 600)) : '';
+		const column = track;
+		if (!main || !column) return;
+		/** How far apart the days sit: a column and the room on either side of it. */
+		let gap = 0;
+		const slide = (x: number, ms = 0) => {
+			column.style.transition = ms ? `transform ${ms}ms cubic-bezier(0.2, 0.8, 0.2, 1)` : '';
+			column.style.transform = x ? `translateX(${x}px)` : '';
 		};
-		const toward = (x: number) => (x > 0 ? data.previous : data.next);
+		const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 		const stop = onSwipe(main, {
 			axis: 'x',
 			// The left edge draws out the ribbon on a phone.
-			accept: (touch, target) => !inText(target) && !(phone.current && touch.clientX < 24),
-			move: (x) => slide(toward(x) ? x * 0.5 : x * 0.15, false),
-			end: (x, speed) => {
-				const day = toward(x);
-				if (day && (Math.abs(x) > 80 || (Math.abs(x) > 30 && Math.abs(speed) > 0.4))) {
-					slide(0, false);
-					void goto(dayHref(day.date));
-				} else slide(0, true);
+			accept: (touch, target) =>
+				columns === 1 && !inText(target) && !(phone.current && touch.clientX < 24),
+			move: (x) => {
+				const day = x > 0 ? data.previous : data.next;
+				if (!day) {
+					sliding = null;
+					return slide(x * 0.15);
+				}
+				if (sliding?.day !== day) {
+					const padding = parseFloat(getComputedStyle(main).paddingLeft);
+					gap = column.offsetWidth + 2 * padding;
+					// Hidden while it moves, or the day beyond the right edge would
+					// scroll the view sideways.
+					main.style.overflowX = 'hidden';
+					sliding = { day, offset: x > 0 ? -gap : gap, top: main.scrollTop };
+				}
+				slide(x);
+			},
+			end: async (x, speed) => {
+				const day = sliding?.day;
+				const far = Math.abs(x) > gap * 0.3 || (Math.abs(x) > 30 && Math.abs(speed) > 0.4);
+				if (!day || !far || Math.sign(x) !== Math.sign(-sliding!.offset)) {
+					slide(0, 200);
+					await settle(200);
+					if (column.style.transform === '') sliding = null;
+					main.style.overflowX = '';
+					return;
+				}
+				slide(-sliding!.offset, 220);
+				await settle(220);
+				// Both to the top, which the view opens on, in one frame: the day
+				// brought in stays where it shows.
+				main.scrollTop = 0;
+				sliding = { ...sliding!, top: 0 };
+				shell.slid = true;
+				try {
+					await goto(dayHref(day.date));
+				} finally {
+					shell.slid = false;
+					slide(0);
+					sliding = null;
+					main.style.overflowX = '';
+				}
 			}
 		});
 		return () => {
 			stop();
-			slide(0, false);
+			slide(0);
+			main.style.overflowX = '';
 		};
 	});
 </script>
@@ -117,7 +161,11 @@
 <!-- In a wider view the day has the one before it on its left, and in a wide
      one the one after it on its right too, which centres it. -->
 <div
+	bind:this={track}
 	class={[
+		// Holds its title's top margin, as the day sliding in beside it does.
+		'relative',
+		columns === 1 && 'flow-root',
 		columns > 1 && 'grid justify-center gap-x-8',
 		columns === 2 && 'grid-cols-[repeat(2,minmax(0,48rem))]',
 		columns === 3 && 'grid-cols-[repeat(3,minmax(0,48rem))]'
@@ -126,59 +174,7 @@
 	{#if columns > 1}{@render besideDay(data.previous)}{/if}
 	<View key={data.date} name={dayHeading(data.date)}>
 		{#snippet heading(compact: boolean)}
-			<!-- Side by side ahead of the title, so they stay put while its width
-			     changes from one day to the next. On a screen too narrow for the
-			     date on one line beside them, the title goes under them. -->
-			<div class={compact ? 'contents' : 'flex min-w-0 flex-1 flex-wrap items-center gap-2'}>
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					href={data.previous && dayHref(data.previous.date)}
-					disabled={!data.previous}
-					aria-label={m.calendar_previous_day()}
-					aria-keyshortcuts="Alt+ArrowLeft"
-					title="{m.calendar_previous_day()} ({mac ? '⌥←' : 'Alt+←'})"
-					class="text-muted-foreground hover:text-foreground"
-				>
-					<ChevronLeftIcon />
-				</Button>
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					href={data.next && dayHref(data.next.date)}
-					disabled={!data.next}
-					aria-label={m.calendar_next_day()}
-					aria-keyshortcuts="Alt+ArrowRight"
-					title="{m.calendar_next_day()} ({mac ? '⌥→' : 'Alt+→'})"
-					class="text-muted-foreground hover:text-foreground"
-				>
-					<ChevronRightIcon />
-				</Button>
-				<!-- The date opens the calendar, on the day's month; the calendar after
-				     it says it can be clicked. -->
-				<svelte:element
-					this={compact ? 'span' : 'h1'}
-					class={compact
-						? 'min-w-0 text-sm font-semibold whitespace-nowrap'
-						: 'grow basis-0 text-2xl font-medium max-sm:text-xl'}
-				>
-					<a
-						href={resolve('calendar/')}
-						title={m.calendar_pick()}
-						class="group/date -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
-					>
-						<span class={compact ? 'min-w-0 truncate' : undefined}>
-							{#if compact}{dayHeading(data.date, true)}{:else}{@render dayName(data.date)}{/if}
-						</span>
-						<CalendarIcon
-							class={[
-								'shrink-0 text-muted-foreground transition-colors group-hover/date:text-foreground',
-								compact ? 'size-3.5' : 'size-4.5'
-							]}
-						/>
-					</a>
-				</svelte:element>
-			</div>
+			{@render titleRow(data.date, data.previous?.date, data.next?.date, compact)}
 		{/snippet}
 
 		<!-- What earlier notes said about this day (SPEC 5.3). -->
@@ -255,7 +251,92 @@
 		{/if}
 	</View>
 	{#if columns === 3}{@render besideDay(data.next)}{/if}
+	{#if sliding}
+		<!-- The day the finger brings in, drawn as the view will draw it, at the
+		     top of what shows. Only a picture of it until it lands. -->
+		<div
+			inert
+			aria-hidden="true"
+			class="absolute inset-x-0 mx-auto w-full max-w-3xl"
+			style:top="{sliding.top}px"
+			style:transform="translateX({sliding.offset}px)"
+		>
+			<div class="mt-6 mb-8 flex items-center gap-2">
+				<!-- Its own neighbours are not loaded: its arrows show both, but
+				     the one back to this day. -->
+				{@render titleRow(sliding.day.date, sliding.day.date, sliding.day.date, false)}
+			</div>
+			{#if sliding.day.notes.length}
+				<NoteList notes={sliding.day.notes} empty="" {...shell.cardActions} />
+			{:else}
+				<p class="py-16 text-center text-base text-meta">{m.page_empty_other_day()}</p>
+			{/if}
+		</div>
+	{/if}
 </div>
+
+<!-- The day's title row: the arrows to the days on either side, then its
+     name, which opens the calendar. -->
+{#snippet titleRow(
+	date: string,
+	previous: string | undefined,
+	next: string | undefined,
+	compact: boolean
+)}
+	<!-- Side by side ahead of the title, so they stay put while its width
+	     changes from one day to the next. On a screen too narrow for the
+	     date on one line beside them, the title goes under them. -->
+	<div class={compact ? 'contents' : 'flex min-w-0 flex-1 flex-wrap items-center gap-2'}>
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			href={previous && dayHref(previous)}
+			disabled={!previous}
+			aria-label={m.calendar_previous_day()}
+			aria-keyshortcuts="Alt+ArrowLeft"
+			title="{m.calendar_previous_day()} ({mac ? '⌥←' : 'Alt+←'})"
+			class="text-muted-foreground hover:text-foreground"
+		>
+			<ChevronLeftIcon />
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon-sm"
+			href={next && dayHref(next)}
+			disabled={!next}
+			aria-label={m.calendar_next_day()}
+			aria-keyshortcuts="Alt+ArrowRight"
+			title="{m.calendar_next_day()} ({mac ? '⌥→' : 'Alt+→'})"
+			class="text-muted-foreground hover:text-foreground"
+		>
+			<ChevronRightIcon />
+		</Button>
+		<!-- The date opens the calendar, on the day's month; the calendar after
+		     it says it can be clicked. -->
+		<svelte:element
+			this={compact ? 'span' : 'h1'}
+			class={compact
+				? 'min-w-0 text-sm font-semibold whitespace-nowrap'
+				: 'grow basis-0 text-2xl font-medium max-sm:text-xl'}
+		>
+			<a
+				href={resolve('calendar/')}
+				title={m.calendar_pick()}
+				class="group/date -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+			>
+				<span class={compact ? 'min-w-0 truncate' : undefined}>
+					{#if compact}{dayHeading(date, true)}{:else}{@render dayName(date)}{/if}
+				</span>
+				<CalendarIcon
+					class={[
+						'shrink-0 text-muted-foreground transition-colors group-hover/date:text-foreground',
+						compact ? 'size-3.5' : 'size-4.5'
+					]}
+				/>
+			</a>
+		</svelte:element>
+	</div>
+{/snippet}
 
 <!-- A day's name as its column heads it: the weekday, then the date, quieter. -->
 {#snippet dayName(date: string)}

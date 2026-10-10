@@ -153,6 +153,9 @@ export class Shell implements WorkspaceHost {
 	ribbonOpen = $state(false);
 	/** The views' scrolling element, which takes the day's swipes. */
 	main = $state<HTMLElement | null>(null);
+	/** The view opening slid into place under the finger already, so it does
+	 *  not rise as an opening view does. */
+	slid = false;
 	/** Counts the times the notes or threads were read again, for a view
 	 *  outside the routes, which loads what it shows itself. */
 	reloads = $state(0);

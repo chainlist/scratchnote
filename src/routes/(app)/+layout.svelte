@@ -282,10 +282,13 @@
 					<Resizable.Handle class="z-10 after:w-2" />
 				{/if}
 				<Resizable.Pane id="view" order={2} class="relative">
+					<!-- On a touch screen the scrollbar keeps its room, which a phone's,
+					     drawn over the page, never takes: a day sliding in is laid out
+					     as wide as it lands, scrolling or not, under an emulator too. -->
 					<main
 						bind:this={shell.main}
 						bind:offsetWidth={shell.width}
-						class="h-full overflow-y-auto px-6 pb-16"
+						class="h-full overflow-y-auto px-6 pb-16 pointer-coarse:[scrollbar-gutter:stable]"
 					>
 						{@render children()}
 					</main>

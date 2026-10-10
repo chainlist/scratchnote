@@ -2,7 +2,7 @@ import { dev } from '$app/env';
 import { invoke as tauriInvoke, type InvokeArgs, type InvokeOptions } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { Language } from '#lib/i18n.svelte.js';
-import { track } from '#lib/slow-calls.js';
+import { track, type Command } from '#lib/slow-calls.js';
 
 /** A command the window called while it started, timed from when it began loading. */
 export interface StartupCall {
@@ -17,7 +17,7 @@ export interface StartupCall {
  */
 export const startupCalls = { open: dev, calls: [] as StartupCall[] };
 
-function invoke<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions): Promise<T> {
+function invoke<T>(cmd: Command, args?: InvokeArgs, options?: InvokeOptions): Promise<T> {
 	const call = track(cmd, tauriInvoke<T>(cmd, args, options));
 	if (!startupCalls.open) return call;
 	const start = performance.now();

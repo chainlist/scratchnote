@@ -58,6 +58,9 @@ export class BasicsPlugin extends Plugin {
 			tasks: { ...DEFAULTS.tasks, ...saved?.tasks },
 			highlights: { ...DEFAULTS.highlights, ...saved?.highlights }
 		};
+		const { tasks, highlights } = this.settings;
+		if (tasks.order !== 'newest' && tasks.order !== 'oldest') tasks.order = DEFAULTS.tasks.order;
+		if (!(highlights.color in COLORS)) highlights.color = DEFAULTS.highlights.color;
 		this.#apply();
 	}
 

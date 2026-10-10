@@ -7,6 +7,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell, type ThreadPick } from '#lib/shell.svelte.js';
 	import { threadName, threadScope } from '#lib/threads.js';
+	import { untrack } from 'svelte';
 
 	let {
 		pick = $bindable(),
@@ -62,7 +63,10 @@
 				: asked.notes.length === 1
 					? threadsForNote(asked.notes[0])
 					: threadCards();
-		const fromKept = shell.threadList.find((thread) => thread.id === asked.from)?.kept ?? false;
+		// Read once: a thread changing while the picker is open must not reload it.
+		const fromKept = untrack(
+			() => shell.threadList.find((thread) => thread.id === asked.from)?.kept ?? false
+		);
 		load
 			.then((found) => {
 				if (pick !== asked) return;

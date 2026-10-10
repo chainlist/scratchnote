@@ -6,7 +6,9 @@ let space = $state('');
 
 /** Keep up with the open space in this window. Resolves to the way to stop. */
 export function followSpace() {
-	void listSpaces().then((view) => (space = view.active));
+	void listSpaces()
+		.then((view) => (space = view.active))
+		.catch((e) => console.error('attachments: could not read the open space', e));
 	return onSpacesChanged((view) => (space = view.active));
 }
 

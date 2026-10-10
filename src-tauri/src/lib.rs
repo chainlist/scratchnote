@@ -3,6 +3,8 @@ mod ahead;
 mod android;
 mod attachments;
 mod commands;
+#[cfg(desktop)]
+mod desktop;
 mod embed;
 mod error;
 mod events;
@@ -20,26 +22,17 @@ mod watcher;
 
 pub(crate) use error::{Error, Result};
 
-#[cfg(desktop)]
-use tauri::menu::{Menu, MenuItem};
-#[cfg(desktop)]
-use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, State};
-#[cfg(desktop)]
-use tauri::{WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
-#[cfg(desktop)]
-use tauri_plugin_global_shortcut::ShortcutState;
+use std::sync::{Arc, Mutex, RwLock};
 
+use tauri::{App, AppHandle, Emitter, Manager, State};
+
+use embed::sync::Wake;
 use settings::Settings;
 use state::AppState;
 use storage::writer::Writer;
 
 const CAPTURE: &str = "capture";
 const MAIN: &str = "main";
-/// Toggles the capture window, for desktops where apps cannot register a
-/// global shortcut (Wayland): the user binds this command there instead.
-#[cfg(desktop)]
-const CAPTURE_FLAG: &str = "--capture";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -48,30 +41,8 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
-    // The tray, the capture window and its hotkey, launch at login and
-    // self-update are desktop things; Android has none of them.
     #[cfg(desktop)]
-    let builder = builder
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        // Launching the app again reaches the running one instead, which also
-        // brings the main window back on desktops that show no tray icon.
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if args.iter().any(|a| a == CAPTURE_FLAG) {
-                toggle_capture(app);
-            } else {
-                show_main(app);
-            }
-        }))
-        .plugin(tauri_plugin_autostart::Builder::new().build())
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        toggle_capture(app);
-                    }
-                })
-                .build(),
-        );
+    let builder = desktop::plugins(builder);
     #[cfg(target_os = "android")]
     let builder = builder.plugin(android::init());
     builder
@@ -88,16 +59,38 @@ pub fn run() {
             },
         )
         .invoke_handler(tauri::generate_handler![
+            // Notes and the days they are on.
             commands::notes::save_note,
             commands::notes::get_day,
             commands::notes::list_days,
+            commands::notes::get_note,
+            commands::notes::get_notes,
+            commands::notes::delete_note,
+            commands::notes::update_note,
+            commands::notes::move_note,
             commands::notes::notes_about,
             commands::notes::clear_day_ahead,
+            commands::notes::rebuild_index,
+            commands::notes::today,
+            commands::notes::open_link,
+            // Pages.
+            commands::pages::create_page,
+            commands::pages::list_pages,
+            commands::pages::get_page,
+            commands::pages::update_page,
+            commands::pages::finish_page,
+            commands::pages::rename_page,
+            commands::pages::delete_page,
+            commands::pages::note_to_page,
+            commands::pages::move_page,
+            // Search, recall and what notes are about.
             commands::search::search,
             commands::search::search_meaning,
             commands::search::similar_notes,
-            commands::labels::note_labels,
             commands::search::draft_hints,
+            commands::search::notes_containing,
+            commands::labels::note_labels,
+            // Threads, mentions, pins and the map.
             commands::threads::list_threads,
             commands::threads::get_thread,
             commands::threads::rename_thread,
@@ -117,43 +110,29 @@ pub fn run() {
             commands::map::map_categories,
             commands::map::map_links,
             commands::map::map_search,
-            commands::notes::get_note,
-            commands::notes::get_notes,
-            commands::search::notes_containing,
-            commands::notes::delete_note,
-            commands::notes::update_note,
-            commands::notes::rebuild_index,
-            commands::notes::move_note,
-            commands::models::embedding_model_info,
-            commands::models::download_embedding_model,
-            commands::models::old_chat_model,
-            commands::models::remove_old_chat_model,
-            commands::models::embedder_activity,
-            commands::notes::today,
-            commands::settings::get_settings,
-            commands::settings::set_settings,
-            commands::settings::restart_app,
-            commands::settings::pick_notes_folder,
+            // Attachments.
+            commands::attachments::add_attachments,
+            commands::attachments::save_attachment,
+            commands::attachments::move_attachments,
+            commands::attachments::open_attachment,
+            // Spaces.
             commands::spaces::list_spaces,
             commands::spaces::create_space,
             commands::spaces::rename_space,
             commands::spaces::delete_space,
             commands::spaces::open_space_folder,
-            commands::notes::open_link,
             commands::spaces::set_active_space,
-            commands::pages::create_page,
-            commands::pages::list_pages,
-            commands::pages::get_page,
-            commands::pages::update_page,
-            commands::pages::finish_page,
-            commands::pages::rename_page,
-            commands::pages::delete_page,
-            commands::pages::note_to_page,
-            commands::pages::move_page,
-            commands::attachments::add_attachments,
-            commands::attachments::save_attachment,
-            commands::attachments::move_attachments,
-            commands::attachments::open_attachment,
+            // The embedding model.
+            commands::models::embedding_model_info,
+            commands::models::download_embedding_model,
+            commands::models::old_chat_model,
+            commands::models::remove_old_chat_model,
+            commands::models::embedder_activity,
+            // Settings and plugins.
+            commands::settings::get_settings,
+            commands::settings::set_settings,
+            commands::settings::restart_app,
+            commands::settings::pick_notes_folder,
             commands::plugins::plugins_view,
             commands::plugins::set_plugins,
             commands::plugins::plugin_code,
@@ -163,113 +142,107 @@ pub fn run() {
             commands::plugins::plugin_details,
             commands::plugins::install_plugin,
             commands::plugins::uninstall_plugin,
+            // The windows.
             hide_capture,
             capture_to_page,
             reveal_note,
+            #[cfg(desktop)]
+            desktop::set_tray_labels,
+            #[cfg(mobile)]
             set_tray_labels,
             startup::launch_steps,
         ])
-        .setup(|app| {
-            startup::step("Starting Tauri and its plugins");
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
-
-            let settings = Settings::load(app.handle());
-            let hotkey = settings.capture_hotkey.clone();
-            let root = settings.root.clone();
-
-            // Before spaces.json is read, since it may point it at a new folder.
-            spaces::migrate_root(&root);
-            startup::step("Reading the settings");
-            let local_data = app.path().app_local_data_dir().unwrap_or_else(|e| {
-                log::warn!(
-                    "no folder for the app's own data ({e}), keeping the models in the notes root"
-                );
-                root.clone()
-            });
-
-            let embed_wake: embed::sync::Wake = std::sync::Arc::new(tokio::sync::Notify::new());
-            app.manage(AppState {
-                root: root.clone(),
-                local_data,
-                settings: std::sync::RwLock::new(settings),
-                writer: Writer::spawn(),
-                // Filled in below: opening a space starts its watcher, which
-                // needs the state to be managed already.
-                spaces: std::sync::RwLock::new(Vec::new()),
-                registry: std::sync::RwLock::new(spaces::Registry::load(&root)),
-                embedder: std::sync::RwLock::new(None),
-                embedder_loading: std::sync::Mutex::new(()),
-                embed_wake: embed_wake.clone(),
-                embedding_download: std::sync::Mutex::new(None),
-                embedder_activity: std::sync::Mutex::default(),
-            });
-
-            // Every space is listed, but only the open one is read and watched
-            // (SPEC 4.6). The others are read when they are opened.
-            let state = app.state::<AppState>();
-            let mut listed: Vec<_> = spaces::discover_or_first(&root)
-                .into_iter()
-                .map(|(name, path)| commands::spaces::add_space(app.handle(), &name, path))
-                .collect();
-            commands::spaces::sort_spaces(&mut listed);
-            if let Ok(mut spaces) = state.spaces.write() {
-                *spaces = listed;
-            }
-            startup::step("Listing the spaces");
-            if let Ok(open) = state.space() {
-                commands::spaces::load_space(app.handle(), &open);
-            }
-
-            // Opening the space above already woke it, so its notes are
-            // backfilled.
-            embed::sync::spawn(app.handle().clone(), embed_wake.clone());
-            // Off the launch, as a model moved to another drive is copied.
-            // The legacy model is looked for once it has moved.
-            let handle = app.handle().clone();
-            std::thread::spawn(move || {
-                let state = handle.state::<AppState>();
-                if embed::model::move_from_notes_root(&state.root, &state.local_data) {
-                    embed_wake.notify_one();
-                }
-                commands::models::replace_legacy_embedding_model(&handle);
-            });
-            startup::step("Starting the embedding task");
-
-            #[cfg(desktop)]
-            {
-                build_capture_window(app.handle())?;
-                startup::step("Making the capture window");
-                build_tray(app.handle())?;
-                keep_main_window_alive(app.handle());
-                startup::step("Making the tray icon");
-
-                {
-                    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-                    if let Err(e) = app.global_shortcut().register(hotkey.as_str()) {
-                        log::error!("could not register the capture hotkey {hotkey}: {e}");
-                    }
-                }
-
-                if std::env::args().any(|a| a == CAPTURE_FLAG) {
-                    toggle_capture(app.handle());
-                }
-                startup::step("Registering the capture shortcut");
-            }
-            #[cfg(mobile)]
-            let _ = hotkey;
-            startup::done();
-
-            Ok(())
-        })
+        .setup(setup)
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(on_run_event);
+}
+
+/// Everything the app does at launch before its window loads, step by step
+/// (`startup`).
+fn setup(app: &mut App) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    startup::step("Starting Tauri and its plugins");
+    if cfg!(debug_assertions) {
+        app.handle().plugin(
+            tauri_plugin_log::Builder::default()
+                .level(log::LevelFilter::Info)
+                .build(),
+        )?;
+    }
+
+    let settings = Settings::load(app.handle());
+    let hotkey = settings.capture_hotkey.clone();
+    let root = settings.root.clone();
+
+    // Before spaces.json is read, since it may point it at a new folder.
+    spaces::migrate_root(&root);
+    startup::step("Reading the settings");
+    let local_data = app.path().app_local_data_dir().unwrap_or_else(|e| {
+        log::warn!("no folder for the app's own data ({e}), keeping the models in the notes root");
+        root.clone()
+    });
+
+    let embed_wake: Wake = Arc::new(tokio::sync::Notify::new());
+    app.manage(AppState {
+        root: root.clone(),
+        local_data,
+        settings: RwLock::new(settings),
+        writer: Writer::spawn(),
+        // Filled in below: opening a space starts its watcher, which needs
+        // the state to be managed already.
+        spaces: RwLock::new(Vec::new()),
+        registry: RwLock::new(spaces::Registry::load(&root)),
+        embedder: RwLock::new(None),
+        embedder_loading: Mutex::new(()),
+        embed_wake: embed_wake.clone(),
+        embedding_download: Mutex::new(None),
+        embedder_activity: Mutex::default(),
+    });
+
+    open_spaces(app.handle());
+    start_embedding(app.handle(), embed_wake);
+
+    #[cfg(desktop)]
+    desktop::setup(app.handle(), &hotkey)?;
+    #[cfg(mobile)]
+    let _ = hotkey;
+    startup::done();
+    Ok(())
+}
+
+/// List every space, but read and watch only the open one (SPEC 4.6). The
+/// others are read when they are opened.
+fn open_spaces(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let mut listed: Vec<_> = spaces::discover_or_first(&state.root)
+        .into_iter()
+        .map(|(name, path)| commands::spaces::add_space(app, &name, path))
+        .collect();
+    commands::spaces::sort_spaces(&mut listed);
+    if let Ok(mut spaces) = state.spaces.write() {
+        *spaces = listed;
+    }
+    startup::step("Listing the spaces");
+    if let Ok(open) = state.space() {
+        commands::spaces::load_space(app, &open);
+    }
+}
+
+/// Start the embed task. Opening the space already woke it, so its notes
+/// are backfilled.
+fn start_embedding(app: &AppHandle, embed_wake: Wake) {
+    embed::sync::spawn(app.clone(), embed_wake.clone());
+    // Off the launch, as a model moved to another drive is copied. The
+    // legacy model is looked for once it has moved.
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let state = handle.state::<AppState>();
+        if embed::model::move_from_notes_root(&state.root, &state.local_data) {
+            embed_wake.notify_one();
+        }
+        commands::models::replace_legacy_embedding_model(&handle);
+    });
+    startup::step("Starting the embedding task");
 }
 
 /// Clicking the Dock icon brings back a main window that closing hid.
@@ -325,40 +298,6 @@ fn reveal_note(app: AppHandle, id: String, date: String, kind: Option<String>) {
     );
 }
 
-#[cfg(desktop)]
-/// The capture window is built once at startup and only ever shown and
-/// hidden, so the hotkey never pays for window creation. It opens centred;
-/// where the user moves and sizes it then holds until the app quits.
-fn build_capture_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
-    WebviewWindowBuilder::new(app, CAPTURE, WebviewUrl::App("capture/".into()))
-        .title("Scratchnote capture")
-        .inner_size(620.0, 200.0)
-        // At 16px text; the webview grows it with the text size setting.
-        .min_inner_size(420.0, 150.0)
-        .decorations(false)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .maximizable(false)
-        .visible(false)
-        .center()
-        .build()
-}
-
-#[cfg(desktop)]
-fn toggle_capture(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(CAPTURE) else {
-        return;
-    };
-    if window.is_visible().unwrap_or(false) {
-        let _ = window.hide();
-    } else {
-        let _ = window.show();
-        let _ = window.set_focus();
-        // Tells the webview to focus the input; it is already loaded.
-        let _ = app.emit_to(CAPTURE, "capture-shown", ());
-    }
-}
-
 fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(MAIN) {
         let _ = window.show();
@@ -366,21 +305,6 @@ fn show_main(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
-}
-
-#[cfg(desktop)]
-/// Closing the main window hides it; the app stays in the tray.
-fn keep_main_window_alive(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(MAIN) else {
-        return;
-    };
-    let handle = window.clone();
-    window.on_window_event(move |event| {
-        if let WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            let _ = handle.hide();
-        }
-    });
 }
 
 /// The tray menu's wording. The frontend holds the translations, so the
@@ -395,65 +319,9 @@ struct TrayLabels {
     quit: String,
 }
 
-#[cfg(desktop)]
-impl Default for TrayLabels {
-    fn default() -> Self {
-        Self {
-            new_note: "New note".into(),
-            open: "Open Scratchnote".into(),
-            settings: "Settings".into(),
-            quit: "Quit".into(),
-        }
-    }
-}
-
-#[cfg(desktop)]
-fn tray_menu(app: &AppHandle, labels: &TrayLabels) -> tauri::Result<Menu<tauri::Wry>> {
-    let new_note = MenuItem::with_id(app, "new_note", &labels.new_note, true, None::<&str>)?;
-    let open = MenuItem::with_id(app, "open", &labels.open, true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", &labels.settings, true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", &labels.quit, true, None::<&str>)?;
-    Menu::with_items(app, &[&new_note, &open, &settings, &quit])
-}
-
-#[cfg(desktop)]
-#[tauri::command]
-fn set_tray_labels(app: AppHandle, labels: TrayLabels) -> Result<()> {
-    let tray = app.tray_by_id("tray").ok_or("no tray icon")?;
-    let menu = tray_menu(&app, &labels)?;
-    Ok(tray.set_menu(Some(menu))?)
-}
-
 /// Android has no tray to label.
 #[cfg(mobile)]
 #[tauri::command]
 fn set_tray_labels(labels: TrayLabels) {
     let _ = labels;
-}
-
-#[cfg(desktop)]
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let menu = tray_menu(app, &TrayLabels::default())?;
-    let icon = app
-        .default_window_icon()
-        .ok_or_else(|| tauri::Error::AssetNotFound("the window icon".into()))?;
-
-    TrayIconBuilder::with_id("tray")
-        .icon(icon.clone())
-        .tooltip("Scratchnote")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "new_note" => toggle_capture(app),
-            "open" => show_main(app),
-            "settings" => {
-                show_main(app);
-                let _ = app.emit_to(MAIN, "open-settings", ());
-            }
-            "quit" => app.exit(0),
-            _ => {}
-        })
-        .build(app)?;
-
-    Ok(())
 }

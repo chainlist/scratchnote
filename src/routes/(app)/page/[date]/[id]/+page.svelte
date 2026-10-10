@@ -3,7 +3,7 @@
 	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import type { Note } from '#lib/api.js';
-	import PageView from '#lib/components/PageView.svelte';
+	import PageEditor from '#lib/components/page/PageEditor.svelte';
 	import View from '#lib/components/layout/View.svelte';
 	import { dayHeading } from '#lib/dates.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -47,7 +47,7 @@
 		await shell.refresh();
 	}
 
-	let view = $state<PageView>();
+	let view = $state<PageEditor>();
 
 	// An open new page takes the capture window's text where it is typed.
 	$effect(() => {
@@ -62,14 +62,14 @@
 
 <View back={resolve(`day/${date}/`)} key={opened}>
 	{#snippet heading(compact: boolean)}
-		<!-- The page's title is its own heading, in the view (PageView's
+		<!-- The page's title is its own heading, in the view (PageEditor's
 		     `own`); this is its day. -->
 		<span class="text-sm font-medium whitespace-nowrap text-muted-foreground">
 			{dayHeading(date, compact)}
 		</span>
 	{/snippet}
 
-	<PageView
+	<PageEditor
 		bind:this={view}
 		{id}
 		{date}

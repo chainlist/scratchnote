@@ -9,7 +9,7 @@
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { PageSession } from '#lib/components/page-session.svelte.js';
+	import { PageSession } from '#lib/components/page/page-session.svelte.js';
 
 	let {
 		id,

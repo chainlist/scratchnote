@@ -4,7 +4,7 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
 	import * as Select from '#lib/components/ui/select/index.js';
-	import Markdown from '#lib/components/Markdown.svelte';
+	import NotePreview from '#lib/components/NotePreview.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {
@@ -79,18 +79,7 @@
 					{m.move_description({ space: spaces?.active ?? '' })}
 				</Dialog.Description>
 			</Dialog.Header>
-			{#if shown}
-				<div class="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-					{#if isPage(shown)}
-						<p class="truncate font-medium text-foreground">
-							{shown.subject ?? m.pages_untitled()}
-						</p>
-					{/if}
-					{#if shown.body}
-						<Markdown text={shown.body} links={false} class="line-clamp-2" />
-					{/if}
-				</div>
-			{/if}
+			{#if shown}<NotePreview note={shown} clamp="line-clamp-2" />{/if}
 			<div class="flex flex-col gap-2">
 				<Label for="move-space">{m.move_space_label()}</Label>
 				<Select.Root type="single" bind:value={target}>

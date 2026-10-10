@@ -4,7 +4,7 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Label } from '#lib/components/ui/label/index.js';
-	import Markdown from '#lib/components/Markdown.svelte';
+	import NotePreview from '#lib/components/NotePreview.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {
@@ -65,11 +65,7 @@
 				<Dialog.Title>{m.pages_turn_into_title()}</Dialog.Title>
 				<Dialog.Description>{m.pages_turn_into_description()}</Dialog.Description>
 			</Dialog.Header>
-			{#if note}
-				<div class="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-					<Markdown text={note.body} links={false} class="max-h-[3lh] overflow-hidden" />
-				</div>
-			{/if}
+			{#if note}<NotePreview {note} clamp="max-h-[3lh] overflow-hidden" />{/if}
 			<div class="flex flex-col gap-2">
 				<Label for="page-title">{m.pages_title_label()}</Label>
 				<Input

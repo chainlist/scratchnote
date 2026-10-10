@@ -670,7 +670,7 @@ fn a_note_put_in_a_names_thread_stays_there_and_scopes_round_trip() {
     edits.put_in("01A".into(), "@atlas:01D".into());
     edits.put_in("01A".into(), "@atlas:01A-2".into());
     assert_eq!(
-        edits.put("atlas", "01A").map(String::as_str),
+        edits.put("atlas", "01A"),
         Some("@atlas:01A-2"),
         "one per scope"
     );

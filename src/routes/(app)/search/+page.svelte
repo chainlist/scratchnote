@@ -16,7 +16,6 @@
 	function showMore() {
 		const q = encodeURIComponent(data.query);
 		// resolve() takes no query string, so the query follows the path it gives.
-		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		void goto(`${resolve('search/')}?q=${q}&n=${data.shown + RESULTS_STEP}`, {
 			replace: true,
 			reset: false

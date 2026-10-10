@@ -200,6 +200,7 @@ export class Shell implements WorkspaceHost {
 
 	/** Threads' first notes to read again with the next reload: those changed,
 	 *  or all of them when what changed is not known. */
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- nothing is drawn from it
 	#leadsChanged: Set<string> | 'all' = new Set();
 
 	/** Load what the views show again, after a change here or on disk;
@@ -210,6 +211,7 @@ export class Shell implements WorkspaceHost {
 		// An invalidation aborts a navigation under way, so it waits for one to land.
 		while (navigating.complete) await navigating.complete.catch(() => {});
 		const leads = this.#leadsChanged;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- nothing is drawn from it
 		this.#leadsChanged = new Set();
 		await invalidate('app:notes');
 		this.reloads++;
@@ -547,7 +549,6 @@ export class Shell implements WorkspaceHost {
 			.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
 			.join('&');
 		// resolve() takes no query string, so the query follows the path it gives.
-		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		return goto(`${resolve(`plugin/${type}/`)}${query ? `?${query}` : ''}`);
 	};
 
@@ -606,7 +607,6 @@ export class Shell implements WorkspaceHost {
 		this.query = trimmed;
 		if (!trimmed) return this.openDay(this.day);
 		// resolve() takes no query string, so the query follows the path it gives.
-		// eslint-disable-next-line svelte/no-navigation-without-resolve
 		await goto(`${resolve('search/')}?q=${encodeURIComponent(trimmed)}`);
 	};
 

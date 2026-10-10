@@ -9,7 +9,7 @@
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import { m } from '#lib/paraglide/messages.js';
-	import { longDay } from '#lib/dates.js';
+	import { longDay } from '#lib/helpers/dates.js';
 
 	let {
 		releases = $bindable()

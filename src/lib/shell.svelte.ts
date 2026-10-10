@@ -23,7 +23,7 @@ import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { afterNavigation, onGuard } from '#lib/back.svelte.js';
 import { addToPageDraft } from '#lib/page-draft.js';
 import { m } from '#lib/paraglide/messages.js';
-import { errorText } from '#lib/errors.js';
+import { errorText } from '#lib/helpers/errors.js';
 import { pluginPageHref, samePin } from '#lib/pins.js';
 import { threadHref } from '#lib/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';

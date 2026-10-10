@@ -5,12 +5,12 @@
 	import NewNote from './NewNote.svelte';
 	import NoteList from '#lib/components/note/NoteList.svelte';
 	import View from '#lib/components/layout/View.svelte';
-	import { dayHeading } from '#lib/dates.js';
-	import { prettyHotkey } from '#lib/hotkeys.js';
+	import { dayHeading } from '#lib/helpers/dates.js';
+	import { prettyHotkey } from '#lib/helpers/hotkeys.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { typesText } from '#lib/dom.js';
-	import { errorText } from '#lib/errors.js';
+	import { typesText } from '#lib/helpers/dom.js';
+	import { errorText } from '#lib/helpers/errors.js';
 	import type { Day } from './+page';
 	import DayName from './DayName.svelte';
 	import DayTitleRow from './DayTitleRow.svelte';

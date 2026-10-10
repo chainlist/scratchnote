@@ -1,8 +1,8 @@
 <script lang="ts">
 	import Settings from '#lib/components/settings/Settings.svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import { inText } from '#lib/dom.js';
-	import { onSwipe, phone } from '#lib/swipe.js';
+	import { inText } from '#lib/helpers/dom.js';
+	import { onSwipe, phone } from '#lib/helpers/swipe.js';
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
 

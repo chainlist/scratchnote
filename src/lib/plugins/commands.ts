@@ -1,5 +1,5 @@
 import type { EditorView } from '@codemirror/view';
-import { errorText } from '#lib/errors.js';
+import { errorText } from '#lib/helpers/errors.js';
 import { reportError } from './app';
 import { Editor } from './editor';
 import type { CommandEntry } from './registry.svelte';

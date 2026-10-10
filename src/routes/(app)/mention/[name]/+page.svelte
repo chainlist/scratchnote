@@ -5,7 +5,7 @@
 	import ThreadLanes from '#lib/components/thread/ThreadLanes.svelte';
 	import KeepThreadButtons from '#lib/components/thread/KeepThreadButtons.svelte';
 	import View from '#lib/components/layout/View.svelte';
-	import { shortDay } from '#lib/dates.js';
+	import { shortDay } from '#lib/helpers/dates.js';
 	import { mentionHue, mentionKey } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

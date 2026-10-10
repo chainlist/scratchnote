@@ -18,7 +18,7 @@
 	import * as Card from '#lib/components/ui/card/index.js';
 	import * as ToggleGroup from '#lib/components/ui/toggle-group/index.js';
 	import View from '#lib/components/layout/View.svelte';
-	import { dayNumber } from '#lib/dates.js';
+	import { dayNumber } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { threadHref } from '#lib/threads.js';

@@ -4,9 +4,9 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { dayHeading } from '#lib/dates.js';
+	import { dayHeading } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { mac } from '#lib/platform.js';
+	import { mac } from '#lib/helpers/platform.js';
 	import DayName from './DayName.svelte';
 
 	let {

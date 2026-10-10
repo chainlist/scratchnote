@@ -7,7 +7,7 @@
 	import { Switch } from '#lib/components/ui/switch/index.js';
 	import { clearResumeStep } from '#lib/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { android } from '#lib/platform.js';
+	import { android } from '#lib/helpers/platform.js';
 	import About from './About.svelte';
 	import FolderPicker from './FolderPicker.svelte';
 	import HotkeyInput from './HotkeyInput.svelte';

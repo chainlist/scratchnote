@@ -1,5 +1,5 @@
-import { onSwipe, phone } from '#lib/swipe.js';
-import { inText } from '#lib/dom.js';
+import { onSwipe, phone } from '#lib/helpers/swipe.js';
+import { inText } from '#lib/helpers/dom.js';
 import type { Day } from './+page';
 
 /** The day the finger brings in, beside the view, while it moves. */

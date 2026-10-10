@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { Thread } from '#lib/api.js';
 	import MentionChip from '#lib/components/common/MentionChip.svelte';
-	import { dateFormat, daysAgo, isoDay, shortDay } from '#lib/dates.js';
+	import { dateFormat, daysAgo, isoDay, shortDay } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { threadHref, threadHue } from '#lib/threads.js';

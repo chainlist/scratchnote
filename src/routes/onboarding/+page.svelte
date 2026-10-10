@@ -25,7 +25,7 @@
 	import { languageName, LANGUAGES } from '#lib/i18n.svelte.js';
 	import { clearResumeStep, resumeStep, setResumeStep } from '#lib/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { android, mac } from '#lib/platform.js';
+	import { android, mac } from '#lib/helpers/platform.js';
 	import { app } from '#lib/plugins/app.js';
 
 	/**

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { HTMLInputAttributes } from 'svelte/elements';
 	import { Input } from '#lib/components/ui/input/index.js';
-	import { prettyHotkey } from '#lib/hotkeys.js';
-	import { mac } from '#lib/platform.js';
+	import { prettyHotkey } from '#lib/helpers/hotkeys.js';
+	import { mac } from '#lib/helpers/platform.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {

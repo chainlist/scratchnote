@@ -9,7 +9,7 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { android } from '#lib/platform.js';
+	import { android } from '#lib/helpers/platform.js';
 	import { app } from '#lib/plugins/app.js';
 	import { duration, startupTimes } from '#lib/startup.js';
 	import type { SettingsState } from './state.svelte';

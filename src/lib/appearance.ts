@@ -8,7 +8,7 @@ import '@fontsource-variable/playpen-sans';
 import '@fontsource-variable/shantell-sans';
 import type { Settings } from '#lib/api.js';
 import { m } from '#lib/paraglide/messages.js';
-import { writeJson } from '#lib/storage.js';
+import { writeJson } from '#lib/helpers/storage.js';
 
 type Appearance = Pick<Settings, 'accentColor' | 'fontFamily' | 'fontSize' | 'radius' | 'theme'>;
 

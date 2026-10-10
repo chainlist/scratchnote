@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
-	import { errorText } from '#lib/errors.js';
+	import { errorText } from '#lib/helpers/errors.js';
 	import type { PluginSettingTab } from '#lib/plugins/api.js';
 	import { clearSettings } from '#lib/plugins/setting-model.js';
 

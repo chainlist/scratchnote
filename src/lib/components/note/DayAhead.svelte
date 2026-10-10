@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { aheadLabel, dayHeading } from '#lib/dates.js';
+	import { aheadLabel, dayHeading } from '#lib/helpers/dates.js';
 	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

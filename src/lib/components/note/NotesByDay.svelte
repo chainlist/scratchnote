@@ -3,7 +3,7 @@
 	import type { Note } from '#lib/api.js';
 	import NoteList from '#lib/components/note/NoteList.svelte';
 	import ShowMore from '#lib/components/common/ShowMore.svelte';
-	import { dayHeading, monthHeading, weekday } from '#lib/dates.js';
+	import { dayHeading, monthHeading, weekday } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { RESULTS_STEP } from '#lib/query.js';
 

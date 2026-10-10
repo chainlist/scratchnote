@@ -9,7 +9,7 @@
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import { m } from '#lib/paraglide/messages.js';
-	import { android, mac } from '#lib/platform.js';
+	import { android, mac } from '#lib/helpers/platform.js';
 
 	let {
 		spaces,

@@ -4,8 +4,8 @@
 	import { closeOnBack } from '#lib/back.svelte.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { inText } from '#lib/dom.js';
-	import { onSwipe } from '#lib/swipe.js';
+	import { inText } from '#lib/helpers/dom.js';
+	import { onSwipe } from '#lib/helpers/swipe.js';
 
 	/** The ribbon on a phone: off screen until the menu button or a swipe in
 	 *  from the left edge draws it out over the view. A swipe back, a tap

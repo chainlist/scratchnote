@@ -6,7 +6,7 @@
 	import NotesByDay from '#lib/components/note/NotesByDay.svelte';
 	import RenameThreadDialog from '#lib/components/thread/RenameThreadDialog.svelte';
 	import ThreadArc from '#lib/components/thread/ThreadArc.svelte';
-	import { shortDay } from '#lib/dates.js';
+	import { shortDay } from '#lib/helpers/dates.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { openTasks } from '#lib/threads.js';
 	import { resolve } from '$app/paths';

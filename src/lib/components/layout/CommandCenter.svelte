@@ -15,9 +15,9 @@
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import SunIcon from '@lucide/svelte/icons/sun';
-	import { hasEvery, queryWords } from '#lib/matching.js';
+	import { hasEvery, queryWords } from '#lib/helpers/matching.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { formatHotkey } from '#lib/hotkeys.js';
+	import { formatHotkey } from '#lib/helpers/hotkeys.js';
 	import { runCommand } from '#lib/plugins/commands.js';
 	import { labelText, registry, type CommandEntry } from '#lib/plugins/registry.svelte.js';
 

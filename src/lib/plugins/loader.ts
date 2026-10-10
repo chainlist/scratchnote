@@ -15,9 +15,9 @@ import {
 	type PluginState,
 	type PluginsView
 } from '#lib/api.js';
-import { errorText } from '#lib/errors.js';
+import { errorText } from '#lib/helpers/errors.js';
 import { m } from '#lib/paraglide/messages.js';
-import { older } from '#lib/versions.js';
+import { older } from '#lib/helpers/versions.js';
 import { corePlugins } from '../../plugins';
 import {
 	Component,

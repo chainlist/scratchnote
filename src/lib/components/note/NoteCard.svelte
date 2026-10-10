@@ -7,8 +7,8 @@
 	import NoteChips from '#lib/components/note/NoteChips.svelte';
 	import NoteEditor from '#lib/components/note/NoteEditor.svelte';
 	import NoteMenu from '#lib/components/note/NoteMenu.svelte';
-	import { shortDay } from '#lib/dates.js';
-	import { typesText } from '#lib/dom.js';
+	import { shortDay } from '#lib/helpers/dates.js';
+	import { typesText } from '#lib/helpers/dom.js';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import { editDrafts } from '#lib/note-draft.js';
 	import { m } from '#lib/paraglide/messages.js';

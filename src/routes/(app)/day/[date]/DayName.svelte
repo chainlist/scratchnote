@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { dayTitle } from '#lib/dates.js';
+	import { dayTitle } from '#lib/helpers/dates.js';
 
 	/** A day's name as its column heads it: the weekday, then the date, quieter. */
 	let { date }: { date: string } = $props();

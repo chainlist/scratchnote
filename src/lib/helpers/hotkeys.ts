@@ -1,4 +1,4 @@
-import { mac } from '#lib/platform.js';
+import { mac } from '#lib/helpers/platform.js';
 
 /**
  * Hotkeys in CodeMirror's notation, `Mod-Shift-h`, as the app's and the

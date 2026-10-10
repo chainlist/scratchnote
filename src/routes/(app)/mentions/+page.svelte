@@ -4,12 +4,12 @@
 	import MentionLetter from '#lib/components/common/MentionLetter.svelte';
 	import PinButton from '#lib/components/common/PinButton.svelte';
 	import ShowMore from '#lib/components/common/ShowMore.svelte';
-	import { daysAgo, shortDay } from '#lib/dates.js';
+	import { daysAgo, shortDay } from '#lib/helpers/dates.js';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import { goto } from '$app/navigation';
 	import * as InputGroup from '#lib/components/ui/input-group/index.js';
-	import { hasEvery, queryWords } from '#lib/matching.js';
+	import { hasEvery, queryWords } from '#lib/helpers/matching.js';
 	import { along, mentionHref, mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

@@ -1,4 +1,4 @@
-import { readJson, remove, writeJson } from '#lib/storage.js';
+import { readJson, remove, writeJson } from '#lib/helpers/storage.js';
 
 /**
  * The onboarding step to pick up on, kept while a run is under way so the

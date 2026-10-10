@@ -18,12 +18,12 @@
 	import { formatKeys, links, plugged, theme } from '#lib/codemirror/extensions.js';
 	import { attachmentSpace } from '#lib/codemirror/live-preview.js';
 	import EditorToolbar from '#lib/components/editor/EditorToolbar.svelte';
-	import { errorText } from '#lib/errors.js';
+	import { errorText } from '#lib/helpers/errors.js';
 	import { attachmentLink } from '#lib/markdown.js';
 	import { formats } from '#lib/markdown/commands.js';
 	import { mentionCompletion } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { android } from '#lib/platform.js';
+	import { android } from '#lib/helpers/platform.js';
 	import { Editor } from '#lib/plugins/editor.js';
 	import { registry, type ToolbarEntry } from '#lib/plugins/registry.svelte.js';
 

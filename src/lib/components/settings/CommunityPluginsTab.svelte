@@ -17,7 +17,7 @@
 	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 	import { m } from '#lib/paraglide/messages.js';
 	import { adopt, plugins, setCommunity, setCommunityPlugin } from '#lib/plugins/loader.js';
-	import { older } from '#lib/versions.js';
+	import { older } from '#lib/helpers/versions.js';
 	import PluginBrowser from './PluginBrowser.svelte';
 	import PluginOptions from './PluginOptions.svelte';
 	import PluginRow from './PluginRow.svelte';

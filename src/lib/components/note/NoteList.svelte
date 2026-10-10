@@ -3,7 +3,7 @@
 	import { isPage, type Note } from '#lib/api.js';
 	import NoteCard from '#lib/components/note/NoteCard.svelte';
 	import PageCard from '#lib/components/note/PageCard.svelte';
-	import { daySpacing } from '#lib/dates.js';
+	import { daySpacing } from '#lib/helpers/dates.js';
 	import { noteTitle } from '#lib/markdown.js';
 	import { Checkbox } from '#lib/components/ui/checkbox/index.js';
 

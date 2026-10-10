@@ -8,7 +8,7 @@
 	import { followSpace } from '#lib/attachments.svelte.js';
 	import { applyLanguage } from '#lib/i18n.svelte.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
-	import { android } from '#lib/platform.js';
+	import { android } from '#lib/helpers/platform.js';
 	import { recordStartup } from '#lib/startup.js';
 
 	let { children } = $props();

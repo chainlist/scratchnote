@@ -8,11 +8,11 @@
 	import AppHeader from '#lib/components/layout/AppHeader.svelte';
 	import CommandCenter from '#lib/components/layout/CommandCenter.svelte';
 	import EmbedderBar from '#lib/components/layout/EmbedderBar.svelte';
-	import DeleteNoteDialog from '#lib/components/DeleteNoteDialog.svelte';
+	import DeleteNoteDialog from '#lib/components/dialogs/DeleteNoteDialog.svelte';
 	import Dock from '#lib/components/layout/Dock.svelte';
-	import MoveDialog from '#lib/components/MoveDialog.svelte';
-	import NoteToPageDialog from '#lib/components/NoteToPageDialog.svelte';
-	import OldChatModelDialog from '#lib/components/OldChatModelDialog.svelte';
+	import MoveDialog from '#lib/components/dialogs/MoveDialog.svelte';
+	import NoteToPageDialog from '#lib/components/dialogs/NoteToPageDialog.svelte';
+	import OldChatModelDialog from '#lib/components/dialogs/OldChatModelDialog.svelte';
 	import PageEditor from '#lib/components/page/PageEditor.svelte';
 	import PluginPanel from '#lib/components/layout/PluginPanel.svelte';
 	import Ribbon from '#lib/components/layout/Ribbon.svelte';
@@ -21,7 +21,7 @@
 	import ThreadDock from '#lib/components/thread/ThreadDock.svelte';
 	import ThreadPicker from '#lib/components/thread/ThreadPicker.svelte';
 	import ViewHeader from '#lib/components/layout/ViewHeader.svelte';
-	import WhatsNew from '#lib/components/WhatsNew.svelte';
+	import WhatsNew from '#lib/components/dialogs/WhatsNew.svelte';
 	import * as Resizable from '#lib/components/ui/resizable/index.js';
 	import { Toaster } from '#lib/components/ui/sonner/index.js';
 	import { Spinner } from '#lib/components/ui/spinner/index.js';

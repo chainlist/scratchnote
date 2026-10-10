@@ -2,7 +2,7 @@
 	import type { ComponentProps } from 'svelte';
 	import type { Note } from '#lib/api.js';
 	import NoteList from '#lib/components/NoteList.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import ShowMore from '#lib/components/ShowMore.svelte';
 	import { dayHeading, monthHeading, weekday } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { RESULTS_STEP } from '#lib/query.js';
@@ -78,10 +78,9 @@
 	</section>
 {/each}
 {#if count < notes.length}
-	<div class="mt-8 flex justify-center">
-		<Button variant="outline" size="sm" onclick={() => (drawn = count + RESULTS_STEP)}>
-			{m.search_show_more()}
-			<span class="text-xs text-muted-foreground tabular-nums">{notes.length - count}</span>
-		</Button>
-	</div>
+	<ShowMore
+		class="mt-8"
+		count={notes.length - count}
+		onclick={() => (drawn = count + RESULTS_STEP)}
+	/>
 {/if}

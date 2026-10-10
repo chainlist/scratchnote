@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '#lib/components/ui/button/index.js';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-	import PinIcon from '@lucide/svelte/icons/pin';
+	import PinButton from '#lib/components/PinButton.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell, type ViewTitle } from '#lib/shell.svelte.js';
 
@@ -82,22 +82,5 @@
 			{#if detail}<span class="font-normal text-muted-foreground">{detail}</span>{/if}
 		</svelte:element>
 	{/if}
-	{#if pin && !compact}
-		{@const pinned = shell.isPinned(pin)}
-		{@const label = pinned ? m.pin_remove() : m.pin_add()}
-		<Button
-			variant="ghost"
-			size="icon-sm"
-			onclick={() => void shell.togglePin(pin)}
-			aria-label={m.pin_add()}
-			aria-pressed={pinned}
-			title={label}
-			class={[
-				'shrink-0',
-				pinned ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
-			]}
-		>
-			<PinIcon class={pinned ? 'fill-current' : undefined} />
-		</Button>
-	{/if}
+	{#if pin && !compact}<PinButton {pin} />{/if}
 </div>

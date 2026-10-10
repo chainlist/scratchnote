@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ThreadView from '#lib/components/ThreadView.svelte';
+	import ThreadView from '#lib/components/thread/ThreadView.svelte';
 	import View from '#lib/components/layout/View.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';

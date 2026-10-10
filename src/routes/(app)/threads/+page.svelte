@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { getNotes, type Note, type Thread, type ThreadCard } from '#lib/api.js';
 	import MentionChip from '#lib/components/MentionChip.svelte';
-	import KeepThreadButtons from '#lib/components/KeepThreadButtons.svelte';
+	import KeepThreadButtons from '#lib/components/thread/KeepThreadButtons.svelte';
 	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import SectionTabs from '#lib/components/layout/SectionTabs.svelte';
 	import ShowMore from '#lib/components/ShowMore.svelte';
@@ -12,7 +12,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { leadNotes, SUGGESTED_PAGE, threadHref, threadName } from '#lib/threads.js';
-	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
+	import ThreadLanes from '#lib/components/thread/ThreadLanes.svelte';
 
 	let { data } = $props();
 

@@ -2,8 +2,8 @@
 	import MentionLetter from '#lib/components/MentionLetter.svelte';
 	import NotesByDay from '#lib/components/note/NotesByDay.svelte';
 	import SectionTabs from '#lib/components/layout/SectionTabs.svelte';
-	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
-	import KeepThreadButtons from '#lib/components/KeepThreadButtons.svelte';
+	import ThreadLanes from '#lib/components/thread/ThreadLanes.svelte';
+	import KeepThreadButtons from '#lib/components/thread/KeepThreadButtons.svelte';
 	import View from '#lib/components/layout/View.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { mentionHue, mentionKey } from '#lib/mentions.js';

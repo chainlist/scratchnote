@@ -15,7 +15,7 @@
 	} = $props();
 
 	const shell = getShell();
-	const places = $derived(shell.threadsOf(id));
+	const places = $derived(shell.threads.threadsOf(id));
 </script>
 
 <!-- The threads a note is in (SPEC 6.4), one line each: the name it was
@@ -38,7 +38,7 @@
 	>
 		<RouteIcon class="size-3 shrink-0" />
 		{#if thread.mention}<span class="shrink-0 text-neutral-400">@{thread.mention}</span>{/if}
-		<span class="truncate">{shell.nameOf(thread)}</span>
+		<span class="truncate">{shell.threads.nameOf(thread)}</span>
 		<span class="shrink-0 tabular-nums">
 			{m.thread_position({ n: index + 1, count: thread.notes.length })}
 		</span>

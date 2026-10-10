@@ -5,7 +5,8 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getShell, type ThreadPick } from '#lib/shell.svelte.js';
+	import { getShell } from '#lib/shell.svelte.js';
+	import type { ThreadPick } from '#lib/shell/threads.svelte.js';
 	import { threadName, threadScope } from '#lib/threads.js';
 	import { untrack } from 'svelte';
 
@@ -65,7 +66,7 @@
 					: threadCards();
 		// Read once: a thread changing while the picker is open must not reload it.
 		const fromKept = untrack(
-			() => shell.threadList.find((thread) => thread.id === asked.from)?.kept ?? false
+			() => shell.threads.threadList.find((thread) => thread.id === asked.from)?.kept ?? false
 		);
 		load
 			.then((found) => {
@@ -93,8 +94,8 @@
 	);
 	/** The thread a merge takes the notes of, as it is named everywhere. */
 	const fromName = $derived.by(() => {
-		const from = shell.threadList.find((thread) => thread.id === shown?.from);
-		return from ? shell.nameOf(from) : m.thread_untitled();
+		const from = shell.threads.threadList.find((thread) => thread.id === shown?.from);
+		return from ? shell.threads.nameOf(from) : m.thread_untitled();
 	});
 
 	const hint = $derived(

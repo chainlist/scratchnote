@@ -69,7 +69,7 @@
 					id="thread-title"
 					bind:ref={input}
 					bind:value={title}
-					placeholder={thread ? shell.nameOf(thread) : m.thread_untitled()}
+					placeholder={thread ? shell.threads.nameOf(thread) : m.thread_untitled()}
 					maxlength={120}
 				/>
 			</div>

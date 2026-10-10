@@ -338,16 +338,16 @@
 						</DropdownMenu.Item>
 					{/if}
 					{#if shell.canSimilar}
-						<DropdownMenu.Item onSelect={() => shell.askThread(current)}>
-							<RouteIcon />{shell.threadOf(current.id) ? m.thread_move() : m.thread_add()}
+						<DropdownMenu.Item onSelect={() => shell.threads.askThread(current)}>
+							<RouteIcon />{shell.threads.threadOf(current.id) ? m.thread_move() : m.thread_add()}
 						</DropdownMenu.Item>
 					{/if}
-					{#if shell.threadOf(current.id)}
-						<DropdownMenu.Item onSelect={() => void shell.keepOut(current, true)}>
+					{#if shell.threads.threadOf(current.id)}
+						<DropdownMenu.Item onSelect={() => void shell.threads.keepOut(current, true)}>
 							<RouteOffIcon />{m.thread_leave()}
 						</DropdownMenu.Item>
-					{:else if shell.keptOut(current.id)}
-						<DropdownMenu.Item onSelect={() => void shell.keepOut(current, false)}>
+					{:else if shell.threads.keptOut(current.id)}
+						<DropdownMenu.Item onSelect={() => void shell.threads.keepOut(current, false)}>
 							<RouteIcon />{m.thread_rejoin()}
 						</DropdownMenu.Item>
 					{/if}

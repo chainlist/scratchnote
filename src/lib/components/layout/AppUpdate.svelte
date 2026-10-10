@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { dev } from '$app/env';
-	import { appUpdate } from '#lib/app-update.svelte.js';
+	import { appUpdate } from '#lib/app/app-update.svelte.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import DownloadIcon from '@lucide/svelte/icons/download';
 	import { android } from '#lib/helpers/platform.js';

@@ -8,7 +8,7 @@
 
 	let { ...restProps }: SonnerProps = $props();
 
-	// The app sets its own theme on <html> (#lib/appearance.js) rather than
+	// The app sets its own theme on <html> (#lib/app/appearance.js) rather than
 	// through a mode watcher; the toasts follow its class.
 	const root = document.documentElement;
 	let dark = $state(root.classList.contains('dark'));

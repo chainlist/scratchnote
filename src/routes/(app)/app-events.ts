@@ -13,7 +13,7 @@ import {
 	stopAll,
 	type Settings
 } from '#lib/api.js';
-import { remPixels } from '#lib/appearance.js';
+import { remPixels } from '#lib/app/appearance.js';
 import { android } from '#lib/helpers/platform.js';
 import type { Shell } from '#lib/shell.svelte.js';
 

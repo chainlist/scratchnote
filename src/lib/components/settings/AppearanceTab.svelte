@@ -10,8 +10,8 @@
 		FONTS,
 		RADII,
 		THEMES
-	} from '#lib/appearance.js';
-	import { languageName, LANGUAGES, type Language } from '#lib/i18n.svelte.js';
+	} from '#lib/app/appearance.js';
+	import { languageName, LANGUAGES, type Language } from '#lib/app/i18n.svelte.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import Segmented from './Segmented.svelte';
 	import SettingRow from './SettingRow.svelte';

@@ -22,8 +22,8 @@
 	import LanguagesIcon from '@lucide/svelte/icons/languages';
 	import PaletteIcon from '@lucide/svelte/icons/palette';
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
-	import { languageName, LANGUAGES } from '#lib/i18n.svelte.js';
-	import { clearResumeStep, resumeStep, setResumeStep } from '#lib/onboarding.js';
+	import { languageName, LANGUAGES } from '#lib/app/i18n.svelte.js';
+	import { clearResumeStep, resumeStep, setResumeStep } from '#lib/app/onboarding.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { android, mac } from '#lib/helpers/platform.js';
 	import { app } from '#lib/plugins/app.js';

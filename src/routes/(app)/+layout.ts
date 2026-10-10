@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { resolve } from '$app/paths';
 import { embeddingModelInfo, getSettings, listDays, listSpaces, today } from '#lib/api.js';
-import { resumeStep } from '#lib/onboarding.js';
+import { resumeStep } from '#lib/app/onboarding.js';
 import type { LayoutLoad } from './$types';
 
 /** The onboarding check is made once, when the window first opens. */

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Release } from '#lib/changelog.js';
+	import type { Release } from '#lib/app/changelog.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Tabs from '#lib/components/ui/tabs/index.js';
 	import Markdown from '#lib/components/editor/Markdown.svelte';

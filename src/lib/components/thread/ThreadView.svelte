@@ -18,7 +18,7 @@
 	import { mentionHref } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { closeOnBack } from '#lib/back.svelte.js';
+	import { closeOnBack } from '#lib/app/back.svelte.js';
 
 	let {
 		found

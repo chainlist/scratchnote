@@ -1,4 +1,4 @@
-import changelog from '../../CHANGELOG.md?raw';
+import changelog from '../../../CHANGELOG.md?raw';
 import { compareVersions } from '#lib/helpers/versions.js';
 
 /** The one release that did not record the version last opened. */

@@ -20,7 +20,7 @@ import {
 	type SpacesView
 } from '#lib/api.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
-import { afterNavigation, onGuard } from '#lib/back.svelte.js';
+import { afterNavigation, onGuard } from '#lib/app/back.svelte.js';
 import { addToPageDraft } from '#lib/page-draft.js';
 import { m } from '#lib/paraglide/messages.js';
 import { errorText } from '#lib/helpers/errors.js';

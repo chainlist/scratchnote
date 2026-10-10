@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { dev } from '$app/env';
 	import { asset } from '$app/paths';
-	import { appUpdate } from '#lib/app-update.svelte.js';
-	import { releases, type Release } from '#lib/changelog.js';
+	import { appUpdate } from '#lib/app/app-update.svelte.js';
+	import { releases, type Release } from '#lib/app/changelog.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import WhatsNew from '#lib/components/dialogs/WhatsNew.svelte';
 	import DownloadIcon from '@lucide/svelte/icons/download';
@@ -11,7 +11,7 @@
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { android } from '#lib/helpers/platform.js';
 	import { app } from '#lib/plugins/app.js';
-	import { duration, startupTimes } from '#lib/startup.js';
+	import { duration, startupTimes } from '#lib/app/startup.js';
 	import type { SettingsState } from './state.svelte';
 	import StartupDetails from './StartupDetails.svelte';
 	import { group, hint } from './styles';

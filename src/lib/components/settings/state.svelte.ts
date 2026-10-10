@@ -7,7 +7,7 @@ import {
 	type Settings,
 	type SettingsView
 } from '#lib/api.js';
-import { DEFAULT_APPEARANCE } from '#lib/appearance.js';
+import { DEFAULT_APPEARANCE } from '#lib/app/appearance.js';
 import { m } from '#lib/paraglide/messages.js';
 
 /**

@@ -1,4 +1,4 @@
-import type { Language } from '#lib/i18n.svelte.js';
+import type { Language } from '#lib/app/i18n.svelte.js';
 import { event, invoke } from './invoke.js';
 
 export interface Settings {

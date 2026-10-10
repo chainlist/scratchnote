@@ -1,7 +1,7 @@
 import { dev } from '$app/env';
 import { invoke as tauriInvoke, type InvokeArgs, type InvokeOptions } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { track, type Command } from '#lib/slow-calls.js';
+import { track, type Command } from '#lib/api/slow-calls.js';
 
 /** A command the window called while it started, timed from when it began loading. */
 export interface StartupCall {

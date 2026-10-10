@@ -261,6 +261,6 @@
 
 <SettingsDialog bind:open={shell.settingsOpen} />
 
-<!-- Says when a command keeps the window waiting (#lib/slow-calls.js), under
+<!-- Says when a command keeps the window waiting (#lib/api/slow-calls.js), under
      the header (h-12) and its window controls. -->
 <Toaster position="top-right" offset={{ top: 56, right: 16 }} />

@@ -1,5 +1,5 @@
 import { Decoration, EditorView, WidgetType } from '@codemirror/view';
-import { attachmentUrl } from '#lib/attachments.svelte.js';
+import { attachmentUrl } from '#lib/notes/attachments.svelte.js';
 import { cardName, fileName, fileType, type WidgetRender } from '#lib/markdown.js';
 
 /** A list item's bullet, drawn in place of its marker. */

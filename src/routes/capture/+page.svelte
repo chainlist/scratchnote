@@ -21,7 +21,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import SendHorizontalIcon from '@lucide/svelte/icons/send-horizontal';
 	import { relink } from '#lib/markdown.js';
-	import { withMention } from '#lib/mentions.js';
+	import { withMention } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { formatHotkey } from '#lib/helpers/hotkeys.js';
 	import { mac } from '#lib/helpers/platform.js';

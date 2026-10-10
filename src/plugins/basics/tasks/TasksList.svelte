@@ -8,7 +8,7 @@
 	import ShowMore from '#lib/components/common/ShowMore.svelte';
 	import type { Note } from '#lib/plugins/api.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { RESULTS_STEP } from '#lib/query.js';
+	import { RESULTS_STEP } from '#lib/notes/query.js';
 	import type { BasicsPlugin } from '../plugin.svelte';
 	import { tasks, toggleTask, type Task } from './tasks';
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Attachment } from 'svelte/attachments';
 	import { openAttachment, openLink } from '#lib/api.js';
-	import { attachmentUrl } from '#lib/attachments.svelte.js';
+	import { attachmentUrl } from '#lib/notes/attachments.svelte.js';
 	import { cardName, fileName, fileType, renderLines, type WidgetRender } from '#lib/markdown.js';
 
 	let {

@@ -3,7 +3,7 @@
 	import MarkdownEditor from '#lib/components/editor/MarkdownEditor.svelte';
 	import Recall from '#lib/components/note/Recall.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { withMention } from '#lib/mentions.js';
+	import { withMention } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {

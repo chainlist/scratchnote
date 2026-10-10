@@ -7,7 +7,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import type { ThreadPick } from '#lib/shell/threads.svelte.js';
-	import { threadName, threadScope } from '#lib/threads.js';
+	import { threadName, threadScope } from '#lib/notes/threads.js';
 	import { untrack } from 'svelte';
 
 	let {

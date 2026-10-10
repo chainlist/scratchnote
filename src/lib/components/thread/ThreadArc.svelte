@@ -2,7 +2,7 @@
 	import type { Note, Thread } from '#lib/api.js';
 	import { dayHeading, daysAgo, isoDay, shortDay } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { threadHue } from '#lib/threads.js';
+	import { threadHue } from '#lib/notes/threads.js';
 
 	let {
 		thread,

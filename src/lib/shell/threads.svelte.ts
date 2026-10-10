@@ -18,7 +18,7 @@ import {
 import { noteTitle } from '#lib/markdown.js';
 import { m } from '#lib/paraglide/messages.js';
 import type { Shell } from '#lib/shell.svelte.js';
-import { threadName, threadScope } from '#lib/threads.js';
+import { threadName, threadScope } from '#lib/notes/threads.js';
 
 /** Where a note sits in its thread: the thread, and its place in it from 0. */
 interface ThreadPlace {

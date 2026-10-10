@@ -5,7 +5,7 @@ import {
 	type MarkdownExtension,
 	type MarkdownParser
 } from '@lezer/markdown';
-import { mentionRender, mentionSyntax } from '#lib/mentions.js';
+import { mentionRender, mentionSyntax } from '#lib/notes/mentions.js';
 import { registry, type SyntaxEntry } from '#lib/plugins/registry.svelte.js';
 import type { NodeRender } from '#lib/plugins/types.js';
 

@@ -6,10 +6,10 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { shortDay } from '#lib/helpers/dates.js';
-	import { mentionHref, mentionHue } from '#lib/mentions.js';
+	import { mentionHref, mentionHue } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadHref, threadHue } from '#lib/threads.js';
+	import { threadHref, threadHue } from '#lib/notes/threads.js';
 
 	let {
 		note,

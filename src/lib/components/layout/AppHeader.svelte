@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { SpacesView } from '#lib/api.js';
-	import AppUpdate from '#lib/components/AppUpdate.svelte';
-	import SpaceSwitcher from '#lib/components/SpaceSwitcher.svelte';
-	import WindowControls from '#lib/components/WindowControls.svelte';
+	import AppUpdate from '#lib/components/layout/AppUpdate.svelte';
+	import SpaceSwitcher from '#lib/components/layout/SpaceSwitcher.svelte';
+	import WindowControls from '#lib/components/layout/WindowControls.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import MenuIcon from '@lucide/svelte/icons/menu';
 	import SearchIcon from '@lucide/svelte/icons/search';

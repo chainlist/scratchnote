@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
-	import Dock from '#lib/components/Dock.svelte';
+	import Dock from '#lib/components/layout/Dock.svelte';
 	import PluginIcon from '#lib/components/PluginIcon.svelte';
 	import { openView, type Header } from '#lib/plugins/host.js';
 	import { registry, type ViewEntry } from '#lib/plugins/registry.svelte.js';

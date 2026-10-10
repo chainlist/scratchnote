@@ -10,7 +10,7 @@
 	import HotkeyInput from '#lib/components/settings/HotkeyInput.svelte';
 	import { SettingsState } from '#lib/components/settings/state.svelte.js';
 	import { hint } from '#lib/components/settings/styles.js';
-	import WindowControls from '#lib/components/WindowControls.svelte';
+	import WindowControls from '#lib/components/layout/WindowControls.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';

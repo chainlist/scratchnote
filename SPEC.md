@@ -827,7 +827,8 @@ plugin-registry/      # a local stand-in for the GitHub registry (4.10)
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy
   lib/attachments.svelte.ts  # the open space, for the attachment protocol's URLs
-  lib/api.ts          # typed wrappers around Tauri invoke/listen
+  lib/api.ts          # typed wrappers around Tauri invoke/listen, from lib/api/, one module per commands/ module
+
 ```
 
 ## 10. Milestones

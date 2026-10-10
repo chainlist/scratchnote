@@ -7,7 +7,8 @@ import {
 } from '@lezer/markdown';
 import type { SyntaxNode, Tree } from '@lezer/common';
 import { mentionRender, mentionSyntax } from '#lib/mentions.js';
-import type { NodeRender, WidgetContext } from '#lib/plugins/api.js';
+import type { NodeRender, WidgetContext } from '#lib/plugins/types.js';
+
 import { registry, type SyntaxEntry } from '#lib/plugins/registry.svelte.js';
 
 /**

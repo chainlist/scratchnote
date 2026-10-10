@@ -10,7 +10,7 @@ use crate::storage::pins::PinKind;
 /// to the left edge marked. Asked for another space, as the capture window
 /// does for the one it picked, none: only the open one is read.
 #[tauri::command]
-pub fn list_mentions(
+pub async fn list_mentions(
     state: State<'_, AppState>,
     space: Option<String>,
 ) -> Result<Vec<MentionSummary>, String> {
@@ -33,7 +33,7 @@ pub fn list_mentions(
 
 /// The notes and pages that mention `name`, newest first. Case does not count.
 #[tauri::command]
-pub fn notes_mentioning(state: State<'_, AppState>, name: String) -> Result<MentionNotes, String> {
+pub async fn notes_mentioning(state: State<'_, AppState>, name: String) -> Result<MentionNotes, String> {
     let found = state
         .space()?
         .read(|idx, db| mentions::notes(idx, db, &name))?;

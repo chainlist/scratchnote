@@ -62,7 +62,7 @@ pub async fn create_page(
 
 /// Every page of the open space, for the list of pages (SPEC 3.5).
 #[tauri::command]
-pub fn list_pages(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
+pub async fn list_pages(state: State<'_, AppState>) -> Result<Vec<Note>, String> {
     let space = state.space()?;
     let mut pages = {
         let index = space

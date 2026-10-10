@@ -18,11 +18,13 @@ pub struct EmbeddingModelInfo {
 }
 
 #[tauri::command]
-pub fn embedding_model_info(state: State<'_, AppState>) -> EmbeddingModelInfo {
-    EmbeddingModelInfo {
+pub async fn embedding_model_info(
+    state: State<'_, AppState>,
+) -> Result<EmbeddingModelInfo, String> {
+    Ok(EmbeddingModelInfo {
         installed: download::is_installed(&state.local_data, EmbeddingModel),
         downloading: state.embedding_download.lock().ok().and_then(|d| *d),
-    }
+    })
 }
 
 /// What the embedder is doing, for the status bar of a dev build.

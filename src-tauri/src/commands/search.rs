@@ -15,7 +15,7 @@ use crate::storage::index::IndexEntry;
 /// matches from `offset` on, and how many there are in all. Without a limit
 /// every match comes back, as a plugin's search asks for them.
 #[tauri::command]
-pub fn search(
+pub async fn search(
     state: State<'_, AppState>,
     query: String,
     offset: Option<usize>,
@@ -32,7 +32,7 @@ pub fn search(
 /// a plugin to pick what it reads out of, as the tasks view picks the open
 /// tasks (SPEC 3.8).
 #[tauri::command]
-pub fn notes_containing(
+pub async fn notes_containing(
     state: State<'_, AppState>,
     needles: Vec<String>,
 ) -> Result<Vec<Note>, String> {

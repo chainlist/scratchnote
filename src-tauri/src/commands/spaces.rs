@@ -146,7 +146,7 @@ pub fn sort_spaces(spaces: &mut [Arc<Space>]) {
 }
 
 #[tauri::command]
-pub fn list_spaces(state: State<'_, AppState>) -> Result<SpacesView, String> {
+pub async fn list_spaces(state: State<'_, AppState>) -> Result<SpacesView, String> {
     spaces_view(&state)
 }
 

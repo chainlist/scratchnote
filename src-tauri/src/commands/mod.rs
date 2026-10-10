@@ -1,4 +1,8 @@
 //! Tauri commands, SPEC 8.
+//!
+//! A command that reads files, takes a space's locks or asks SQLite is
+//! async: Tauri runs a sync command on the main thread, where waiting on a
+//! rebuild or a map pass would freeze the windows.
 
 pub mod attachments;
 pub mod labels;

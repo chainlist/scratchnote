@@ -18,8 +18,8 @@ fn check_community(state: &AppState) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn plugins_view(state: State<'_, AppState>) -> PluginsView {
-    view(&state.root)
+pub async fn plugins_view(state: State<'_, AppState>) -> Result<PluginsView, String> {
+    Ok(view(&state.root))
 }
 
 /// Save which plugins are on. Every window hears of it and follows.
@@ -41,7 +41,7 @@ pub async fn set_plugins(
 /// An enabled community plugin's code. Nothing is handed out while
 /// community plugins are off, whatever the webview asks.
 #[tauri::command]
-pub fn plugin_code(state: State<'_, AppState>, id: String) -> Result<PluginCode, String> {
+pub async fn plugin_code(state: State<'_, AppState>, id: String) -> Result<PluginCode, String> {
     check_id(&id)?;
     let plugins = load_state(&state.root);
     if !plugins.community || !plugins.enabled.contains(&id) {
@@ -56,7 +56,7 @@ pub fn plugin_code(state: State<'_, AppState>, id: String) -> Result<PluginCode,
 
 /// What a plugin saved, or null before it ever did.
 #[tauri::command]
-pub fn plugin_data(
+pub async fn plugin_data(
     state: State<'_, AppState>,
     id: String,
     core: bool,

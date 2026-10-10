@@ -120,7 +120,7 @@ pub async fn move_attachments(
 /// Open an attachment of the open space in its own app, as a double click
 /// in the file manager would.
 #[tauri::command]
-pub fn open_attachment(
+pub async fn open_attachment(
     app: AppHandle,
     state: State<'_, AppState>,
     path: String,

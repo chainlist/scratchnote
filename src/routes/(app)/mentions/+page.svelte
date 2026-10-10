@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MentionSummary, Pin } from '#lib/api.js';
 	import View from '#lib/components/View.svelte';
+	import ShowMore from '#lib/components/ShowMore.svelte';
 	import { daysAgo, shortDay } from '#lib/dates.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import PinIcon from '@lucide/svelte/icons/pin';
@@ -267,14 +268,11 @@
 					{/each}
 				</ul>
 				{#if drawn < shownOthers.length}
-					<div class="mt-4 flex justify-center">
-						<Button variant="outline" size="sm" onclick={() => (drawn += PAGE)}>
-							{m.search_show_more()}
-							<span class="text-xs text-muted-foreground tabular-nums">
-								{shownOthers.length - drawn}
-							</span>
-						</Button>
-					</div>
+					<ShowMore
+						class="mt-4"
+						count={shownOthers.length - drawn}
+						onclick={() => (drawn += PAGE)}
+					/>
 				{/if}
 			</section>
 		{/if}

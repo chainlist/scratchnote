@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 	import NoteList from '#lib/components/NoteList.svelte';
 	import View from '#lib/components/View.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import ShowMore from '#lib/components/ShowMore.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { RESULTS_STEP } from '#lib/query.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -31,8 +31,6 @@
 >
 	<NoteList notes={data.found.notes} empty={m.page_no_match()} showDate {...shell.cardActions} />
 	{#if data.found.notes.length < data.found.total}
-		<Button variant="ghost" class="mt-4 text-muted-foreground" onclick={showMore}>
-			{m.search_show_more()}
-		</Button>
+		<ShowMore ghost class="mt-4" onclick={showMore} />
 	{/if}
 </View>

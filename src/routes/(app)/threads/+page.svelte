@@ -4,6 +4,7 @@
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import SectionTabs from '#lib/components/SectionTabs.svelte';
+	import ShowMore from '#lib/components/ShowMore.svelte';
 	import View from '#lib/components/View.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { mentionHue } from '#lib/mentions.js';
@@ -139,9 +140,7 @@
 					{/each}
 				</ul>
 				{#if shown < suggested.length}
-					<div class="mt-4 flex justify-center">
-						<Button variant="outline" size="sm" onclick={showMore}>{m.search_show_more()}</Button>
-					</div>
+					<ShowMore class="mt-4" onclick={showMore} />
 				{/if}
 			{:else}
 				<p class="text-sm text-meta">{m.threads_suggested_none()}</p>

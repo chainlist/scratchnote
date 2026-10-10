@@ -5,7 +5,7 @@
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import InlineError from '#lib/components/InlineError.svelte';
 	import TimelineItem from '#lib/components/TimelineItem.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import ShowMore from '#lib/components/ShowMore.svelte';
 	import type { Note } from '#lib/plugins/api.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { RESULTS_STEP } from '#lib/query.js';
@@ -98,9 +98,12 @@
 	 *  asking, as the other long lists do, so a space with thousands of open
 	 *  tasks opens at once. The count in the title is of all of them. */
 	let drawn = $state(RESULTS_STEP);
-	const count = $derived(
-		groups.reduce((sum, group) => sum + group.open.filter((t) => !t.done).length, 0)
-	);
+	/** The open tasks of these notes. */
+	const openIn = (shown: typeof groups) =>
+		shown.reduce((sum, group) => sum + group.open.filter((t) => !t.done).length, 0);
+	const count = $derived(openIn(groups));
+	/** Those of the notes not drawn yet, for Show more. */
+	const tasksLeft = $derived(openIn(groups.slice(drawn)));
 
 	// The page's title counts them.
 	$effect(() => oncount(count));
@@ -172,17 +175,8 @@
 		{/each}
 	</ul>
 	{#if drawn < groups.length}
-		<div class="mt-8 flex justify-center">
-			<Button variant="outline" size="sm" onclick={() => (drawn += RESULTS_STEP)}>
-				{m.search_show_more()}
-				<!-- Tasks, as the title counts them, not notes. -->
-				<span class="text-xs text-muted-foreground tabular-nums">
-					{groups
-						.slice(drawn)
-						.reduce((sum, group) => sum + group.open.filter((t) => !t.done).length, 0)}
-				</span>
-			</Button>
-		</div>
+		<!-- Tasks, as the title counts them, not notes. -->
+		<ShowMore class="mt-8" count={tasksLeft} onclick={() => (drawn += RESULTS_STEP)} />
 	{/if}
 {/if}
 

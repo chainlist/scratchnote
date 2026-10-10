@@ -28,8 +28,8 @@ export function onSwipe(element: HTMLElement | Document, swipe: Swipe) {
 	let state: 'pending' | 'active' | null = null;
 	let distance = 0;
 
-	const along = (touch: Touch) =>
-		swipe.axis === 'x' ? touch.clientX - start!.x : touch.clientY - start!.y;
+	const along = (touch: Touch, from: { x: number; y: number }) =>
+		swipe.axis === 'x' ? touch.clientX - from.x : touch.clientY - from.y;
 
 	function touchstart(event: Event) {
 		const { touches, target } = event as TouchEvent;
@@ -55,7 +55,7 @@ export function onSwipe(element: HTMLElement | Document, swipe: Swipe) {
 			if (!state) return;
 		}
 		event.preventDefault();
-		distance = along(touch);
+		distance = along(touch, start);
 		swipe.move?.(distance);
 	}
 

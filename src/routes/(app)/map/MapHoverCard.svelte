@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { MapNote, Note, Thread } from '#lib/api.js';
-	import MentionChip from '#lib/components/MentionChip.svelte';
+	import MentionChip from '#lib/components/common/MentionChip.svelte';
 	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { mentionHue } from '#lib/mentions.js';

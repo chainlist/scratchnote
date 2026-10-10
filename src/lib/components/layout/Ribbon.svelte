@@ -13,7 +13,7 @@
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import SunIcon from '@lucide/svelte/icons/sun';
 	import { today, type Pin } from '#lib/api.js';
-	import PluginIcon from '#lib/components/PluginIcon.svelte';
+	import PluginIcon from '#lib/components/common/PluginIcon.svelte';
 	import * as ContextMenu from '#lib/components/ui/context-menu/index.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { coreIds } from '#lib/plugins/loader.js';

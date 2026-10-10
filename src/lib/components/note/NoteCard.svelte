@@ -3,7 +3,7 @@
 	import type { Note } from '#lib/api.js';
 	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import TimelineItem from '#lib/components/note/TimelineItem.svelte';
-	import InlineError from '#lib/components/InlineError.svelte';
+	import InlineError from '#lib/components/common/InlineError.svelte';
 	import NoteChips from '#lib/components/note/NoteChips.svelte';
 	import NoteEditor from '#lib/components/note/NoteEditor.svelte';
 	import NoteMenu from '#lib/components/note/NoteMenu.svelte';

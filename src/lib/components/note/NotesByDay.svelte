@@ -2,7 +2,7 @@
 	import type { ComponentProps } from 'svelte';
 	import type { Note } from '#lib/api.js';
 	import NoteList from '#lib/components/note/NoteList.svelte';
-	import ShowMore from '#lib/components/ShowMore.svelte';
+	import ShowMore from '#lib/components/common/ShowMore.svelte';
 	import { dayHeading, monthHeading, weekday } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { RESULTS_STEP } from '#lib/query.js';

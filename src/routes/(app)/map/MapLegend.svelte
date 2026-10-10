@@ -1,5 +1,5 @@
 <script lang="ts">
-	import MentionChip from '#lib/components/MentionChip.svelte';
+	import MentionChip from '#lib/components/common/MentionChip.svelte';
 	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { NO_NAME } from './map-data.js';

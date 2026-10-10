@@ -1,6 +1,6 @@
 <script lang="ts">
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import ErrorDetails from '#lib/components/ErrorDetails.svelte';
+	import ErrorDetails from '#lib/components/common/ErrorDetails.svelte';
 	import { cn } from '#lib/utils.js';
 
 	let {

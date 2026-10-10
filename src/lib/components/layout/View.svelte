@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import ErrorDetails from '#lib/components/ErrorDetails.svelte';
+	import ErrorDetails from '#lib/components/common/ErrorDetails.svelte';
 	import ViewHeader from '#lib/components/layout/ViewHeader.svelte';
 	import * as Alert from '#lib/components/ui/alert/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';

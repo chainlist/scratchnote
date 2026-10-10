@@ -3,9 +3,9 @@
 	import type { Attachment } from 'svelte/attachments';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
-	import InlineError from '#lib/components/InlineError.svelte';
+	import InlineError from '#lib/components/common/InlineError.svelte';
 	import TimelineItem from '#lib/components/note/TimelineItem.svelte';
-	import ShowMore from '#lib/components/ShowMore.svelte';
+	import ShowMore from '#lib/components/common/ShowMore.svelte';
 	import type { Note } from '#lib/plugins/api.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { RESULTS_STEP } from '#lib/query.js';

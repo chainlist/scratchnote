@@ -2,7 +2,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import CircleAlertIcon from '@lucide/svelte/icons/circle-alert';
-	import ErrorDetails from '#lib/components/ErrorDetails.svelte';
+	import ErrorDetails from '#lib/components/common/ErrorDetails.svelte';
 	import View from '#lib/components/layout/View.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { m } from '#lib/paraglide/messages.js';

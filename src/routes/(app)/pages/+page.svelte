@@ -1,7 +1,7 @@
 <script lang="ts">
 	import NoteList from '#lib/components/note/NoteList.svelte';
 	import View from '#lib/components/layout/View.svelte';
-	import ShowMore from '#lib/components/ShowMore.svelte';
+	import ShowMore from '#lib/components/common/ShowMore.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { RESULTS_STEP } from '#lib/query.js';
 	import { getShell } from '#lib/shell.svelte.js';

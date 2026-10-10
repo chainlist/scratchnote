@@ -1,7 +1,7 @@
 <script lang="ts" generics="T extends Thread">
 	import type { Snippet } from 'svelte';
 	import type { Thread } from '#lib/api.js';
-	import MentionChip from '#lib/components/MentionChip.svelte';
+	import MentionChip from '#lib/components/common/MentionChip.svelte';
 	import { dateFormat, daysAgo, isoDay, shortDay } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

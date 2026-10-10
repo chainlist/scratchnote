@@ -2,7 +2,7 @@
 	import { isPage, type Note } from '#lib/api.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import Markdown from '#lib/components/Markdown.svelte';
+	import NotePreview from '#lib/components/NotePreview.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {
@@ -48,16 +48,7 @@
 				<Dialog.Description>{m.page_delete_description()}</Dialog.Description>
 			{/if}
 		</Dialog.Header>
-		{#if note}
-			<div class="rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-				{#if isPage(note)}
-					<p class="truncate font-medium text-foreground">{note.subject ?? m.pages_untitled()}</p>
-				{/if}
-				{#if note.body}
-					<Markdown text={note.body} links={false} class="max-h-[4lh] overflow-hidden" />
-				{/if}
-			</div>
-		{/if}
+		{#if note}<NotePreview {note} clamp="max-h-[4lh] overflow-hidden" />{/if}
 		<Dialog.Footer>
 			<Button variant="outline" onclick={() => (note = null)}>{m.common_cancel()}</Button>
 			<Button variant="destructive" onclick={confirm} disabled={removing}>

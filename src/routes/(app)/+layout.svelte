@@ -13,7 +13,7 @@
 	import MoveDialog from '#lib/components/MoveDialog.svelte';
 	import NoteToPageDialog from '#lib/components/NoteToPageDialog.svelte';
 	import OldChatModelDialog from '#lib/components/OldChatModelDialog.svelte';
-	import PageView from '#lib/components/PageView.svelte';
+	import PageEditor from '#lib/components/page/PageEditor.svelte';
 	import PluginPanel from '#lib/components/layout/PluginPanel.svelte';
 	import Ribbon from '#lib/components/layout/Ribbon.svelte';
 	import RibbonDrawer from '#lib/components/layout/RibbonDrawer.svelte';
@@ -211,7 +211,7 @@
 			<Dock label={docked.subject ?? m.pages_untitled()} onclose={() => (shell.docked = null)}>
 				<div class="min-h-0 flex-1 overflow-y-auto px-8">
 					{#key docked.id}
-						<PageView
+						<PageEditor
 							id={docked.id}
 							date={docked.date}
 							oncreated={() => void shell.refresh()}

@@ -500,7 +500,9 @@ A core plugin is a folder of [`src/plugins/`](src/plugins/), listed in
 loads the same way; it may be written in TypeScript and Svelte (mounting its
 components into the element it is given), use the app's messages and UI
 components, and nothing else of the app. What a core plugin does, a community
-plugin can do. Its data goes in `core-plugins/<id>.json`.
+plugin can do. The core plugins share a few helpers of their own, such as
+`src/plugins/dom.ts`, as a community plugin bundles its own. A core plugin's
+data goes in `core-plugins/<id>.json`.
 
 A core plugin is on unless the user switches it off. One with
 `offByDefault: true` in its entry starts off instead, until the user switches

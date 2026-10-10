@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { MapNote, Note, Thread } from '#lib/api.js';
+	import MentionChip from '#lib/components/MentionChip.svelte';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { mentionHue } from '#lib/mentions.js';
@@ -59,9 +60,7 @@
 	{#if note.mentions.length}
 		<p class="mt-1.5 flex flex-wrap gap-1">
 			{#each note.mentions as key (key)}
-				<span class="name-tint rounded-md px-1 text-xs font-medium" style:--hue={mentionHue(key)}
-					>{nameOf(key)}</span
-				>
+				<MentionChip class="text-xs" hue={mentionHue(key)}>{nameOf(key)}</MentionChip>
 			{/each}
 		</p>
 	{/if}

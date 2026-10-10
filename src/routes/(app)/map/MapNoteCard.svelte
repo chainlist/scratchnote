@@ -1,6 +1,7 @@
 <script lang="ts">
 	import XIcon from '@lucide/svelte/icons/x';
 	import type { MapNote, Note, Thread } from '#lib/api.js';
+	import MentionChip from '#lib/components/MentionChip.svelte';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
@@ -62,11 +63,8 @@
 	{#if note.mentions.length}
 		<Card.Content class="flex flex-wrap gap-1">
 			{#each note.mentions as key (key)}
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- mentionHref resolves it -->
-				<a
-					href={mentionHref(key)}
-					class="name-tint rounded-md px-1 text-sm font-medium hover:underline"
-					style:--hue={mentionHue(key)}>{nameOf(key)}</a
+				<MentionChip href={mentionHref(key)} class="text-sm hover:underline" hue={mentionHue(key)}
+					>{nameOf(key)}</MentionChip
 				>
 			{/each}
 		</Card.Content>

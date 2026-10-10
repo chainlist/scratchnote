@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MentionChip from '#lib/components/MentionChip.svelte';
 	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { NO_NAME } from './map-data.js';
@@ -44,7 +45,7 @@
 					<span class="min-w-0 flex-1 truncate text-muted-foreground">{m.map_no_name()}</span>
 				{:else}
 					<span class="min-w-0 flex-1 truncate">
-						<span class="name-tint rounded-md px-1 text-sm font-medium">{nameOf(key)}</span>
+						<MentionChip class="text-sm">{nameOf(key)}</MentionChip>
 					</span>
 				{/if}
 				<span class="text-xs text-muted-foreground tabular-nums">{count}</span>

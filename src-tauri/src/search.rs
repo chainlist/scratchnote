@@ -51,7 +51,7 @@ impl Query {
 
 /// Whether `matched`, from `Query::matched`, lets `entry` through.
 fn passes(matched: &Option<HashSet<String>>, entry: &IndexEntry) -> bool {
-    matched.as_ref().map_or(true, |ids| ids.contains(&entry.id))
+    matched.as_ref().is_none_or(|ids| ids.contains(&entry.id))
 }
 
 /// `entries` as notes, their text read from `db`.

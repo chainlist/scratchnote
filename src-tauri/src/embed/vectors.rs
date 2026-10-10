@@ -16,7 +16,7 @@ use std::path::Path;
 
 use rusqlite::Connection;
 
-use super::normalize;
+use super::math::{add, dot, from_le_bytes, normalize, to_le_bytes};
 use crate::storage::index::IndexEntry;
 use crate::storage::space_db::SpaceDb;
 use crate::Result;
@@ -93,10 +93,7 @@ impl Vectors {
             if bytes.len() != dims * 4 {
                 return None;
             }
-            let vector: Vec<f32> = bytes
-                .chunks_exact(4)
-                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                .collect();
+            let vector = from_le_bytes(bytes);
             vectors
                 .notes
                 .insert(row.get(0).ok()?, (row.get(1).ok()?, vector));
@@ -124,8 +121,7 @@ impl Vectors {
         )?;
         let mut row = |id: &str| -> Result<()> {
             let (hash, vector) = &self.notes[id];
-            let bytes: Vec<u8> = vector.iter().flat_map(|x| x.to_le_bytes()).collect();
-            put.execute(rusqlite::params![id, hash, bytes])?;
+            put.execute(rusqlite::params![id, hash, to_le_bytes(vector)])?;
             Ok(())
         };
         match &self.unsaved {
@@ -229,6 +225,9 @@ impl Vectors {
         self.notes.len() != before
     }
 
+    /// Store `id`'s vector, embedded from the body `hash` names, at unit
+    /// length in place of any it had. Refused when it is not as long as
+    /// the store's vectors.
     pub fn insert(&mut self, id: String, hash: String, mut vector: Vec<f32>) -> Result<()> {
         if vector.len() != self.dims {
             return Err(format!(
@@ -423,11 +422,7 @@ impl Vectors {
         for _ in 0..count {
             let id = reader.string()?;
             let hash = reader.string()?;
-            let vector = reader
-                .take(dims.checked_mul(4)?)?
-                .chunks_exact(4)
-                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                .collect::<Vec<f32>>();
+            let vector = from_le_bytes(reader.take(dims.checked_mul(4)?)?);
             add(&mut sum, &vector, 1.0);
             if let Some((_, old)) = notes.insert(id, (hash, vector)) {
                 add(&mut sum, &old, -1.0);
@@ -452,34 +447,6 @@ fn ranked(mut scored: Vec<(&String, f32)>, k: usize) -> Vec<(String, f32)> {
         .into_iter()
         .map(|(id, score)| (id.clone(), score))
         .collect()
-}
-
-/// Adds `vector` times `sign` into `sum`.
-fn add(sum: &mut [f64], vector: &[f32], sign: f64) {
-    for (s, &x) in sum.iter_mut().zip(vector) {
-        *s += sign * x as f64;
-    }
-}
-
-/// Summed in eight lanes, which the compiler turns into vector
-/// instructions: one running sum would make each addition wait on the last.
-pub(crate) fn dot(a: &[f32], b: &[f32]) -> f32 {
-    let len = a.len().min(b.len());
-    let (a, b) = (&a[..len], &b[..len]);
-    let mut lanes = [0.0f32; 8];
-    let (a8, b8) = (a.chunks_exact(8), b.chunks_exact(8));
-    let tail: f32 = a8
-        .remainder()
-        .iter()
-        .zip(b8.remainder())
-        .map(|(x, y)| x * y)
-        .sum();
-    for (x, y) in a8.zip(b8) {
-        for i in 0..8 {
-            lanes[i] += x[i] * y[i];
-        }
-    }
-    lanes.iter().sum::<f32>() + tail
 }
 
 #[cfg(test)]

@@ -1,7 +1,6 @@
 //! Pages, SPEC 3.5 and 4.7: the page view and the list of pages. How a
 //! page's file and stub are kept is `crate::pages`.
 
-use chrono::Local;
 use tauri::{AppHandle, State};
 use ulid::Ulid;
 
@@ -13,7 +12,7 @@ use crate::pages::{
 use crate::state::{read_lock, AppState};
 use crate::storage::daily_file::{self, body_hash, Kind, Note, Stub};
 use crate::storage::page_file;
-use crate::storage::{check_date, day_path};
+use crate::storage::{check_date, date_and_time, day_path};
 use crate::Result;
 
 const NO_TITLE: &str = "a page needs a title";
@@ -34,13 +33,13 @@ pub async fn create_page(
         check_date(date)?;
     }
     let space = state.space()?;
-    let now = Local::now();
-    let date = date.unwrap_or_else(|| now.format("%Y-%m-%d").to_string());
+    let (today, time) = date_and_time();
+    let date = date.unwrap_or(today);
     let body = body.trim().to_string();
     let page = Note {
         id: Ulid::generate().to_string(),
         file: free_path(&space, &date, &title, None),
-        time: now.format("%H:%M").to_string(),
+        time,
         hash: body_hash(&body),
         on: page_file::day_ahead(&title, &body, &date),
         ahead_off: false,

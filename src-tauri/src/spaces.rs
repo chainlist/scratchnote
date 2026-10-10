@@ -18,6 +18,8 @@ use crate::embed::threads::{Edits, Threads};
 use crate::embed::vectors::Vectors;
 use crate::state::{lock, read_lock, write_lock};
 use crate::storage::day_path;
+use crate::storage::markdown::collapse_spaces;
+use crate::storage::paths::{self, first_free, meta_dir};
 use crate::storage::daily_file::Note;
 use crate::storage::index::{self, Index, IndexEntry};
 use crate::storage::pins::{self, Pin};
@@ -68,7 +70,7 @@ impl Registry {
 }
 
 pub fn registry_path(root: &Path) -> PathBuf {
-    root.join(".scratchnote").join("spaces.json")
+    meta_dir(root).join("spaces.json")
 }
 
 pub fn spaces_dir(root: &Path) -> PathBuf {
@@ -100,13 +102,13 @@ pub fn migrate_root(root: &Path) {
         .into_iter()
         .map(|(name, _)| name.to_lowercase())
         .collect();
-    let name = std::iter::once(wanted.clone())
-        .chain((2..).map(|n| format!("{wanted} {n}")))
-        .find(|n| !taken.contains(&n.to_lowercase()))
-        .unwrap_or(wanted);
+    let name = first_free(
+        |n| paths::numbered(&wanted, None, n),
+        |name| taken.contains(&name.to_lowercase()),
+    );
     let to = spaces_dir(root).join(&name);
 
-    let moved = std::fs::create_dir_all(to.join(".scratchnote"))
+    let moved = std::fs::create_dir_all(meta_dir(&to))
         .and_then(|_| std::fs::rename(&notes, to.join("notes")));
     if let Err(e) = moved {
         log::error!(
@@ -166,17 +168,14 @@ pub fn discover(root: &Path) -> Vec<(String, PathBuf)> {
 /// too long it must be something every platform accepts as a folder.
 /// Returns the name tidied: surrounding and repeated whitespace dropped.
 pub fn check_name(raw: &str) -> Result<String> {
-    let name = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let name = collapse_spaces(raw);
     if name.is_empty() {
         return Err("a space needs a name".into());
     }
     if name.chars().count() > MAX_NAME {
         return Err(format!("keep the name under {MAX_NAME} characters").into());
     }
-    if let Some(c) = name
-        .chars()
-        .find(|c| c.is_control() || r#"<>:"/\|?*"#.contains(*c))
-    {
+    if let Some(c) = name.chars().find(|c| paths::forbidden(*c)) {
         return Err(format!("a space name cannot contain {c}").into());
     }
     if name.starts_with('.') || name.ends_with('.') {

@@ -6,12 +6,14 @@
 //! `.scratchnote/` costs nothing but the time to reparse. The notes' text is
 //! not held here but in `search.db` (SPEC 6), which follows the same files.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use super::daily_file::{self, Kind, Note};
+use super::paths::meta_dir;
 use super::search_db::{SearchDb, Stamp};
 use super::{check_date, page_file, relative_day_path};
 
@@ -37,10 +39,6 @@ pub struct IndexEntry {
     /// written before words were counted, whose day `load` reparses.
     #[serde(default)]
     pub words: Option<usize>,
-    /// Always empty in the index. Search fills it in for the notes it
-    /// returns.
-    #[serde(skip)]
-    pub body: String,
 }
 
 impl From<&Note> for IndexEntry {
@@ -55,12 +53,12 @@ impl From<&Note> for IndexEntry {
             on: note.on.clone(),
             kind: note.kind,
             words: Some(words(&note.body)),
-            body: String::new(),
         }
     }
 }
 
 impl IndexEntry {
+    /// As a note without its text, which `search::with_bodies` reads.
     pub fn to_note(&self) -> Note {
         Note {
             id: self.id.clone(),
@@ -71,21 +69,15 @@ impl IndexEntry {
             hash: self.hash.clone(),
             on: self.on.clone(),
             ahead_off: false,
-            body: self.body.clone(),
+            body: String::new(),
             kind: self.kind,
             missing: false,
         }
     }
 
-    /// Everything the cache holds, which leaves out the body.
-    fn same_meta(&self, other: &IndexEntry) -> bool {
-        IndexEntry {
-            body: String::new(),
-            ..self.clone()
-        } == IndexEntry {
-            body: String::new(),
-            ..other.clone()
-        }
+    /// Newest first: by date, then by time within the day.
+    pub fn newest_first(a: &IndexEntry, b: &IndexEntry) -> Ordering {
+        b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time))
     }
 }
 
@@ -129,6 +121,8 @@ impl Index {
         !same
     }
 
+    /// Add a note to its day, or a page by its id, replacing a page of that
+    /// id: notes are kept by day, pages each on their own.
     pub fn push(&mut self, entry: IndexEntry) {
         if entry.kind == Kind::Page {
             self.pages.insert(entry.id.clone(), entry);
@@ -215,6 +209,27 @@ impl Index {
         self.by_date.values().flatten().chain(self.pages.values())
     }
 
+    /// The note or page `id`, the first `entries` holds.
+    pub fn get(&self, id: &str) -> Option<&IndexEntry> {
+        self.entries().find(|entry| entry.id == id)
+    }
+
+    /// Every entry by id, for looking up many. An id held twice, as by a
+    /// note copied by hand into another day, gives the last.
+    pub fn by_id(&self) -> HashMap<&str, &IndexEntry> {
+        self.entries()
+            .map(|entry| (entry.id.as_str(), entry))
+            .collect()
+    }
+
+    /// The entries of `ids` the index holds, in the order of `ids`.
+    pub fn pick<'a>(&self, ids: impl IntoIterator<Item = &'a str>) -> Vec<&IndexEntry> {
+        let entries = self.by_id();
+        ids.into_iter()
+            .filter_map(|id| entries.get(id).copied())
+            .collect()
+    }
+
     pub fn to_jsonl(&self) -> String {
         let mut out = String::new();
         for entry in self.entries() {
@@ -244,7 +259,7 @@ impl Index {
 }
 
 pub fn index_path(root: &Path) -> PathBuf {
-    root.join(".scratchnote").join("index.jsonl")
+    meta_dir(root).join("index.jsonl")
 }
 
 /// Every `notes/<year>/<date>.md` under the root, with the date it holds.
@@ -395,7 +410,7 @@ fn read_pages(
                 let entry = IndexEntry::from(&page);
                 changed |= !index
                     .replace_page(entry.clone())
-                    .is_some_and(|before| before.same_meta(&entry));
+                    .is_some_and(|before| before == entry);
                 db.replace_page(&page, stamp)
             }
             None => db.stamp_page_file(file, stamp),
@@ -650,10 +665,6 @@ mod tests {
         let (index, changed) = load(&root, &mut db);
         assert!(!changed, "a fresh cache needs no write back");
         assert_eq!(index.len(), 1);
-        assert!(
-            index.entries().all(|entry| entry.body.is_empty()),
-            "no text in memory"
-        );
         assert_eq!(db.bodies(["01AAA"]).unwrap()["01AAA"], "the body");
 
         // With search.db gone, the day is read into a new one, and what it now
@@ -742,9 +753,12 @@ mod tests {
     #[test]
     fn words_are_counted_once_and_kept_without_the_body() {
         let mut index = Index::default();
-        let entry = IndexEntry::from(&note("01AAA", "2026-09-22", "08:00", "three small words"));
-        assert!(entry.body.is_empty());
-        index.push(entry);
+        index.push(IndexEntry::from(&note(
+            "01AAA",
+            "2026-09-22",
+            "08:00",
+            "three small words",
+        )));
         assert_eq!(index.words_on("2026-09-22"), 3);
 
         let back = Index::from_jsonl(&index.to_jsonl());
@@ -820,8 +834,6 @@ mod tests {
         let (index, changed) = load(&root, &mut db);
         let took = started.elapsed();
         assert!(!changed);
-        let held: usize = index.entries().map(|entry| entry.body.len()).sum();
-        assert_eq!(held, 0, "no note text in memory");
 
         let timed = |query: &str| {
             let started = std::time::Instant::now();

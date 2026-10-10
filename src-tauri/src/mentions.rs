@@ -173,38 +173,48 @@ pub struct MentionSummary {
     pub pinned: bool,
 }
 
+/// What `list` gathers of one name from the notes mentioning it.
+struct Gathered<'a> {
+    notes: Vec<&'a str>,
+    days: BTreeSet<&'a str>,
+    /// The date and time of the newest of them, whose spelling is `name`.
+    newest: (&'a str, &'a str),
+    name: String,
+}
+
 /// Every name the notes of `index` mention, most mentioned first, then the
 /// one mentioned last.
 pub fn list(index: &Index, db: &SearchDb) -> Result<Vec<MentionSummary>> {
-    let entries: HashMap<&str, &IndexEntry> = index.entries().map(|e| (e.id.as_str(), e)).collect();
-    // By key: the notes, their days, and the newest one's place and spelling.
-    let mut names: HashMap<String, (Vec<&str>, BTreeSet<&str>, (&str, &str), String)> =
-        HashMap::new();
+    let entries = index.by_id();
+    let mut names: HashMap<String, Gathered> = HashMap::new();
     for (id, key, name) in db.mention_rows()? {
         let Some(entry) = entries.get(id.as_str()) else {
             continue;
         };
         let when = (entry.date.as_str(), entry.time.as_str());
-        let slot = names
-            .entry(key)
-            .or_insert_with(|| (Vec::new(), BTreeSet::new(), when, name.clone()));
-        if !slot.0.contains(&entry.id.as_str()) {
-            slot.0.push(entry.id.as_str());
+        let slot = names.entry(key).or_insert_with(|| Gathered {
+            notes: Vec::new(),
+            days: BTreeSet::new(),
+            newest: when,
+            name: name.clone(),
+        });
+        if !slot.notes.contains(&entry.id.as_str()) {
+            slot.notes.push(entry.id.as_str());
         }
-        slot.1.insert(entry.date.as_str());
-        if when > slot.2 {
-            slot.2 = when;
-            slot.3 = name;
+        slot.days.insert(entry.date.as_str());
+        if when > slot.newest {
+            slot.newest = when;
+            slot.name = name;
         }
     }
     let mut out: Vec<MentionSummary> = names
         .into_iter()
-        .map(|(key, (notes, days, (last, _), name))| MentionSummary {
-            name,
+        .map(|(key, gathered)| MentionSummary {
+            name: gathered.name,
             key,
-            notes: notes.len(),
-            last: last.to_string(),
-            days: days.into_iter().map(str::to_string).collect(),
+            notes: gathered.notes.len(),
+            last: gathered.newest.0.to_string(),
+            days: gathered.days.into_iter().map(str::to_string).collect(),
             pinned: false,
         })
         .collect();
@@ -227,7 +237,7 @@ pub fn notes(index: &Index, db: &SearchDb, name: &str) -> Result<MentionNotes> {
         .entries()
         .filter(|e| names.contains_key(&e.id))
         .collect();
-    hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
+    hits.sort_by(|a, b| IndexEntry::newest_first(a, b));
     let name = hits.first().and_then(|newest| names.remove(&newest.id));
     Ok(MentionNotes {
         name,

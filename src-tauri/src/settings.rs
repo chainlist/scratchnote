@@ -7,6 +7,8 @@ use crate::Result;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+use crate::storage::paths::meta_dir;
+
 pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,7 +121,7 @@ pub fn default_root(app: &AppHandle) -> PathBuf {
 }
 
 fn settings_path(root: &Path) -> PathBuf {
-    root.join(".scratchnote").join("settings.json")
+    meta_dir(root).join("settings.json")
 }
 
 #[cfg(test)]

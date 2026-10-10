@@ -6,7 +6,6 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::Path;
 
-use chrono::Local;
 use percent_encoding::percent_decode_str;
 use tauri::ipc::InvokeBody;
 use tauri::{AppHandle, State};
@@ -14,11 +13,8 @@ use tauri::{AppHandle, State};
 use super::blocking;
 use crate::attachments::{relocate, resolve, store, Attachment};
 use crate::state::AppState;
+use crate::storage::today;
 use crate::Result;
-
-fn today() -> String {
-    Local::now().format("%Y-%m-%d").to_string()
-}
 
 /// Copy files from disk into the open space, or the one named: dropped on an
 /// editor, or picked with its attach button. Every path is checked before

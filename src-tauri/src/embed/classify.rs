@@ -10,7 +10,8 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
-use super::vectors::{dot, Vectors};
+use super::math::dot;
+use super::vectors::Vectors;
 
 /// The weights, trained offline (see SPEC 3.14 for how).
 const MODEL: &str = include_str!("classifier.json");

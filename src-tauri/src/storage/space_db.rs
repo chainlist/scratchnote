@@ -19,6 +19,8 @@ use rusqlite::{Connection, OptionalExtension, Transaction};
 
 use crate::embed::threads::{Edits, Threads};
 use crate::embed::vectors::Vectors;
+use crate::storage::paths::meta_dir;
+use crate::storage::sqlite;
 use crate::Result;
 
 /// Bumped when the tables change. A later version moves the thread edits
@@ -134,12 +136,12 @@ const SCOPES: &str = "
 ";
 
 pub fn space_db_path(root: &Path) -> PathBuf {
-    root.join(".scratchnote").join("space.db")
+    meta_dir(root).join("space.db")
 }
 
 /// The files `space.db` replaces.
 fn old_files(root: &Path) -> [PathBuf; 3] {
-    let dir = root.join(".scratchnote");
+    let dir = meta_dir(root);
     [
         dir.join("vectors.bin"),
         dir.join("threads.json"),
@@ -156,14 +158,8 @@ impl SpaceDb {
     /// which are then removed. Unlike `search.db`, a file that cannot be
     /// used is left alone: it holds the user's thread edits.
     pub fn open(root: &Path) -> Result<Self> {
-        let path = space_db_path(root);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let mut db = Self::set_up(Connection::open(&path)?)?;
-        let version: i64 = db
-            .conn
-            .query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        let mut db = Self::set_up(sqlite::open(&space_db_path(root))?)?;
+        let version = sqlite::version(&db.conn)?;
         if version == 0 {
             db.make(Some(root))?;
         } else if version < VERSION {
@@ -175,7 +171,7 @@ impl SpaceDb {
                     tx.execute_batch(PINS)?;
                 }
                 tx.execute_batch(SCOPES)?;
-                Ok(tx.pragma_update(None, "user_version", VERSION)?)
+                sqlite::set_version(tx, VERSION)
             })?;
         }
         Ok(db)
@@ -194,10 +190,9 @@ impl SpaceDb {
         // quarter; a 16 KB page holds five. Only takes on a new file, so
         // before the journal mode, which fixes it.
         conn.pragma_update(None, "page_size", PAGE_SIZE)?;
-        conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))?;
         // Each save is on disk before it returns, as the files it replaces
         // were: the thread edits cannot be read again from anywhere.
-        conn.pragma_update(None, "synchronous", "FULL")?;
+        sqlite::write_ahead(&conn, "FULL")?;
         // The log is copied into the file every 1 MB and cut back to that
         // after, where by default it would keep the size of the largest
         // write, such as reading in a whole `vectors.bin`.
@@ -224,7 +219,7 @@ impl SpaceDb {
             tx.execute_batch(CATEGORIES)?;
             tx.execute_batch(PINS)?;
             tx.execute_batch(SCOPES)?;
-            tx.pragma_update(None, "user_version", VERSION)?;
+            sqlite::set_version(tx, VERSION)?;
             if let Some((vectors, threads, edits)) = &old {
                 if let Some(vectors) = vectors {
                     vectors.write(tx)?;
@@ -252,6 +247,16 @@ impl SpaceDb {
             }
         }
         Ok(())
+    }
+
+    /// What `read` read of this database, or `T::default()` when it failed,
+    /// which is logged as not reading `what`: a space whose rows cannot be
+    /// read opens without them rather than not at all.
+    pub(crate) fn load_or_default<T: Default>(read: rusqlite::Result<T>, what: &str) -> T {
+        read.unwrap_or_else(|e| {
+            log::warn!("could not read {what}: {e}");
+            T::default()
+        })
     }
 
     pub(crate) fn conn(&self) -> &Connection {

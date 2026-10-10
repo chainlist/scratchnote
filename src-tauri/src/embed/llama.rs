@@ -16,7 +16,8 @@ use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaModel};
 use llama_cpp_2::token::LlamaToken;
 
-use super::{normalize, Embedder};
+use super::math::normalize;
+use super::Embedder;
 use crate::state::lock;
 use crate::Result;
 

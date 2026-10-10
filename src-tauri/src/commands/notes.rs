@@ -1,9 +1,7 @@
 //! Notes: capture, the day view, edits, and the index behind them.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::Local;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use ulid::Ulid;
@@ -13,7 +11,7 @@ use crate::spaces::Space;
 use crate::state::{read_lock, AppState};
 use crate::storage::daily_file::{self, Kind, Note};
 use crate::storage::index::{self, IndexEntry};
-use crate::storage::{check_date, day_path, page_file, relative_day_path};
+use crate::storage::{check_date, date_and_time, day_path, page_file, relative_day_path};
 use crate::Result;
 
 #[derive(Debug, Serialize)]
@@ -48,11 +46,11 @@ pub async fn save_note(
     }
     let space = state.space_or_open(space.as_deref())?;
 
-    let now = Local::now();
-    let date = date.unwrap_or_else(|| now.format("%Y-%m-%d").to_string());
+    let (today, time) = date_and_time();
+    let date = date.unwrap_or(today);
     let note = Note {
         id: Ulid::generate().to_string(),
-        time: now.format("%H:%M").to_string(),
+        time,
         file: relative_day_path(&date),
         subject: None,
         hash: daily_file::body_hash(&body),
@@ -142,7 +140,7 @@ pub async fn list_days(state: State<'_, AppState>) -> Result<Vec<DaySummary>> {
 #[tauri::command]
 pub async fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<Note>> {
     let space = state.space()?;
-    let note = space.read(|idx, db| match idx.entries().find(|entry| entry.id == id) {
+    let note = space.read(|idx, db| match idx.get(&id) {
         Some(entry) => Ok(crate::search::with_bodies(db, [entry])?.pop()),
         None => Ok(None),
     })?;
@@ -155,14 +153,8 @@ pub async fn get_note(state: State<'_, AppState>, id: String) -> Result<Option<N
 #[tauri::command]
 pub async fn get_notes(state: State<'_, AppState>, ids: Vec<String>) -> Result<Vec<Note>> {
     let space = state.space()?;
-    let notes = space.read(|idx, db| {
-        let entries: HashMap<&str, &IndexEntry> =
-            idx.entries().map(|e| (e.id.as_str(), e)).collect();
-        let asked = ids
-            .iter()
-            .filter_map(|id| entries.get(id.as_str()).copied());
-        crate::search::with_bodies(db, asked)
-    })?;
+    let notes = space
+        .read(|idx, db| crate::search::with_bodies(db, idx.pick(ids.iter().map(String::as_str))))?;
     Ok(notes.unwrap_or_default())
 }
 
@@ -353,7 +345,7 @@ async fn drop_labels(state: &State<'_, AppState>, space: &Space) -> Result<()> {
 
 #[tauri::command]
 pub fn today() -> String {
-    Local::now().format("%Y-%m-%d").to_string()
+    crate::storage::today()
 }
 
 /// The notes and pages of the open space that look forward to `date`, oldest

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import MentionLetter from '#lib/components/MentionLetter.svelte';
-	import NotesByDay from '#lib/components/NotesByDay.svelte';
+	import NotesByDay from '#lib/components/note/NotesByDay.svelte';
 	import SectionTabs from '#lib/components/layout/SectionTabs.svelte';
 	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
 	import KeepThreadButtons from '#lib/components/KeepThreadButtons.svelte';

@@ -2,11 +2,11 @@
 	import { tick, untrack, type ComponentProps } from 'svelte';
 	import type { Note } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
-	import TimelineItem from '#lib/components/TimelineItem.svelte';
+	import TimelineItem from '#lib/components/note/TimelineItem.svelte';
 	import InlineError from '#lib/components/InlineError.svelte';
-	import NoteChips from '#lib/components/NoteChips.svelte';
-	import NoteEditor from '#lib/components/NoteEditor.svelte';
-	import NoteMenu from '#lib/components/NoteMenu.svelte';
+	import NoteChips from '#lib/components/note/NoteChips.svelte';
+	import NoteEditor from '#lib/components/note/NoteEditor.svelte';
+	import NoteMenu from '#lib/components/note/NoteMenu.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { typesText } from '#lib/dom.js';
 	import PencilIcon from '@lucide/svelte/icons/pencil';

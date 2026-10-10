@@ -3,7 +3,7 @@
 	import { renameThread, type Note, type Thread, type ThreadOrder } from '#lib/api.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import NotesByDay from '#lib/components/NotesByDay.svelte';
+	import NotesByDay from '#lib/components/note/NotesByDay.svelte';
 	import RenameThreadDialog from '#lib/components/RenameThreadDialog.svelte';
 	import ThreadArc from '#lib/components/ThreadArc.svelte';
 	import { shortDay } from '#lib/dates.js';

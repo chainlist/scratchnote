@@ -4,7 +4,7 @@
 	import PencilLineIcon from '@lucide/svelte/icons/pencil-line';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import XIcon from '@lucide/svelte/icons/x';
-	import NoteEditor from '#lib/components/NoteEditor.svelte';
+	import NoteEditor from '#lib/components/note/NoteEditor.svelte';
 	import { noteDrafts } from '#lib/note-draft.js';
 	import { m } from '#lib/paraglide/messages.js';
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import type { Note } from '#lib/api.js';
-	import NoteActionItems from '#lib/components/NoteActionItems.svelte';
+	import NoteActionItems from '#lib/components/note/NoteActionItems.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import { m } from '#lib/paraglide/messages.js';

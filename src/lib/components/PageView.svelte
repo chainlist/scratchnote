@@ -2,9 +2,9 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import type { Note } from '#lib/api.js';
 	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
-	import DayAhead from '#lib/components/DayAhead.svelte';
-	import NoteActionItems from '#lib/components/NoteActionItems.svelte';
-	import Recall from '#lib/components/Recall.svelte';
+	import DayAhead from '#lib/components/note/DayAhead.svelte';
+	import NoteActionItems from '#lib/components/note/NoteActionItems.svelte';
+	import Recall from '#lib/components/note/Recall.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import { withMention } from '#lib/mentions.js';

@@ -2,9 +2,9 @@
 	import type { ComponentProps } from 'svelte';
 	import type { Note } from '#lib/api.js';
 	import Markdown from '#lib/components/Markdown.svelte';
-	import DayAhead from '#lib/components/DayAhead.svelte';
+	import DayAhead from '#lib/components/note/DayAhead.svelte';
 	import ThreadLine from '#lib/components/ThreadLine.svelte';
-	import TimelineItem from '#lib/components/TimelineItem.svelte';
+	import TimelineItem from '#lib/components/note/TimelineItem.svelte';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FileXIcon from '@lucide/svelte/icons/file-x';

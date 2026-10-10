@@ -18,8 +18,8 @@
 	import Ribbon from '#lib/components/layout/Ribbon.svelte';
 	import RibbonDrawer from '#lib/components/layout/RibbonDrawer.svelte';
 	import SettingsDialog from '#lib/components/layout/SettingsDialog.svelte';
-	import ThreadDock from '#lib/components/ThreadDock.svelte';
-	import ThreadPicker from '#lib/components/ThreadPicker.svelte';
+	import ThreadDock from '#lib/components/thread/ThreadDock.svelte';
+	import ThreadPicker from '#lib/components/thread/ThreadPicker.svelte';
 	import ViewHeader from '#lib/components/layout/ViewHeader.svelte';
 	import WhatsNew from '#lib/components/WhatsNew.svelte';
 	import * as Resizable from '#lib/components/ui/resizable/index.js';

@@ -3,7 +3,7 @@
 	import type { Note } from '#lib/api.js';
 	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import DayAhead from '#lib/components/note/DayAhead.svelte';
-	import ThreadLine from '#lib/components/ThreadLine.svelte';
+	import ThreadLine from '#lib/components/thread/ThreadLine.svelte';
 	import TimelineItem from '#lib/components/note/TimelineItem.svelte';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';

@@ -250,7 +250,7 @@
 					aria-label={title}
 					aria-current={active ? 'page' : undefined}
 					{title}
-					class="relative flex size-7 items-center justify-center rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+					class="relative flex size-7 items-center justify-center rounded-md focus-ring outline-none"
 				>
 					{@render marker(active, false)}
 					<span

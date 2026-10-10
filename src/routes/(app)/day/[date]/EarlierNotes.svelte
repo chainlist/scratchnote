@@ -25,7 +25,7 @@
 					type="button"
 					onclick={() => void shell.openCited(note)}
 					title={m.day_written_on({ date: dayHeading(note.date) })}
-					class="group -mx-3 grid w-[calc(100%+1.5rem)] cursor-pointer grid-cols-[4.5rem_1fr] items-baseline gap-x-6 rounded-lg px-3 py-1.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+					class="group -mx-3 grid w-[calc(100%+1.5rem)] cursor-pointer grid-cols-[4.5rem_1fr] items-baseline gap-x-6 rounded-lg px-3 py-1.5 text-left focus-ring outline-none"
 				>
 					<!-- The day it was written, which brightens with a tick of the
 					     accent, as a note's time does. -->

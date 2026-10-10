@@ -112,7 +112,7 @@
 							}}
 							aria-label={m.pages_open_side()}
 							title={m.pages_open_side()}
-							class="-my-1 flex size-6 cursor-pointer items-center justify-center rounded text-neutral-400 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+							class="-my-1 flex size-6 cursor-pointer items-center justify-center rounded text-neutral-400 focus-ring outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200"
 						>
 							<PanelRightOpenIcon class="size-3.5" />
 						</button>

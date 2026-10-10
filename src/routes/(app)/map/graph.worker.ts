@@ -1,3 +1,4 @@
+/// <reference lib="webworker" />
 // The graph's physics, off the window's own thread: on 10,000 notes a step
 // takes some 36 ms, which there would hold up every click and key for the
 // seconds the graph takes to settle. The page draws what it is sent.
@@ -48,10 +49,7 @@ const DRAGGING = 0.3;
 
 type Node = SimulationNodeDatum & { x: number; y: number };
 
-const scope = self as unknown as {
-	onmessage: ((event: MessageEvent<GraphRequest>) => void) | null;
-	postMessage(reply: GraphReply, transfer: Transferable[]): void;
-};
+declare const self: DedicatedWorkerGlobalScope;
 
 let nodes: Node[] = [];
 let simulation: Simulation<Node, SimulationLinkDatum<Node>> | null = null;
@@ -65,7 +63,7 @@ function send(settled: boolean) {
 		places[2 * i] = node.x;
 		places[2 * i + 1] = node.y;
 	});
-	scope.postMessage({ places, settled }, [places.buffer]);
+	self.postMessage({ places, settled } satisfies GraphReply, [places.buffer]);
 	sent = performance.now();
 }
 
@@ -85,7 +83,7 @@ function run() {
 	timer ??= setTimeout(step, 0);
 }
 
-scope.onmessage = ({ data }) => {
+self.onmessage = ({ data }: MessageEvent<GraphRequest>) => {
 	switch (data.type) {
 		case 'start': {
 			nodes = Array.from({ length: data.places.length / 2 }, (_, i) => ({

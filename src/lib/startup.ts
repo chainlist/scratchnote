@@ -16,15 +16,25 @@ import { pluginName, pluginStartup, type StartupStep } from '#lib/plugins/loader
  */
 
 /** A phase of the startup, or a step of the wait on the plugins. */
-export interface StartupRow {
-	step: 'app' | 'plugins' | 'view' | 'detail' | StartupStep['step'];
+export type StartupRow = {
 	ms: number;
 	/** A step of the phase above, shown under it. */
 	nested: boolean;
-	plugin?: StartupStep['plugin'];
+} & (
+	| {
+			step: 'app' | 'plugins' | 'view' | 'list' | 'listeners';
+			plugin?: undefined;
+			label?: undefined;
+	  }
+	/** One plugin's load. */
+	| {
+			step: 'plugin';
+			plugin: Extract<StartupStep, { step: 'plugin' }>['plugin'];
+			label?: undefined;
+	  }
 	/** A dev build's detail row says what it is itself. */
-	label?: string;
-}
+	| { step: 'detail'; label: string; plugin?: undefined }
+);
 
 export interface StartupTimes {
 	/**
@@ -154,8 +164,11 @@ export const duration = (ms: number, locale = 'en') =>
 
 function log({ total, plugins, rows }: StartupTimes) {
 	const name = (row: StartupRow) =>
-		row.label ??
-		(row.step === 'plugin' ? pluginName(row.plugin!.id) : NAMES[row.step as keyof typeof NAMES]);
+		row.step === 'detail'
+			? row.label
+			: row.step === 'plugin'
+				? pluginName(row.plugin.id)
+				: NAMES[row.step];
 	const label = (row: StartupRow) => (row.nested ? `  ${name(row)}` : name(row));
 	const note = ({ plugin }: StartupRow) =>
 		plugin

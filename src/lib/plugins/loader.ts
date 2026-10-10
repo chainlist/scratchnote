@@ -188,13 +188,12 @@ function unload(id: string) {
 }
 
 /** One timed step of the plugins' startup, for the startup times. */
-export interface StartupStep {
-	/** Reading the plugin list, loading one plugin, or following changes. */
-	step: 'list' | 'plugin' | 'listeners';
-	ms: number;
+/** Reading the plugin list, loading one plugin, or following changes. */
+export type StartupStep = { ms: number } & (
+	| { step: 'list' | 'listeners' }
 	/** The plugin a `plugin` step loaded, and why it failed. */
-	plugin?: { id: string; core: boolean; error?: string };
-}
+	| { step: 'plugin'; plugin: { id: string; core: boolean; error?: string } }
+);
 
 /**
  * When the plugins' startup began and ended, in ms since the window began

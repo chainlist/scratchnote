@@ -19,8 +19,11 @@
 	};
 
 	const name = (row: StartupRow) =>
-		row.label ??
-		(row.step === 'plugin' ? pluginName(row.plugin!.id) : NAMES[row.step as keyof typeof NAMES]());
+		row.step === 'detail'
+			? row.label
+			: row.step === 'plugin'
+				? pluginName(row.plugin.id)
+				: NAMES[row.step]();
 	const time = (ms: number) => duration(ms, getLocale());
 	const percent = (share: number) =>
 		new Intl.NumberFormat(getLocale(), { style: 'percent' }).format(share);

@@ -290,7 +290,7 @@ class LabelsSettingTab extends PluginSettingTab {
 				for (const share of SHARES) dropdown.addOption(share, percent.format(Number(share)));
 				dropdown.setValue(plugin.settings.sure).onChange(async (share) => {
 					plugin.settings.sure = share;
-					await plugin.saveData(plugin.settings);
+					await plugin.saveData($state.snapshot(plugin.settings));
 					await plugin.page?.draw();
 				});
 			});

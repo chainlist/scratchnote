@@ -10,7 +10,7 @@
 
 	let {
 		threads,
-		name = (thread) => shell.nameOf(thread),
+		name = (thread) => shell.threads.nameOf(thread),
 		chips = true,
 		actions
 	}: {

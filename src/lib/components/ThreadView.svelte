@@ -39,17 +39,17 @@
 	 *  oldest first, so a day's are together either way. */
 	const ordered = $derived.by(() => {
 		const notes = found?.notes ?? [];
-		return shell.threadOrder === 'newest' ? notes.toReversed() : notes;
+		return shell.threads.threadOrder === 'newest' ? notes.toReversed() : notes;
 	});
 
 	const flipOrder = () =>
-		void shell.setThreadOrder(shell.threadOrder === 'newest' ? 'oldest' : 'newest');
+		void shell.threads.setThreadOrder(shell.threads.threadOrder === 'newest' ? 'oldest' : 'newest');
 
 	const merge = (target: Thread) =>
-		(shell.picking = { kind: 'merge', notes: target.notes, from: target.id });
+		(shell.threads.picking = { kind: 'merge', notes: target.notes, from: target.id });
 
 	const orderLabel = () =>
-		shell.threadOrder === 'newest'
+		shell.threads.threadOrder === 'newest'
 			? m.settings_thread_order_newest()
 			: m.settings_thread_order_oldest();
 
@@ -88,7 +88,7 @@
 	 *  notes are still chosen. Those it moved leave the thread, and below. */
 	function moveChosen() {
 		if (!thread || !chosen?.length) return;
-		shell.picking = { kind: 'move', notes: chosen, from: thread.id };
+		shell.threads.picking = { kind: 'move', notes: chosen, from: thread.id };
 	}
 
 	// Notes no longer in the thread, as those just moved, are no longer
@@ -156,10 +156,14 @@
 				<!-- The buttons go under the words when the two do not fit, as in the dock. -->
 				<span class="min-w-0 flex-1 basis-48">{m.thread_suggested_banner()}</span>
 				<span class="ml-auto flex shrink-0 gap-2">
-					<Button variant="ghost" size="sm" onclick={() => void shell.keepThread(thread.id, false)}>
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => void shell.threads.keepThread(thread.id, false)}
+					>
 						{m.thread_dismiss()}
 					</Button>
-					<Button size="sm" onclick={() => void shell.keepThread(thread.id, true)}>
+					<Button size="sm" onclick={() => void shell.threads.keepThread(thread.id, true)}>
 						{m.thread_keep()}
 					</Button>
 				</span>
@@ -230,7 +234,7 @@
 			{/if}
 		</div>
 		<!-- Newest first, where it stands now leads; oldest first, it ends the thread. -->
-		{#if shell.threadOrder === 'newest'}{@render stillOpen(false)}{/if}
+		{#if shell.threads.threadOrder === 'newest'}{@render stillOpen(false)}{/if}
 		<!-- Each month under its name, each day beside its notes, as the
 		     mentions list them; the parts of a day are headings under the day's. -->
 		<NotesByDay
@@ -242,7 +246,7 @@
 			onchoose={choose}
 			{...shell.cardActions}
 		/>
-		{#if shell.threadOrder !== 'newest'}{@render stillOpen(true)}{/if}
+		{#if shell.threads.threadOrder !== 'newest'}{@render stillOpen(true)}{/if}
 	{:else}
 		<!-- Never a dead end: the way on is to the threads still there. -->
 		<p class="text-base text-meta">{m.thread_gone()}</p>
@@ -282,8 +286,8 @@
 				{/if}
 				<DropdownMenu.Label>{m.settings_thread_order()}</DropdownMenu.Label>
 				<DropdownMenu.RadioGroup
-					value={shell.threadOrder}
-					onValueChange={(order) => void shell.setThreadOrder(order as ThreadOrder)}
+					value={shell.threads.threadOrder}
+					onValueChange={(order) => void shell.threads.setThreadOrder(order as ThreadOrder)}
 				>
 					<DropdownMenu.RadioItem value="oldest">
 						{m.settings_thread_order_oldest()}

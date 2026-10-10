@@ -204,13 +204,13 @@
 				.finally(() => (checkingNews = false));
 
 			shell.textSize = remPixels(settings.fontSize);
-			shell.threadOrder = settings.threadOrder;
+			shell.threads.threadOrder = settings.threadOrder;
 			// Android has no capture window, so no hotkey brings it up.
 			shell.captureHotkey = android ? '' : settings.captureHotkey;
 			off.push(
 				onSettingsChanged((changed) => {
 					shell.textSize = remPixels(changed.fontSize);
-					shell.threadOrder = changed.threadOrder;
+					shell.threads.threadOrder = changed.threadOrder;
 					shell.captureHotkey = android ? '' : changed.captureHotkey;
 				})
 			);
@@ -223,8 +223,8 @@
 			// The capture window's recall, showing the old note a draft is about.
 			off.push(onRevealNote((note) => void shell.openCited(note)));
 			// The embed task placing notes in threads, or a thread renamed.
-			off.push(onThreadsChanged(() => void shell.loadThreads()));
-			void shell.loadThreads();
+			off.push(onThreadsChanged(() => void shell.threads.loadThreads()));
+			void shell.threads.loadThreads();
 			off.push(onPinsChanged(() => void shell.loadPins()));
 			void shell.loadPins();
 			off.push(
@@ -372,7 +372,7 @@
 <NoteToPageDialog bind:note={shell.turning} onconfirm={shell.turnIntoPage} />
 
 <MoveDialog bind:note={shell.moving} spaces={shell.spaces} onconfirm={shell.moveTo} />
-<ThreadPicker bind:pick={shell.picking} onconfirm={shell.pickThread} />
+<ThreadPicker bind:pick={shell.threads.picking} onconfirm={shell.threads.pickThread} />
 
 <WhatsNew bind:releases={releaseNotes} />
 <OldChatModelDialog waiting={checkingNews || releaseNotes !== null} onerror={shell.showError} />

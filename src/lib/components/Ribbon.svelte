@@ -40,9 +40,10 @@
 	const pins = $derived(
 		shell.pins.flatMap((pin) => {
 			if (pin.kind === 'thread') {
-				const thread = shell.canSimilar && shell.threadList.find((t) => t.id === pin.target);
+				const thread =
+					shell.canSimilar && shell.threads.threadList.find((t) => t.id === pin.target);
 				if (!thread) return [];
-				const label = shell.nameOf(thread);
+				const label = shell.threads.nameOf(thread);
 				const title = thread.mention ? `@${thread.mention} · ${label}` : label;
 				return [{ pin, label, title }];
 			}
@@ -61,7 +62,7 @@
 	 *  one level below it (SPEC 3.13). */
 	function threadsOf(pin: Pin) {
 		if (pin.kind !== 'mention' || !shell.canSimilar) return [];
-		return shell.threadList
+		return shell.threads.threadList
 			.filter((thread) => thread.kept && thread.scope === pin.target)
 			.toSorted((a, b) => b.until.localeCompare(a.until))
 			.slice(0, 8);
@@ -171,8 +172,8 @@
 		<AtSignIcon />
 	</Button>
 	{#if shell.canSimilar}
-		{@const title = shell.suggested
-			? m.threads_with_suggested({ count: shell.suggested })
+		{@const title = shell.threads.suggested
+			? m.threads_with_suggested({ count: shell.threads.suggested })
 			: m.threads_all()}
 		<Button
 			variant="ghost"
@@ -185,11 +186,11 @@
 		>
 			{@render marker(section === 'threads')}
 			<RouteIcon />
-			{#if shell.suggested}
+			{#if shell.threads.suggested}
 				<span
 					class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] leading-none font-semibold text-primary-foreground ring-2 ring-neutral-950"
 				>
-					{shell.suggested > 9 ? '9+' : shell.suggested}
+					{shell.threads.suggested > 9 ? '9+' : shell.threads.suggested}
 				</span>
 			{/if}
 		</Button>
@@ -270,7 +271,7 @@
 			{#if below.length}
 				{#each below as thread (thread.id)}
 					<ContextMenu.Item onSelect={() => void shell.showThread(thread.id)}>
-						<RouteIcon /><span class="truncate">{shell.nameOf(thread)}</span>
+						<RouteIcon /><span class="truncate">{shell.threads.nameOf(thread)}</span>
 					</ContextMenu.Item>
 				{/each}
 				<ContextMenu.Separator />

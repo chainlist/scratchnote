@@ -81,7 +81,7 @@
 	/** How many threads of the user's each name holds, by key (SPEC 6.4). */
 	const threads = $derived.by(() => {
 		const counts: Record<string, number> = {};
-		for (const thread of shell.threadList)
+		for (const thread of shell.threads.threadList)
 			if (thread.scope && thread.kept) counts[thread.scope] = (counts[thread.scope] ?? 0) + 1;
 		return counts;
 	});

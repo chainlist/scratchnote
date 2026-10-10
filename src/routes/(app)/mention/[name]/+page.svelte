@@ -23,7 +23,7 @@
 	/** The threads found among the name's notes (SPEC 6.4), the user's
 	 *  first, then those only suggested, each the one written in last first. */
 	const threads = $derived(
-		shell.threadList
+		shell.threads.threadList
 			.filter((thread) => thread.scope === mentionKey(name))
 			.toSorted((a, b) => Number(b.kept) - Number(a.kept) || b.until.localeCompare(a.until))
 	);
@@ -99,8 +99,8 @@
 							variant="ghost"
 							size="sm"
 							class="h-7 px-2 text-xs"
-							onclick={() => void shell.keepThread(thread.id, false)}
-							aria-label={m.thread_dismiss_label({ name: shell.nameOf(thread) })}
+							onclick={() => void shell.threads.keepThread(thread.id, false)}
+							aria-label={m.thread_dismiss_label({ name: shell.threads.nameOf(thread) })}
 						>
 							{m.thread_dismiss()}
 						</Button>
@@ -108,8 +108,8 @@
 							variant="outline"
 							size="sm"
 							class="mr-1 h-7 px-2 text-xs"
-							onclick={() => void shell.keepThread(thread.id, true)}
-							aria-label={m.thread_keep_label({ name: shell.nameOf(thread) })}
+							onclick={() => void shell.threads.keepThread(thread.id, true)}
+							aria-label={m.thread_keep_label({ name: shell.threads.nameOf(thread) })}
 						>
 							{m.thread_keep()}
 						</Button>

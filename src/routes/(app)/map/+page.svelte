@@ -1006,7 +1006,7 @@
 								href={threadHref(thread.id)}
 								class="min-w-0 flex-1 truncate text-xs text-muted-foreground hover:underline"
 							>
-								{shell.nameOf(thread)}
+								{shell.threads.nameOf(thread)}
 							</a>
 						{/if}
 						<Button
@@ -1059,7 +1059,7 @@
 								class="name-mark size-2 shrink-0 rounded-full"
 								style:--hue={threadHue(thread.id)}
 							></span>
-							<span class="truncate">{shell.nameOf(thread)}</span>
+							<span class="truncate">{shell.threads.nameOf(thread)}</span>
 						</p>
 					{/if}
 				</div>

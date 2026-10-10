@@ -131,7 +131,7 @@
 				<div class="mt-2 flex items-center gap-3 text-xs text-meta tabular-nums">
 					<span>{m.pages_words({ count: words })}</span>
 				</div>
-				{#if note.on || (threadLine && shell.threadOf(note.id))}
+				{#if note.on || (threadLine && shell.threads.threadOf(note.id))}
 					<div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
 						{#if note.on}<DayAhead on={note.on} />{/if}
 						{#if threadLine}<ThreadLine id={note.id} />{/if}

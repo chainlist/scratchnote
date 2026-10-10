@@ -110,8 +110,8 @@
 										variant="ghost"
 										size="sm"
 										class="h-7 px-2 text-xs"
-										onclick={() => void shell.keepThread(thread.id, false)}
-										aria-label={m.thread_dismiss_label({ name: shell.nameOf(thread) })}
+										onclick={() => void shell.threads.keepThread(thread.id, false)}
+										aria-label={m.thread_dismiss_label({ name: shell.threads.nameOf(thread) })}
 									>
 										{m.thread_dismiss()}
 									</Button>
@@ -119,8 +119,8 @@
 										variant="outline"
 										size="sm"
 										class="h-7 px-2 text-xs"
-										onclick={() => void shell.keepThread(thread.id, true)}
-										aria-label={m.thread_keep_label({ name: shell.nameOf(thread) })}
+										onclick={() => void shell.threads.keepThread(thread.id, true)}
+										aria-label={m.thread_keep_label({ name: shell.threads.nameOf(thread) })}
 									>
 										{m.thread_keep()}
 									</Button>

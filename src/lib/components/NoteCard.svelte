@@ -89,7 +89,7 @@
 	const shell = getShell();
 	/** The note's time, with its day where the list spans days: how a screen reader names it. */
 	const when = $derived(showDate ? `${shortDay(note.date)} ${note.time}` : note.time);
-	const inThread = $derived(shell.threadOf(note.id) !== undefined);
+	const inThread = $derived(shell.threads.threadOf(note.id) !== undefined);
 	/** What the plugins add under the text; one failing is left out, not the card. */
 	const chips = $derived(
 		registry.chips.flatMap(({ plugin, chip }): NoteChip[] => {
@@ -113,7 +113,7 @@
 		if (text === undefined) editDrafts.delete(note.id);
 		else editDrafts.set(note.id, text);
 	}
-	const keptOut = $derived(shell.keptOut(note.id));
+	const keptOut = $derived(shell.threads.keptOut(note.id));
 
 	async function startEditing() {
 		if (editing) return;
@@ -386,16 +386,16 @@
 						{#if shell.canSimilar || inThread || keptOut}
 							<DropdownMenu.Separator />
 							{#if shell.canSimilar}
-								<DropdownMenu.Item onSelect={() => shell.askThread(note)}>
+								<DropdownMenu.Item onSelect={() => shell.threads.askThread(note)}>
 									<RouteIcon />{inThread ? m.thread_move() : m.thread_add()}
 								</DropdownMenu.Item>
 							{/if}
 							{#if inThread}
-								<DropdownMenu.Item onSelect={() => void shell.keepOut(note, true)}>
+								<DropdownMenu.Item onSelect={() => void shell.threads.keepOut(note, true)}>
 									<RouteOffIcon />{m.thread_leave()}
 								</DropdownMenu.Item>
 							{:else if keptOut}
-								<DropdownMenu.Item onSelect={() => void shell.keepOut(note, false)}>
+								<DropdownMenu.Item onSelect={() => void shell.threads.keepOut(note, false)}>
 									<RouteIcon />{m.thread_rejoin()}
 								</DropdownMenu.Item>
 							{/if}

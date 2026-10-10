@@ -8,27 +8,16 @@ import {
 	clearDayAhead,
 	deleteNote,
 	deletePage,
-	dismissThread,
-	getNotes,
 	isPage,
-	keepOutOfThreads,
-	keepThread,
 	listPins,
-	listThreads,
-	mergeThreads,
 	moveNote,
 	movePage,
 	noteToPage,
-	patchSettings,
-	putInThread,
 	setPins,
-	undoThreadChange,
 	updateNote,
 	type Note,
 	type Pin,
-	type SpacesView,
-	type Thread,
-	type ThreadOrder
+	type SpacesView
 } from '#lib/api.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
 import { afterNavigation, onGuard } from '#lib/back.svelte.js';
@@ -36,24 +25,9 @@ import { addToPageDraft } from '#lib/page-draft.js';
 import { m } from '#lib/paraglide/messages.js';
 import { errorText } from '#lib/errors.js';
 import { pluginPageHref, samePin } from '#lib/pins.js';
-import { noteTitle } from '#lib/markdown.js';
-import { threadHref, threadName, threadScope } from '#lib/threads.js';
+import { threadHref } from '#lib/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
-
-/** Where a note sits in its thread: the thread, and its place in it from 0. */
-export interface ThreadPlace {
-	thread: Thread;
-	index: number;
-}
-
-/** Notes waiting on the thread picker to say where they go (SPEC 6.4). */
-export interface ThreadPick {
-	/** One note added to a thread, notes moved from one, or a whole thread merged. */
-	kind: 'add' | 'move' | 'merge';
-	notes: string[];
-	/** The thread they come from, which is not on offer. */
-	from?: string;
-}
+import { ThreadsState } from '#lib/shell/threads.svelte.js';
 
 /** A view's title row, which the top bar shows a copy of once it scrolls away. */
 export interface ViewTitle {
@@ -91,24 +65,16 @@ export class Shell implements WorkspaceHost {
 	/** Similar notes come from the embedding model's vectors. */
 	embeddingInstalled = $state(false);
 	canSimilar = $derived(this.embeddingInstalled);
-	/** The threads of the user's each note of the open space is in, by
-	 *  note (SPEC 6.4): one at most of the general scope, and one at most
-	 *  of each name it mentions, the general scope's first. A note in a
-	 *  thread only suggested has none. */
-	threads = $state.raw<Record<string, ThreadPlace[]>>({});
-	/** Every thread of the open space, kept or suggested. */
-	threadList = $state.raw<Thread[]>([]);
-	/** How many threads are only suggested. */
-	suggested = $state(0);
+	/** The threads of the open space, and what the user does to them. */
+	readonly threads = new ThreadsState(this, {
+		cleared: (what) => this.#cleared(what),
+		failQuietly: (what, e, retry) => this.#failQuietly(what, e, retry)
+	});
 	/** What the open space has pinned to the left edge, in its order. */
 	pins = $state.raw<Pin[]>([]);
-	/** The notes taken out of threads. */
-	alone = $state.raw<string[]>([]);
 	/** The rem in pixels, the text size setting times Android's font scale: what
 	 *  the day's columns are sized in. */
 	textSize = $state(16);
-	/** The thread order setting: which of a thread's notes its view lists first. */
-	threadOrder = $state<ThreadOrder>('oldest');
 	/** The capture hotkey setting, as an accelerator; null until it is read. */
 	captureHotkey = $state<string | null>(null);
 	/** The views' width, which a docked page narrows. Taken with the
@@ -121,8 +87,6 @@ export class Shell implements WorkspaceHost {
 	turning = $state<Note | null>(null);
 	/** The note or page waiting on the space it moves to. */
 	moving = $state<Note | null>(null);
-	/** Notes waiting on the thread picker. */
-	picking = $state<ThreadPick | null>(null);
 	/** Every space and the open one, as the app layout last listed them. */
 	spaces = $state.raw<SpacesView | null>(null);
 	/** A note can move only with another space to go to. */
@@ -197,30 +161,17 @@ export class Shell implements WorkspaceHost {
 		history.go(-1 - kept);
 	};
 
-	/** Threads' first notes to read again with the next reload: those changed,
-	 *  or all of them when what changed is not known. */
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- nothing is drawn from it
-	#leadsChanged: Set<string> | 'all' = new Set();
-
 	/** Load what the views show again, after a change here or on disk;
 	 *  `changed` is the note that changed, when only one did. */
 	refresh = async (changed?: string) => {
-		if (changed === undefined) this.#leadsChanged = 'all';
-		else if (this.#leadsChanged !== 'all') this.#leadsChanged.add(changed);
+		this.threads.leadChanged(changed);
 		// An invalidation aborts a navigation under way, so it waits for one to land.
 		await afterNavigation();
-		const leads = this.#leadsChanged;
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- nothing is drawn from it
-		this.#leadsChanged = new Set();
+		const leads = this.threads.takeChangedLeads();
 		await invalidate('app:notes');
 		this.reloads++;
-		// A note edited may be a thread's first: its name is read again, the
-		// old one showing meanwhile. Only those changed, as a space can name
-		// hundreds of threads by their first notes.
-		this.#readLeads(
-			leads === 'all' ? Object.keys(this.leads) : [...leads].filter((id) => id in this.leads),
-			true
-		);
+		// A note edited may be a thread's first: its name is read again.
+		this.threads.readLeadsAgain(leads);
 		// The plugins' pages and panels load their notes themselves.
 		notesChanged();
 	};
@@ -281,7 +232,7 @@ export class Shell implements WorkspaceHost {
 	 *  space comes after that space opens, so it waits for the views to leave
 	 *  the last one, a new page open there included. */
 	takeCaptureDraft = async (body: string) => {
-		await this.switching.catch(() => {});
+		await this.#switching.catch(() => {});
 		if (this.draft) return this.draft(body);
 		addToPageDraft(body);
 		this.newPage();
@@ -289,90 +240,6 @@ export class Shell implements WorkspaceHost {
 
 	showSimilar = (note: Note) => {
 		void goto(resolve(`similar/${note.date}/${note.id}/`));
-	};
-
-	/** Where a note sits in its first thread, while threads are on offer. */
-	threadOf = (id: string): ThreadPlace | undefined => this.threadsOf(id)[0];
-
-	/** Where a note sits in each of its threads, while threads are on offer. */
-	threadsOf = (id: string): ThreadPlace[] => (this.canSimilar ? (this.threads[id] ?? []) : []);
-
-	/** A note taken out of threads, which can be let back in while threads are on offer. */
-	keptOut = (id: string) => this.canSimilar && this.alone.includes(id);
-
-	/** The first note of each untitled thread, by its id, named as a line
-	 *  names it: what `nameOf` calls those threads. */
-	leads = $state.raw<Record<string, string>>({});
-	/** First notes asked for and not read yet, so each is asked for once. */
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- nothing is drawn from it
-	#leadsAsked = new Set<string>();
-
-	/**
-	 * A thread's name, as every view gives it (`threadName`). An untitled
-	 * one is called by its first note, read here the first time it is
-	 * named; until then it is "Thread".
-	 */
-	nameOf = (thread: Thread) => {
-		if (thread.title) return thread.title;
-		const first = thread.notes[0];
-		if (first === undefined) return threadName(thread);
-		if (!(first in this.leads)) this.#readLeads([first]);
-		return this.leads[first] || threadName(thread);
-	};
-
-	/** Read these first notes, those not read or asked for yet, together;
-	 *  `again` reads those already read too. */
-	#readLeads = (ids: (string | undefined)[], again = false) => {
-		const fresh = ids.filter(
-			(id): id is string =>
-				id !== undefined && (again || !(id in this.leads)) && !this.#leadsAsked.has(id)
-		);
-		if (!fresh.length) return;
-		fresh.forEach((id) => this.#leadsAsked.add(id));
-		// Asked for from a view as it draws: the answer lands after it.
-		queueMicrotask(async () => {
-			try {
-				const notes = await getNotes(fresh);
-				this.leads = {
-					...this.leads,
-					...Object.fromEntries(notes.map((note) => [note.id, noteTitle(note)]))
-				};
-			} catch {
-				// A name not read stays "Thread"; nothing else depends on it.
-			} finally {
-				fresh.forEach((id) => this.#leadsAsked.delete(id));
-			}
-		});
-	};
-
-	/** Read the open space's threads again, as the backend placed them. */
-	loadThreads = async () => {
-		try {
-			const view = await listThreads();
-			const places: Record<string, ThreadPlace[]> = {};
-
-			for (const thread of view.threads)
-				if (thread.kept)
-					thread.notes.forEach((id, index) => (places[id] ??= []).push({ thread, index }));
-			for (const list of Object.values(places))
-				list.sort((a, b) => Number(a.thread.scope !== null) - Number(b.thread.scope !== null));
-
-			this.threads = places;
-			this.threadList = view.threads;
-			// The threads the day names under their notes, read before they show.
-			this.#readLeads(
-				view.threads
-					.filter((thread) => thread.kept && !thread.title)
-					.map((thread) => thread.notes[0])
-			);
-			this.suggested = view.threads.filter((thread) => !thread.kept).length;
-			this.alone = view.alone;
-			// The view of a thread lists its notes itself.
-			await invalidate('app:threads');
-			this.reloads++;
-		} catch (e) {
-			this.#failQuietly(m.error_load_threads(), e, this.loadThreads);
-		}
 	};
 
 	showThread = (id: string) => goto(threadHref(id));
@@ -402,8 +269,9 @@ export class Shell implements WorkspaceHost {
 	togglePin = async (pin: Pin) => {
 		if (this.isPinned(pin))
 			return this.#savePins(this.pins.filter((other) => !samePin(other, pin)));
-		const thread = pin.kind === 'thread' && this.threadList.find((t) => t.id === pin.target);
-		if (thread && !thread.kept) await this.keepThread(thread.id, true);
+		const thread =
+			pin.kind === 'thread' && this.threads.threadList.find((t) => t.id === pin.target);
+		if (thread && !thread.kept) await this.threads.keepThread(thread.id, true);
 		await this.#savePins([...this.pins, pin]);
 	};
 
@@ -427,110 +295,6 @@ export class Shell implements WorkspaceHost {
 			await this.refresh(note.id);
 		} catch (e) {
 			this.fail(m.error_clear_day_ahead(), e, () => this.clearDayAhead(note));
-		}
-	};
-
-	/** Take a note out of threads, where it stays, or let it back in. */
-	keepOut = async (note: Pick<Note, 'id'>, out: boolean) => {
-		try {
-			await keepOutOfThreads(note.id, out);
-			this.#cleared(m.error_thread_change());
-			if (out) this.#offerUndo(m.thread_taken_out());
-		} catch (e) {
-			this.fail(m.error_thread_change(), e, () => this.keepOut(note, out));
-		}
-	};
-
-	/** Make a suggested thread the user's, or stop suggesting it. */
-	keepThread = async (id: string, keep: boolean) => {
-		try {
-			await (keep ? keepThread(id) : dismissThread(id));
-			this.#cleared(m.error_keep_thread());
-			// Kept, the thread is the user's: said so, as it changes what happens next.
-			if (keep) return this.#offerUndo(m.thread_kept());
-			// Dismissed from its own page or the dock, the thread is gone from
-			// under the user: they go on to the threads, and Undo brings it back.
-			const here = page.params.id === id;
-			const docked = this.dockedThread === id;
-			if (docked) this.dockedThread = null;
-			if (here) await this.showThreads();
-			this.#offerUndo(m.thread_dismissed(), async () => {
-				if (docked) this.dockedThread = id;
-				if (here) await this.showThread(id);
-			});
-		} catch (e) {
-			this.fail(m.error_keep_thread(), e, () => this.keepThread(id, keep));
-		}
-	};
-
-	/**
-	 * Offer to take back the change to threads just made, with an Undo on a
-	 * toast. `back` runs once it is taken back, to show what came back.
-	 */
-	#offerUndo = (message: string, back?: () => unknown) => {
-		toast(message, {
-			duration: 8000,
-			action: { label: m.thread_undo(), onClick: () => void this.#undo(back) }
-		});
-	};
-
-	#undo = async (back?: () => unknown) => {
-		try {
-			// Refused once anything changed the threads since: a later change is never lost.
-			if (!(await undoThreadChange())) return this.showError(m.thread_undo_late());
-			await back?.();
-		} catch (e) {
-			this.fail(m.error_keep_thread(), e);
-		}
-	};
-
-	/** A note asks for a thread; the picker asks which. */
-	askThread = (note: Pick<Note, 'id'>) => {
-		const from = this.threadOf(note.id)?.thread.id;
-		this.picking = { kind: from ? 'move' : 'add', notes: [note.id], from };
-	};
-
-	/**
-	 * Put the picked notes in thread `into`, or a new one when null, and
-	 * open it when they came from the thread on view. Resolves to an error
-	 * for the picker to show, or null once done.
-	 */
-	pickThread = async (pick: ThreadPick, into: string | null): Promise<string | null> => {
-		// Named before the change, which can take a thread away.
-		const name = (id: string | null | undefined) => {
-			const thread = id ? this.threadList.find((other) => other.id === id) : undefined;
-			return thread ? this.nameOf(thread) : m.thread_untitled();
-		};
-		const [fromName, intoName] = [name(pick.from), name(into)];
-		const count = pick.notes.length;
-		try {
-			let thread = into;
-			if (pick.kind === 'merge' && pick.from && into) await mergeThreads(pick.from, into);
-			// A new thread is made among the notes of the name they come from.
-			else thread = await putInThread(pick.notes, into, pick.from && threadScope(pick.from));
-			if (pick.kind === 'merge' && thread && this.dockedThread === pick.from)
-				this.dockedThread = thread;
-			if (pick.kind === 'merge' && thread && page.params.id === pick.from)
-				await this.showThread(thread);
-			if (pick.kind === 'merge' && pick.from && thread) {
-				const [from, into] = [pick.from, thread];
-				// Undone, the thread merged away comes back where the other took its place.
-				this.#offerUndo(m.thread_merged({ from: fromName, into: intoName }), async () => {
-					if (this.dockedThread === into) this.dockedThread = from;
-					if (page.params.id === into) await this.showThread(from);
-				});
-			} else {
-				this.#offerUndo(
-					into === null
-						? m.thread_moved_new({ count })
-						: pick.kind === 'add'
-							? m.thread_added({ into: intoName })
-							: m.thread_moved({ count, into: intoName })
-				);
-			}
-			return null;
-		} catch (e) {
-			return String(e);
 		}
 	};
 
@@ -637,19 +401,6 @@ export class Shell implements WorkspaceHost {
 		this.#blinkTimer = setTimeout(() => (this.blinking = null), 1400);
 	};
 
-	/** Change the order of a thread's notes, the setting Settings > Threads
-	 *  has, from the thread itself. */
-	setThreadOrder = async (order: ThreadOrder) => {
-		const was = this.threadOrder;
-		this.threadOrder = order;
-		try {
-			await patchSettings({ threadOrder: order });
-		} catch (e) {
-			this.threadOrder = was;
-			this.fail(m.error_save_setting(), e);
-		}
-	};
-
 	/** The inline editor. */
 	saveBody = async (note: Note, body: string): Promise<boolean> => {
 		try {
@@ -726,14 +477,14 @@ export class Shell implements WorkspaceHost {
 	 * afresh.
 	 */
 	switchSpace = () => {
-		this.switching = this.leaveSpace();
-		return this.switching;
+		this.#switching = this.#leaveSpace();
+		return this.#switching;
 	};
 
 	/** The views catching up with the space opened last. */
-	private switching: Promise<void> = Promise.resolve();
+	#switching: Promise<void> = Promise.resolve();
 
-	private leaveSpace = async () => {
+	#leaveSpace = async () => {
 		this.query = '';
 		this.docked = null;
 		this.dockedThread = null;
@@ -746,7 +497,7 @@ export class Shell implements WorkspaceHost {
 			route === '/(app)/page/[date]/[id]'
 		)
 			await this.openDay(this.day);
-		await Promise.all([this.refresh(), this.loadThreads(), this.loadPins()]);
+		await Promise.all([this.refresh(), this.threads.loadThreads(), this.loadPins()]);
 	};
 
 	/** What every card can do. */

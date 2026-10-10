@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { MentionSummary, Pin } from '#lib/api.js';
 	import View from '#lib/components/View.svelte';
+	import MentionLetter from '#lib/components/MentionLetter.svelte';
 	import PinButton from '#lib/components/PinButton.svelte';
 	import ShowMore from '#lib/components/ShowMore.svelte';
 	import { daysAgo, shortDay } from '#lib/dates.js';
@@ -89,15 +90,13 @@
 
 <!-- A name's letter in its own colour. -->
 {#snippet letter(mention: MentionSummary, quiet: boolean)}
-	<span
+	<MentionLetter
+		name={mention.name}
 		class={[
-			'name-tint flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-semibold',
 			quiet &&
 				'opacity-50 transition-opacity group-hover:opacity-100 group-has-focus-visible:opacity-100'
 		]}
-	>
-		{[...mention.name][0]?.toUpperCase()}
-	</span>
+	/>
 {/snippet}
 
 <!-- How many notes name it, the day of the last, and how many threads it holds. -->

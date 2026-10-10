@@ -1,6 +1,7 @@
 <script lang="ts" generics="T extends Thread">
 	import type { Snippet } from 'svelte';
 	import type { Thread } from '#lib/api.js';
+	import MentionChip from '#lib/components/MentionChip.svelte';
 	import { dateFormat, daysAgo, isoDay, shortDay } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -113,9 +114,8 @@
 							title={range(thread)}
 							class="block truncate text-neutral-200 after:absolute after:inset-0"
 						>
-							{#if chips && thread.mention}<span
-									class="name-tint mr-1.5 rounded-md px-1 text-sm font-medium"
-									>@{thread.mention}</span
+							{#if chips && thread.mention}<MentionChip class="mr-1.5 text-sm"
+									>@{thread.mention}</MentionChip
 								>{/if}{name(thread)}
 						</a>
 						<span class="block truncate text-xs text-meta">

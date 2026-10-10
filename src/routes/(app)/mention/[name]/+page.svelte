@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MentionLetter from '#lib/components/MentionLetter.svelte';
 	import NotesByDay from '#lib/components/NotesByDay.svelte';
 	import SectionTabs from '#lib/components/SectionTabs.svelte';
 	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
@@ -62,13 +63,13 @@
 		{#if compact}
 			<span class="min-w-0 truncate text-sm font-semibold">@{name}</span>
 		{:else}
-			<span
-				class="name-tint ml-1 flex size-11 shrink-0 items-center justify-center rounded-xl text-lg font-semibold"
-				style:--hue={mentionHue(mentionKey(name))}
+			<MentionLetter
+				{name}
+				large
+				class="ml-1"
+				hue={mentionHue(mentionKey(name))}
 				aria-hidden="true"
-			>
-				{[...name][0]?.toUpperCase()}
-			</span>
+			/>
 			<div class="ml-1.5 min-w-0">
 				<h1 class="truncate text-2xl leading-8 font-semibold tracking-tight">@{name}</h1>
 				{#if facts}

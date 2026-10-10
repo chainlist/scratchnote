@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { getNotes, type Note, type Thread, type ThreadCard } from '#lib/api.js';
+	import MentionChip from '#lib/components/MentionChip.svelte';
 	import KeepThreadButtons from '#lib/components/KeepThreadButtons.svelte';
 	import Markdown from '#lib/components/Markdown.svelte';
 	import SectionTabs from '#lib/components/SectionTabs.svelte';
@@ -100,9 +101,9 @@
 						>
 							<div class="flex items-center gap-2">
 								<span class="min-w-0 flex-1 truncate text-xs text-meta">
-									{#if thread.mention}<span
-											class="name-tint mr-1.5 rounded-md px-1 font-medium"
-											style:--hue={thread.scope && mentionHue(thread.scope)}>@{thread.mention}</span
+									{#if thread.mention}<MentionChip
+											class="mr-1.5"
+											hue={thread.scope && mentionHue(thread.scope)}>@{thread.mention}</MentionChip
 										>{/if}
 									{m.thread_detail({ count: thread.notes.length, date: shortDay(thread.since) })}
 								</span>

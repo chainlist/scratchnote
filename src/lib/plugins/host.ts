@@ -1,6 +1,7 @@
-import { onHeaderChange, type ItemView } from './views';
+import { errorText } from '#lib/errors.js';
 import { app, reportError } from './app';
 import type { ViewEntry } from './registry.svelte';
+import { onHeaderChange, type ItemView } from './views';
 
 export interface Header {
 	title: string;
@@ -20,8 +21,7 @@ export function openView(
 	params: Record<string, string>,
 	onheader: (header: Header) => void
 ): () => void {
-	const fail = (e: unknown) =>
-		reportError(`${entry.plugin}: ${e instanceof Error ? e.message : String(e)}`);
+	const fail = (e: unknown) => reportError(`${entry.plugin}: ${errorText(e)}`);
 	let view: ItemView;
 	try {
 		view = entry.create();

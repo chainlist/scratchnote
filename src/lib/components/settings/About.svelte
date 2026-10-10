@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { dev } from '$app/env';
-	import { getVersion } from '@tauri-apps/api/app';
 	import { asset } from '$app/paths';
 	import { appUpdate } from '#lib/app-update.svelte.js';
 	import { releases, type Release } from '#lib/changelog.js';
@@ -12,6 +10,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { android } from '#lib/platform.js';
+	import { app } from '#lib/plugins/app.js';
 	import { duration, startupTimes } from '#lib/startup.js';
 	import type { SettingsState } from './state.svelte';
 	import StartupDetails from './StartupDetails.svelte';
@@ -19,7 +18,8 @@
 
 	let { settings }: { settings: SettingsState } = $props();
 
-	let version = $state('');
+	/** Read at startup, before the plugins load. */
+	const version = app.version;
 	let releaseNotes = $state<Release[] | null>(null);
 	let checking = $state(false);
 	/** Said under the version once a check finds nothing newer. */
@@ -29,14 +29,6 @@
 	/** Recorded once the first view was up, well before the settings open. */
 	const startup = startupTimes();
 	let startupShown = $state(false);
-
-	onMount(async () => {
-		try {
-			version = await getVersion();
-		} catch (e) {
-			settings.say(String(e), true);
-		}
-	});
 
 	/** Unlike the top bar's, this check was asked for, so a failure says why. */
 	async function look() {

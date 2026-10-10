@@ -1,4 +1,5 @@
 import changelog from '../../CHANGELOG.md?raw';
+import { compareVersions } from '#lib/versions.js';
 
 /** The one release that did not record the version last opened. */
 export const FIRST_RELEASE = '0.1.0';
@@ -10,16 +11,6 @@ export interface Release {
 	date: string;
 	/** Such as Features or Bug Fixes, in the changelog's order. */
 	sections: { title: string; entries: string[] }[];
-}
-
-/**
- * Negative, zero or positive as `a` is older than, the same as or newer than
- * `b`, for plain `x.y.z` versions.
- */
-export function compareVersions(a: string, b: string): number {
-	const [x, y] = [a, b].map((v) => v.split('.').map(Number));
-	for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
-	return 0;
 }
 
 /** An entry made for reading in the app: no commit links, and it starts with a capital. */

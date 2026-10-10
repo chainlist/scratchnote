@@ -376,6 +376,7 @@
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Separator } from '#lib/components/ui/separator/index.js';
 	import { Toggle } from '#lib/components/ui/toggle/index.js';
+	import { errorText } from '#lib/errors.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { android } from '#lib/platform.js';
 	import { Editor } from '#lib/plugins/editor.js';
@@ -441,7 +442,7 @@
 		try {
 			button.run(new Editor(view));
 		} catch (e) {
-			onerror(`${button.plugin}: ${e instanceof Error ? e.message : String(e)}`);
+			onerror(`${button.plugin}: ${errorText(e)}`);
 		}
 		view.focus();
 	}

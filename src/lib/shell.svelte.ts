@@ -3,7 +3,7 @@ import { toast } from 'svelte-sonner';
 import { EditorView } from '@codemirror/view';
 import { goto, invalidate } from '$app/navigation';
 import { resolve } from '$app/paths';
-import { navigating, page } from '$app/state';
+import { page } from '$app/state';
 import {
 	clearDayAhead,
 	deleteNote,
@@ -31,10 +31,11 @@ import {
 	type ThreadOrder
 } from '#lib/api.js';
 import { loadDock, saveDock, type DockSide } from '#lib/dock.js';
-import { onGuard } from '#lib/back.svelte.js';
+import { afterNavigation, onGuard } from '#lib/back.svelte.js';
 import { addToPageDraft } from '#lib/page-draft.js';
 import { m } from '#lib/paraglide/messages.js';
-import { samePin } from '#lib/pins.js';
+import { errorText } from '#lib/errors.js';
+import { pluginPageHref, samePin } from '#lib/pins.js';
 import { noteTitle } from '#lib/markdown.js';
 import { threadHref, threadName, threadScope } from '#lib/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
@@ -207,7 +208,7 @@ export class Shell implements WorkspaceHost {
 		if (changed === undefined) this.#leadsChanged = 'all';
 		else if (this.#leadsChanged !== 'all') this.#leadsChanged.add(changed);
 		// An invalidation aborts a navigation under way, so it waits for one to land.
-		while (navigating.complete) await navigating.complete.catch(() => {});
+		await afterNavigation();
 		const leads = this.#leadsChanged;
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- nothing is drawn from it
 		this.#leadsChanged = new Set();
@@ -233,7 +234,7 @@ export class Shell implements WorkspaceHost {
 	/** Say what failed in plain words, keeping the error itself under Details. */
 	fail = (what: string, e: unknown, retry?: () => unknown) => {
 		this.error = what;
-		this.errorDetail = e instanceof Error ? e.message : String(e);
+		this.errorDetail = errorText(e);
 		this.errorRetry = retry ?? null;
 	};
 
@@ -546,8 +547,7 @@ export class Shell implements WorkspaceHost {
 		const query = Object.entries(params)
 			.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
 			.join('&');
-		// resolve() takes no query string, so the query follows the path it gives.
-		return goto(`${resolve(`plugin/${type}/`)}${query ? `?${query}` : ''}`);
+		return goto(pluginPageHref(query ? `${type}?${query}` : type));
 	};
 
 	/** The dock holds one thing: a page, a plugin's view or a thread. */
@@ -665,7 +665,7 @@ export class Shell implements WorkspaceHost {
 			// Save is the way to try again.
 			this.saveFailures = {
 				...this.saveFailures,
-				[note.id]: e instanceof Error ? e.message : String(e)
+				[note.id]: errorText(e)
 			};
 			return false;
 		}

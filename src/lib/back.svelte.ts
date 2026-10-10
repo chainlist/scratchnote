@@ -45,6 +45,11 @@ export function closeOnBack(open: () => boolean, close: () => void) {
 	});
 }
 
+/** Once no view is loading: every navigation under way has landed or failed. */
+export async function afterNavigation() {
+	while (navigating.complete) await navigating.complete.catch(() => {});
+}
+
 /** Where the history stands: on the entry kept while something is open. */
 export const onGuard = () => page.state.overlay === true;
 
@@ -62,7 +67,7 @@ async function reconcile() {
 	try {
 		for (;;) {
 			await tick();
-			while (navigating.complete) await navigating.complete.catch(() => {});
+			await afterNavigation();
 			const want = layers.length > 0;
 			if (want === onGuard()) return;
 			if (want) {

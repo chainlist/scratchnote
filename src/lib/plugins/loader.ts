@@ -15,7 +15,9 @@ import {
 	type PluginState,
 	type PluginsView
 } from '#lib/api.js';
+import { errorText } from '#lib/errors.js';
 import { m } from '#lib/paraglide/messages.js';
+import { older } from '#lib/versions.js';
 import { corePlugins } from '../../plugins';
 import {
 	Component,
@@ -102,20 +104,6 @@ interface Loaded {
 }
 
 const loaded = new Map<string, Loaded>();
-
-/** Whether version `a` is older than `b`, number by number, as the backend compares. */
-export function older(a: string, b: string): boolean {
-	const numbers = (v: string) =>
-		v
-			.split(/[-+]/)[0]
-			.split('.')
-			.map((n) => Number.parseInt(n, 10) || 0);
-	const [x, y] = [numbers(a), numbers(b)];
-	for (let i = 0; i < Math.max(x.length, y.length); i++) {
-		if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
-	}
-	return false;
-}
 
 function requireModule(name: string): unknown {
 	if (name in MODULES) return MODULES[name];
@@ -251,7 +239,7 @@ async function apply(times?: StartupStep[]) {
 			plugins.status[id] = { state: 'on' };
 		} catch (e) {
 			console.error(`plugin ${id} did not load`, e);
-			error = e instanceof Error ? e.message : String(e);
+			error = errorText(e);
 			plugins.status[id] = { state: 'failed', error };
 		}
 		const plugin = { id, core: coreIds.has(id), error };

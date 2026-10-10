@@ -20,7 +20,8 @@
 	import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 	import { hasEvery, queryWords } from '#lib/matching.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { adopt, coreIds, older, plugins, setCommunityPlugin } from '#lib/plugins/loader.js';
+	import { adopt, coreIds, plugins, setCommunityPlugin } from '#lib/plugins/loader.js';
+	import { older } from '#lib/versions.js';
 	import type { SettingsState } from './state.svelte';
 	import { hint } from './styles';
 

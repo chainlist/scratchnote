@@ -51,6 +51,13 @@ export const mentionSyntax: MarkdownConfig = {
 /** The key a name is found by: case does not count, `@Marie` is `@marie`. */
 export const mentionKey = (name: string) => name.replace(/^@/, '').toLowerCase();
 
+/** A text hashed to a whole number, the same every time. */
+function hashString(text: string) {
+	let hash = 0;
+	for (const char of text) hash = (Math.imul(hash, 31) + char.codePointAt(0)!) >>> 0;
+	return hash;
+}
+
 /** The hues a name's own colour takes on the lists (oklch), far enough
  *  apart round the wheel to tell eight names apart. */
 const HUES = [25, 70, 110, 150, 195, 240, 285, 330];
@@ -58,17 +65,13 @@ const HUES = [25, 70, 110, 150, 195, 240, 285, 330];
 /** A name's hue on the lists of names and threads, the same every time:
  *  its key, hashed onto `HUES`. */
 export function mentionHue(key: string) {
-	let hash = 0;
-	for (const char of key) hash = (Math.imul(hash, 31) + char.codePointAt(0)!) >>> 0;
-	return HUES[hash % HUES.length];
+	return HUES[hashString(key) % HUES.length];
 }
 
 /** A hue anywhere round the wheel for what has no name to take one from,
  *  as a thread of the general scope or a page's pin: its id, hashed. */
 export function hueOf(id: string) {
-	let hash = 0;
-	for (const char of id) hash = (Math.imul(hash, 31) + char.codePointAt(0)!) >>> 0;
-	return hash % 360;
+	return hashString(id) % 360;
 }
 
 /** Where each of `days` within the last `span` days falls along them, from

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
+	import { errorText } from '#lib/errors.js';
 	import type { PluginSettingTab } from '#lib/plugins/api.js';
 	import { clearSettings } from '#lib/plugins/setting-model.js';
 
@@ -22,8 +23,7 @@
 	const show =
 		(current: PluginSettingTab): Attachment<HTMLElement> =>
 		(el) => {
-			const fail = (e: unknown) =>
-				onerror(`${plugin}: ${e instanceof Error ? e.message : String(e)}`);
+			const fail = (e: unknown) => onerror(`${plugin}: ${errorText(e)}`);
 			const { containerEl } = current;
 			containerEl.className = 'flex flex-col';
 			clearSettings(containerEl);

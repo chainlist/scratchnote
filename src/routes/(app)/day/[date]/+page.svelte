@@ -16,7 +16,9 @@
 	import CalendarIcon from '@lucide/svelte/icons/calendar';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { inText, onSwipe, phone } from '#lib/swipe.js';
+	import { inText, typesText } from '#lib/dom.js';
+	import { errorText } from '#lib/errors.js';
+	import { onSwipe, phone } from '#lib/swipe.js';
 	import type { Day } from './+page';
 
 	let { data } = $props();
@@ -53,7 +55,7 @@
 			await shell.refresh();
 			return null;
 		} catch (e) {
-			return e instanceof Error ? e.message : String(e);
+			return errorText(e);
 		}
 	}
 
@@ -64,9 +66,8 @@
 		// Text keeps its keys, Alt+arrows move by word on macOS, and a dialog
 		// or a menu keeps them from the day behind it.
 		const target = event.target as HTMLElement;
-		if (event.defaultPrevented || target.isContentEditable) return;
-		if (target.closest('input, textarea, select, [role="dialog"], [role="menu"], [role="listbox"]'))
-			return;
+		if (event.defaultPrevented || typesText(target)) return;
+		if (target.closest('select, [role="dialog"], [role="menu"], [role="listbox"]')) return;
 		// N starts a note, as the button under the day's notes does.
 		if (event.key.toLowerCase() === 'n' && !event.altKey && !event.ctrlKey && !event.metaKey) {
 			if (event.repeat) return;

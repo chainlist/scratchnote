@@ -8,6 +8,7 @@ import '@fontsource-variable/playpen-sans';
 import '@fontsource-variable/shantell-sans';
 import type { Settings } from '#lib/api.js';
 import { m } from '#lib/paraglide/messages.js';
+import { writeJson } from '#lib/storage.js';
 
 type Appearance = Pick<Settings, 'accentColor' | 'fontFamily' | 'fontSize' | 'radius' | 'theme'>;
 
@@ -185,7 +186,7 @@ export function applyAppearance(appearance: Appearance) {
 	style.fontSize = `${remPixels(fontSize)}px`;
 	style.setProperty('--radius', `${radius}rem`);
 	// app.html restores this at the next launch, before the settings arrive.
-	localStorage.setItem('appearance', JSON.stringify({ dark, style: style.cssText }));
+	writeJson('appearance', { dark, style: style.cssText });
 }
 
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');

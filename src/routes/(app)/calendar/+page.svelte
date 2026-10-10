@@ -1,6 +1,6 @@
 <script lang="ts">
 	import MonthCalendar from './MonthCalendar.svelte';
-	import View from '#lib/components/View.svelte';
+	import View from '#lib/components/layout/View.svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 

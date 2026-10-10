@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { MentionSummary, Pin } from '#lib/api.js';
-	import View from '#lib/components/View.svelte';
+	import View from '#lib/components/layout/View.svelte';
 	import MentionLetter from '#lib/components/MentionLetter.svelte';
 	import PinButton from '#lib/components/PinButton.svelte';
 	import ShowMore from '#lib/components/ShowMore.svelte';

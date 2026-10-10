@@ -4,7 +4,7 @@
 	import { saveNote } from '#lib/api.js';
 	import NewNote from './NewNote.svelte';
 	import NoteList from '#lib/components/NoteList.svelte';
-	import View from '#lib/components/View.svelte';
+	import View from '#lib/components/layout/View.svelte';
 	import { dayHeading } from '#lib/dates.js';
 	import { prettyHotkey } from '#lib/hotkeys.js';
 	import { m } from '#lib/paraglide/messages.js';

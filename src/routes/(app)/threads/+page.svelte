@@ -4,9 +4,9 @@
 	import MentionChip from '#lib/components/MentionChip.svelte';
 	import KeepThreadButtons from '#lib/components/KeepThreadButtons.svelte';
 	import Markdown from '#lib/components/Markdown.svelte';
-	import SectionTabs from '#lib/components/SectionTabs.svelte';
+	import SectionTabs from '#lib/components/layout/SectionTabs.svelte';
 	import ShowMore from '#lib/components/ShowMore.svelte';
-	import View from '#lib/components/View.svelte';
+	import View from '#lib/components/layout/View.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';

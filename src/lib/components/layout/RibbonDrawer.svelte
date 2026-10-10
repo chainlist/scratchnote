@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
-	import Ribbon from '#lib/components/Ribbon.svelte';
+	import Ribbon from '#lib/components/layout/Ribbon.svelte';
 	import { closeOnBack } from '#lib/back.svelte.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';

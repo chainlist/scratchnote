@@ -10,7 +10,7 @@
 		type SpacesView
 	} from '#lib/api.js';
 	import InlineError from '#lib/components/InlineError.svelte';
-	import { sidebarItem } from '#lib/components/sidebar.js';
+	import { sidebarItem } from '#lib/components/layout/sidebar.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import * as Popover from '#lib/components/ui/popover/index.js';

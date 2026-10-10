@@ -9,10 +9,8 @@
 //! typing, and the model does not embed it until `finish_page` says the view
 //! closed (SPEC 3.5). The page view's commands are in `commands::pages`.
 
-use tauri::{AppHandle, Emitter, State};
-
 use crate::spaces::Space;
-use crate::state::{read_lock, AppState};
+use crate::state::read_lock;
 use crate::storage::daily_file::{self, Note, Stub};
 use crate::storage::day_path;
 use crate::storage::index::{Index, IndexEntry};
@@ -115,10 +113,6 @@ pub async fn write_new(writer: &Writer, space: &Space, page: &Note) -> Result<()
     Ok(())
 }
 
-pub fn emit_updated(app: &AppHandle, id: &str) {
-    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
-}
-
 /// Every page in the index, newest first: by date, then by time within the day.
 pub fn newest_first(index: &Index) -> Vec<Note> {
     let mut pages: Vec<&IndexEntry> = index.pages().collect();
@@ -128,24 +122,16 @@ pub fn newest_first(index: &Index) -> Vec<Note> {
 
 /// Forget the day ahead read in a page (SPEC 5.3). No day is read in it
 /// again, even once its text changes.
-pub async fn clear_day_ahead(
-    app: &AppHandle,
-    state: &State<'_, AppState>,
-    space: &Space,
-    id: &str,
-) -> Result<()> {
+pub async fn clear_day_ahead(writer: &Writer, space: &Space, id: &str) -> Result<()> {
     let page = read_page(space, id).await?;
     let file = page.file.clone();
-    state
-        .writer
+    writer
         .rewrite(space.root.join(&page.file), move |existing| {
             page_file::clear_day_ahead(existing?, &file)
         })
         .await?;
     reindex(space, &page.file)?;
-    space.persist_index(&state.writer).await?;
-    emit_updated(app, id);
-    Ok(())
+    space.persist_index(writer).await
 }
 
 #[cfg(test)]

@@ -3,10 +3,11 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 use ulid::Ulid;
 
 use super::blocking;
+use crate::events;
 use crate::spaces::Space;
 use crate::state::{read_lock, AppState};
 use crate::storage::daily_file::{self, Kind, Note};
@@ -69,7 +70,7 @@ pub async fn save_note(
 
     space.note_added(&state.writer, &note).await?;
 
-    let _ = app.emit("note-updated", serde_json::json!({ "id": note.id }));
+    events::note_updated(&app, &note.id);
     Ok(Some(note))
 }
 
@@ -182,7 +183,7 @@ pub async fn delete_note(
     space.day_changed(&date)?;
     space.persist_index(&state.writer).await?;
 
-    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    events::note_updated(&app, &id);
     Ok(())
 }
 
@@ -212,7 +213,7 @@ pub async fn update_note(
     }
     reindex_day(&state, &space, &date).await?;
 
-    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    events::note_updated(&app, &id);
     read_note(&space, &date, &id).await
 }
 
@@ -282,7 +283,7 @@ pub async fn move_note(
     reindex_day(&state, &from, &date).await?;
     crate::attachments::drop_carried(&from, &carried);
 
-    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    events::note_updated(&app, &id);
     Ok(())
 }
 
@@ -315,7 +316,7 @@ pub async fn rebuild_index(app: AppHandle, state: State<'_, AppState>) -> Result
     let count = blocking(move || rebuilding.rebuild()).await??;
     space.persist_index(&state.writer).await?;
 
-    let _ = app.emit("index-rebuilt", ());
+    events::index_rebuilt(&app);
     Ok(count)
 }
 
@@ -377,7 +378,9 @@ pub async fn clear_day_ahead(
     check_date(&date)?;
     let space = state.space()?;
     if is_page(&space, &id) {
-        return crate::pages::clear_day_ahead(&app, &state, &space, &id).await;
+        crate::pages::clear_day_ahead(&state.writer, &space, &id).await?;
+        events::note_updated(&app, &id);
+        return Ok(());
     }
     let path = day_path(&space.root, &date);
     let cleared = id.clone();
@@ -391,7 +394,7 @@ pub async fn clear_day_ahead(
         return Err(format!("no note {id} in {date}").into());
     }
     reindex_day(&state, &space, &date).await?;
-    let _ = app.emit("note-updated", serde_json::json!({ "id": id }));
+    events::note_updated(&app, &id);
     Ok(())
 }
 

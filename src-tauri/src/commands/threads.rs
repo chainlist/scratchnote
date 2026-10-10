@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use super::blocking;
+use crate::events;
 use crate::embed::threads::{scope_of, thread_id, when_written, Thread, Threads, When};
 use crate::spaces::Space;
 use crate::state::AppState;
@@ -139,10 +140,7 @@ pub async fn rename_thread(
         }
         true
     })?;
-    let _ = app.emit(
-        "threads-changed",
-        serde_json::json!({ "space": space.name }),
-    );
+    events::threads_changed(&app, &space.name);
     Ok(())
 }
 
@@ -156,8 +154,7 @@ pub async fn keep_out_of_threads(
     out: bool,
 ) -> Result<()> {
     let space = state.space()?;
-    let before = space.decided();
-    let changed = space.change_edits(|edits| {
+    let changed = space.decide(|edits| {
         if out {
             let put = edits.take_out(&id);
             edits.alone.insert(id) || put
@@ -168,7 +165,6 @@ pub async fn keep_out_of_threads(
     if !changed {
         return Ok(());
     }
-    space.remember_change(before);
     place_again(&app, &space).await
 }
 
@@ -177,10 +173,7 @@ pub async fn keep_out_of_threads(
 async fn place_again(app: &AppHandle, space: &Arc<Space>) -> Result<()> {
     let placing = space.clone();
     blocking(move || crate::embed::sync::sync_threads(&placing)).await?;
-    let _ = app.emit(
-        "threads-changed",
-        serde_json::json!({ "space": space.name }),
-    );
+    events::threads_changed(app, &space.name);
     Ok(())
 }
 
@@ -206,15 +199,13 @@ pub async fn keep_thread(
     if notes.is_empty() {
         return Ok(());
     }
-    let before = space.decided();
-    space.change_edits(|edits| {
+    space.decide(|edits| {
         for note in notes {
             edits.put_in(note, id.clone());
         }
         edits.dismissed.remove(&id);
         true
     })?;
-    space.remember_change(before);
     place_again(&app, &space).await
 }
 
@@ -230,12 +221,10 @@ pub async fn dismiss_thread(
     if notes.is_empty() {
         return Ok(());
     }
-    let before = space.decided();
-    space.change_edits(|edits| {
+    space.decide(|edits| {
         edits.dismissed.insert(id, notes.into_iter().collect());
         true
     })?;
-    space.remember_change(before);
     place_again(&app, &space).await
 }
 
@@ -274,15 +263,13 @@ pub async fn put_in_thread(
             )
         }
     };
-    let before = space.decided();
-    space.change_edits(|edits| {
+    space.decide(|edits| {
         for note in notes {
             edits.alone.remove(&note);
             edits.put_in(note, thread.clone());
         }
         true
     })?;
-    space.remember_change(before);
     place_again(&app, &space).await?;
     Ok(thread)
 }
@@ -309,7 +296,7 @@ pub async fn merge_threads(
         .change_pins(|pins| crate::storage::pins::follow_merge(pins, &from, &into))?
         .is_some()
     {
-        super::pins::pins_changed(&app, &space.name);
+        events::pins_changed(&app, &space.name);
     }
     let notes = notes_of(&space, &from);
     space.change_edits(|edits| {
@@ -340,7 +327,7 @@ pub async fn undo_thread_change(
         return Ok(false);
     };
     if pins_changed {
-        super::pins::pins_changed(&app, &space.name);
+        events::pins_changed(&app, &space.name);
     }
     place_again(&app, &space).await?;
     Ok(true)

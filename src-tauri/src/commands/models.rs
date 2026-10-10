@@ -2,12 +2,13 @@
 //! SPEC 5.
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 use super::blocking;
 use crate::embed::activity::Activity;
 use crate::embed::download;
 use crate::embed::model::{self, models_dir, EmbeddingModel, LEGACY_EMBEDDING_FILE};
+use crate::events;
 use crate::state::{lock, AppState};
 use crate::Result;
 
@@ -56,10 +57,7 @@ async fn fetch_embedding_model(app: &AppHandle) -> Result<()> {
         }
         *running = Some(0);
     }
-    let _ = app.emit(
-        "embedding-status",
-        serde_json::json!({ "state": "downloading", "percent": 0 }),
-    );
+    events::embedding_status(app, "downloading", Some(0));
 
     let progress_app = app.clone();
     let result = async {
@@ -68,10 +66,7 @@ async fn fetch_embedding_model(app: &AppHandle) -> Result<()> {
             if let Ok(mut running) = progress_app.state::<AppState>().embedding_download.lock() {
                 *running = Some(percent);
             }
-            let _ = progress_app.emit(
-                "embedding-status",
-                serde_json::json!({ "state": "downloading", "percent": percent }),
-            );
+            events::embedding_status(&progress_app, "downloading", Some(percent));
         })
         .await
     }
@@ -87,7 +82,7 @@ async fn fetch_embedding_model(app: &AppHandle) -> Result<()> {
     } else {
         "absent"
     };
-    let _ = app.emit("embedding-status", serde_json::json!({ "state": status }));
+    events::embedding_status(app, status, None);
     result
 }
 

@@ -11,6 +11,7 @@
 	import Markdown from '#lib/components/Markdown.svelte';
 	import { Badge } from '#lib/components/ui/badge/index.js';
 	import { Button } from '#lib/components/ui/button/index.js';
+	import { Spinner } from '#lib/components/ui/spinner/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import { Input } from '#lib/components/ui/input/index.js';
 	import { Switch } from '#lib/components/ui/switch/index.js';
@@ -175,7 +176,7 @@
 					<p class="text-sm text-destructive">{detailsFailed}</p>
 				{:else if !details}
 					<p class="flex items-center gap-2 {hint}">
-						<RefreshCwIcon class="size-3.5 animate-spin" />{m.plugins_loading()}
+						<Spinner class="size-3.5" aria-hidden="true" />{m.plugins_loading()}
 					</p>
 				{:else if details.readme}
 					<Markdown text={details.readme} class="text-sm leading-6" />
@@ -193,7 +194,7 @@
 		</div>
 	{:else if entries === null}
 		<p class="flex items-center gap-2 {hint}">
-			<RefreshCwIcon class="size-3.5 animate-spin" />{m.plugins_loading()}
+			<Spinner class="size-3.5" aria-hidden="true" />{m.plugins_loading()}
 		</p>
 	{:else if shown.length === 0}
 		<p class={hint}>{m.plugins_browse_empty()}</p>

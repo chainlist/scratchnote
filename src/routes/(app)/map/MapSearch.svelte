@@ -69,7 +69,7 @@
 						onclick={() => onpick(id)}
 						aria-current={selectedId === id ? 'true' : undefined}
 						class={[
-							'flex w-full min-w-0 items-baseline gap-2 rounded-md px-1 py-1 text-left text-sm transition-colors outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid',
+							'flex w-full min-w-0 items-baseline gap-2 rounded-md px-1 py-1 text-left text-sm focus-ring transition-colors outline-none hover:bg-muted',
 							selectedId === id && 'bg-muted'
 						]}
 					>

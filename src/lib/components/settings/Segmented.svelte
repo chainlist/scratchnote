@@ -29,7 +29,7 @@
 	{#each options as option (option.value)}
 		<RadioGroup.Item
 			value={String(option.value)}
-			class="h-7 rounded-md px-3 text-xs font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid {value ===
+			class="h-7 rounded-md px-3 text-xs font-medium whitespace-nowrap focus-ring transition-colors outline-none {value ===
 			option.value
 				? 'bg-primary text-primary-foreground'
 				: 'text-muted-foreground hover:bg-accent hover:text-foreground'}"

@@ -33,7 +33,7 @@
 
 	/** Rename, Select notes and Merge into, in a row under the title. */
 	const action =
-		'-mx-1.5 flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-ring';
+		'-mx-1.5 flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-ring';
 
 	/** The thread's notes in the order the settings ask for. They come
 	 *  oldest first, so a day's are together either way. */
@@ -252,7 +252,7 @@
 		<p class="text-base text-meta">{m.thread_gone()}</p>
 		<a
 			href={resolve('threads/')}
-			class="mt-3 inline-flex items-center gap-1.5 rounded text-sm text-neutral-300 outline-none hover:text-neutral-100 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+			class="mt-3 inline-flex items-center gap-1.5 rounded text-sm text-neutral-300 focus-ring outline-none hover:text-neutral-100"
 		>
 			{m.thread_gone_link()}<ArrowRightIcon class="size-3.5" />
 		</a>
@@ -312,7 +312,7 @@
 						<button
 							type="button"
 							onclick={() => void shell.blink(note.id, root, { focus: true })}
-							class="-mx-1.5 flex w-full min-w-0 cursor-pointer items-center gap-3 rounded px-1.5 py-1 text-left outline-none hover:bg-neutral-900 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+							class="-mx-1.5 flex w-full min-w-0 cursor-pointer items-center gap-3 rounded px-1.5 py-1 text-left focus-ring outline-none hover:bg-neutral-900"
 						>
 							<span
 								aria-hidden="true"

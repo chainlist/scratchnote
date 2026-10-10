@@ -123,7 +123,7 @@
 				onfocus={() => (current = i)}
 				aria-label={label(dot)}
 				title={label(dot)}
-				class="group absolute top-1/2 flex size-5 -translate-1/2 cursor-pointer items-center justify-center rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+				class="group absolute top-1/2 flex size-5 -translate-1/2 cursor-pointer items-center justify-center rounded-full focus-ring outline-none"
 				style:left="{dot.at}%"
 			>
 				<span

@@ -67,7 +67,7 @@
 		<a
 			href={resolve('calendar/')}
 			title={m.calendar_pick()}
-			class="group/date -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring focus-visible:outline-solid"
+			class="group/date -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 focus-ring transition-colors hover:bg-muted"
 		>
 			<span class={compact ? 'min-w-0 truncate' : undefined}>
 				{#if compact}{dayHeading(date, true)}{:else}<DayName {date} />{/if}

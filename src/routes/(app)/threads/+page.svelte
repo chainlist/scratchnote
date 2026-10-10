@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { getNotes, type Note, type Thread, type ThreadCard } from '#lib/api.js';
+	import KeepThreadButtons from '#lib/components/KeepThreadButtons.svelte';
 	import Markdown from '#lib/components/Markdown.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
 	import SectionTabs from '#lib/components/SectionTabs.svelte';
 	import ShowMore from '#lib/components/ShowMore.svelte';
 	import View from '#lib/components/View.svelte';
@@ -107,24 +107,7 @@
 									{m.thread_detail({ count: thread.notes.length, date: shortDay(thread.since) })}
 								</span>
 								<div class="relative z-10 flex shrink-0 gap-1">
-									<Button
-										variant="ghost"
-										size="sm"
-										class="h-7 px-2 text-xs"
-										onclick={() => void shell.threads.keepThread(thread.id, false)}
-										aria-label={m.thread_dismiss_label({ name: shell.threads.nameOf(thread) })}
-									>
-										{m.thread_dismiss()}
-									</Button>
-									<Button
-										variant="outline"
-										size="sm"
-										class="h-7 px-2 text-xs"
-										onclick={() => void shell.threads.keepThread(thread.id, true)}
-										aria-label={m.thread_keep_label({ name: shell.threads.nameOf(thread) })}
-									>
-										{m.thread_keep()}
-									</Button>
+									<KeepThreadButtons {thread} />
 								</div>
 							</div>
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- threadHref resolves it -->

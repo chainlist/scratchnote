@@ -2,7 +2,7 @@
 	import NotesByDay from '#lib/components/NotesByDay.svelte';
 	import SectionTabs from '#lib/components/SectionTabs.svelte';
 	import ThreadLanes from '#lib/components/ThreadLanes.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import KeepThreadButtons from '#lib/components/KeepThreadButtons.svelte';
 	import View from '#lib/components/View.svelte';
 	import { shortDay } from '#lib/dates.js';
 	import { mentionHue, mentionKey } from '#lib/mentions.js';
@@ -95,24 +95,7 @@
 				{#snippet actions(thread)}
 					{#if !thread.kept}
 						<!-- A suggestion is kept or dismissed here, as in Threads. -->
-						<Button
-							variant="ghost"
-							size="sm"
-							class="h-7 px-2 text-xs"
-							onclick={() => void shell.threads.keepThread(thread.id, false)}
-							aria-label={m.thread_dismiss_label({ name: shell.threads.nameOf(thread) })}
-						>
-							{m.thread_dismiss()}
-						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							class="mr-1 h-7 px-2 text-xs"
-							onclick={() => void shell.threads.keepThread(thread.id, true)}
-							aria-label={m.thread_keep_label({ name: shell.threads.nameOf(thread) })}
-						>
-							{m.thread_keep()}
-						</Button>
+						<KeepThreadButtons {thread} keepClass="mr-1" />
 					{/if}
 				{/snippet}
 			</ThreadLanes>

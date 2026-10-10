@@ -4,8 +4,8 @@
 use tauri::{AppHandle, State};
 use ulid::Ulid;
 
-use super::notes::{free_id, move_target, read_note};
 use crate::events;
+use crate::notes::{free_id, move_target, read_note};
 use crate::pages::{
     drop_stub, entry, free_path, newest_first, read_page, reindex, sync_stub, write_new,
 };

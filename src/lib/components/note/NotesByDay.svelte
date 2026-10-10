@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import type { Note } from '#lib/api.js';
 	import NoteList from '#lib/components/note/NoteList.svelte';
 	import ShowMore from '#lib/components/common/ShowMore.svelte';
@@ -52,9 +53,10 @@
      how many notes it holds, each day in a column of its own beside its
      notes, its number large and its weekday under it, kept in view while
      its notes scroll by. The column lines up with the first note's time.
-     A faint line parts the days of a month. -->
+     A faint line parts the days of a month. A month or a day drawn by
+     Show more fades in. -->
 {#each months as { month, count, days } (month)}
-	<section class="mb-10 last:mb-0">
+	<section class="mb-10 last:mb-0" in:fade={{ duration: 200 }}>
 		<h2 class="mb-1 flex items-baseline gap-2">
 			<span class="text-base font-semibold text-neutral-200">{monthHeading(month)}</span>
 			<span class="text-xs text-meta tabular-nums">{m.tags_notes({ count })}</span>
@@ -62,6 +64,7 @@
 		{#each days as day (day.date)}
 			<section
 				class="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-x-4 border-neutral-800/70 [&+&]:border-t"
+				in:fade={{ duration: 200 }}
 			>
 				<h3 class="sticky top-0 self-start pt-5 text-center">
 					<span class="sr-only">{dayHeading(day.date)}</span>

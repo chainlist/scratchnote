@@ -213,6 +213,44 @@ body {
 	}
 }
 
+/* The dock opening, or moved to the view's other side: it comes in from
+   its own edge. A fade alone when motion is reduced. */
+@keyframes dock-in {
+	from {
+		opacity: 0;
+		transform: translateX(var(--dock-from, 0));
+	}
+}
+
+.dock-in {
+	animation: dock-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dock-in {
+		animation: fade-in 0.2s ease-out backwards;
+	}
+}
+
+/* A check drawing itself, as Saved in the capture window: the path needs
+   pathLength="1". Already drawn when motion is reduced. */
+@keyframes check-draw {
+	from {
+		stroke-dashoffset: 1;
+	}
+}
+
+.check-draw path {
+	stroke-dasharray: 1;
+	animation: check-draw 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.check-draw path {
+		animation: none;
+	}
+}
+
 @keyframes note-glow {
 	50% {
 		color: color-mix(in oklab, var(--primary) 75%, var(--foreground));

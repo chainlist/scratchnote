@@ -255,10 +255,15 @@ export class Shell implements WorkspaceHost {
 
 	isPinned = (pin: Pin) => this.pins.some((other) => samePin(other, pin));
 
+	/** The pins as the user last saved them: the left edge animates that
+	 *  change only, not pins read at launch, on a space switch or as the
+	 *  threads they lead to come in. Nothing is drawn from it. */
+	pinsSaved: Pin[] | null = null;
+
 	/** Save the pins in this order. */
 	#savePins = async (pins: Pin[]) => {
 		try {
-			this.pins = await setPins(pins);
+			this.pins = this.pinsSaved = await setPins(pins);
 		} catch (e) {
 			this.#failQuietly(m.error_save_pins(), e, () => this.#savePins(pins));
 		}

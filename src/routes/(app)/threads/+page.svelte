@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { getNotes, type Note, type Thread, type ThreadCard } from '#lib/api.js';
 	import MentionChip from '#lib/components/common/MentionChip.svelte';
 	import KeepThreadButtons from '#lib/components/thread/KeepThreadButtons.svelte';
@@ -8,6 +9,7 @@
 	import ShowMore from '#lib/components/common/ShowMore.svelte';
 	import View from '#lib/components/layout/View.svelte';
 	import { shortDay } from '#lib/helpers/dates.js';
+	import { room } from '#lib/helpers/motion.js';
 	import { mentionHue } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -94,9 +96,13 @@
 		{:else}
 			{#if suggested.length}
 				<p class="mb-4 text-sm text-meta">{m.threads_suggested_hint()}</p>
-				<ul class="flex flex-col gap-3">
+				<!-- A suggestion kept or dismissed closes its room, and the next
+				     comes into view under the others. -->
+				<ul class="space-y-3">
 					{#each drawn as thread (thread.id)}
 						<li
+							in:fade={{ duration: 200 }}
+							out:room={{ duration: 200 }}
 							class="relative rounded-lg border border-neutral-800 px-4 py-3 transition-colors hover:border-neutral-700 hover:bg-neutral-900 has-focus-visible:border-neutral-700 has-focus-visible:bg-neutral-900"
 						>
 							<div class="flex items-center gap-2">

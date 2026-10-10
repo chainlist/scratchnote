@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { Attachment } from 'svelte/attachments';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+	import { fade } from 'svelte/transition';
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import InlineError from '#lib/components/common/InlineError.svelte';
 	import TimelineItem from '#lib/components/note/TimelineItem.svelte';
@@ -146,7 +147,7 @@
 	<!-- On the day's own timeline: when on the left, the tasks on the right. -->
 	<ul>
 		{#each groups.slice(0, drawn) as { note, body, open } (note.id)}
-			<li>
+			<li in:fade={{ duration: 200 }}>
 				<TimelineItem
 					time={note.time}
 					date={note.date}

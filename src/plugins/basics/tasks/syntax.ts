@@ -3,6 +3,15 @@ import type { MarkdownSyntax, WidgetContext } from '#lib/plugins/api.js';
 import { m } from '#lib/paraglide/messages.js';
 import { BOX } from './tasks';
 
+/** The task last ticked on a card, by its line's text, and when: the card
+ *  draws the note anew with a new box, which then draws its tick in. It
+ *  is drawn again as the note saves, and that box goes on where it was. */
+let justTicked: { line: string; at: number } | null = null;
+const TICKING_MS = 400;
+
+/** The text of the line a box is on, which names its task. */
+const lineOf = (box: HTMLElement) => box.closest('.md-line')?.textContent?.trim() ?? '';
+
 /**
  * A task's box in place of its `[ ]` (SPEC 3.4). A click ticks or clears
  * it: in the editor it changes the text being written and leaves the
@@ -31,12 +40,20 @@ function box(node: WidgetContext): HTMLElement {
 	button.setAttribute('aria-checked', String(done));
 	button.setAttribute('aria-label', m.note_task_done());
 	button.disabled = !node.editable;
-	button.addEventListener('click', toggle);
+	button.addEventListener('click', () => {
+		if (!done) justTicked = { line: lineOf(button), at: performance.now() };
+		toggle();
+	});
 	// Named after its task once it is on the page, so a screen reader says
 	// which task it ticks; "Done" stays for a box with no text after it.
 	queueMicrotask(() => {
-		const task = button.closest('.md-line')?.textContent?.trim();
+		const task = lineOf(button);
 		if (task) button.setAttribute('aria-label', task);
+		const since = justTicked ? performance.now() - justTicked.at : Infinity;
+		if (done && justTicked?.line === task && since < TICKING_MS) {
+			button.classList.add('md-tick-in');
+			button.style.setProperty('--ticked-ago', `${-since}ms`);
+		}
 	});
 	return button;
 }

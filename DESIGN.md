@@ -260,6 +260,13 @@ A thread's span in time: a hairline axis with one round dot per day that holds n
 - **Calendar wave** (500ms, 30ms per row plus column): days rise into place. Reduced motion: a 300ms fade.
 - **Search glow** (2.4s loop): text being searched by meaning breathes from the meta tone to the accent and back. Reduced motion: still, in the meta tone.
 - **Overlays** (menus, popovers, dialogs): shadcn's stock zoom and slide. Reduced motion: the fade alone.
+- **More notes** (200ms): more than three notes coming into a list at once (a new search, Show more) fade in together. A note saved, deleted or moved shows or goes at once: tried with its room opening and closing (2026-10-10), it felt clunky.
+- **Suggestion closes** (200ms): a thread suggestion kept or dismissed closes its room, so the ones below move up. Reduced motion: a 150ms fade.
+- **Pins** (200ms in, 150ms out, 250ms slide): a pin the user adds grows in from 60%, one taken off shrinks away, and the others slide to their new places, as when one is moved. Pins read at launch, on a space switch or as their threads load just appear. Reduced motion: a fade, no slide.
+- **Dock in** (300ms): the dock comes 1rem in from its own edge as it opens or moves sides. Reduced motion: a 200ms fade.
+- **Onboarding step** (300ms): each step comes 24px in from the side being gone to; its progress bar fills from the start. Reduced motion: a 150ms fade, the bar at once.
+- **Tick** (150ms fill, 250ms draw): a task box ticked on a card fills, then its check is revealed from the left; Saved in the capture window draws its check. Reduced motion: the fill alone, the check already drawn.
+- Every arriving motion uses the page-in curve (`settle` in `#lib/helpers/motion.ts`); exits are faster than entrances. Nothing moves while typing, on long-list rows one by one, or on the map.
 
 ## Do's and Don'ts
 

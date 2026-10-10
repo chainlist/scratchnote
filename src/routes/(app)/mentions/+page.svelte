@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fade } from 'svelte/transition';
 	import type { MentionSummary, Pin } from '#lib/api.js';
 	import View from '#lib/components/layout/View.svelte';
 	import MentionLetter from '#lib/components/common/MentionLetter.svelte';
@@ -227,6 +228,7 @@
 						<li
 							class="group -mx-2 flex items-center gap-1 rounded hover:bg-neutral-900 has-focus-visible:bg-neutral-900"
 							style:--hue={mentionHue(mention.key)}
+							in:fade={{ duration: 200 }}
 						>
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- mentionHref resolves it -->
 							<a

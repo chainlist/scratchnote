@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Component, Snippet } from 'svelte';
+	import { flip } from 'svelte/animate';
+	import { fade, scale } from 'svelte/transition';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -19,6 +21,7 @@
 	import { coreIds } from '#lib/plugins/loader.js';
 	import { monogram, pinHref, pinHue, pinPage } from '#lib/shell/pins.js';
 	import { errorText } from '#lib/helpers/errors.js';
+	import { moveLess, settle } from '#lib/helpers/motion.js';
 	import { threadScope } from '#lib/notes/threads.js';
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -129,6 +132,18 @@
 			? 'text-primary hover:text-primary'
 			: 'text-muted-foreground hover:text-foreground';
 
+	/** Whether the pins shown are the ones the user just saved: only that
+	 *  change moves, not pins read at launch or coming in with their threads. */
+	const saved = () => shell.pins === shell.pinsSaved;
+
+	/** A pin growing in from its middle, or shrinking away; with less motion, a fade. */
+	function pop(node: Element, { duration = 200 } = {}) {
+		if (!saved()) return { duration: 0 };
+		return moveLess()
+			? fade(node, { duration: 150 })
+			: scale(node, { start: 0.6, duration, easing: settle });
+	}
+
 	/** One that fails says so above the view. */
 	function run(item: RibbonEntry) {
 		const fail = (e: unknown) => shell.showError(`${item.plugin}: ${errorText(e)}`);
@@ -192,10 +207,18 @@
 	{/if}
 	{#if pins.length}
 		<Separator class="my-1 w-5!" />
-		{#each pins as { pin, label, title }, index (`${pin.kind} ${pin.target}`)}
-			{@render pinButton(pin, label, title, index)}
-		{/each}
 	{/if}
+	<!-- A pin the user adds grows in and one taken off shrinks away, and the
+	     others slide to their new places, as when one is moved. -->
+	{#each pins as { pin, label, title }, index (`${pin.kind} ${pin.target}`)}
+		<div
+			animate:flip={{ duration: saved() && !moveLess() ? 250 : 0, easing: settle }}
+			in:pop
+			out:pop={{ duration: 150 }}
+		>
+			{@render pinButton(pin, label, title, index)}
+		</div>
+	{/each}
 </nav>
 
 <!-- One of the edge's own buttons, a view or a kind of view, marked while

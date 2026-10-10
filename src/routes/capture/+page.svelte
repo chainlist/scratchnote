@@ -230,7 +230,22 @@
 			</Recall>
 		{/if}
 		<span class="ml-auto flex shrink-0 items-center gap-2">
-			<span aria-live="polite">{saved ? m.capture_saved() : saving ? m.capture_saving() : ''}</span>
+			<span aria-live="polite" class="flex items-center gap-1">
+				{#if saved}
+					<!-- Lucide's check, drawn in as the note is saved. -->
+					<svg
+						aria-hidden="true"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						class="check-draw size-3"><path d="M20 6 9 17l-5-5" pathLength="1" /></svg
+					>
+				{/if}
+				{saved ? m.capture_saved() : saving ? m.capture_saving() : ''}
+			</span>
 			{#if spaces && spaces.spaces.length > 1}
 				<!-- Where the note goes: the open space unless another is picked,
 				     which stands out. Picked, the text takes the focus back. -->

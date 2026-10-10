@@ -203,6 +203,7 @@
 		minSize={dockBounds.min}
 		maxSize={dockBounds.max}
 		onResize={shell.resizeDock}
+		class={['dock-in', shell.dockSide === 'left' ? '[--dock-from:-1rem]' : '[--dock-from:1rem]']}
 	>
 		{#if shell.docked}
 			{@const docked = shell.docked}

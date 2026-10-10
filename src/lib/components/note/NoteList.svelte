@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ComponentProps } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { isPage, type Note } from '#lib/api.js';
 	import NoteCard from '#lib/components/note/NoteCard.svelte';
 	import PageCard from '#lib/components/note/PageCard.svelte';
@@ -43,6 +44,24 @@
 	/** One day's notes are spaced by the time between them and named by
 	 *  their parts of the day; a list across days keeps its dates instead. */
 	const spacing = $derived(showDate ? [] : daySpacing(notes));
+
+	/** More than this many notes coming at once are a list drawn anew or a
+	 *  stretch more, which fades in together; a note or two written or
+	 *  moved just shows. */
+	const FEW = 3;
+	/** The notes shown, and how many came when they last changed. */
+	let shown: string[] = [];
+	let came = 0;
+	$effect.pre(() => {
+		const ids = notes.map((note) => note.id);
+		const before = new Set(shown);
+		came = ids.filter((id) => !before.has(id)).length;
+		shown = ids;
+	});
+
+	function arrive(node: HTMLElement) {
+		return came > FEW ? fade(node, { duration: 200 }) : { duration: 0 };
+	}
 </script>
 
 {#if notes.length === 0}
@@ -53,7 +72,7 @@
 			{@const timeline = { ...spacing[i], partLevel, aside: chosen ? box : undefined }}
 			<!-- A chosen note is washed with the accent, so the choice reads while
 			     scrolling, not only from its box. -->
-			<li class={[chosen?.includes(note.id) && '[&>div>article]:bg-primary/8']}>
+			<li class={[chosen?.includes(note.id) && '[&>div>article]:bg-primary/8']} in:arrive>
 				{#if isPage(note)}
 					<PageCard
 						{note}

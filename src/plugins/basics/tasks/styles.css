@@ -34,3 +34,30 @@
 	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
 		center / 80% no-repeat;
 }
+
+/* A box just ticked: it fills, and its tick draws in from the left. The
+   fill alone when motion is reduced. */
+@keyframes md-tick-fill {
+	from {
+		border-color: var(--color-neutral-300);
+		background-color: transparent;
+	}
+}
+@keyframes md-tick-draw {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+}
+/* --ticked-ago, negative, carries the animation on in a box drawn again. */
+.md-tick-in {
+	animation: md-tick-fill 150ms ease-out var(--ticked-ago, 0ms);
+}
+.md-tick-in::before {
+	animation: md-tick-draw 250ms cubic-bezier(0.22, 1, 0.36, 1) calc(60ms + var(--ticked-ago, 0ms))
+		backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+	.md-tick-in::before {
+		animation: none;
+	}
+}

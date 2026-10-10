@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Thread } from '#lib/api.js';
 	import { Button } from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -19,20 +20,19 @@
 
 	const shell = getShell();
 
-	let title = $state('');
+	// Each thread opens the dialog on the user's title, empty while there is
+	// none, and no error.
+	const threadId = $derived(thread?.id ?? null);
+	let title = $derived.by(() => {
+		void threadId;
+		return untrack(() => (thread?.named ? (thread.title ?? '') : ''));
+	});
+	let error = $derived.by((): string | null => {
+		void threadId;
+		return null;
+	});
 	let input = $state<HTMLInputElement | null>(null);
 	let working = $state(false);
-	let error = $state<string | null>(null);
-
-	// The field starts on the user's title, empty while there is none.
-	let loaded: string | null = null;
-	$effect(() => {
-		const id = thread?.id ?? null;
-		if (id === loaded) return;
-		loaded = id;
-		title = thread?.named ? (thread.title ?? '') : '';
-		error = null;
-	});
 
 	async function confirm(event?: SubmitEvent) {
 		event?.preventDefault();

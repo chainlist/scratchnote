@@ -65,6 +65,7 @@
 			run++;
 			found = null;
 			named = null;
+			open = false;
 			return;
 		}
 		if (key === asked) return;
@@ -75,13 +76,10 @@
 			if (mine !== run) return;
 			found = hints?.note ?? null;
 			named = hints?.mention ?? null;
+			// A note that is no longer found takes its popover with it.
+			if (!found) open = false;
 		}, QUIET_MS);
 		return () => clearTimeout(timer);
-	});
-
-	// A note that is no longer found takes its popover with it.
-	$effect(() => {
-		if (!found) open = false;
 	});
 </script>
 

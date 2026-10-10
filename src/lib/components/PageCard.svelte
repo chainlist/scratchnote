@@ -9,6 +9,7 @@
 	import FileTextIcon from '@lucide/svelte/icons/file-text';
 	import FileXIcon from '@lucide/svelte/icons/file-x';
 	import PanelRightOpenIcon from '@lucide/svelte/icons/panel-right-open';
+	import { wordCount } from '#lib/markdown.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 
@@ -41,7 +42,7 @@
 		>;
 	} = $props();
 
-	const words = $derived(note.body.split(/\s+/).filter(Boolean).length);
+	const words = $derived(wordCount(note.body));
 	/** The start of the text without its blank lines, so both preview lines say something. */
 	const preview = $derived(
 		note.body

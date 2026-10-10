@@ -32,7 +32,8 @@
 		type Attachment
 	} from '#lib/api.js';
 	import { attachmentUrl } from '#lib/attachments.svelte.js';
-	import { bold, bullets, formats, italic, link } from '#lib/format.js';
+	import { bold, bullets, formats, italic, link } from '#lib/markdown/commands.js';
+
 	import {
 		attachmentLink,
 		cardName,

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Component, Snippet } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { Button } from '#lib/components/ui/button/index.js';
@@ -110,6 +111,17 @@
 		}
 	});
 
+	/** One of the edge's own buttons: the kind of view it shows, which marks
+	 *  it while shown, and where it goes or what it does. */
+	interface NavButton {
+		kind: NonNullable<typeof section>;
+		label: string;
+		icon: Component;
+		href?: string;
+		onclick?: () => void;
+		badge?: Snippet;
+	}
+
 	/** An edge button's look: in the accent colour while its kind of view is
 	 *  shown. */
 	const tone = (button: string) =>
@@ -134,78 +146,41 @@
 	aria-label={m.ribbon_label()}
 	class="flex shrink-0 [scrollbar-width:none] flex-col items-center gap-1 overflow-y-auto px-2 py-3"
 >
-	<Button
-		variant="ghost"
-		size="icon-sm"
-		onclick={async () => void shell.openDay(await today())}
-		aria-label={m.command_today()}
-		title={m.command_today()}
-		class={['relative', tone('today')]}
-		aria-current={section === 'today' ? 'page' : undefined}
-	>
-		{@render marker(section === 'today')}
-		<SunIcon />
-	</Button>
-	<Button
-		variant="ghost"
-		size="icon-sm"
-		href={resolve('pages/')}
-		aria-label={m.pages_all()}
-		title={m.pages_all()}
-		class={['relative', tone('pages')]}
-		aria-current={section === 'pages' ? 'page' : undefined}
-	>
-		{@render marker(section === 'pages')}
-		<FilesIcon />
-	</Button>
+	{@render navButton({
+		kind: 'today',
+		label: m.command_today(),
+		icon: SunIcon,
+		onclick: async () => void shell.openDay(await today())
+	})}
+	{@render navButton({
+		kind: 'pages',
+		label: m.pages_all(),
+		icon: FilesIcon,
+		href: resolve('pages/')
+	})}
 	<Separator class="my-1 w-5!" />
-	<Button
-		variant="ghost"
-		size="icon-sm"
-		href={resolve('mentions/')}
-		aria-label={m.mentions_title()}
-		title={m.mentions_title()}
-		class={['relative', tone('mentions')]}
-		aria-current={section === 'mentions' ? 'page' : undefined}
-	>
-		{@render marker(section === 'mentions')}
-		<AtSignIcon />
-	</Button>
+	{@render navButton({
+		kind: 'mentions',
+		label: m.mentions_title(),
+		icon: AtSignIcon,
+		href: resolve('mentions/')
+	})}
 	{#if shell.canSimilar}
-		{@const title = shell.threads.suggested
-			? m.threads_with_suggested({ count: shell.threads.suggested })
-			: m.threads_all()}
-		<Button
-			variant="ghost"
-			size="icon-sm"
-			href={resolve('threads/')}
-			aria-label={title}
-			{title}
-			class={['relative', tone('threads')]}
-			aria-current={section === 'threads' ? 'page' : undefined}
-		>
-			{@render marker(section === 'threads')}
-			<RouteIcon />
-			{#if shell.threads.suggested}
-				<span
-					class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] leading-none font-semibold text-primary-foreground ring-2 ring-neutral-950"
-				>
-					{shell.threads.suggested > 9 ? '9+' : shell.threads.suggested}
-				</span>
-			{/if}
-		</Button>
-		<Button
-			variant="ghost"
-			size="icon-sm"
-			href={resolve('map/')}
-			aria-label={m.map_title()}
-			title={m.map_title()}
-			class={['relative', tone('map')]}
-			aria-current={section === 'map' ? 'page' : undefined}
-		>
-			{@render marker(section === 'map')}
-			<MapIcon />
-		</Button>
+		{@render navButton({
+			kind: 'threads',
+			label: shell.threads.suggested
+				? m.threads_with_suggested({ count: shell.threads.suggested })
+				: m.threads_all(),
+			icon: RouteIcon,
+			href: resolve('threads/'),
+			badge: suggestedCount
+		})}
+		{@render navButton({
+			kind: 'map',
+			label: m.map_title(),
+			icon: MapIcon,
+			href: resolve('map/')
+		})}
 	{/if}
 	{#if core.length}
 		<Separator class="my-1 w-5!" />
@@ -222,6 +197,36 @@
 		{/each}
 	{/if}
 </nav>
+
+<!-- One of the edge's own buttons, a view or a kind of view, marked while
+     it is shown. -->
+{#snippet navButton({ kind, label, icon: Icon, href, onclick, badge }: NavButton)}
+	<Button
+		variant="ghost"
+		size="icon-sm"
+		{href}
+		{onclick}
+		aria-label={label}
+		title={label}
+		class={['relative', tone(kind)]}
+		aria-current={section === kind ? 'page' : undefined}
+	>
+		{@render marker(section === kind)}
+		<Icon />{#if badge}
+			{@render badge()}{/if}
+	</Button>
+{/snippet}
+
+<!-- How many threads are suggested, on the Threads button. -->
+{#snippet suggestedCount()}
+	{#if shell.threads.suggested}
+		<span
+			class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] leading-none font-semibold text-primary-foreground ring-2 ring-neutral-950"
+		>
+			{shell.threads.suggested > 9 ? '9+' : shell.threads.suggested}
+		</span>
+	{/if}
+{/snippet}
 
 <!-- The bar beside a button whose view is shown, at the rail's edge. A
      Button's border is left out of where it is placed from, so the bar

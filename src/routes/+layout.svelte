@@ -5,7 +5,7 @@
 	import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 	import { getSettings, onSettingsChanged, stopAll, type Settings } from '#lib/api.js';
 	import { applyAppearance } from '#lib/app/appearance.js';
-	import { followSpace } from '#lib/attachments.svelte.js';
+	import { followSpace } from '#lib/notes/attachments.svelte.js';
 	import { applyLanguage } from '#lib/app/i18n.svelte.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { android } from '#lib/helpers/platform.js';

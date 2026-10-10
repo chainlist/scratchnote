@@ -10,7 +10,7 @@
 	import { shortDay } from '#lib/helpers/dates.js';
 	import { typesText } from '#lib/helpers/dom.js';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
-	import { editDrafts } from '#lib/note-draft.js';
+	import { editDrafts } from '#lib/notes/note-draft.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 

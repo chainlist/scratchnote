@@ -7,7 +7,7 @@
 	import Recall from '#lib/components/note/Recall.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import { withMention } from '#lib/mentions.js';
+	import { withMention } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { PageSession } from '#lib/components/page/page-session.svelte.js';
 

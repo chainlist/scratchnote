@@ -3,9 +3,9 @@
 	import MentionChip from '#lib/components/common/MentionChip.svelte';
 	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import { shortDay } from '#lib/helpers/dates.js';
-	import { mentionHue } from '#lib/mentions.js';
+	import { mentionHue } from '#lib/notes/mentions.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadHue } from '#lib/threads.js';
+	import { threadHue } from '#lib/notes/threads.js';
 	import type { Point } from './map-data.js';
 
 	let {

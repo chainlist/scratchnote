@@ -7,7 +7,7 @@
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadName } from '#lib/threads.js';
+	import { threadName } from '#lib/notes/threads.js';
 
 	/** A thread in the dock, where a page docks (SPEC 6.4). */
 	let { id, onclose }: { id: string; onclose: () => void } = $props();

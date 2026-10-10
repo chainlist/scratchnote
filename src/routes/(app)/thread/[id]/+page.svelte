@@ -4,7 +4,7 @@
 	import { shortDay } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadName } from '#lib/threads.js';
+	import { threadName } from '#lib/notes/threads.js';
 
 	let { data, params } = $props();
 

@@ -21,7 +21,7 @@
 	import { dayNumber } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadHref } from '#lib/threads.js';
+	import { threadHref } from '#lib/notes/threads.js';
 	import { Camera } from './camera.svelte.js';
 	import { drawMap, type Label } from './draw.js';
 	import { graph, samePlaces, type Graph, type GraphNode } from './graph.js';

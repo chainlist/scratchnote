@@ -25,7 +25,7 @@ import { addToPageDraft } from '#lib/page-draft.js';
 import { m } from '#lib/paraglide/messages.js';
 import { errorText } from '#lib/helpers/errors.js';
 import { pluginPageHref, samePin } from '#lib/pins.js';
-import { threadHref } from '#lib/threads.js';
+import { threadHref } from '#lib/notes/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
 import { ThreadsState } from '#lib/shell/threads.svelte.js';
 

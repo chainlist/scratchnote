@@ -5,7 +5,7 @@
 	import { dateFormat, daysAgo, isoDay, shortDay } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { threadHref, threadHue } from '#lib/threads.js';
+	import { threadHref, threadHue } from '#lib/notes/threads.js';
 
 	const shell = getShell();
 

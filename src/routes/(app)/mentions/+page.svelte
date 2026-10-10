@@ -10,7 +10,7 @@
 	import { goto } from '$app/navigation';
 	import * as InputGroup from '#lib/components/ui/input-group/index.js';
 	import { hasEvery, queryWords } from '#lib/helpers/matching.js';
-	import { along, mentionHref, mentionHue } from '#lib/mentions.js';
+	import { along, mentionHref, mentionHue } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 

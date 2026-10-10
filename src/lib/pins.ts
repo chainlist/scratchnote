@@ -1,7 +1,7 @@
 import { resolve } from '$app/paths';
 import type { Pin } from '#lib/api.js';
-import { hueOf, mentionHref, mentionHue } from '#lib/mentions.js';
-import { threadHref, threadHue } from '#lib/threads.js';
+import { hueOf, mentionHref, mentionHue } from '#lib/notes/mentions.js';
+import { threadHref, threadHue } from '#lib/notes/threads.js';
 
 /** A pin's hue (oklch), drawn as a name's tint: a thread's own, a name's
  *  own, or a page's from its type and query. */

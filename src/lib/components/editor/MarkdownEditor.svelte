@@ -13,7 +13,7 @@
 	import { EditorView, keymap, placeholder as placeholderText } from '@codemirror/view';
 	import { open as pickFiles } from '@tauri-apps/plugin-dialog';
 	import { addAttachments, saveAttachment, type Attachment } from '#lib/api.js';
-	import { pickFileBytes } from '#lib/attachments.svelte.js';
+	import { pickFileBytes } from '#lib/notes/attachments.svelte.js';
 	import { acceptDrops } from '#lib/codemirror/drops.js';
 	import { formatKeys, links, plugged, theme } from '#lib/codemirror/extensions.js';
 	import { attachmentSpace } from '#lib/codemirror/live-preview.js';
@@ -21,7 +21,7 @@
 	import { errorText } from '#lib/helpers/errors.js';
 	import { attachmentLink } from '#lib/markdown.js';
 	import { formats } from '#lib/markdown/commands.js';
-	import { mentionCompletion } from '#lib/mentions.js';
+	import { mentionCompletion } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { android } from '#lib/helpers/platform.js';
 	import { Editor } from '#lib/plugins/editor.js';

@@ -1,5 +1,5 @@
 import { getNotes, listThreads } from '#lib/api.js';
-import { leadNotes, SUGGESTED_PAGE } from '#lib/threads.js';
+import { leadNotes, SUGGESTED_PAGE } from '#lib/notes/threads.js';
 import type { PageLoad } from './$types';
 
 /** Every thread of the space, the one written in last first, with the first

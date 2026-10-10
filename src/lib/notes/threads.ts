@@ -1,6 +1,6 @@
 import { resolve } from '$app/paths';
 import type { Note, Thread } from '#lib/api.js';
-import { hueOf, mentionHue } from '#lib/mentions.js';
+import { hueOf, mentionHue } from '#lib/notes/mentions.js';
 import { noteTitle } from '#lib/markdown.js';
 import { m } from '#lib/paraglide/messages.js';
 

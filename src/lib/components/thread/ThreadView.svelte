@@ -8,14 +8,14 @@
 	import ThreadArc from '#lib/components/thread/ThreadArc.svelte';
 	import { shortDay } from '#lib/helpers/dates.js';
 	import { Button } from '#lib/components/ui/button/index.js';
-	import { openTasks } from '#lib/threads.js';
+	import { openTasks } from '#lib/notes/threads.js';
 	import { resolve } from '$app/paths';
 	import ArrowDownUpIcon from '@lucide/svelte/icons/arrow-down-up';
 	import ArrowRightIcon from '@lucide/svelte/icons/arrow-right';
 	import ListChecksIcon from '@lucide/svelte/icons/list-checks';
 	import MergeIcon from '@lucide/svelte/icons/merge';
 	import PencilIcon from '@lucide/svelte/icons/pencil';
-	import { mentionHref } from '#lib/mentions.js';
+	import { mentionHref } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
 	import { closeOnBack } from '#lib/app/back.svelte.js';

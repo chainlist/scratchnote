@@ -19,7 +19,7 @@
 	import { coreIds } from '#lib/plugins/loader.js';
 	import { monogram, pinHref, pinHue, pinPage } from '#lib/pins.js';
 	import { errorText } from '#lib/helpers/errors.js';
-	import { threadScope } from '#lib/threads.js';
+	import { threadScope } from '#lib/notes/threads.js';
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
 

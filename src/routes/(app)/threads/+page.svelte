@@ -8,10 +8,10 @@
 	import ShowMore from '#lib/components/common/ShowMore.svelte';
 	import View from '#lib/components/layout/View.svelte';
 	import { shortDay } from '#lib/helpers/dates.js';
-	import { mentionHue } from '#lib/mentions.js';
+	import { mentionHue } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
-	import { leadNotes, SUGGESTED_PAGE, threadHref, threadName } from '#lib/threads.js';
+	import { leadNotes, SUGGESTED_PAGE, threadHref, threadName } from '#lib/notes/threads.js';
 	import ThreadLanes from '#lib/components/thread/ThreadLanes.svelte';
 
 	let { data } = $props();

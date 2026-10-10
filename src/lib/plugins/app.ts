@@ -14,7 +14,7 @@ import {
 	updatePage,
 	type Note
 } from '#lib/api.js';
-import { attachmentUrl } from '#lib/attachments.svelte.js';
+import { attachmentUrl } from '#lib/notes/attachments.svelte.js';
 import { fileName, parseMarkdown, preview } from '#lib/markdown.js';
 import { getLocale } from '#lib/paraglide/runtime.js';
 import type { App } from './types';

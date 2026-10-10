@@ -28,13 +28,9 @@ pub struct MapNote {
 #[tauri::command]
 pub async fn note_map(state: State<'_, AppState>) -> Result<Vec<MapNote>> {
     let space = state.space()?;
-    let mut mentions: HashMap<String, Vec<String>> = HashMap::new();
-    for (id, key, _) in space.read(|_, db| db.mention_rows())?.unwrap_or_default() {
-        let keys = mentions.entry(id).or_default();
-        if !keys.contains(&key) {
-            keys.push(key);
-        }
-    }
+    let mut mentions = space
+        .read(|_, db| db.mentions_by_note())?
+        .unwrap_or_default();
     let places: HashMap<String, ([f32; 2], Option<i64>)> = {
         let map = lock(&space.map, "map")?;
         let Some(map) = map.as_ref() else {

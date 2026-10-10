@@ -262,11 +262,7 @@ async fn hash_file(path: &Path) -> Result<String> {
         }
         hasher.update(&buffer[..read]);
     }
-    Ok(hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect())
+    Ok(crate::storage::hex(&hasher.finalize()))
 }
 
 #[cfg(test)]

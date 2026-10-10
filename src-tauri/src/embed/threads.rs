@@ -41,7 +41,8 @@ use chrono::{Days, NaiveDate};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
-use super::vectors::{dot, Vectors};
+use super::math::{add, add_into, dot};
+use super::vectors::Vectors;
 use crate::storage::index::Index;
 use crate::storage::space_db::SpaceDb;
 use crate::Result;
@@ -268,10 +269,7 @@ impl Edits {
 
     /// What the user decided. Edits that cannot be read decide nothing.
     pub fn load(db: &SpaceDb) -> Self {
-        Self::read(db.conn()).unwrap_or_else(|e| {
-            log::warn!("could not read the thread edits: {e}");
-            Self::default()
-        })
+        SpaceDb::load_or_default(Self::read(db.conn()), "the thread edits")
     }
 
     fn read(conn: &Connection) -> rusqlite::Result<Self> {
@@ -431,9 +429,7 @@ impl Group {
     }
 
     fn add(&mut self, id: &str, vector: &[f32], date: NaiveDate, usual: &Usual) {
-        for (s, x) in self.sum.iter_mut().zip(vector) {
-            *s += x;
-        }
+        add_into(&mut self.sum, vector);
         self.notes.push(id.to_string());
         self.own = dot(&self.sum, &self.sum);
         self.all = dot(&self.sum, &usual.sum);
@@ -443,9 +439,7 @@ impl Group {
 
     /// Take in the notes of `other`.
     fn absorb(&mut self, other: Group, usual: &Usual) {
-        for (s, x) in self.sum.iter_mut().zip(&other.sum) {
-            *s += x;
-        }
+        add_into(&mut self.sum, &other.sum);
         self.notes.extend(other.notes);
         self.own = dot(&self.sum, &self.sum);
         self.all = dot(&self.sum, &usual.sum);
@@ -531,9 +525,7 @@ impl Usual {
         }
         let mut total = vec![0.0f64; vectors.dims()];
         for (_, vector) in members.iter().filter_map(|id| vectors.get(id)) {
-            for (t, x) in total.iter_mut().zip(vector) {
-                *t += f64::from(*x);
-            }
+            add(&mut total, vector, 1.0);
         }
         let sum: Vec<f32> = total.into_iter().map(|t| t as f32).collect();
         let dots: HashMap<String, (f32, f32)> = members
@@ -645,12 +637,9 @@ impl Threads {
         let (Some(version), Some(model)) = (version, db.meta("threads_model")) else {
             return Self::default();
         };
-        let scopes = match Self::read(db.conn()) {
-            Ok(scopes) => scopes,
-            Err(e) => {
-                log::warn!("could not read where notes were placed: {e}");
-                return Self::default();
-            }
+        let read = Self::read(db.conn()).map(Some);
+        let Some(scopes) = SpaceDb::load_or_default(read, "where notes were placed") else {
+            return Self::default();
         };
         Self {
             saved: Some(Saved {

@@ -70,9 +70,7 @@ impl Categories {
     /// The saved categories, `None` when there are none yet.
     pub fn load(db: &SpaceDb) -> Option<Self> {
         let base = db.meta("categories_base")?.parse().ok()?;
-        Self::read(db.conn(), base)
-            .map_err(|e| log::warn!("could not read the categories: {e}"))
-            .ok()
+        SpaceDb::load_or_default(Self::read(db.conn(), base).map(Some), "the categories")
     }
 
     fn read(conn: &Connection, base: f32) -> rusqlite::Result<Self> {

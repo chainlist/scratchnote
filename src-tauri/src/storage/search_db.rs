@@ -13,13 +13,15 @@
 //! how a launch tells the files to read again. `mentions` holds the names
 //! each note and page mentions (SPEC 3.10), read as its text goes in.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use rusqlite::{params, Connection, OptionalExtension};
 
 use super::daily_file::Note;
+use super::paths::meta_dir;
+use super::sqlite;
 use crate::mentions::mentions;
 use crate::search::fold;
 use crate::Result;
@@ -92,7 +94,7 @@ const DROP: &str = "
 ";
 
 pub fn search_db_path(root: &Path) -> PathBuf {
-    root.join(".scratchnote").join("search.db")
+    meta_dir(root).join("search.db")
 }
 
 /// When a day file was last written and how long it was, as last read.
@@ -134,10 +136,7 @@ impl SearchDb {
     /// The space's file, made again when it cannot be used.
     pub fn open(root: &Path) -> Result<Self> {
         let path = search_db_path(root);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        match Self::set_up(Connection::open(&path)?) {
+        match Self::set_up(sqlite::open(&path)?) {
             Ok(db) => Ok(db),
             Err(e) => {
                 log::warn!("{} is not usable ({e}), making it again", path.display());
@@ -146,7 +145,7 @@ impl SearchDb {
                     file.push(suffix);
                     let _ = std::fs::remove_file(file);
                 }
-                Self::set_up(Connection::open(&path)?)
+                Self::set_up(sqlite::open(&path)?)
             }
         }
     }
@@ -160,14 +159,12 @@ impl SearchDb {
     fn set_up(conn: Connection) -> Result<Self> {
         // A derived cache: a crash may lose the last writes, which the next
         // launch reads again, but never leaves the file broken.
-        conn.query_row("PRAGMA journal_mode = WAL", [], |_| Ok(()))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-        if version != VERSION {
+        sqlite::write_ahead(&conn, "NORMAL")?;
+        if sqlite::version(&conn)? != VERSION {
             conn.execute_batch(DROP)?;
             conn.execute_batch(TABLES)?;
             conn.execute_batch(TRIGGERS)?;
-            conn.pragma_update(None, "user_version", VERSION)?;
+            sqlite::set_version(&conn, VERSION)?;
         }
         Ok(Self { conn })
     }
@@ -225,25 +222,18 @@ impl SearchDb {
 
     /// Every day file as it was last read.
     pub fn days(&self) -> Result<HashMap<String, Stamp>> {
-        let mut statement = self.conn.prepare("SELECT day, modified, len FROM days")?;
-        let rows = statement.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                Stamp {
-                    modified: row.get(1)?,
-                    len: row.get(2)?,
-                },
-            ))
-        })?;
-        Ok(rows.collect::<rusqlite::Result<_>>()?)
+        self.stamps("SELECT day, modified, len FROM days")
     }
 
     /// Every file under `pages/` as it was last read, by its path relative
     /// to the root.
     pub fn page_files(&self) -> Result<HashMap<String, Stamp>> {
-        let mut statement = self
-            .conn
-            .prepare("SELECT path, modified, len FROM page_files")?;
+        self.stamps("SELECT path, modified, len FROM page_files")
+    }
+
+    /// The rows of `sql`, a name then its file's time and length, by name.
+    fn stamps(&self, sql: &str) -> Result<HashMap<String, Stamp>> {
+        let mut statement = self.conn.prepare(sql)?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -420,6 +410,32 @@ impl SearchDb {
         )?;
         let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The keys of the names each note or page mentions, by its id, each
+    /// key once, in the order the rows come.
+    pub fn mentions_by_note(&self) -> Result<HashMap<String, Vec<String>>> {
+        let mut out: HashMap<String, Vec<String>> = HashMap::new();
+        for (id, key, _) in self.mention_rows()? {
+            let keys = out.entry(id).or_default();
+            if !keys.contains(&key) {
+                keys.push(key);
+            }
+        }
+        Ok(out)
+    }
+
+    /// The ids of the notes and pages mentioning each name, by its key, each
+    /// id once, in the order the rows come.
+    pub fn notes_by_mention(&self) -> Result<BTreeMap<String, Vec<String>>> {
+        let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (id, key, _) in self.mention_rows()? {
+            let notes = out.entry(key).or_default();
+            if !notes.contains(&id) {
+                notes.push(id);
+            }
+        }
+        Ok(out)
     }
 
     /// The notes and pages mentioning the name with this key, by id, with

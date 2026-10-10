@@ -8,14 +8,16 @@
 //! a note does, which are read past.
 
 use super::check_date;
-use super::daily_file::{body_hash, is_labelled, strip_category, Kind, Note, AHEAD_OFF, PAGE_OPEN};
+use super::daily_file::{body_hash, is_labelled, strip_category, Kind, Note, PAGE_OPEN};
+use super::markdown::{collapse_spaces, newline_of, strip_bom, Marker, AHEAD_OFF};
+use super::paths::{numbered, safe_part};
 
 /// The longest title part of a page's file name, in characters.
 const MAX_NAME_TITLE: usize = 80;
 
 /// A title as typed, on one line. `None` when nothing is left of it.
 pub fn clean_title(raw: &str) -> Option<String> {
-    let title = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    let title = collapse_spaces(raw);
     (!title.is_empty()).then_some(title)
 }
 
@@ -25,26 +27,9 @@ pub fn clean_title(raw: &str) -> Option<String> {
 /// every platform; the date in front keeps it clear of reserved names and
 /// leading dots.
 pub fn file_name(date: &str, title: &str, n: usize) -> String {
-    let spaced: String = title
-        .chars()
-        .map(|c| {
-            if c.is_control() || r#"<>:"/\|?*"#.contains(c) {
-                ' '
-            } else {
-                c
-            }
-        })
-        .collect();
-    let collapsed = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
-    let cut: String = collapsed.chars().take(MAX_NAME_TITLE).collect();
-    let safe = cut.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
-    let safe = if safe.is_empty() { "page" } else { safe };
-    let suffix = if n > 1 {
-        format!(" {n}")
-    } else {
-        String::new()
-    };
-    format!("{date} {safe}{suffix}.md")
+    let safe = safe_part(title, MAX_NAME_TITLE, "");
+    let safe = if safe.is_empty() { "page" } else { &safe };
+    numbered(&format!("{date} {safe}"), Some("md"), n)
 }
 
 /// Where a page of `date` named `name` goes, relative to the space's root.
@@ -91,22 +76,11 @@ pub fn render_page(page: &Note) -> String {
 /// the page carries and falls back on for a title. `None` when the file does
 /// not start with a page's marker, so it is not a page.
 pub fn parse_page(content: &str, file: &str) -> Option<Note> {
-    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
-    let mut lines = content.lines();
+    let mut lines = strip_bom(content).lines();
     let header = lines.next()?.trim();
-    let attrs = header.strip_prefix(PAGE_OPEN)?.strip_suffix("-->")?.trim();
-
-    let (mut id, mut day, mut time) = (None, None, None);
-    for pair in attrs.split_whitespace() {
-        match pair.split_once('=') {
-            Some(("id", v)) => id = Some(v.to_string()),
-            Some(("day", v)) => day = Some(v.to_string()),
-            Some(("time", v)) => time = Some(v.to_string()),
-            _ => {}
-        }
-    }
-    let day = day.filter(|d| check_date(d).is_ok())?;
-    let ahead_off = attrs.split_whitespace().any(|pair| pair == AHEAD_OFF);
+    let marker = Marker::parse(header, PAGE_OPEN)?;
+    let day = marker.day.filter(|d| check_date(d).is_ok())?.to_string();
+    let ahead_off = marker.ahead_off;
 
     let all: Vec<&str> = lines.collect();
     let mut rest = skip_blank(&all);
@@ -127,9 +101,9 @@ pub fn parse_page(content: &str, file: &str) -> Option<Note> {
         .flatten();
 
     Some(Note {
-        id: id?,
+        id: marker.id?.to_string(),
         date: day,
-        time: time?,
+        time: marker.time?.to_string(),
         file: file.to_string(),
         subject: Some(title),
         hash: body_hash(&body),
@@ -160,12 +134,7 @@ fn rewrite(content: &str, file: &str, edit: impl FnOnce(&mut Note)) -> Option<St
     let mut page = parse_page(content, file)?;
     edit(&mut page);
     page.hash = body_hash(&page.body);
-    let rendered = render_page(&page);
-    Some(if content.contains("\r\n") {
-        rendered.replace('\n', "\r\n")
-    } else {
-        rendered
-    })
+    Some(render_page(&page).replace('\n', newline_of(content)))
 }
 
 /// Clear the page's day ahead for good. The title and text stay.
@@ -176,7 +145,7 @@ pub fn clear_day_ahead(content: &str, file: &str) -> Option<String> {
 /// The page written as pages are now, without the category a model gave
 /// it. `None` when it is not a page, or carries no labels.
 pub fn drop_labels(content: &str, file: &str) -> Option<String> {
-    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let content = strip_bom(content);
     let header = content.lines().next()?;
     is_labelled(header)
         .then(|| rewrite(content, file, |_| {}))

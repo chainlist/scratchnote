@@ -1,7 +1,5 @@
 //! Search by words and by meaning, and similar notes, SPEC 6.
 
-use std::collections::{BTreeMap, HashMap};
-
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
@@ -10,7 +8,6 @@ use crate::search::Found;
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
-use crate::storage::index::IndexEntry;
 use crate::Result;
 
 /// Words across every day (SPEC 6): the `limit`
@@ -122,11 +119,7 @@ pub async fn similar_notes(state: State<'_, AppState>, id: String) -> Result<Vec
 /// longer has is left out.
 fn notes_of(space: &Space, hits: &[(String, f32)]) -> Result<Vec<Note>> {
     let found = space.read(|idx, db| {
-        let notes: HashMap<&str, &IndexEntry> = idx.entries().map(|e| (e.id.as_str(), e)).collect();
-        let found = hits
-            .iter()
-            .filter_map(|(hit, _)| notes.get(hit.as_str()).copied());
-        crate::search::with_bodies(db, found)
+        crate::search::with_bodies(db, idx.pick(hits.iter().map(|(hit, _)| hit.as_str())))
     })?;
     Ok(found.unwrap_or_default())
 }
@@ -189,18 +182,11 @@ pub async fn draft_hints(
 /// The name whose notes a draft's vector fits, as it is typed: scored as a
 /// note joins a thread, against every name with a few notes.
 fn name_for(space: &Space, vector: &[f32], exclude: Option<&str>) -> Result<Option<String>> {
-    let Some((rows, listed)) =
-        space.read(|idx, db| Ok((db.mention_rows()?, crate::mentions::list(idx, db)?)))?
+    let Some((names, listed)) =
+        space.read(|idx, db| Ok((db.notes_by_mention()?, crate::mentions::list(idx, db)?)))?
     else {
         return Ok(None);
     };
-    let mut names: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (id, key, _) in rows {
-        let notes = names.entry(key).or_default();
-        if !notes.contains(&id) {
-            notes.push(id);
-        }
-    }
     let cuts = crate::embed::threads::CUTS;
     let found = space.vectors.lock().ok().and_then(|vectors| {
         crate::embed::threads::closest_name(
@@ -223,6 +209,8 @@ fn name_for(space: &Space, vector: &[f32], exclude: Option<&str>) -> Result<Opti
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
     use crate::embed::vectors::Vectors;
     use crate::embed::{installed_embedder, samples, Embedder};
 

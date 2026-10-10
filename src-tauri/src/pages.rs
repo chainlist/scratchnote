@@ -17,6 +17,7 @@ use crate::storage::daily_file::{self, Note, Stub};
 use crate::storage::day_path;
 use crate::storage::index::{Index, IndexEntry};
 use crate::storage::page_file;
+use crate::storage::paths::first_free;
 use crate::storage::writer::Writer;
 use crate::Result;
 
@@ -55,13 +56,12 @@ pub fn reindex(space: &Space, file: &str) -> Result<Option<Note>> {
 /// `current` is the page's own file, which it may keep, in any case.
 pub fn free_path(space: &Space, date: &str, title: &str, current: Option<&str>) -> String {
     let current = current.map(str::to_lowercase);
-    (1..)
-        .map(|n| page_file::relative_path(date, &page_file::file_name(date, title, n)))
-        .find(|rel| {
-            current.as_deref() == Some(rel.to_lowercase().as_str())
-                || !space.root.join(rel).exists()
-        })
-        .expect("some numbered name is free")
+    first_free(
+        |n| page_file::relative_path(date, &page_file::file_name(date, title, n)),
+        |rel| {
+            current.as_deref() != Some(rel.to_lowercase().as_str()) && space.root.join(rel).exists()
+        },
+    )
 }
 
 /// Give the page's day the stub it should have: added when there is none,
@@ -121,9 +121,9 @@ pub fn emit_updated(app: &AppHandle, id: &str) {
 
 /// Every page in the index, newest first: by date, then by time within the day.
 pub fn newest_first(index: &Index) -> Vec<Note> {
-    let mut pages: Vec<Note> = index.pages().map(IndexEntry::to_note).collect();
-    pages.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
-    pages
+    let mut pages: Vec<&IndexEntry> = index.pages().collect();
+    pages.sort_by(|a, b| IndexEntry::newest_first(a, b));
+    pages.into_iter().map(IndexEntry::to_note).collect()
 }
 
 /// Forget the day ahead read in a page (SPEC 5.3). No day is read in it

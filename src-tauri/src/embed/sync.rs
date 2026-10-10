@@ -174,19 +174,17 @@ pub(crate) fn sync_threads(space: &Space) -> bool {
         _ => return false,
     };
     let edits = space.edits();
-    let mut mentioned = threads::Mentioned::new();
-    match space.read(|_, db| db.mention_rows()) {
-        Ok(Some(rows)) => {
-            for (id, key, _) in rows {
-                mentioned.entry(id).or_default().push(key);
-            }
-        }
+    let mentioned = match space.read(|_, db| db.mentions_by_note()) {
+        Ok(Some(mentioned)) => mentioned,
         Ok(None) => return false,
-        Err(e) => log::warn!(
-            "could not read what the notes of {} mention: {e}",
-            space.name
-        ),
-    }
+        Err(e) => {
+            log::warn!(
+                "could not read what the notes of {} mention: {e}",
+                space.name
+            );
+            threads::Mentioned::new()
+        }
+    };
     // One placement at a time, as the embed task and a thread command may
     // both place: each saves only what changed since what it copied.
     let Ok(_placing) = space.placing.lock() else {

@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use super::blocking;
 use crate::spaces::{self, Space};
 use crate::state::{read_lock, write_lock, AppState};
+use crate::storage::paths::meta_dir;
 use crate::Result;
 
 /// One row of the space switcher.
@@ -250,7 +251,7 @@ pub async fn delete_space(
 
     let was_open = space.is_open();
     space.retire();
-    let trash = state.root.join(".scratchnote").join("trash");
+    let trash = meta_dir(&state.root).join("trash");
     let to = trash.join(format!("{name} {}", Local::now().format("%Y-%m-%d %H%M%S")));
     let moved = match tokio::fs::create_dir_all(&trash).await {
         Ok(()) => tokio::fs::rename(&space.root, &to).await,

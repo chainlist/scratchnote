@@ -12,6 +12,7 @@ pub mod classify;
 pub mod download;
 pub mod llama;
 pub mod map;
+pub mod math;
 pub mod model;
 #[cfg(test)]
 pub mod samples;
@@ -73,17 +74,6 @@ pub(crate) fn embedder(app: &AppHandle) -> Option<Arc<dyn Embedder>> {
     })
 }
 
-/// Scale to unit length, so similarity is a plain dot product. A zero vector
-/// has no direction and is left as it is: it scores zero against anything.
-pub fn normalize(vector: &mut [f32]) {
-    let norm = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm > 0.0 {
-        for x in vector {
-            *x /= norm;
-        }
-    }
-}
-
 /// The embedding model for the tests that need real weights: the file
 /// `SCRATCHNOTE_EMBEDDING_MODEL` names, else the one the app downloads into
 /// the app's own folder on this computer. `None`, and the test skips,
@@ -125,7 +115,7 @@ impl StubEmbedder {
             word.hash(&mut hasher);
             vector[(hasher.finish() % Self::DIMS as u64) as usize] += 1.0;
         }
-        normalize(&mut vector);
+        math::normalize(&mut vector);
         vector
     }
 }

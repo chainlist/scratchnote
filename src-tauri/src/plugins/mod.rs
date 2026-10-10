@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 use crate::state::AppState;
+use crate::storage::paths::meta_dir;
 use crate::Result;
 
 const STATE_FILE: &str = "plugins.json";
@@ -93,10 +94,6 @@ pub fn check_id(id: &str) -> Result<()> {
     } else {
         Err(format!("{id} is not a plugin id").into())
     }
-}
-
-fn meta_dir(root: &Path) -> PathBuf {
-    root.join(".scratchnote")
 }
 
 pub fn plugins_dir(root: &Path) -> PathBuf {

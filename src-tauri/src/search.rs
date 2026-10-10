@@ -5,7 +5,7 @@
 //! `Réunion`. The words are looked for in `search.db`, which holds the text;
 //! the order and the stretch asked for come from the index in memory.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use serde::Serialize;
 use unicode_normalization::char::is_combining_mark;
@@ -71,10 +71,6 @@ pub fn with_bodies<'a>(
         .collect())
 }
 
-fn newest_first(hits: &mut [&IndexEntry]) {
-    hits.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.time.cmp(&a.time)));
-}
-
 /// Up to `k` notes of `hits`, best first, that do not match the query's
 /// words: what search by meaning adds under the word matches.
 pub fn by_meaning(
@@ -86,13 +82,9 @@ pub fn by_meaning(
 ) -> Result<Vec<Note>> {
     let query = Query::parse(raw);
     let matched = query.matched(db)?;
-    let entries: HashMap<&str, &IndexEntry> = index
-        .entries()
-        .map(|entry| (entry.id.as_str(), entry))
-        .collect();
-    let found: Vec<&IndexEntry> = hits
-        .iter()
-        .filter_map(|(id, _)| entries.get(id.as_str()).copied())
+    let found: Vec<&IndexEntry> = index
+        .pick(hits.iter().map(|(id, _)| id.as_str()))
+        .into_iter()
         .filter(|entry| !passes(&matched, entry))
         .take(k)
         .collect();
@@ -126,7 +118,7 @@ pub fn search(
         .entries()
         .filter(|entry| passes(&matched, entry))
         .collect();
-    newest_first(&mut hits);
+    hits.sort_by(|a, b| IndexEntry::newest_first(a, b));
     Ok(Found {
         total: hits.len(),
         notes: with_bodies(db, hits.into_iter().skip(offset).take(limit))?,
@@ -157,7 +149,7 @@ pub fn containing(index: &Index, db: &SearchDb, needles: &[String]) -> Result<Ve
         .entries()
         .filter(|entry| ids.contains(&entry.id))
         .collect();
-    newest_first(&mut hits);
+    hits.sort_by(|a, b| IndexEntry::newest_first(a, b));
     with_bodies(db, hits)
 }
 

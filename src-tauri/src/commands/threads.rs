@@ -11,7 +11,8 @@ use crate::embed::threads::{scope_of, thread_id, when_written, Thread, Threads, 
 use crate::spaces::Space;
 use crate::state::AppState;
 use crate::storage::daily_file::Note;
-use crate::storage::index::IndexEntry;
+use crate::storage::markdown::collapse_spaces;
+use crate::storage::paths::first_free;
 use crate::{Error, Result};
 
 /// The longest title a thread takes, in characters.
@@ -112,13 +113,7 @@ pub async fn get_thread(state: State<'_, AppState>, id: String) -> Result<Option
     };
     let thread = named(&space, vec![thread]).remove(0);
     let notes = space.read(|idx, db| {
-        let entries: HashMap<&str, &IndexEntry> =
-            idx.entries().map(|e| (e.id.as_str(), e)).collect();
-        let members = thread
-            .notes
-            .iter()
-            .filter_map(|id| entries.get(id.as_str()).copied());
-        crate::search::with_bodies(db, members)
+        crate::search::with_bodies(db, idx.pick(thread.notes.iter().map(String::as_str)))
     })?;
     Ok(Some(ThreadNotes {
         thread,
@@ -135,13 +130,7 @@ pub async fn rename_thread(
     title: String,
 ) -> Result<()> {
     let space = state.space()?;
-    let title: String = title
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(MAX_TITLE)
-        .collect();
+    let title: String = collapse_spaces(&title).chars().take(MAX_TITLE).collect();
     space.change_edits(|edits| {
         if title.is_empty() {
             edits.titles.remove(&id);
@@ -276,10 +265,13 @@ pub async fn put_in_thread(
             let taken: std::collections::HashSet<String> =
                 placed(&space, |threads| Some(threads.names())).unwrap_or_default();
             let scope = scope.as_deref().unwrap_or_default();
-            std::iter::once(thread_id(scope, &first))
-                .chain((2..).map(|n| thread_id(scope, &format!("{first}-{n}"))))
-                .find(|name| !taken.contains(name))
-                .expect("a free name")
+            first_free(
+                |n| match n {
+                    1 => thread_id(scope, &first),
+                    n => thread_id(scope, &format!("{first}-{n}")),
+                },
+                |name| taken.contains(name),
+            )
         }
     };
     let before = space.decided();
@@ -366,13 +358,10 @@ pub async fn thread_cards(state: State<'_, AppState>) -> Result<Vec<ThreadCard>>
 /// `threads` with their first notes.
 fn cards(space: &Space, threads: Vec<Thread>) -> Result<Vec<ThreadCard>> {
     let first = space.read(|idx, db| {
-        let entries: HashMap<&str, &IndexEntry> =
-            idx.entries().map(|e| (e.id.as_str(), e)).collect();
         let shown = threads
             .iter()
-            .flat_map(|thread| thread.notes.iter().take(2))
-            .filter_map(|id| entries.get(id.as_str()).copied());
-        crate::search::with_bodies(db, shown)
+            .flat_map(|thread| thread.notes.iter().take(2));
+        crate::search::with_bodies(db, idx.pick(shown.map(String::as_str)))
     })?;
     let first: HashMap<String, Note> = first
         .unwrap_or_default()

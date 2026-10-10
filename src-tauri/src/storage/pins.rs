@@ -56,10 +56,7 @@ pub struct Pin {
 /// The pins in their order. A kind a later version added is passed over,
 /// and pins that cannot be read pin nothing.
 pub fn load(db: &SpaceDb) -> Vec<Pin> {
-    read(db.conn()).unwrap_or_else(|e| {
-        log::warn!("could not read the pins: {e}");
-        Vec::new()
-    })
+    SpaceDb::load_or_default(read(db.conn()), "the pins")
 }
 
 fn read(conn: &Connection) -> rusqlite::Result<Vec<Pin>> {

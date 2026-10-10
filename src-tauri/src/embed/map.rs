@@ -29,7 +29,8 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 use super::categories::Categories;
-use super::vectors::{dot, Vectors};
+use super::math::dot;
+use super::vectors::Vectors;
 use crate::state::lock;
 use crate::storage::space_db::SpaceDb;
 use crate::Result;
@@ -148,10 +149,7 @@ impl Map {
         let Some(model) = db.meta("map_model") else {
             return Self::default();
         };
-        let mut map = Self::read(db.conn(), model).unwrap_or_else(|e| {
-            log::warn!("could not read the map: {e}");
-            Self::default()
-        });
+        let mut map = SpaceDb::load_or_default(Self::read(db.conn(), model), "the map");
         map.categories = Categories::load(db);
         map
     }
@@ -359,11 +357,7 @@ impl Map {
                 .collect();
             let mut touched = Vec::new();
             for &(s, j) in &scored {
-                let list = &mut self.near[j];
-                if list.len() < LINKS || s > list[list.len() - 1].0 {
-                    let at = list.partition_point(|(b, _)| *b >= s);
-                    list.insert(at, (s, slot));
-                    list.truncate(LINKS);
+                if insert_ranked(&mut self.near[j], s, slot) {
                     touched.push(j);
                     lists.insert(j);
                 }
@@ -550,13 +544,22 @@ fn top(i: usize, pool: &[usize], score: impl Fn(usize, usize) -> f32) -> Near {
 fn best(scored: impl IntoIterator<Item = (f32, usize)>) -> Near {
     let mut near: Near = Vec::with_capacity(LINKS + 1);
     for (s, j) in scored {
-        if near.len() < LINKS || s > near[near.len() - 1].0 {
-            let at = near.partition_point(|(b, _)| *b >= s);
-            near.insert(at, (s, j));
-            near.truncate(LINKS);
-        }
+        insert_ranked(&mut near, s, j);
     }
     near
+}
+
+/// Put note `j`, `s` close, in `near`, a list kept closest first and at
+/// most `LINKS` long, if it is closer than the list's last or the list is
+/// short. Equal scores keep the order they came in. True when it went in.
+fn insert_ranked(near: &mut Near, s: f32, j: usize) -> bool {
+    if near.len() >= LINKS && s <= near[near.len() - 1].0 {
+        return false;
+    }
+    let at = near.partition_point(|(b, _)| *b >= s);
+    near.insert(at, (s, j));
+    near.truncate(LINKS);
+    true
 }
 
 /// The average of the places of the first `PLACE_AMONG` of `near`, weighted
@@ -1039,10 +1042,7 @@ mod tests {
             let mut rows = statement.query([]).unwrap();
             while let Some(row) = rows.next().unwrap() {
                 let bytes: Vec<u8> = row.get(2).unwrap();
-                let v = bytes
-                    .chunks_exact(4)
-                    .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                    .collect();
+                let v = crate::embed::math::from_le_bytes(&bytes);
                 vectors
                     .insert(row.get(0).unwrap(), row.get(1).unwrap(), v)
                     .unwrap();

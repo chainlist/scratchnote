@@ -13,12 +13,13 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::hex;
+use super::markdown::{newline_of, Marker, AHEAD_OFF};
+
 const NOTE_OPEN: &str = "<!-- sn:note ";
 /// Opens a page's stub here, and the marker line of a page file.
 pub const PAGE_OPEN: &str = "<!-- sn:page ";
 const NOTE_END: &str = "<!-- sn:end -->";
-/// In a marker, the user cleared the day ahead (SPEC 5.3).
-pub(crate) const AHEAD_OFF: &str = "ahead=off";
 
 /// A note in a day's file, or a page with a file of its own (SPEC 4.7).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,8 +66,7 @@ pub struct Note {
 
 /// First 8 hex chars of SHA-256 over the trimmed body.
 pub fn body_hash(body: &str) -> String {
-    let digest = Sha256::digest(body.trim().as_bytes());
-    digest[..4].iter().map(|b| format!("{b:02x}")).collect()
+    hex(&Sha256::digest(body.trim().as_bytes())[..4])
 }
 
 pub fn render_note(note: &Note) -> String {
@@ -157,12 +157,7 @@ fn remove_block(content: &str, open: &str, id: &str) -> Option<String> {
     }
 
     // `lines()` strips line endings, so rejoin with whatever the file used.
-    // An external Windows editor may well have rewritten it as CRLF.
-    let newline = if content.contains("\r\n") {
-        "\r\n"
-    } else {
-        "\n"
-    };
+    let newline = newline_of(content);
     let kept: Vec<&str> = lines[..first]
         .iter()
         .chain(&lines[last + 1..])
@@ -233,12 +228,7 @@ fn rewrite_block(content: &str, id: &str, edit: impl FnOnce(&mut Note)) -> Optio
 /// `content` with lines `start..=end` swapped for `replacement`, in the line
 /// endings the file already uses.
 fn splice(content: &str, lines: &[&str], start: usize, end: usize, replacement: &str) -> String {
-    let newline = if content.contains("\r\n") {
-        "\r\n"
-    } else {
-        "\n"
-    };
-
+    let newline = newline_of(content);
     let mut out: Vec<&str> = Vec::with_capacity(lines.len());
     out.extend_from_slice(&lines[..start]);
     out.extend(replacement.lines());
@@ -336,15 +326,7 @@ pub fn parse_stubs(content: &str) -> Vec<Stub> {
 }
 
 fn build_stub(header: &str, block: &[&str]) -> Option<Stub> {
-    let attrs = header.strip_prefix(PAGE_OPEN)?.strip_suffix("-->")?.trim();
-    let (mut id, mut time) = (None, None);
-    for pair in attrs.split_whitespace() {
-        match pair.split_once('=') {
-            Some(("id", v)) => id = Some(v.to_string()),
-            Some(("time", v)) => time = Some(v.to_string()),
-            _ => {}
-        }
-    }
+    let marker = Marker::parse(header, PAGE_OPEN)?;
     // A link edited out of shape still leaves the stub, which the app then
     // rewrites from the page.
     let (title, target) = block
@@ -353,8 +335,8 @@ fn build_stub(header: &str, block: &[&str]) -> Option<Stub> {
         .and_then(|line| parse_link(line.trim()))
         .unwrap_or_default();
     Some(Stub {
-        id: id?,
-        time: time?,
+        id: marker.id?.to_string(),
+        time: marker.time?.to_string(),
         title,
         target,
     })
@@ -419,17 +401,8 @@ pub fn note_to_stub(content: &str, note_id: &str, stub: &Stub) -> Option<String>
 }
 
 fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<Note> {
-    let attrs = header.strip_prefix(NOTE_OPEN)?.strip_suffix("-->")?.trim();
-
-    let (mut id, mut time) = (None, None);
-    for pair in attrs.split_whitespace() {
-        match pair.split_once('=') {
-            Some(("id", v)) => id = Some(v.to_string()),
-            Some(("time", v)) => time = Some(v.to_string()),
-            _ => {}
-        }
-    }
-    let ahead_off = attrs.split_whitespace().any(|pair| pair == AHEAD_OFF);
+    let marker = Marker::parse(header, NOTE_OPEN)?;
+    let ahead_off = marker.ahead_off;
 
     let body = if is_labelled(header) {
         unlabelled_body(block)
@@ -438,9 +411,9 @@ fn build_note(header: &str, block: &[&str], date: &str, file: &str) -> Option<No
     };
 
     Some(Note {
-        id: id?,
+        id: marker.id?.to_string(),
         date: date.to_string(),
-        time: time?,
+        time: marker.time?.to_string(),
         file: file.to_string(),
         subject: None,
         hash: body_hash(&body),

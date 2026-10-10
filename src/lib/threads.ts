@@ -41,3 +41,12 @@ export const leadNotes = (threads: Thread[]) =>
 
 /** The view of a thread, in the timeline's place. */
 export const threadHref = (id: string) => resolve(`thread/${encodeURIComponent(id)}/`);
+
+/** The tasks still open in the notes, as they come, each with its note. */
+export const openTasks = (notes: Note[]) =>
+	notes.flatMap((note) =>
+		note.body.split('\n').flatMap((line) => {
+			const task = line.match(/^\s*[-*+]\s+\[ \]\s+(.+)$/)?.[1];
+			return task ? [{ note, task: noteTitle({ subject: null, body: task }) }] : [];
+		})
+	);

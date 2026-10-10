@@ -187,8 +187,10 @@ function unload(id: string) {
 	entry.style?.remove();
 }
 
-/** One timed step of the plugins' startup, for the startup times. */
-/** Reading the plugin list, loading one plugin, or following changes. */
+/**
+ * One timed step of the plugins' startup, for the startup times: reading the
+ * plugin list, loading one plugin, or following changes.
+ */
 export type StartupStep = { ms: number } & (
 	| { step: 'list' | 'listeners' }
 	/** The plugin a `plugin` step loaded, and why it failed. */

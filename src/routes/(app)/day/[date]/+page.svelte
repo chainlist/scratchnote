@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { saveNote } from '#lib/api.js';
-	import NewNote from '#lib/components/NewNote.svelte';
+	import NewNote from './NewNote.svelte';
 	import NoteList from '#lib/components/NoteList.svelte';
 	import View from '#lib/components/View.svelte';
 	import { dayHeading } from '#lib/dates.js';

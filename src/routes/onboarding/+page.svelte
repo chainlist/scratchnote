@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { EMBEDDING_SIZE, restartApp } from '#lib/api.js';
-	import WelcomeStep from '#lib/components/onboarding/WelcomeStep.svelte';
+	import WelcomeStep from './WelcomeStep.svelte';
 	import AppearanceTab from '#lib/components/settings/AppearanceTab.svelte';
 	import EmbeddingModel from '#lib/components/settings/EmbeddingModel.svelte';
 	import FolderPicker from '#lib/components/settings/FolderPicker.svelte';

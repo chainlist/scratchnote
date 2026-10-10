@@ -4,7 +4,7 @@
 	import { Slider } from '#lib/components/ui/slider/index.js';
 	import { dayOfNumber, shortDay } from '#lib/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import type { timeBars } from './layout.js';
+	import type { timeBars } from './map-data.js';
 
 	let {
 		extent,

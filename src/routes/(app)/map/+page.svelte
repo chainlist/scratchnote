@@ -35,7 +35,7 @@
 		spotsOf,
 		threadGroups,
 		timeBars
-	} from './layout.js';
+	} from './map-data.js';
 	import MapDateRange from './MapDateRange.svelte';
 	import MapHoverCard from './MapHoverCard.svelte';
 	import MapLegend from './MapLegend.svelte';

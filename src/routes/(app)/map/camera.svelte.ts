@@ -1,6 +1,6 @@
 import { untrack } from 'svelte';
 import type { MapNote } from '#lib/api.js';
-import type { Point } from './layout.js';
+import type { Point } from './map-data.js';
 
 /** How far from a dot, in CSS pixels, the pointer still points at it. */
 const REACH = 8;

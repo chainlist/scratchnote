@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { mentionHue } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { NO_NAME } from './layout.js';
+	import { NO_NAME } from './map-data.js';
 
 	let {
 		entries,

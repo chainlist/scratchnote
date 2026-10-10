@@ -1,386 +1,31 @@
-<script module lang="ts">
+<script lang="ts">
+	import { onMount } from 'svelte';
 	import { history, historyKeymap, standardKeymap } from '@codemirror/commands';
-	import { commonmarkLanguage, markdownKeymap } from '@codemirror/lang-markdown';
-	import { Language, syntaxTree } from '@codemirror/language';
+	import { markdownKeymap } from '@codemirror/lang-markdown';
+	import { syntaxTree } from '@codemirror/language';
 	import {
 		Compartment,
 		EditorSelection,
 		EditorState,
-		Facet,
 		Prec,
-		type Extension,
-		type Range
+		type StateCommand
 	} from '@codemirror/state';
-	import {
-		Decoration,
-		EditorView,
-		ViewPlugin,
-		WidgetType,
-		keymap,
-		placeholder as placeholderText,
-		type DecorationSet,
-		type ViewUpdate
-	} from '@codemirror/view';
-	import type { MarkdownExtension, MarkdownParser } from '@lezer/markdown';
-	import { getCurrentWebview } from '@tauri-apps/api/webview';
+	import { EditorView, keymap, placeholder as placeholderText } from '@codemirror/view';
 	import { open as pickFiles } from '@tauri-apps/plugin-dialog';
-	import {
-		addAttachments,
-		openAttachment,
-		openLink,
-		saveAttachment,
-		type Attachment
-	} from '#lib/api.js';
-	import { attachmentUrl } from '#lib/attachments.svelte.js';
-	import { bold, bullets, formats, italic, link } from '#lib/markdown/commands.js';
-	import {
-		attachmentLink,
-		cardName,
-		fileName,
-		fileType,
-		markdownExtensions,
-		preview,
-		type WidgetRender
-	} from '#lib/markdown.js';
-	import { mentionCompletion } from '#lib/mentions.js';
-	import { runCommand } from '#lib/plugins/commands.js';
-	import { registry } from '#lib/plugins/registry.svelte.js';
-
-	class Bullet extends WidgetType {
-		eq() {
-			return true;
-		}
-		toDOM() {
-			const span = document.createElement('span');
-			span.className = 'md-bullet';
-			return span;
-		}
-	}
-	const bullet = Decoration.replace({ widget: new Bullet() });
-
-	/** What a plugin draws for one of its nodes, such as a task's box (SPEC 3.9). */
-	class PluginWidget extends WidgetType {
-		readonly render: WidgetRender;
-		readonly text: string;
-		readonly clicks: boolean;
-		constructor(render: WidgetRender, text: string, clicks: boolean) {
-			super();
-			this.render = render;
-			this.text = text;
-			this.clicks = clicks;
-		}
-		eq(other: PluginWidget) {
-			return other.render === this.render && other.text === this.text;
-		}
-		toDOM(view: EditorView) {
-			const text = this.text;
-			let dom: HTMLElement | undefined;
-			try {
-				dom = this.render({
-					text,
-					where: 'editor',
-					editable: true,
-					// Where the node is now, which edits elsewhere may have moved.
-					update: (next) => {
-						if (!dom) return;
-						const from = view.posAtDOM(dom);
-						view.dispatch({ changes: { from, to: from + text.length, insert: next } });
-					}
-				});
-			} catch (e) {
-				// A faulty plugin leaves the text as typed.
-				console.error(e);
-				dom = element('span', '', text);
-			}
-			return dom;
-		}
-		// A widget that handles its own clicks keeps them from the editor; any
-		// other takes the cursor there, which brings its markup back to edit.
-		ignoreEvent() {
-			return this.clicks;
-		}
-	}
-	const hide = Decoration.replace({});
-	const markup = Decoration.mark({ class: 'md-markup' });
-
-	function element(tag: string, className: string, text = '') {
-		const node = document.createElement(tag);
-		node.className = className;
-		node.textContent = text;
-		return node;
-	}
-
-	/** The space an editor's attachments are in, when it is not the open one. */
-	const attachmentSpace = Facet.define<string, string | undefined>({
-		combine: (spaces) => spaces[0]
-	});
-
-	/** An attachment drawn where its markup is: its image, or the card the read-only view draws. */
-	class Attached extends WidgetType {
-		readonly path: string;
-		readonly name: string;
-		readonly image: boolean;
-		readonly space: string | undefined;
-		constructor(path: string, name: string, image: boolean, space: string | undefined) {
-			super();
-			this.path = path;
-			this.name = name || fileName(path);
-			this.image = image;
-			this.space = space;
-		}
-		eq(other: Attached) {
-			return (
-				other.path === this.path &&
-				other.name === this.name &&
-				other.image === this.image &&
-				other.space === this.space
-			);
-		}
-		toDOM(view: EditorView) {
-			if (this.image) {
-				const img = document.createElement('img');
-				img.className = 'md-image';
-				img.src = attachmentUrl(this.path, this.space);
-				img.alt = this.name;
-				img.dataset.attachment = this.path;
-				// Its height is known once it loads, and the editor's lines move for it.
-				img.onload = () => view.requestMeasure();
-				return img;
-			}
-			const card = element('span', 'md-file');
-			card.title = this.name;
-			card.dataset.attachment = this.path;
-			card.append(
-				element('span', 'md-file-type', fileType(this.path)),
-				element('span', 'md-file-name', cardName(this.name, this.path))
-			);
-			return card;
-		}
-		// A click on it puts the cursor there, which brings its markup back to edit.
-		ignoreEvent() {
-			return false;
-		}
-	}
-
-	function decorate(view: EditorView): DecorationSet {
-		const { state } = view;
-		const { doc } = state;
-		const text = doc.toString();
-		const { marks, hidden, lines, attachments, widgets } = preview(syntaxTree(state), text);
-
-		// The lines the cursor or selection is on show their markup, to edit it.
-		const shown = (pos: number) => {
-			const line = doc.lineAt(pos);
-			return (
-				view.hasFocus &&
-				state.selection.ranges.some((range) => range.from <= line.to && range.to >= line.from)
-			);
-		};
-
-		const ranges: Range<Decoration>[] = [];
-		for (const [from, line] of lines) {
-			const attributes = line.style ? { style: line.style } : undefined;
-			ranges.push(Decoration.line({ class: line.class, attributes }).range(from));
-		}
-		for (const mark of marks) {
-			const attributes = mark.href ? { 'data-href': mark.href } : undefined;
-			ranges.push(Decoration.mark({ class: mark.class, attributes }).range(mark.from, mark.to));
-		}
-		for (const range of hidden) {
-			// A plugin may not hide a line break; a link split over two lines keeps its markup.
-			if (range.from === range.to || text.slice(range.from, range.to).includes('\n')) continue;
-			const deco = shown(range.from) ? markup : range.bullet ? bullet : hide;
-			ranges.push(deco.range(range.from, range.to));
-		}
-		// A plugin's widget stands in for its node off the line being edited;
-		// on that line the node shows as markup, to edit.
-		for (const { from, to, text: nodeText, render, clicks } of widgets) {
-			if (shown(from)) ranges.push(markup.range(from, to));
-			else
-				ranges.push(
-					Decoration.replace({ widget: new PluginWidget(render, nodeText, clicks) }).range(from, to)
-				);
-		}
-		// On the line being edited an attachment stays in view after its markup.
-		const space = state.facet(attachmentSpace);
-		for (const attached of attachments) {
-			const { from, to } = attached;
-			if (text.slice(from, to).includes('\n')) continue;
-			const widget = new Attached(attached.path, attached.name, attached.image, space);
-			if (shown(from)) {
-				ranges.push(markup.range(from, to));
-				ranges.push(Decoration.widget({ widget, side: 1 }).range(to));
-			} else {
-				ranges.push(Decoration.replace({ widget }).range(from, to));
-			}
-		}
-		return Decoration.set(ranges, true);
-	}
-
-	const livePreview = () =>
-		ViewPlugin.fromClass(
-			class {
-				decorations: DecorationSet;
-				constructor(view: EditorView) {
-					this.decorations = decorate(view);
-				}
-				update(update: ViewUpdate) {
-					if (
-						update.docChanged ||
-						update.selectionSet ||
-						update.focusChanged ||
-						syntaxTree(update.startState) !== syntaxTree(update.state) ||
-						update.startState.facet(attachmentSpace) !== update.state.facet(attachmentSpace)
-					)
-						this.decorations = decorate(update.view);
-				}
-			},
-			{ decorations: (plugin) => plugin.decorations }
-		);
-
-	/**
-	 * CommonMark's language data, so the list keys below recognise it, with
-	 * the syntax the read-only view parses: the core's and the plugins'.
-	 * Both are made again when a plugin's syntax comes or goes, and the live
-	 * preview with them, so it draws by the new rules at once.
-	 */
-	let support: { from: MarkdownExtension[]; extension: Extension } | undefined;
-	function markdownSupport(): Extension {
-		const from = markdownExtensions();
-		if (support?.from !== from) {
-			const parser = (commonmarkLanguage.parser as MarkdownParser).configure(from);
-			const language = new Language(commonmarkLanguage.data, parser, [], 'markdown');
-			support = { from, extension: [language, livePreview()] };
-		}
-		return support.extension;
-	}
-
-	/**
-	 * What the plugins bring to every editor: their syntax, the hotkeys of
-	 * their commands on the text, and their own CodeMirror extensions.
-	 */
-	function plugged(): Extension {
-		const keys = registry.commands
-			.filter((command) => command.hotkey && command.editorCallback)
-			.map((command) => ({
-				key: command.hotkey!,
-				run: (view: EditorView) => {
-					runCommand(command, view);
-					return true;
-				}
-			}));
-		return [
-			markdownSupport(),
-			keymap.of(keys),
-			registry.editorExtensions.map((entry) => entry.extension)
-		];
-	}
-
-	/** Ctrl or Cmd and a click opens a link or an attachment; a plain click edits it. */
-	const links = EditorView.domEventHandlers({
-		mousedown(event) {
-			if (!(event.ctrlKey || event.metaKey)) return false;
-			const target = (event.target as Element).closest('[data-href], [data-attachment]');
-			if (!target) return false;
-			event.preventDefault();
-			const href = target.getAttribute('data-href');
-			if (href) void openLink(href);
-			else void openAttachment(target.getAttribute('data-attachment')!);
-			return true;
-		}
-	});
-
-	/** The toolbar's word-processor keys. */
-	const formatKeys = keymap.of([
-		{ key: 'Mod-b', run: bold },
-		{ key: 'Mod-i', run: italic },
-		{ key: 'Mod-k', run: link }
-	]);
-
-	/** What each editor's box, `.md-editor`, does with files dropped on it. */
-	const dropTargets = new WeakMap<
-		Element,
-		(paths: string[], at: { x: number; y: number }) => void
-	>();
-	let listening = false;
-
-	/**
-	 * Files dragged in from the file manager go to Tauri rather than the page,
-	 * with their paths, so one listener per window finds the editor under the
-	 * pointer, outlines it while they hover, and hands it the drop.
-	 */
-	function listenForDrops() {
-		if (listening) return;
-		listening = true;
-		void getCurrentWebview().onDragDropEvent(({ payload }) => {
-			for (const box of document.querySelectorAll('.md-drop')) box.classList.remove('md-drop');
-			if (payload.type === 'leave') return;
-			const at = payload.position.toLogical(window.devicePixelRatio);
-			const box = document.elementFromPoint(at.x, at.y)?.closest('.md-editor');
-			const drop = box && dropTargets.get(box);
-			if (!drop) return;
-			if (payload.type === 'drop') drop(payload.paths, at);
-			else box.classList.add('md-drop');
-		});
-	}
-
-	// Type, spacing and colours come from the page, as they did for the textarea.
-	const theme = EditorView.theme({
-		'&': { flex: '1 1 auto', minHeight: '0' },
-		'&.cm-focused': { outline: 'none' },
-		'.cm-scroller': { fontFamily: 'inherit', lineHeight: 'inherit' },
-		'.cm-content': { padding: '0', minHeight: '100%', caretColor: 'currentColor' },
-		'.cm-line': { padding: '0 0 0 var(--md-indent, 0)' },
-		'.cm-placeholder': { color: 'var(--color-meta)' },
-		// The names offered as `@` is typed, as the app's menus look.
-		'.cm-tooltip.cm-tooltip-autocomplete': {
-			border: 'none',
-			borderRadius: 'var(--radius-lg)',
-			padding: '0.25rem',
-			background: 'var(--popover)',
-			color: 'var(--popover-foreground)',
-			// A hairline, not a shadow: the app lifts by tone and border.
-			boxShadow: '0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent)'
-		},
-		'.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'inherit', maxHeight: '14rem' },
-		'.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
-			borderRadius: 'var(--radius-md)',
-			padding: '0.2rem 0.5rem',
-			lineHeight: '1.4'
-		},
-		'.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-			background: 'var(--accent)',
-			color: 'var(--accent-foreground)'
-		},
-		'.cm-completionLabel': { fontWeight: '500' },
-		'.cm-completionMatchedText': { textDecoration: 'none', color: 'var(--primary)' },
-		'.cm-completionDetail': {
-			marginLeft: '0.75rem',
-			fontStyle: 'normal',
-			fontFamily: 'var(--font-mono)',
-			fontSize: '0.75em',
-			color: 'var(--color-meta)'
-		}
-	});
-</script>
-
-<script lang="ts">
-	import { onMount } from 'svelte';
-	import type { StateCommand } from '@codemirror/state';
-	import BoldIcon from '@lucide/svelte/icons/bold';
-	import ItalicIcon from '@lucide/svelte/icons/italic';
-	import LinkIcon from '@lucide/svelte/icons/link';
-	import ListIcon from '@lucide/svelte/icons/list';
-	import PaperclipIcon from '@lucide/svelte/icons/paperclip';
-	import PluginIcon from '#lib/components/PluginIcon.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
-	import { Separator } from '#lib/components/ui/separator/index.js';
-	import { Toggle } from '#lib/components/ui/toggle/index.js';
+	import { addAttachments, saveAttachment, type Attachment } from '#lib/api.js';
+	import { pickFileBytes } from '#lib/attachments.svelte.js';
+	import { acceptDrops } from '#lib/codemirror/drops.js';
+	import { formatKeys, links, plugged, theme } from '#lib/codemirror/extensions.js';
+	import { attachmentSpace } from '#lib/codemirror/live-preview.js';
+	import EditorToolbar from '#lib/components/EditorToolbar.svelte';
 	import { errorText } from '#lib/errors.js';
+	import { attachmentLink } from '#lib/markdown.js';
+	import { formats } from '#lib/markdown/commands.js';
+	import { mentionCompletion } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { android } from '#lib/platform.js';
 	import { Editor } from '#lib/plugins/editor.js';
-	import { labelText, type ToolbarEntry } from '#lib/plugins/registry.svelte.js';
+	import { registry, type ToolbarEntry } from '#lib/plugins/registry.svelte.js';
 
 	let {
 		value = $bindable(''),
@@ -447,11 +92,6 @@
 		view.focus();
 	}
 
-	// See-through greys, so the buttons show on every editor's background.
-	const tool =
-		'size-6 min-w-6 px-0 text-neutral-400 hover:bg-neutral-500/15 hover:text-neutral-200 aria-pressed:bg-neutral-500/25 aria-pressed:text-neutral-100 data-[state=on]:bg-neutral-500/25';
-	const divider = 'mx-1 h-4 bg-neutral-500/30 data-vertical:self-center';
-
 	/** A toolbar button: the text keeps the focus, so the next one acts on it too. */
 	function run(command: StateCommand) {
 		if (!view) return;
@@ -508,21 +148,6 @@
 		});
 	}
 
-	/**
-	 * Android's picker hands out content URIs, which the backend cannot read
-	 * as paths, so the files go over as bytes, as a paste does.
-	 */
-	function pickFileBytes(): Promise<File[]> {
-		return new Promise((done) => {
-			const input = document.createElement('input');
-			input.type = 'file';
-			input.multiple = true;
-			input.onchange = () => done([...(input.files ?? [])]);
-			input.oncancel = () => done([]);
-			input.click();
-		});
-	}
-
 	onMount(() => {
 		view = new EditorView({
 			parent: host,
@@ -558,10 +183,9 @@
 			})
 		});
 		refreshActive(view);
-		dropTargets.set(host, drop);
-		listenForDrops();
+		const stopDrops = acceptDrops(host, drop);
 		return () => {
-			dropTargets.delete(host);
+			stopDrops();
 			view?.destroy();
 		};
 	});
@@ -601,97 +225,12 @@
 
 <!-- The text goes in after the toolbar. -->
 <div bind:this={host} class="md-editor flex flex-col {className}">
-	<!-- For those who do not write markdown (SPEC 3.4). A press keeps the
-	     focus, and so the selection, in the text; its buttons are what take
-	     the focus from the keyboard. -->
-	<!-- svelte-ignore a11y_interactive_supports_focus -->
-	<div
-		role="toolbar"
-		aria-label={m.format_toolbar()}
-		onmousedown={(event) => event.preventDefault()}
-		class="mb-1 -ml-1 flex shrink-0 items-center gap-0.5 {toolbarClass}"
-	>
-		<Toggle
-			size="sm"
-			class={tool}
-			bind:pressed={() => active.bold, () => run(bold)}
-			aria-label={m.format_bold()}
-			title={m.format_bold()}
-		>
-			<BoldIcon class="size-3.5" />
-		</Toggle>
-		<Toggle
-			size="sm"
-			class={tool}
-			bind:pressed={() => active.italic, () => run(italic)}
-			aria-label={m.format_italic()}
-			title={m.format_italic()}
-		>
-			<ItalicIcon class="size-3.5" />
-		</Toggle>
-		{@render pluginTools('text')}
-		<Separator orientation="vertical" class={divider} />
-		<Toggle
-			size="sm"
-			class={tool}
-			bind:pressed={() => active.bullets, () => run(bullets)}
-			aria-label={m.format_bullets()}
-			title={m.format_bullets()}
-		>
-			<ListIcon class="size-3.5" />
-		</Toggle>
-		{@render pluginTools('lists')}
-		<Separator orientation="vertical" class={divider} />
-		<Button
-			variant="ghost"
-			size="icon-xs"
-			class={tool}
-			onclick={() => run(link)}
-			aria-label={m.format_link()}
-			title={m.format_link()}
-		>
-			<LinkIcon class="size-3.5" />
-		</Button>
-		<Button
-			variant="ghost"
-			size="icon-xs"
-			class={tool}
-			onclick={attachFiles}
-			aria-label={m.attach_file()}
-			title={m.attach_file()}
-		>
-			<PaperclipIcon class="size-3.5" />
-		</Button>
-		{@render pluginTools('insert')}
-	</div>
+	<EditorToolbar
+		{active}
+		{pluginActive}
+		onrun={run}
+		onplugin={runPlugin}
+		onattach={attachFiles}
+		class={toolbarClass}
+	/>
 </div>
-
-<!-- The plugins' buttons in a group, such as the Tasks plugin's checklist
-     beside the bulleted list (SPEC 3.9). -->
-{#snippet pluginTools(group: 'text' | 'lists' | 'insert')}
-	{#each registry.toolbar.filter((button) => (button.group ?? 'insert') === group) as button (button)}
-		{@const title = labelText(button.title)}
-		{#if button.active}
-			<Toggle
-				size="sm"
-				class={tool}
-				bind:pressed={() => pluginActive.includes(button), () => runPlugin(button)}
-				aria-label={title}
-				{title}
-			>
-				<PluginIcon icon={button.icon} class="size-3.5" />
-			</Toggle>
-		{:else}
-			<Button
-				variant="ghost"
-				size="icon-xs"
-				class={tool}
-				onclick={() => runPlugin(button)}
-				aria-label={title}
-				{title}
-			>
-				<PluginIcon icon={button.icon} class="size-3.5" />
-			</Button>
-		{/if}
-	{/each}
-{/snippet}

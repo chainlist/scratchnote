@@ -4,12 +4,8 @@
 	import PencilLineIcon from '@lucide/svelte/icons/pencil-line';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import XIcon from '@lucide/svelte/icons/x';
-	import InlineError from '#lib/components/InlineError.svelte';
-	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
-	import Recall from '#lib/components/Recall.svelte';
-	import { Button } from '#lib/components/ui/button/index.js';
+	import NoteEditor from '#lib/components/NoteEditor.svelte';
 	import { noteDrafts } from '#lib/note-draft.js';
-	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 
 	let {
@@ -38,13 +34,12 @@
 
 	let saving = $state(false);
 	/** The last save's error, until a save works. */
-	let failure = $state<string | null>(null);
+	let failure = $state<string>();
 	// What was written here before the view was left, open as it was then.
 	const kept = untrack(() => noteDrafts.get(draftKey));
 	let draft = $state(kept?.body ?? '');
 	if (kept?.writing) writing = true;
-	let editor = $state<MarkdownEditor | null>(null);
-	let box = $state<HTMLElement>();
+	let editor = $state<NoteEditor | null>(null);
 	let addButton = $state<HTMLButtonElement>();
 
 	// Kept as it is typed, so that the view left by any way finds it again.
@@ -65,7 +60,7 @@
 		await tick();
 		editor?.focus();
 		// The editor opens under the last note, often below the window's edge.
-		box?.scrollIntoView({ block: 'nearest' });
+		editor?.reveal();
 	}
 
 	async function discard() {
@@ -81,9 +76,9 @@
 			return;
 		}
 		saving = true;
-		failure = await onsave(draft);
+		failure = (await onsave(draft)) ?? undefined;
 		saving = false;
-		if (failure === null) {
+		if (failure === undefined) {
 			draft = '';
 			writing = false;
 		}
@@ -95,20 +90,6 @@
 		writing = false;
 		await tick();
 		addButton?.focus();
-	}
-
-	const action =
-		'cursor-pointer rounded px-1.5 py-0.5 text-xs text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200 disabled:opacity-50';
-
-	function onKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-			event.preventDefault();
-			void save();
-		} else if (event.key === 'Escape' && !event.defaultPrevented) {
-			// The editor takes one first that closes the names `@` offers.
-			event.preventDefault();
-			void close();
-		}
 	}
 </script>
 
@@ -123,36 +104,16 @@
 			: 'col-start-2 max-w-[70ch] min-w-0'}
 	>
 		{#if writing}
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div bind:this={box} class="flex flex-col gap-2" onkeydown={onKeydown}>
-				<MarkdownEditor
-					bind:this={editor}
-					bind:value={draft}
-					placeholder={m.capture_placeholder()}
-					label={m.note_body_label()}
-					{onerror}
-					class="-mx-2 max-h-[calc(16lh+0.5rem)] min-h-[calc(3lh+0.5rem)] w-[calc(100%+1rem)] rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-base leading-7 text-neutral-100 focus-within:border-neutral-600"
-				/>
-				<div class="flex items-center justify-end gap-1">
-					<!-- Opening the old note would leave this one unsaved, so it is
-					     only read here (SPEC 6.3). -->
-					<Recall
-						text={draft}
-						onmention={(name) => (draft = withMention(draft, name))}
-						class="mr-auto min-w-0 text-xs text-meta"
-					>
-						<span class="mr-auto text-xs text-meta">{m.note_new_hint()}</span>
-					</Recall>
-					<!-- Closing keeps the draft, so the button says close, not cancel. -->
-					<button type="button" onclick={close} class={action}>{m.common_close()}</button>
-					<Button size="sm" onclick={save} disabled={saving}>
-						{m.common_save()}
-					</Button>
-				</div>
-				{#if failure !== null}
-					<InlineError message={m.error_save_note()} detail={failure} />
-				{/if}
-			</div>
+			<NoteEditor
+				bind:this={editor}
+				bind:value={draft}
+				placeholder={m.capture_placeholder()}
+				{saving}
+				{failure}
+				onsave={() => void save()}
+				onclose={() => void close()}
+				{onerror}
+			/>
 		{:else}
 			<!-- Wraps on a phone, where the draft's button would otherwise
 			     shrink under its own label. -->

@@ -13,21 +13,14 @@
 	} from '#lib/api.js';
 	import MarkdownEditor from '#lib/components/MarkdownEditor.svelte';
 	import DayAhead from '#lib/components/DayAhead.svelte';
-	import { aheadLabel } from '#lib/dates.js';
+	import NoteActionItems from '#lib/components/NoteActionItems.svelte';
 	import Recall from '#lib/components/Recall.svelte';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
-	import CalendarXIcon from '@lucide/svelte/icons/calendar-x';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
-	import FolderInputIcon from '@lucide/svelte/icons/folder-input';
-	import RouteIcon from '@lucide/svelte/icons/route';
-	import RouteOffIcon from '@lucide/svelte/icons/route-off';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import WaypointsIcon from '@lucide/svelte/icons/waypoints';
 	import { wordCount } from '#lib/markdown.js';
 	import { joinText, pageDraft } from '#lib/page-draft.js';
 	import { withMention } from '#lib/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
-	import { getShell } from '#lib/shell.svelte.js';
 
 	let {
 		id,
@@ -87,7 +80,6 @@
 		return chain;
 	}
 
-	const shell = getShell();
 	const words = $derived(wordCount(body));
 	const cleanTitle = (raw: string) => raw.split(/\s+/).filter(Boolean).join(' ');
 
@@ -321,40 +313,12 @@
 					<EllipsisIcon class="size-4" />
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content align="end" class="w-max max-w-80 min-w-52">
-					{#if onsimilar}
-						<DropdownMenu.Item onSelect={() => onsimilar(current)}>
-							<WaypointsIcon />{m.note_similar()}
-						</DropdownMenu.Item>
-					{/if}
-					{#if onmove}
-						<DropdownMenu.Item onSelect={() => void move(onmove)}>
-							<FolderInputIcon />{m.move_to()}
-						</DropdownMenu.Item>
-					{/if}
-					{#if current.on}
-						{@const on = current.on}
-						<DropdownMenu.Item onSelect={() => void shell.clearDayAhead(current)}>
-							<CalendarXIcon />{m.day_ahead_clear({ date: aheadLabel(on) })}
-						</DropdownMenu.Item>
-					{/if}
-					{#if shell.canSimilar}
-						<DropdownMenu.Item onSelect={() => shell.threads.askThread(current)}>
-							<RouteIcon />{shell.threads.threadOf(current.id) ? m.thread_move() : m.thread_add()}
-						</DropdownMenu.Item>
-					{/if}
-					{#if shell.threads.threadOf(current.id)}
-						<DropdownMenu.Item onSelect={() => void shell.threads.keepOut(current, true)}>
-							<RouteOffIcon />{m.thread_leave()}
-						</DropdownMenu.Item>
-					{:else if shell.threads.keptOut(current.id)}
-						<DropdownMenu.Item onSelect={() => void shell.threads.keepOut(current, false)}>
-							<RouteIcon />{m.thread_rejoin()}
-						</DropdownMenu.Item>
-					{/if}
-					<DropdownMenu.Separator />
-					<DropdownMenu.Item variant="destructive" onSelect={() => ondelete(current)}>
-						<Trash2Icon />{m.common_delete()}
-					</DropdownMenu.Item>
+					<NoteActionItems
+						note={current}
+						{onsimilar}
+						onmove={onmove && (() => void move(onmove))}
+						{ondelete}
+					/>
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
 		{/if}

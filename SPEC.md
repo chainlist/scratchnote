@@ -823,7 +823,8 @@ src/
   lib/plugins/        # the plugin API (api.ts), its registry of contributions, the loader
   plugins/            # the core plugins, one folder each (basics/, journal/, stats/)
 plugin-registry/      # a local stand-in for the GitHub registry (4.10)
-  lib/components/ (NoteCard, CommandCenter, SpaceSwitcher, ...)
+  lib/components/     # by area: layout/, note/, editor/, page/, thread/, dialogs/, common/, settings/; ui/ is shadcn-svelte's
+  lib/codemirror/     # the editor's CodeMirror parts: live preview, widgets, keys, drops
   lib/stores/         # Svelte 5 runes-based state (*.svelte.ts)
   lib/i18n.svelte.ts  # the language setting, as a Paraglide strategy
   lib/attachments.svelte.ts  # the open space, for the attachment protocol's URLs

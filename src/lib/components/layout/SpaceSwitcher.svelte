@@ -23,6 +23,7 @@
 	import { parts, slot } from '#lib/app/i18n.svelte.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { cn } from '#lib/utils.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 
 	let {
 		view,
@@ -174,6 +175,7 @@
 	</Popover.Trigger>
 	<Popover.Content
 		class="max-h-(--bits-floating-available-height) w-64 overflow-y-auto bg-background p-1.5"
+		{@attach scrollbars}
 		{align}
 		onCloseAutoFocus={returnFocus &&
 			((event) => {

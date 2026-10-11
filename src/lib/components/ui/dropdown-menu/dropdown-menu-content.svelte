@@ -2,6 +2,7 @@
 	import { DropdownMenu as DropdownMenuPrimitive } from 'bits-ui';
 	import { cn, type WithoutChildrenOrChild } from '#lib/utils.js';
 	import DropdownMenuPortal from './dropdown-menu-portal.svelte';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 	import type { ComponentProps } from 'svelte';
 
 	let {
@@ -27,5 +28,6 @@
 			className
 		)}
 		{...restProps}
+		{@attach scrollbars}
 	/>
 </DropdownMenuPortal>

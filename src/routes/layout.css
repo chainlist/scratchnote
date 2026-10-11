@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn-svelte/tailwind.css';
+@import 'overlayscrollbars/overlayscrollbars.css';
 
 @custom-variant dark (&:is(.dark *));
 /* Less motion is the app's own choice as well as the system's: applyAppearance
@@ -41,6 +42,20 @@ body {
 }
 ::-webkit-scrollbar-button {
 	display: none;
+}
+
+/* The same look for the scrollbars drawn over the content (helpers/scrollbars):
+   a 4px thumb in a 10px lane, wider to the pointer than it looks. */
+.os-theme-app {
+	box-sizing: border-box;
+	--os-size: 10px;
+	--os-padding-perpendicular: 3px;
+	--os-padding-axis: 3px;
+	--os-handle-border-radius: 9999px;
+	--os-handle-interactive-area-offset: 3px;
+	--os-handle-bg: var(--color-neutral-700);
+	--os-handle-bg-hover: var(--color-neutral-500);
+	--os-handle-bg-active: var(--color-neutral-500);
 }
 
 /* Surfaces point at the neutral scale, which applyAppearance tints with the

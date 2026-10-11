@@ -5,6 +5,7 @@
 	import PluginIcon from '#lib/components/common/PluginIcon.svelte';
 	import { openView, type Header } from '#lib/plugins/host.js';
 	import { registry, type ViewEntry } from '#lib/plugins/registry.svelte.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 
 	/** A plugin's view in the dock, where a page docks (SPEC 3.9). */
 	let { type, onclose }: { type: string; onclose: () => void } = $props();
@@ -31,7 +32,11 @@
 			<h2 class="min-w-0 flex-1 truncate text-sm font-semibold">{header.title}</h2>
 		{/snippet}
 		{#key entry}
-			<div class="min-h-0 flex-1 overflow-y-auto px-4 pb-16" {@attach mountView(entry)}></div>
+			<!-- The view gets an element of its own inside the scroller: it may
+			     empty its element, which would take the scrollbars with it. -->
+			<div class="min-h-0 flex-1 overflow-y-auto px-4 pb-16" {@attach scrollbars}>
+				<div {@attach mountView(entry)}></div>
+			</div>
 		{/key}
 	</Dock>
 {/if}

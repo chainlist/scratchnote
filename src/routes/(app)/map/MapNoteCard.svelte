@@ -9,6 +9,7 @@
 	import { mentionHref, mentionHue } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 	import { threadHref, threadHue } from '#lib/notes/threads.js';
 
 	let {
@@ -56,7 +57,7 @@
 		</Card.Action>
 	</Card.Header>
 	{#if preview}
-		<Card.Content class="min-h-0 overflow-y-auto">
+		<Card.Content class="min-h-0 overflow-y-auto" {@attach scrollbars}>
 			<Markdown text={preview.body} links={false} />
 		</Card.Content>
 	{/if}

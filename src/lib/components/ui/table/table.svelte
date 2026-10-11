@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { cn, type WithElementRef } from '#lib/utils.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 	import type { HTMLTableAttributes } from 'svelte/elements';
 
 	let {
@@ -10,7 +11,7 @@
 	}: WithElementRef<HTMLTableAttributes> = $props();
 </script>
 
-<div data-slot="table-container" class="relative w-full overflow-x-auto">
+<div data-slot="table-container" class="relative w-full overflow-x-auto" {@attach scrollbars}>
 	<table
 		bind:this={ref}
 		data-slot="table"

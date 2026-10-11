@@ -3,6 +3,7 @@
 	import { cn } from '#lib/utils.js';
 	import type { WithoutChildrenOrChild } from '#lib/utils.js';
 	import ContextMenuPortal from './context-menu-portal.svelte';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 	import type { ComponentProps } from 'svelte';
 
 	let {
@@ -24,5 +25,6 @@
 			className
 		)}
 		{...restProps}
+		{@attach scrollbars}
 	/>
 </ContextMenuPortal>

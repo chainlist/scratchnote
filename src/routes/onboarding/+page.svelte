@@ -28,6 +28,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { moveLess, settle } from '#lib/helpers/motion.js';
 	import { android, mac } from '#lib/helpers/platform.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 	import { app } from '#lib/plugins/app.js';
 
 	/**
@@ -152,7 +153,7 @@
 		</div>
 	</header>
 
-	<main class="min-h-0 flex-1 overflow-y-auto px-6">
+	<main class="min-h-0 flex-1 overflow-y-auto px-6" {@attach scrollbars}>
 		<div class="mx-auto flex max-w-xl flex-col gap-6 pt-6 pb-10">
 			<div class="flex gap-1" aria-hidden="true">
 				<!-- Each step's bar fills from its start as the step is reached. -->

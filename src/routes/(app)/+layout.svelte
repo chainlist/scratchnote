@@ -33,6 +33,7 @@
 	import { setShell, Shell } from '#lib/shell.svelte.js';
 	import { closeOnBack, startBackGuard } from '#lib/app/back.svelte.js';
 	import { phone } from '#lib/helpers/swipe.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 	import { followApp } from './app-events.js';
 	import { windowKeydown } from './window-keys.js';
 
@@ -170,6 +171,7 @@
 						bind:this={shell.main}
 						bind:offsetWidth={shell.width}
 						class="h-full overflow-y-auto px-6 pb-16 pointer-coarse:[scrollbar-gutter:stable]"
+						{@attach scrollbars}
 					>
 						{@render children()}
 					</main>
@@ -210,7 +212,7 @@
 			<!-- The page docked beside the view, written in while the notes stay
 			     in reach. -->
 			<Dock label={docked.subject ?? m.pages_untitled()} onclose={() => (shell.docked = null)}>
-				<div class="min-h-0 flex-1 overflow-y-auto px-8">
+				<div class="min-h-0 flex-1 overflow-y-auto px-8" {@attach scrollbars}>
 					{#key docked.id}
 						<PageEditor
 							id={docked.id}

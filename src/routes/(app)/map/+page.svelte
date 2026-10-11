@@ -41,6 +41,7 @@
 	import MapLegend from './MapLegend.svelte';
 	import MapNoteCard from './MapNoteCard.svelte';
 	import MapSearch from './MapSearch.svelte';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 
 	let { data } = $props();
 
@@ -439,7 +440,7 @@
 					/>
 					<MapDateRange {extent} {bars} bind:span />
 				</Card.Content>
-				<Card.Content class="min-h-0 overflow-y-auto">
+				<Card.Content class="min-h-0 overflow-y-auto" {@attach scrollbars}>
 					<MapLegend
 						entries={[...legend, ...(unnamedCount ? [{ key: NO_NAME, count: unnamedCount }] : [])]}
 						picked={pickedName}

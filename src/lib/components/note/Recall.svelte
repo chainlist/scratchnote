@@ -11,6 +11,7 @@
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import { m } from '#lib/paraglide/messages.js';
 	import { cn } from '#lib/utils.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 
 	let {
 		text,
@@ -125,6 +126,7 @@
 					side="top"
 					align="start"
 					class="max-h-(--bits-floating-available-height) w-96 max-w-[calc(100vw-1rem)] overflow-y-auto bg-background p-3"
+					{@attach scrollbars}
 					onCloseAutoFocus={returnFocus &&
 						((event) => {
 							event.preventDefault();

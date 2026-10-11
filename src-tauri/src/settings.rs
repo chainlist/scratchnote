@@ -29,6 +29,8 @@ pub struct Settings {
     pub radius: f32,
     /// "dark", "light" or "system" to follow the OS.
     pub theme: String,
+    /// Fades in place of movement, whatever the OS asks; off follows the OS.
+    pub reduce_motion: bool,
     /// A locale such as "fr", or "system" to follow the OS language. The
     /// frontend owns the list of locales; an unknown one follows the OS.
     pub language: String,
@@ -52,6 +54,7 @@ impl Default for Settings {
             font_size: 16,
             radius: 0.625,
             theme: "dark".to_string(),
+            reduce_motion: false,
             language: "system".to_string(),
             onboarded: false,
             last_seen_version: None,

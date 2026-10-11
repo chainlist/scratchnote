@@ -14,6 +14,7 @@
 				const painted = JSON.parse(localStorage.getItem('appearance'));
 				if (painted) {
 					document.documentElement.classList.toggle('dark', painted.dark);
+					document.documentElement.classList.toggle('less-motion', !!painted.less);
 					document.documentElement.style.cssText = painted.style;
 				}
 			}

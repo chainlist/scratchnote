@@ -59,9 +59,9 @@
 <!-- The note's menu in the margin, beside the time it acts on; over the
      text's right end when the time heads the text, in a narrow container. -->
 <div
-	class="absolute top-3.5 left-1.5 flex transition group-hover:opacity-100 focus-within:opacity-100 @max-[24rem]:top-2.5 @max-[24rem]:right-3 @max-[24rem]:left-auto {open
+	class="absolute top-3.5 left-1.5 flex transition duration-200 ease-settle group-hover:translate-x-0 group-hover:opacity-100 focus-within:translate-x-0 focus-within:opacity-100 motion-reduce:translate-x-0 @max-[24rem]:top-2.5 @max-[24rem]:right-3 @max-[24rem]:left-auto {open
 		? 'opacity-100'
-		: 'opacity-0'}"
+		: 'translate-x-1 opacity-0'}"
 >
 	{#if !armed}
 		<button

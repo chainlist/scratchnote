@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { resolve } from '$app/paths';
 	import ChevronLeftIcon from '@lucide/svelte/icons/chevron-left';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
@@ -8,6 +10,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { mac } from '#lib/helpers/platform.js';
 	import DayName from './DayName.svelte';
+	import { moveLess, settle } from '#lib/helpers/motion.js';
 
 	let {
 		date,
@@ -24,6 +27,24 @@
 	} = $props();
 
 	const dayHref = (day: string) => resolve(`day/${day}/`);
+
+	/** The day the title last named. */
+	let last = untrack(() => date);
+
+	/** Another day's name comes in from the side it lies on, a later day
+	 *  from the right, as the arrows and swipes go. With less motion, a fade. */
+	function turn(node: Element) {
+		// Leaving for another view, the title is redrawn once without a day.
+		if (!date) return { duration: 0 };
+		const side = Math.sign(date.localeCompare(last));
+		last = date;
+		if (moveLess() || side === 0) return fade(node, { duration: 150 });
+		return {
+			duration: 250,
+			easing: settle,
+			css: (t: number, u: number) => `opacity: ${t}; transform: translateX(${u * side * 12}px)`
+		};
+	}
 </script>
 
 <!-- The day's title row: the arrows to the days on either side, then its
@@ -40,7 +61,7 @@
 		aria-label={m.calendar_previous_day()}
 		aria-keyshortcuts="Alt+ArrowLeft"
 		title="{m.calendar_previous_day()} ({mac ? '⌥←' : 'Alt+←'})"
-		class="text-muted-foreground hover:text-foreground"
+		class="text-muted-foreground hover:text-foreground [&_svg]:transition-[translate] [&_svg]:duration-200 [&_svg]:ease-settle hover:[&_svg]:-translate-x-0.5"
 	>
 		<ChevronLeftIcon />
 	</Button>
@@ -52,7 +73,7 @@
 		aria-label={m.calendar_next_day()}
 		aria-keyshortcuts="Alt+ArrowRight"
 		title="{m.calendar_next_day()} ({mac ? '⌥→' : 'Alt+→'})"
-		class="text-muted-foreground hover:text-foreground"
+		class="text-muted-foreground hover:text-foreground [&_svg]:transition-[translate] [&_svg]:duration-200 [&_svg]:ease-settle hover:[&_svg]:translate-x-0.5"
 	>
 		<ChevronRightIcon />
 	</Button>
@@ -69,9 +90,11 @@
 			title={m.calendar_pick()}
 			class="group/date -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 focus-ring transition-colors hover:bg-muted"
 		>
-			<span class={compact ? 'min-w-0 truncate' : undefined}>
-				{#if compact}{dayHeading(date, true)}{:else}<DayName {date} />{/if}
-			</span>
+			{#key date}
+				<span class={compact ? 'min-w-0 truncate' : undefined} in:turn>
+					{#if compact}{dayHeading(date, true)}{:else}<DayName {date} />{/if}
+				</span>
+			{/key}
 			<CalendarIcon
 				class={[
 					'shrink-0 text-muted-foreground transition-colors group-hover/date:text-foreground',

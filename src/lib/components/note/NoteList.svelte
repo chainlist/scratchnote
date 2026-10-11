@@ -23,6 +23,7 @@
 		partLevel = 2,
 		chosen = null,
 		onchoose,
+		unfold = true,
 		...actions
 	}: Actions & {
 		notes: Note[];
@@ -39,6 +40,9 @@
 		/** The notes chosen, while notes are being chosen: each card then has a box. */
 		chosen?: string[] | null;
 		onchoose?: (id: string, on: boolean) => void;
+		/** Off where the list is only a picture, as the day a swipe brings in
+		 *  beside the view, or lands where that picture already was. */
+		unfold?: boolean;
 	} = $props();
 
 	/** One day's notes are spaced by the time between them and named by
@@ -62,17 +66,39 @@
 	function arrive(node: HTMLElement) {
 		return came > FEW ? fade(node, { duration: 200 }) : { duration: 0 };
 	}
+
+	/** Drawn anew, the list opens (`[data-opening]` in layout.css): the rail
+	 *  draws down to each note in turn and the note rises beside it. Only for
+	 *  as long as that takes, so a note written later just shows. */
+	const STAGGER = 8;
+	// Read once, as the list is drawn.
+	// svelte-ignore state_referenced_locally
+	const unfolds = unfold;
+	let opening = $state(unfolds);
+	$effect(() => {
+		if (!opening) return;
+		const done = setTimeout(() => (opening = false), 1200);
+		return () => clearTimeout(done);
+	});
 </script>
 
 {#if notes.length === 0}
 	<p class="text-base text-meta">{empty}</p>
 {:else}
-	<ul class={chosen ? 'pl-8' : undefined}>
+	<ul
+		class={chosen ? 'pl-8' : undefined}
+		data-unfold={unfolds || undefined}
+		data-opening={opening || undefined}
+	>
 		{#each notes as note, i (note.id)}
 			{@const timeline = { ...spacing[i], partLevel, aside: chosen ? box : undefined }}
 			<!-- A chosen note is washed with the accent, so the choice reads while
 			     scrolling, not only from its box. -->
-			<li class={[chosen?.includes(note.id) && '[&>div>article]:bg-primary/8']} in:arrive>
+			<li
+				class={[chosen?.includes(note.id) && '[&>div>article]:bg-primary/8']}
+				style:--i={Math.min(i, STAGGER)}
+				in:arrive
+			>
 				{#if isPage(note)}
 					<PageCard
 						{note}

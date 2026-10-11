@@ -31,6 +31,10 @@
 	/** What failed in plain words, and the error as it came for its tooltip. */
 	let error = $state<{ what: string; detail?: string } | null>(null);
 	let saved = $state(false);
+	/** While the note goes: its text lifts out of the field. */
+	let sending = $state(false);
+	/** The window's frame, whose edge lights as it comes up. */
+	let frame: HTMLElement;
 	let spaces = $state<SpacesView | null>(null);
 	/** The space picked for this draft; until then it goes into the open one. */
 	let picked = $state<string | null>(null);
@@ -59,6 +63,7 @@
 				// A new note starts in the open space; one left half written keeps its own.
 				if (draft.trim() === '') forget();
 				input?.focus();
+				light();
 			}),
 			onSettingsChanged((settings) => (hideImmediately = settings.hideImmediately)),
 			onSpacesChanged(followSpaces)
@@ -77,6 +82,13 @@
 			attachedIn = null;
 			attached = [];
 		}
+	}
+
+	/** The frame's edge lights in the accent and cools, each time it comes up. */
+	function light() {
+		frame.classList.remove('edge-light');
+		void frame.offsetWidth;
+		frame.classList.add('edge-light');
 	}
 
 	/** The draft is gone, so its space and its files are too. */
@@ -109,15 +121,22 @@
 		}
 		saving = true;
 		error = null;
+		// The text lifts away while the note is written, never holding up the
+		// save; the window goes once both are done.
+		sending = true;
 		try {
 			const into = target;
-			await bringAttachments(into);
-			await saveNote(draft, undefined, into);
+			const write = async () => {
+				await bringAttachments(into);
+				await saveNote(draft, undefined, into);
+			};
+			await Promise.all([write(), wait(170)]);
 			draft = '';
 			forget();
 			if (!hideImmediately) {
+				sending = false;
 				saved = true;
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				await wait(1000);
 				saved = false;
 			}
 			await hideCapture();
@@ -125,8 +144,11 @@
 			error = { what: m.error_save_note(), detail: String(e) };
 		} finally {
 			saving = false;
+			sending = false;
 		}
 	}
+
+	const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 	/** Hand the draft to a new page in the main window, in the space picked (SPEC 3.5). */
 	async function toPage() {
@@ -182,6 +204,7 @@
      formatting buttons and a few lines keeps the lines. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+	bind:this={frame}
 	class="@container-size flex h-screen flex-col gap-2 border border-neutral-700 bg-neutral-900 p-3 text-neutral-100"
 	onkeydown={onKeydown}
 	data-tauri-drag-region
@@ -194,7 +217,9 @@
 		space={attachedIn ?? (target || undefined)}
 		onerror={(message) => (error = { what: message })}
 		onattach={onAttach}
-		class="min-h-0 flex-1 rounded bg-neutral-800 p-2 text-sm leading-relaxed [--md-image-height:6rem]"
+		class="min-h-0 flex-1 rounded bg-neutral-800 p-2 text-sm leading-relaxed [--md-image-height:6rem] {sending
+			? 'note-sending'
+			: ''}"
 		toolbarClass="[@container(max-height:8rem)]:hidden"
 	/>
 
@@ -272,6 +297,9 @@
 				disabled={saving}
 				aria-label={m.common_save()}
 				title={m.common_save()}
+				class="[&_svg]:transition-[translate,opacity] [&_svg]:duration-150 [&_svg]:ease-in {sending
+					? '[&_svg]:translate-x-1.5 [&_svg]:opacity-0 motion-reduce:[&_svg]:translate-x-0'
+					: ''}"
 			>
 				<SendHorizontalIcon />
 			</Button>

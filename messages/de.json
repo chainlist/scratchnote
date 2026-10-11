@@ -348,6 +348,8 @@
 	"settings_radius_small": "Klein",
 	"settings_radius_default": "Standard",
 	"settings_radius_large": "Groß",
+	"settings_reduce_motion": "Bewegung reduzieren",
+	"settings_reduce_motion_hint": "Elemente blenden ein, statt sich zu bewegen. Immer an, wenn dein System weniger Bewegung verlangt.",
 	"settings_reset": "Auf Standard zurücksetzen",
 	"settings_update_failed": "Prüfung fehlgeschlagen: {reason}",
 	"settings_checking": "Wird geprüft",

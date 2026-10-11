@@ -255,18 +255,49 @@ The unit every timeline is built from (`TimelineItem`, exposed to plugins as `Ti
 A thread's span in time: a hairline axis with one round dot per day that holds notes, sized by count, in the thread's own hue, with the first and last dates in tabular meta text below. Suggested threads draw at half opacity. Dots grow 1.5x on hover and take the focus ring.
 
 ### Motion
+Reduced motion is on when the user turns on Reduce motion in Appearance or the system asks for it: `applyAppearance` then puts `less-motion` on the root, and every fallback below, the `motion-reduce:` variant and `moveLess()` follow that class.
 - **Page in** (350ms, `cubic-bezier(0.22, 1, 0.36, 1)`): a view rises 8px out of a 3px blur. Reduced motion: a 200ms fade.
 - **Note pulse** (1.2s): two soft accent pulses on a note opened from a link. Reduced motion: one slow fade.
 - **Calendar wave** (500ms, 30ms per row plus column): days rise into place. Reduced motion: a 300ms fade.
 - **Search glow** (2.4s loop): text being searched by meaning breathes from the meta tone to the accent and back. Reduced motion: still, in the meta tone.
-- **Overlays** (menus, popovers, dialogs): shadcn's stock zoom and slide. Reduced motion: the fade alone.
+- **Overlays** (menus, popovers, tooltips, dialogs, 180ms in, 110ms out): shadcn's zoom and slide, on the settle curve whatever duration the component set. Reduced motion: the fade alone.
 - **More notes** (200ms): more than three notes coming into a list at once (a new search, Show more) fade in together. A note saved, deleted or moved shows or goes at once: tried with its room opening and closing (2026-10-10), it felt clunky.
 - **Suggestion closes** (200ms): a thread suggestion kept or dismissed closes its room, so the ones below move up. Reduced motion: a 150ms fade.
 - **Pins** (200ms in, 150ms out, 250ms slide): a pin the user adds grows in from 60%, one taken off shrinks away, and the others slide to their new places, as when one is moved. Pins read at launch, on a space switch or as their threads load just appear. Reduced motion: a fade, no slide.
 - **Dock in** (300ms): the dock comes 1rem in from its own edge as it opens or moves sides. Reduced motion: a 200ms fade.
 - **Onboarding step** (300ms): each step comes 24px in from the side being gone to; its progress bar fills from the start. Reduced motion: a 150ms fade, the bar at once.
 - **Tick** (150ms fill, 250ms draw): a task box ticked on a card fills, then its check is revealed from the left; Saved in the capture window draws its check. Reduced motion: the fill alone, the check already drawn.
-- Every arriving motion uses the page-in curve (`settle` in `#lib/helpers/motion.ts`); exits are faster than entrances. Nothing moves while typing, on long-list rows one by one, or on the map.
+- **Day opens** (signature, about 0.9s at most): wherever a list of notes is drawn anew (a day, its neighbours, search, a thread), the rail draws down the margin at 45ms a note, each mark lights in the accent as the line reaches it and cools to its rest, and its note rises 6px out of a 2px blur. Only the first 16 move, the stagger stops at the ninth, and a note written later just shows. The view around it only fades. A day brought in by a swipe does not unfold. Reduced motion: the notes fade in together, the rail is there.
+- **Capture sends** (signature, 170ms): on save the text lifts 10px out of the field and blurs away while the send arrow slips right; the window hides once both the save and the motion are done, so the save never waits. Each time the window comes up its edge lights in the accent and cools to its hairline over 700ms. Reduced motion: the text fades; the edge still lights.
+- **Gliding marks** (250ms): one mark per group slides to whatever is chosen rather than one going out and another lighting: the ribbon's edge bar (between buttons and pins), a tab list's pill or underline, a segmented picker's fill (`follow` in `#lib/helpers/motion.ts`, `.glide-mark` in layout.css). Reduced motion: the mark moves at once and fades.
+- **Day title** (250ms): another day's name comes in 12px from the side it lies on, a later day from the right. Reduced motion: a fade.
+- **Look changes** (260ms): a new theme, accent, font, size or radius crossfades the window (a view transition). The first paint is at once.
+- **Small feedback**: a pressed button sinks (icon buttons to 90%, others to 97-98%) over 75ms; a timeline mark grows 1.5x (a page's box 1.1x) under the pointer or focus; the day arrows lean 2px toward their day; the Add a note plus turns a quarter; a note's menu cue slides 4px in as it shows; a checkbox's check is revealed from the left and a radio's dot grows; a switch's thumb settles; a link's underline thickens; the threads count grows in when it changes; the error banner drops 6px into place; the new-note editor and the choosing boxes grow in.
+
+#### Named Rules
+How to give a new feature or view its motion. Every rule holds under every theme, font, size and language, on a phone as on the desktop.
+
+**The Earned Motion Rule.** Motion only does one of four jobs: it acknowledges an action (a press, a tick), shows where something went or came from (a gliding mark, a day from its side), makes a change of state legible (a suggestion closing its room), or is a surface's one authored moment (the day opening, the capture sending). If taking it away loses no meaning, it is decoration: leave it out. A surface has at most one signature; everything else stays small.
+
+**The Never Wait Rule.** Motion never holds up work. A save, a load, a keystroke or a navigation happens at once and the animation runs beside it; where something must follow both, the slower of the two decides, as the capture window hides once the save and its 170ms are done. Nothing moves while typing, and no motion blocks input for more than 200ms.
+
+**The Timing Scale Rule.** Feedback 75 to 150ms; a change of state 150 to 250ms; overlays, marks and views 250 to 350ms; a signature up to 450ms per element and under a second in all. An exit takes about two thirds of its entrance. Arrivals use the one curve, `settle` (`ease-settle` in Tailwind); exits ease in. No bounce, no elastic, no new curve.
+
+**The Small Distance Rule.** Things travel 2 to 12px, scale between 0.6 and 1.5, and blur at most 3px. Direction carries meaning: a thing comes from where it lies (a later day from the right, the dock from its own edge, a step from the side being gone to), never from an arbitrary corner.
+
+**The One Mark Rule.** When the choice in a group changes, one mark glides to it (`follow`) rather than one going out and another lighting. A new group of choices (tabs, a segmented picker, a rail of buttons) gets its mark this way.
+
+**The Change Not Presence Rule.** Motion marks what the user just did, not what merely is. What arrives at launch, on a space switch, by a sync or as data loads appears at once; only the user's own change moves, as pins only slide after the user's own pin change (`pinsSaved`). A list drawn anew may open, staggered at most 9 steps and moving at most its first 16 items.
+
+**The Still Column Rule.** In the reading column a single note saved, deleted or moved shows or goes at once, with no height or room animation (tried 2026-10-10, clunky). The map's dots never animate, and nothing moves on long lists row by row.
+
+**The Hover Is Focus Rule.** A motion cue on hover also plays on keyboard focus (`group-hover` with `group-focus-within` or `focus-visible`), as every hover cue does.
+
+**The Less Motion Rule.** Every animation has a fallback under `.less-motion` (or `motion-reduce:`; `moveLess()` in script), never `@media (prefers-reduced-motion)`, which misses the app's own Reduce motion setting. The fallback moves nothing and fades in 120 to 200ms, but keeps what confirms an action: a tick still fills, an edge still lights.
+
+**The Reuse Rule.** Build from what exists: `settle`, `rise`, `pop`, `room` and `follow` in `#lib/helpers/motion.ts`, the keyframes in layout.css. Animate transform, opacity, colour and a bounded filter; never width, height or margins frame by frame, except `room` on one short row. A loop (the search glow) runs only while its work does.
+
+**The Written Down Rule.** A new motion gets its line in the list above: its name, duration, what moves and its reduced fallback. Motion tried and rejected keeps its line too, with why, so it is not tried again.
 
 ## Do's and Don'ts
 
@@ -275,7 +306,7 @@ A thread's span in time: a hairline axis with one round dot per day that holds n
 - **Do** use `TimelineItem` (or the plugin `Timeline` builder) for anything listed by time, and pass `daySpacing` results for one day's items.
 - **Do** put quiet text in `--color-meta`, and give figures that must line up `tabular-nums`.
 - **Do** make every hover cue a focus cue too (`group-hover` with `group-focus-within` or `group-focus-visible`).
-- **Do** give every animation a `prefers-reduced-motion` fallback, as the existing keyframes do.
+- **Do** give every animation a reduced-motion fallback under `.less-motion` (or Tailwind's `motion-reduce:`), never `@media (prefers-reduced-motion)`, which misses the app's own setting.
 - **Do** leave room for the longest of the six languages: truncate or wrap labels, never fix widths to English.
 
 ### Don't:

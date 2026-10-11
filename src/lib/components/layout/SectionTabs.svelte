@@ -17,13 +17,10 @@
 <Tabs.Root bind:value={() => value, (next) => (value = next as V)}>
 	<Tabs.List
 		variant="line"
-		class="mb-5 h-auto w-full justify-start gap-5 border-b border-neutral-800 p-0"
+		class="mb-5 h-auto w-full justify-start gap-5 border-b border-neutral-800 p-0 [--tabs-mark-drop:-1px]"
 	>
 		{#each tabs as tab (tab.value)}
-			<Tabs.Trigger
-				value={tab.value}
-				class="h-auto flex-none px-0 pt-1 pb-2.5 group-data-horizontal/tabs:after:-bottom-px"
-			>
+			<Tabs.Trigger value={tab.value} class="h-auto flex-none px-0 pt-1 pb-2.5">
 				{tab.label}
 				<span class="text-xs font-normal text-muted-foreground tabular-nums">{tab.count}</span>
 			</Tabs.Trigger>

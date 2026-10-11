@@ -1,12 +1,15 @@
 <script lang="ts">
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import type { Note } from '#lib/api.js';
+	import Markdown from '#lib/components/editor/Markdown.svelte';
 	import MarkdownEditor from '#lib/components/editor/MarkdownEditor.svelte';
 	import DayAhead from '#lib/components/note/DayAhead.svelte';
 	import NoteActionItems from '#lib/components/note/NoteActionItems.svelte';
 	import Recall from '#lib/components/note/Recall.svelte';
+	import { Button } from '#lib/components/ui/button/index.js';
 	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
+	import PencilIcon from '@lucide/svelte/icons/pencil';
 	import { withMention } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { PageSession } from '#lib/components/page/page-session.svelte.js';
@@ -40,6 +43,9 @@
 		own?: boolean;
 	} = $props();
 
+	/** A page opens to be read, and to be written in once Edit is pressed,
+	 *  until it is closed. A new one has nothing to read yet. */
+	let editing = $state(untrack(() => id === null));
 	let editor = $state<MarkdownEditor | null>(null);
 	let titleInput = $state<HTMLInputElement | null>(null);
 	const session = new PageSession({
@@ -55,7 +61,6 @@
 			await session.open(id);
 			await tick();
 			if (id === null) titleInput?.focus();
-			else editor?.focus();
 		})();
 		// An edit in another editor.
 		return session.listen();
@@ -66,6 +71,18 @@
 	/** Text handed over from the capture window, after what is typed. */
 	export function addText(text: string) {
 		session.addText(text);
+	}
+
+	async function startEditing() {
+		editing = true;
+		await tick();
+		editor?.focus();
+	}
+
+	/** A task box ticked while reading saves at once. */
+	function saveTicks(next: string) {
+		session.body = next;
+		void session.saveNow();
 	}
 
 	function onTitleKeydown(event: KeyboardEvent) {
@@ -97,23 +114,36 @@
 <div class="flex flex-col gap-4 pb-16" onkeydown={onKeydown}>
 	<!-- The title is a field; the view's heading, for a screen reader's list
 	     of them, says the same. -->
-	{#if own}<h1 class="sr-only">{session.title.trim() || m.pages_untitled()}</h1>{/if}
+	{#if own && editing}<h1 class="sr-only">{session.title.trim() || m.pages_untitled()}</h1>{/if}
 	<div class="flex items-start gap-2">
-		<input
-			bind:this={titleInput}
-			bind:value={session.title}
-			onblur={() => {
-				// Switching to another app blurs the field too; a title half typed
-				// then must not become a file name. It saves once focus moves on
-				// inside the window, or on Enter.
-				if (document.hasFocus()) void session.saveTitle();
-			}}
-			onkeydown={onTitleKeydown}
-			placeholder={m.pages_title_placeholder()}
-			aria-label={m.pages_title_label()}
-			disabled={session.loading}
-			class="min-w-0 flex-1 border-b border-transparent bg-transparent text-2xl font-semibold tracking-tight text-neutral-100 outline-none placeholder:text-meta focus-visible:border-ring"
-		/>
+		{#if !editing}
+			<svelte:element
+				this={own ? 'h1' : 'h2'}
+				class="min-w-0 flex-1 border-b border-transparent text-2xl font-semibold tracking-tight break-words text-neutral-100"
+				>{session.title.trim() || m.pages_untitled()}</svelte:element
+			>
+			{#if session.page}
+				<Button onclick={startEditing} class="mt-0.5">
+					<PencilIcon />{m.note_edit()}
+				</Button>
+			{/if}
+		{:else}
+			<input
+				bind:this={titleInput}
+				bind:value={session.title}
+				onblur={() => {
+					// Switching to another app blurs the field too; a title half typed
+					// then must not become a file name. It saves once focus moves on
+					// inside the window, or on Enter.
+					if (document.hasFocus()) void session.saveTitle();
+				}}
+				onkeydown={onTitleKeydown}
+				placeholder={m.pages_title_placeholder()}
+				aria-label={m.pages_title_label()}
+				disabled={session.loading}
+				class="min-w-0 flex-1 border-b border-transparent bg-transparent text-2xl font-semibold tracking-tight text-neutral-100 outline-none placeholder:text-meta focus-visible:border-ring"
+			/>
+		{/if}
 		{#if session.page}
 			{@const current = session.page}
 			<DropdownMenu.Root>
@@ -157,7 +187,13 @@
 		{/if}
 	</div>
 
-	{#if !session.loading}
+	{#if !session.loading && !editing}
+		<Markdown
+			text={session.body}
+			onchange={saveTicks}
+			class="text-base leading-7 text-neutral-200"
+		/>
+	{:else if !session.loading}
 		<MarkdownEditor
 			bind:this={editor}
 			bind:value={session.body}

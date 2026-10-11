@@ -21,7 +21,7 @@
 	import { coreIds } from '#lib/plugins/loader.js';
 	import { monogram, pinHref, pinHue, pinPage } from '#lib/shell/pins.js';
 	import { errorText } from '#lib/helpers/errors.js';
-	import { moveLess, settle } from '#lib/helpers/motion.js';
+	import { follow, moveLess, pop as grow, settle } from '#lib/helpers/motion.js';
 	import { threadScope } from '#lib/notes/threads.js';
 	import { labelText, registry, type RibbonEntry } from '#lib/plugins/registry.svelte.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -159,8 +159,16 @@
      than take the whole window with them. -->
 <nav
 	aria-label={m.ribbon_label()}
-	class="flex shrink-0 [scrollbar-width:none] flex-col items-center gap-1 overflow-y-auto px-2 py-3"
+	class="relative flex shrink-0 [scrollbar-width:none] flex-col items-center gap-1 overflow-y-auto px-2 py-3"
 >
+	<!-- The bar at the strip's edge beside the button or pin whose view is
+	     shown. It glides from one to the next as the view changes. -->
+	<span
+		aria-hidden="true"
+		class="glide-mark h-5 w-1 rounded-r bg-primary"
+		style="translate: 0 calc(var(--mark-y) + (var(--mark-h) - 1.25rem) / 2)"
+		{@attach follow('[aria-current="page"]')}
+	></span>
 	{@render navButton({
 		kind: 'today',
 		label: m.command_today(),
@@ -234,30 +242,23 @@
 		class={['relative', tone(kind)]}
 		aria-current={section === kind ? 'page' : undefined}
 	>
-		{@render marker(section === kind)}
 		<Icon />{#if badge}
 			{@render badge()}{/if}
 	</Button>
 {/snippet}
 
-<!-- How many threads are suggested, on the Threads button. -->
+<!-- How many threads are suggested, on the Threads button. It grows in
+     afresh when the count changes, so a new suggestion is noticed. -->
 {#snippet suggestedCount()}
 	{#if shell.threads.suggested}
-		<span
-			class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] leading-none font-semibold text-primary-foreground ring-2 ring-neutral-950"
-		>
-			{shell.threads.suggested > 9 ? '9+' : shell.threads.suggested}
-		</span>
-	{/if}
-{/snippet}
-
-<!-- The bar beside a button whose view is shown, at the rail's edge. A
-     Button's border is left out of where it is placed from, so the bar
-     steps back over it to line up with a pin's. -->
-{#snippet marker(active: boolean, bordered = true)}
-	{#if active}
-		<span class={['absolute top-1 -left-2 h-5 w-1 rounded-r bg-primary', bordered && '-m-px']}
-		></span>
+		{#key shell.threads.suggested}
+			<span
+				in:grow
+				class="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] leading-none font-semibold text-primary-foreground ring-2 ring-neutral-950"
+			>
+				{shell.threads.suggested > 9 ? '9+' : shell.threads.suggested}
+			</span>
+		{/key}
 	{/if}
 {/snippet}
 
@@ -280,7 +281,6 @@
 					{title}
 					class="relative flex size-7 items-center justify-center rounded-md focus-ring outline-none"
 				>
-					{@render marker(active, false)}
 					<span
 						class={[
 							'name-tint flex size-7 items-center justify-center rounded-md text-[0.7rem] leading-none font-semibold transition-opacity',

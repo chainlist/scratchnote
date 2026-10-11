@@ -3,6 +3,10 @@
 @import 'shadcn-svelte/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
+/* Less motion is the app's own choice as well as the system's: applyAppearance
+   marks the root with `less-motion` for either, and every calmer style,
+   this variant and the `.less-motion` blocks below, follows that class. */
+@custom-variant motion-reduce (&:where(.less-motion, .less-motion *));
 
 /* The focus ring of the app's own controls, as the keyboard reaches them: a
    3px ring at half strength around a 1px outline in the ring's colour. */
@@ -98,6 +102,12 @@ body {
 	--ring: oklch(0.708 0 0);
 }
 
+/* The curve of whatever arrives: quick, then settling (`settle` in
+   #lib/helpers/motion.ts), as `ease-settle`. */
+@theme {
+	--ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @theme inline {
 	--color-ring: var(--ring);
 	--color-input: var(--input);
@@ -159,7 +169,7 @@ body {
 	animation: note-blink 1.2s ease-in-out;
 }
 
-@media (prefers-reduced-motion: reduce) {
+.less-motion {
 	.note-blink {
 		animation: note-fade 1.2s ease-out;
 	}
@@ -179,7 +189,7 @@ body {
 	animation: page-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-@media (prefers-reduced-motion: reduce) {
+.less-motion {
 	.page-in {
 		animation: fade-in 0.2s ease-out backwards;
 	}
@@ -201,7 +211,7 @@ body {
 	animation-delay: calc(var(--day-wave, 0) * 30ms);
 }
 
-@media (prefers-reduced-motion: reduce) {
+.less-motion {
 	.calendar-day-in {
 		animation: fade-in 0.3s ease-out backwards;
 	}
@@ -226,7 +236,7 @@ body {
 	animation: dock-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-@media (prefers-reduced-motion: reduce) {
+.less-motion {
 	.dock-in {
 		animation: fade-in 0.2s ease-out backwards;
 	}
@@ -245,7 +255,7 @@ body {
 	animation: check-draw 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-@media (prefers-reduced-motion: reduce) {
+.less-motion {
 	.check-draw path {
 		animation: none;
 	}
@@ -264,15 +274,210 @@ body {
 	animation: note-glow 2.4s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
+.less-motion {
 	.note-glow-text {
 		animation: none;
 	}
 }
 
+/* Menus, popovers, tooltips and dialogs open on the settling curve and go
+   quicker than they came, whatever duration their component set. */
+[class*='animate-in']:is([data-state='open'], [data-state='delayed-open'], [data-open]) {
+	--tw-animation-duration: 180ms;
+	--tw-ease: var(--ease-settle);
+}
+[class*='animate-out']:is([data-state='closed'], [data-closed]) {
+	--tw-animation-duration: 110ms;
+	--tw-ease: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* A day opening, or any list of notes drawn anew: the rail draws down the
+   margin at a pen's pace, each note's mark lights in the accent as the line
+   reaches it and cools to its rest, and the note rises into place beside
+   it. NoteList sets `data-opening` on its list while it opens and `--i` on
+   each item, its place, capped so a long day is never waited on; only the
+   first items move, the rest are below the fold. With reduced motion the
+   notes fade in together and the rail is simply there. */
+@keyframes rail-draw {
+	from {
+		scale: 1 0;
+	}
+}
+
+@keyframes mark-light {
+	from {
+		scale: 0;
+		border-color: var(--primary);
+		background-color: var(--primary);
+		color: var(--primary-foreground);
+		transform: translateY(-6px);
+	}
+	35% {
+		scale: 1;
+		border-color: var(--primary);
+		background-color: var(--primary);
+		color: var(--primary-foreground);
+	}
+}
+
+@keyframes note-rise {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+		filter: blur(2px);
+	}
+}
+
+[data-opening] > li:nth-child(-n + 16) {
+	--unfold-step: 45ms;
+	--unfold-at: calc(80ms + var(--i, 0) * var(--unfold-step));
+	/* Each item draws the rail from the top of its room down to its mark,
+	   then on from its mark to the next item, half a step each. */
+	& .tl-rail-above {
+		transform-origin: top;
+		animation: rail-draw calc(var(--unfold-step) / 2) linear backwards;
+		animation-delay: calc(var(--unfold-at) - var(--unfold-step) / 2);
+	}
+	& .tl-rail-below {
+		transform-origin: top;
+		animation: rail-draw calc(var(--unfold-step) / 2) linear backwards;
+		animation-delay: var(--unfold-at);
+	}
+	/* The mark rides the note's rise backwards, so it stays on the rail. */
+	& .tl-mark {
+		animation: mark-light 450ms var(--ease-settle) backwards;
+		animation-delay: calc(var(--unfold-at) - 40ms);
+	}
+	& :is(.tl-item, .tl-part) {
+		animation: note-rise 450ms var(--ease-settle) backwards;
+		animation-delay: calc(var(--unfold-at) - 40ms);
+	}
+}
+
+/* The view around a list that opens this way only fades, so the notes'
+   own rise is the one movement. */
+.page-in:has([data-unfold]) {
+	animation-name: fade-in;
+	animation-duration: 0.2s;
+}
+
+.less-motion {
+	[data-opening] > li:nth-child(-n + 16) {
+		& :is(.tl-rail-above, .tl-rail-below, .tl-mark) {
+			animation: none;
+		}
+		& :is(.tl-item, .tl-part) {
+			animation: fade-in 0.2s ease-out backwards;
+		}
+	}
+}
+
+/* The one mark of a group that glides to whichever is chosen (`follow` in
+   #lib/helpers/motion.ts): the ribbon's bar, a tab's underline or pill, a
+   segmented picker's fill. Its look and any offset are the caller's
+   classes; with reduced motion it moves at once and only fades. */
+@layer components {
+	.glide-mark {
+		position: absolute;
+		top: 0;
+		left: 0;
+		pointer-events: none;
+		opacity: 0;
+		translate: var(--mark-x, 0) var(--mark-y, 0);
+		width: var(--mark-w, 0);
+		height: var(--mark-h, 0);
+		transition:
+			translate 250ms var(--ease-settle),
+			width 250ms var(--ease-settle),
+			height 250ms var(--ease-settle),
+			opacity 150ms;
+	}
+}
+
+.less-motion {
+	.glide-mark {
+		transition: opacity 150ms;
+	}
+}
+
+/* A box ticked: its check is revealed from the left as the box fills. A
+   radio's dot grows from its middle. Already there with reduced motion. */
+@keyframes check-in {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+}
+
+@keyframes dot-in {
+	from {
+		scale: 0;
+	}
+}
+
+[data-slot='checkbox-indicator'] > svg {
+	animation: check-in 200ms var(--ease-settle) backwards;
+}
+
+[data-slot='radio-group-indicator'] > svg {
+	animation: dot-in 180ms var(--ease-settle) backwards;
+}
+
+.less-motion {
+	[data-slot='checkbox-indicator'] > svg,
+	[data-slot='radio-group-indicator'] > svg {
+		animation: none;
+	}
+}
+
+/* The look changing (theme, accent, font, size, corners): the window
+   crossfades into it rather than snapping (applyAppearance). */
+::view-transition-old(root),
+::view-transition-new(root) {
+	animation-duration: 260ms;
+	animation-timing-function: var(--ease-settle);
+}
+
+/* The capture window sending a note: the text lifts out of the field and
+   goes, as the window does a moment later. A fade with reduced motion. */
+@keyframes note-send {
+	to {
+		opacity: 0;
+		transform: translateY(-10px);
+		filter: blur(3px);
+	}
+}
+
+.note-sending .cm-content {
+	animation: note-send 170ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.less-motion {
+	.note-sending .cm-content {
+		animation: fade-out 120ms ease-in forwards;
+	}
+}
+
+@keyframes fade-out {
+	to {
+		opacity: 0;
+	}
+}
+
+/* The capture window coming up: its edge lights in the accent, the cue of
+   focus, and cools to its hairline, so the eye finds it over another app. */
+@keyframes edge-light {
+	from {
+		border-color: var(--primary);
+	}
+}
+
+.edge-light {
+	animation: edge-light 700ms ease-out;
+}
+
 /* Work under way, as a spinner or a download: with reduced motion a
    spinner turns slowly, still alive, and a pulse holds still. */
-@media (prefers-reduced-motion: reduce) {
+.less-motion {
 	.animate-spin {
 		animation-duration: 3s;
 	}
@@ -280,8 +485,9 @@ body {
 		animation: none;
 	}
 	/* Menus, popovers and dialogs (tw-animate-css) open and close with a
-	   fade alone, without their zoom or slide. */
-	:is(.animate-in, .animate-out) {
+	   fade alone, without their zoom or slide. Their classes come with a
+	   state's variant, as `data-open:animate-in`. */
+	:is([class*='animate-in'], [class*='animate-out']) {
 		--tw-enter-scale: 1;
 		--tw-exit-scale: 1;
 		--tw-enter-translate-x: 0;
@@ -325,6 +531,9 @@ body {
 	text-decoration: underline;
 	text-decoration-color: color-mix(in oklab, var(--primary) 70%, transparent);
 	text-underline-offset: 3px;
+	transition:
+		text-decoration-color 150ms,
+		text-decoration-thickness 150ms;
 }
 a.md-link {
 	cursor: pointer;

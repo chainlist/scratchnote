@@ -166,7 +166,13 @@
 				/>
 			</div>
 		{:else}
-			<NoteList notes={data.notes} empty="" blinking={shell.blinking} {...shell.cardActions} />
+			<NoteList
+				notes={data.notes}
+				empty=""
+				blinking={shell.blinking}
+				unfold={!shell.slid}
+				{...shell.cardActions}
+			/>
 			<NewNote
 				bind:this={newNote}
 				{draftKey}
@@ -198,7 +204,7 @@
 				/>
 			</div>
 			{#if sliding.day.notes.length}
-				<NoteList notes={sliding.day.notes} empty="" {...shell.cardActions} />
+				<NoteList notes={sliding.day.notes} empty="" unfold={false} {...shell.cardActions} />
 			{:else}
 				<p class="py-16 text-center text-base text-meta">{m.page_empty_other_day()}</p>
 			{/if}

@@ -16,6 +16,8 @@ export interface Settings {
 	radius: number;
 	/** 'system' follows the OS setting. */
 	theme: 'dark' | 'light' | 'system';
+	/** Fades in place of movement, whatever the OS asks; off follows the OS. */
+	reduceMotion: boolean;
 	/** A locale such as 'fr', or 'system' to follow the OS language. */
 	language: Language;
 	/** The first-run walkthrough has been finished or skipped. */
@@ -45,6 +47,7 @@ export const editable = (s: Settings): Settings => ({
 	fontSize: s.fontSize,
 	radius: s.radius,
 	theme: s.theme,
+	reduceMotion: s.reduceMotion,
 	language: s.language,
 	onboarded: s.onboarded,
 	lastSeenVersion: s.lastSeenVersion,

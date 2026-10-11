@@ -22,8 +22,9 @@ body {
 	background: var(--color-neutral-950);
 }
 
-/* Thin, trackless scrollbars without arrow buttons. The standard scrollbar-width
-   and scrollbar-color are left unset: in Chromium they override these rules. */
+/* Thin, trackless scrollbars without arrow buttons, in the accent: faint at
+   rest, full under the pointer. The standard scrollbar-width and
+   scrollbar-color are left unset: in Chromium they override these rules. */
 ::-webkit-scrollbar {
 	width: 10px;
 	height: 10px;
@@ -35,10 +36,10 @@ body {
 ::-webkit-scrollbar-thumb {
 	border: 3px solid transparent;
 	border-radius: 9999px;
-	background: var(--color-neutral-700) padding-box;
+	background: color-mix(in oklch, var(--primary) 45%, transparent) padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-	background-color: var(--color-neutral-500);
+	background-color: var(--primary);
 }
 ::-webkit-scrollbar-button {
 	display: none;
@@ -53,9 +54,9 @@ body {
 	--os-padding-axis: 3px;
 	--os-handle-border-radius: 9999px;
 	--os-handle-interactive-area-offset: 3px;
-	--os-handle-bg: var(--color-neutral-700);
-	--os-handle-bg-hover: var(--color-neutral-500);
-	--os-handle-bg-active: var(--color-neutral-500);
+	--os-handle-bg: color-mix(in oklch, var(--primary) 45%, transparent);
+	--os-handle-bg-hover: var(--primary);
+	--os-handle-bg-active: var(--primary);
 }
 
 /* Surfaces point at the neutral scale, which applyAppearance tints with the

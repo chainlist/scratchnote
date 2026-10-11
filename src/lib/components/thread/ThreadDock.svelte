@@ -7,6 +7,7 @@
 	import RouteIcon from '@lucide/svelte/icons/route';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 	import { threadName } from '#lib/notes/threads.js';
 
 	/** A thread in the dock, where a page docks (SPEC 6.4). */
@@ -57,7 +58,7 @@
 			{/if}
 		</div>
 	{/snippet}
-	<div bind:this={scroller} class="min-h-0 flex-1 overflow-y-auto px-4 pb-16">
+	<div bind:this={scroller} class="min-h-0 flex-1 overflow-y-auto px-4 pb-16" {@attach scrollbars}>
 		<!-- Mounted again for another thread, which starts with nothing chosen. -->
 		{#if found !== undefined}
 			{#key found?.thread.id}<ThreadView {found} />{/key}

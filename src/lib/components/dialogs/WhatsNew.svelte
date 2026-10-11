@@ -10,6 +10,7 @@
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import { m } from '#lib/paraglide/messages.js';
 	import { longDay } from '#lib/helpers/dates.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 
 	let {
 		releases = $bindable()
@@ -70,7 +71,7 @@
 				</Tabs.List>
 			</aside>
 
-			<div class="min-w-0 flex-1 overflow-y-auto p-6">
+			<div class="min-w-0 flex-1 overflow-y-auto p-6" {@attach scrollbars}>
 				{#each titles as title (title)}
 					<Tabs.Content value={title} class="flex flex-col gap-6">
 						{#each releases ?? [] as release (release.version)}

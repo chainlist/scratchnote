@@ -5,6 +5,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { pluginName } from '#lib/plugins/loader.js';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 	import { duration, type StartupRow, type StartupTimes } from '#lib/app/startup.js';
 
 	/** This window's startup, step by step, as the console logs it. */
@@ -30,7 +31,7 @@
 </script>
 
 <Dialog.Root bind:open>
-	<Dialog.Content class="max-h-[calc(100%-2rem)] overflow-y-auto sm:max-w-lg">
+	<Dialog.Content class="max-h-[calc(100%-2rem)] overflow-y-auto sm:max-w-lg" {@attach scrollbars}>
 		<Dialog.Header>
 			<Dialog.Title>{m.settings_startup_title()}</Dialog.Title>
 			<Dialog.Description>{m.settings_startup_description()}</Dialog.Description>

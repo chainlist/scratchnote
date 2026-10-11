@@ -25,6 +25,7 @@
 	import ThreadsTab from './ThreadsTab.svelte';
 	import { SettingsState } from './state.svelte';
 	import { hint, section } from './styles';
+	import { scrollbars } from '#lib/helpers/scrollbars.js';
 
 	const settings = new SettingsState();
 	onMount(() => settings.start());
@@ -127,6 +128,7 @@
 >
 	<aside
 		class="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r bg-muted/40 p-3 @max-[46rem]:w-auto @max-[46rem]:p-2"
+		{@attach scrollbars}
 	>
 		<Dialog.Title class="px-2 pt-1 @max-[46rem]:sr-only">{m.common_settings()}</Dialog.Title>
 		<Tabs.List class="w-full gap-0.5 bg-transparent p-0">
@@ -145,7 +147,7 @@
 	</aside>
 
 	<div class="flex min-w-0 flex-1 flex-col">
-		<div class="flex-1 overflow-y-auto p-6">
+		<div class="flex-1 overflow-y-auto p-6" {@attach scrollbars}>
 			{#if settings.message}
 				<Alert.Root variant={settings.message.error ? 'destructive' : 'default'} class="mb-5">
 					{#if settings.message.error}<CircleAlertIcon />{:else}<CircleCheckIcon />{/if}

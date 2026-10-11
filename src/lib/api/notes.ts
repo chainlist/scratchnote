@@ -41,8 +41,13 @@ export const getDay = (date: string) => invoke<Note[]>('get_day', { date });
 
 export const listDays = () => invoke<DaySummary[]>('list_days');
 
-/** The notes and pages that look forward to a day, oldest first (SPEC 5.3). */
-export const notesAbout = (date: string) => invoke<Note[]>('notes_about', { date });
+/** The notes and pages that look forward to a day from `from` to `to`, both
+ *  included, by that day, then oldest first (SPEC 5.3). */
+export const notesAbout = (from: string, to: string) => invoke<Note[]>('notes_about', { from, to });
+
+/** The notes and pages written from `from` to `to`, both included, by day, then time. */
+export const notesBetween = (from: string, to: string) =>
+	invoke<Note[]>('notes_between', { from, to });
 
 /** Forget the day ahead read in a note or page; `date` is its own day. */
 export const clearDayAhead = (date: string, id: string) =>

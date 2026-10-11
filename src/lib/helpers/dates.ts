@@ -31,6 +31,9 @@ export const dayNumber = (date: string) => Math.round(Date.parse(`${date}T00:00:
 /** The day `dayNumber` counted, as the notes write it. */
 export const dayOfNumber = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
 
+/** The day `count` days after `date`, or before it when negative. */
+export const plusDays = (date: string, count: number) => dayOfNumber(dayNumber(date) + count);
+
 /** The formats made, by language and options: making one takes far longer
  *  than using it, and a long list formats a date on every row. */
 const formats = new Map<string, Intl.DateTimeFormat>();
@@ -113,6 +116,16 @@ export function monthHeading(month: string) {
 
 /** A day's weekday, short: `Tue`. */
 export const weekday = (date: string) => dateFormat({ weekday: 'short' }).format(localDay(date));
+
+/** A day of the week to come as an agenda heads it, then its number: tomorrow
+ *  by that name, `Tomorrow 8`, and the others by their weekday, `Thu 9`. */
+export function agendaDay(date: string, today: string) {
+	const name =
+		date === plusDays(today, 1)
+			? new Intl.RelativeTimeFormat(getLocale(), { numeric: 'auto' }).format(1, 'day')
+			: weekday(date);
+	return `${capitalised(name)} ${localDay(date).getDate()}`;
+}
 
 /** A day in full but for its weekday, as a release is dated. */
 export const longDay = (date: string) =>

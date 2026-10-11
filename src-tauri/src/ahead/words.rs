@@ -34,6 +34,7 @@ pub(super) const WEEKDAYS: &[(Weekday, &[&str])] = &[
         &[
             "thursday",
             "thurs",
+            "thu",
             "jeudi",
             "jueves",
             "donnerstag",

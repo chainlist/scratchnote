@@ -139,6 +139,98 @@ fn days_are_newest_first_with_counts() {
 }
 
 #[test]
+fn about_holds_the_days_in_range_by_day_then_oldest_first() {
+    let ahead = |id: &str, date: &str, time: &str, on: &str| Note {
+        on: Some(on.to_string()),
+        ..note(id, date, time, "plan")
+    };
+    let mut index = Index::default();
+    for (id, date, time, on) in [
+        ("01AAA", "2026-10-02", "09:00", "2026-10-09"),
+        ("01BBB", "2026-10-01", "09:00", "2026-10-09"),
+        ("01CCC", "2026-10-03", "09:00", "2026-10-06"),
+        ("01DDD", "2026-10-03", "10:00", "2026-10-12"),
+    ] {
+        index.push(IndexEntry::from(&ahead(id, date, time, on)));
+    }
+    index.push(IndexEntry::from(&note(
+        "01EEE",
+        "2026-10-03",
+        "11:00",
+        "no day",
+    )));
+    index.replace_page(IndexEntry::from(&Note {
+        on: Some("2026-10-05".to_string()),
+        ..page("01FFF", "2026-10-01", "Trip", "plan")
+    }));
+
+    let ids = |from: &str, to: &str| -> Vec<String> {
+        index
+            .about(from, to)
+            .into_iter()
+            .map(|e| e.id.clone())
+            .collect()
+    };
+    assert_eq!(
+        ids("2026-10-05", "2026-10-09"),
+        ["01FFF", "01CCC", "01BBB", "01AAA"]
+    );
+    assert_eq!(ids("2026-10-09", "2026-10-09"), ["01BBB", "01AAA"]);
+    assert!(ids("2026-10-10", "2026-10-11").is_empty());
+}
+
+/// A note copied by hand into the next day keeps its id, and "in a week"
+/// reads a day later there: the range holds both days, the list one note.
+#[test]
+fn about_lists_an_id_held_twice_once() {
+    let ahead = |date: &str, on: &str| Note {
+        on: Some(on.to_string()),
+        ..note("01AAA", date, "09:00", "Call the plumber in a week")
+    };
+    let mut index = Index::default();
+    index.push(IndexEntry::from(&ahead("2026-10-09", "2026-10-16")));
+    index.push(IndexEntry::from(&ahead("2026-10-10", "2026-10-17")));
+
+    let about = index.about("2026-10-12", "2026-10-18");
+    assert_eq!(about.len(), 1);
+    assert_eq!(about[0].date, "2026-10-09");
+}
+
+#[test]
+fn written_holds_the_days_in_range_by_day_then_time() {
+    let mut index = Index::default();
+    for (id, date, time) in [
+        ("01AAA", "2026-09-30", "09:00"),
+        ("01BBB", "2026-10-01", "14:00"),
+        ("01CCC", "2026-10-01", "08:00"),
+        ("01DDD", "2026-10-31", "23:00"),
+        ("01EEE", "2026-11-01", "07:00"),
+    ] {
+        index.push(IndexEntry::from(&note(id, date, time, "text")));
+    }
+    index.replace_page(IndexEntry::from(&page(
+        "01FFF",
+        "2026-10-01",
+        "Trip",
+        "plan",
+    )));
+    index.replace_page(IndexEntry::from(&page(
+        "01GGG",
+        "2026-11-02",
+        "Later",
+        "plan",
+    )));
+
+    let ids: Vec<&str> = index
+        .written("2026-10-01", "2026-10-31")
+        .into_iter()
+        .map(|e| e.id.as_str())
+        .collect();
+    assert_eq!(ids, ["01CCC", "01FFF", "01BBB", "01DDD"]);
+    assert!(index.written("2026-12-01", "2026-12-31").is_empty());
+}
+
+#[test]
 fn words_leave_out_pages_and_markdown_marks() {
     let mut index = Index::default();
     index.push(IndexEntry::from(&note(

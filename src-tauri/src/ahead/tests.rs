@@ -170,6 +170,8 @@ fn reads_the_day_ahead_in_every_language() {
         ("Consegna tra due settimane", WRITTEN, Some("2026-10-07")),
         ("Entrega daqui a 3 dias", WRITTEN, Some("2026-09-26")),
         ("Concert lundi 12 octobre", WRITTEN, Some("2026-10-12")),
+        ("Dentist thu 3pm", WRITTEN, Some("2026-09-24")),
+        ("Demo Thu 15 Oct", WRITTEN, Some("2026-10-15")),
         ("Por la mañana fui al banco", WRITTEN, None),
         ("Heute Morgen war es kalt", WRITTEN, None),
     ];

@@ -15,6 +15,7 @@
 	let {
 		key,
 		fill = false,
+		wide = false,
 		children,
 		...header
 	}: ViewTitle & {
@@ -24,6 +25,9 @@
 		/** The whole main area under the title rather than the reading
 		 *  column, with a set height, as a plugin's page may ask. */
 		fill?: boolean;
+		/** A wider column than the reading one, for a view laid out side by
+		 *  side rather than read down, as the calendar is. */
+		wide?: boolean;
 		children: Snippet;
 	} = $props();
 
@@ -44,7 +48,11 @@
 <svelte:head><title>{windowTitle}</title></svelte:head>
 
 <!-- A view's column: its title, what the app has to say, and the view. -->
-<div class={fill ? 'flex h-full w-full flex-col' : 'mx-auto w-full max-w-3xl'}>
+<div
+	class={fill
+		? 'flex h-full w-full flex-col'
+		: ['mx-auto w-full', wide ? 'max-w-6xl' : 'max-w-3xl']}
+>
 	<ViewHeader {...header} />
 
 	<!-- What failed in plain words, another try where one makes sense, and

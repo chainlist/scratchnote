@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import CalendarChevronsRightIcon from '@lucide/svelte/icons/calendar-chevrons-right';
+	import CalendarClockIcon from '@lucide/svelte/icons/calendar-clock';
 	import { saveNote } from '#lib/api.js';
 	import NewNote from './NewNote.svelte';
+	import AheadNotes from '#lib/components/note/AheadNotes.svelte';
 	import NoteList from '#lib/components/note/NoteList.svelte';
 	import View from '#lib/components/layout/View.svelte';
-	import { dayHeading } from '#lib/helpers/dates.js';
+	import { dayHeading, shortDay } from '#lib/helpers/dates.js';
 	import { prettyHotkey } from '#lib/helpers/hotkeys.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell } from '#lib/shell.svelte.js';
@@ -14,7 +17,6 @@
 	import type { Day } from './+page';
 	import DayName from './DayName.svelte';
 	import DayTitleRow from './DayTitleRow.svelte';
-	import EarlierNotes from './EarlierNotes.svelte';
 	import { slideDays, type Sliding } from './day-swipe.js';
 
 	let { data } = $props();
@@ -137,7 +139,28 @@
 			/>
 		{/snippet}
 
-		{#if data.about.length}<EarlierNotes notes={data.about} />{/if}
+		<!-- What earlier notes said about this day, then about the days with no
+		     notes before it, which waited for it (SPEC 5.3). -->
+		{#if data.about.length || data.skipped.length}
+			<div class="mb-8 flex flex-col gap-4">
+				{#if data.about.length}
+					<AheadNotes
+						notes={data.about}
+						heading={m.day_from_earlier()}
+						icon={CalendarClockIcon}
+						day={(note) => shortDay(note.date)}
+					/>
+				{/if}
+				{#if data.skipped.length}
+					<AheadNotes
+						notes={data.skipped}
+						heading={m.day_from_skipped()}
+						icon={CalendarChevronsRightIcon}
+						day={(note) => shortDay(note.on ?? note.date)}
+					/>
+				{/if}
+			</div>
+		{/if}
 
 		{#if data.notes.length === 0}
 			<div class="flex flex-col items-center gap-4 py-16 text-center">

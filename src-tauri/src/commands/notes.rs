@@ -9,7 +9,6 @@ use crate::notes::{self, move_target};
 use crate::state::{read_lock, AppState};
 use crate::storage::check_date;
 use crate::storage::daily_file::Note;
-use crate::storage::index::IndexEntry;
 use crate::Result;
 
 #[derive(Debug, Serialize)]
@@ -168,20 +167,36 @@ pub fn today() -> String {
     crate::storage::today()
 }
 
-/// The notes and pages of the open space that look forward to `date`, oldest
-/// first, for its day to show what was written ahead of it (SPEC 5.3).
+/// The notes and pages of the open space that look forward to a day from
+/// `from` to `to`, both included, by that day, then oldest first: for a day
+/// to show what was written ahead of it, of the days skipped before it, and
+/// of the week to come (SPEC 5.3).
 #[tauri::command]
-pub async fn notes_about(state: State<'_, AppState>, date: String) -> Result<Vec<Note>> {
-    check_date(&date)?;
+pub async fn notes_about(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> Result<Vec<Note>> {
+    check_date(&from)?;
+    check_date(&to)?;
     let space = state.space()?;
-    let found = space.read(|idx, db| {
-        let mut about: Vec<&IndexEntry> = idx
-            .entries()
-            .filter(|entry| entry.on.as_deref() == Some(date.as_str()))
-            .collect();
-        about.sort_by(|a, b| (&a.date, &a.time).cmp(&(&b.date, &b.time)));
-        crate::search::with_bodies(db, about)
-    })?;
+    let found = space.read(|idx, db| crate::search::with_bodies(db, idx.about(&from, &to)))?;
+    Ok(found.unwrap_or_default())
+}
+
+/// The notes and pages of the open space written from `from` to `to`, both
+/// included, by day, then time, with their text: the calendar names them in
+/// its days and shows a day under the pointer (SPEC 5.3).
+#[tauri::command]
+pub async fn notes_between(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> Result<Vec<Note>> {
+    check_date(&from)?;
+    check_date(&to)?;
+    let space = state.space()?;
+    let found = space.read(|idx, db| crate::search::with_bodies(db, idx.written(&from, &to)))?;
     Ok(found.unwrap_or_default())
 }
 

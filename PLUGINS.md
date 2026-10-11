@@ -473,6 +473,11 @@ and the app's CSS variables, which follow the theme and the accent colour:
 | `--border`, `--card`, `--muted-foreground`    | borders, card backgrounds, dim text                                                    |
 | `--font-mono`                                 | the monospace font                                                                     |
 
+While motion is reduced, by the app's Reduce motion setting or the system's,
+the root element has the class `less-motion`: scope a plugin's calmer styles
+under `.less-motion` rather than `@media (prefers-reduced-motion: reduce)`,
+which misses the setting.
+
 ## Publishing
 
 Community plugins come from GitHub, as Obsidian's do (SPEC 4.10):

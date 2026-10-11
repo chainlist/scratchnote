@@ -3,6 +3,7 @@
 	import * as Select from '#lib/components/ui/select/index.js';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import { RadioGroup } from 'bits-ui';
+	import { Switch } from '#lib/components/ui/switch/index.js';
 	import {
 		ACCENTS,
 		DEFAULT_APPEARANCE,
@@ -36,7 +37,8 @@
 			view.fontFamily === DEFAULT_APPEARANCE.fontFamily &&
 			view.fontSize === DEFAULT_APPEARANCE.fontSize &&
 			view.radius === DEFAULT_APPEARANCE.radius &&
-			view.theme === DEFAULT_APPEARANCE.theme
+			view.theme === DEFAULT_APPEARANCE.theme &&
+			view.reduceMotion === DEFAULT_APPEARANCE.reduceMotion
 	);
 </script>
 
@@ -130,6 +132,17 @@
 				options={RADII.map((radius) => ({ value: radius.rem, label: radius.label() }))}
 				value={view.radius}
 				onpick={(radius) => settings.apply({ radius })}
+			/>
+		</SettingRow>
+		<SettingRow
+			id="reduce-motion"
+			label={m.settings_reduce_motion()}
+			hint={m.settings_reduce_motion_hint()}
+		>
+			<Switch
+				id="reduce-motion"
+				checked={view.reduceMotion}
+				onCheckedChange={(reduceMotion) => settings.apply({ reduceMotion })}
 			/>
 		</SettingRow>
 	</div>

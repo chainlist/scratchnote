@@ -10,7 +10,10 @@ import type { Settings } from '#lib/api.js';
 import { m } from '#lib/paraglide/messages.js';
 import { writeJson } from '#lib/helpers/storage.js';
 
-type Appearance = Pick<Settings, 'accentColor' | 'fontFamily' | 'fontSize' | 'radius' | 'theme'>;
+type Appearance = Pick<
+	Settings,
+	'accentColor' | 'fontFamily' | 'fontSize' | 'radius' | 'theme' | 'reduceMotion'
+>;
 
 /** Android's system font size, which MainActivity.kt hands over in place of
  *  scaling the text alone; 1 everywhere else. */
@@ -138,21 +141,43 @@ export const DEFAULT_APPEARANCE: Appearance = {
 	fontFamily: 'inter',
 	fontSize: 16,
 	radius: 0.625,
-	theme: 'dark'
+	theme: 'dark',
+	reduceMotion: false
 };
 
 /**
- * Paints the settings onto the root element. Inline custom properties beat
- * the ones layout.css sets, and Tailwind sizes in rem, so the root font size
- * scales the whole window.
+ * Paints the settings onto the root element. Once the window shows one look,
+ * another crossfades in rather than snapping (layout.css has the timing);
+ * the first paint, and one in a hidden window, is at once.
  */
 export function applyAppearance(appearance: Appearance) {
 	last = appearance;
 	const { accentColor, fontFamily, fontSize, radius, theme } = appearance;
+	const dark = theme === 'dark' || (theme === 'system' && prefersDark.matches);
+	const look = JSON.stringify([dark, accentColor, fontFamily, fontSize, radius]);
+	const fades = painted !== null && look !== painted && document.visibilityState === 'visible';
+	painted = look;
+	if (fades && document.startViewTransition) document.startViewTransition(() => paint(appearance));
+	else paint(appearance);
+}
+
+/** The look last painted, to tell a change from the same settings again. */
+let painted: string | null = null;
+
+/**
+ * Inline custom properties beat the ones layout.css sets, and Tailwind sizes
+ * in rem, so the root font size scales the whole window.
+ */
+function paint({ accentColor, fontFamily, fontSize, radius, theme, reduceMotion }: Appearance) {
 	const root = document.documentElement;
 	const style = root.style;
 	const dark = theme === 'dark' || (theme === 'system' && prefersDark.matches);
 	root.classList.toggle('dark', dark);
+	// Less motion, asked here or by the system: what moves fades instead.
+	// layout.css and the `motion-reduce:` variant read this class, and so
+	// does `moveLess` in #lib/helpers/motion.ts.
+	const less = reduceMotion || prefersLess.matches;
+	root.classList.toggle('less-motion', less);
 	// An unknown name, say from a hand-edited settings.json, falls back to neutral.
 	const accent = ACCENTS.find((a) => a.name === accentColor && a.name !== 'neutral');
 	const colours = accent?.[dark ? 'dark' : 'light'];
@@ -186,12 +211,16 @@ export function applyAppearance(appearance: Appearance) {
 	style.fontSize = `${remPixels(fontSize)}px`;
 	style.setProperty('--radius', `${radius}rem`);
 	// app.html restores this at the next launch, before the settings arrive.
-	writeJson('appearance', { dark, style: style.cssText });
+	writeJson('appearance', { dark, less, style: style.cssText });
 }
 
 const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+const prefersLess = window.matchMedia('(prefers-reduced-motion: reduce)');
 let last: Appearance | null = null;
-// The system theme can change while the app is open.
+// The system theme can change while the app is open, and so can its motion.
 prefersDark.addEventListener('change', () => {
 	if (last?.theme === 'system') applyAppearance(last);
+});
+prefersLess.addEventListener('change', () => {
+	if (last) applyAppearance(last);
 });

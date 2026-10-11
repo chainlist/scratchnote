@@ -348,6 +348,8 @@
 	"settings_radius_small": "Petit",
 	"settings_radius_default": "Par défaut",
 	"settings_radius_large": "Grand",
+	"settings_reduce_motion": "Réduire les animations",
+	"settings_reduce_motion_hint": "Les éléments apparaissent en fondu au lieu de bouger. Toujours actif quand votre système demande moins d'animations.",
 	"settings_reset": "Réinitialiser",
 	"settings_update_failed": "Impossible de vérifier : {reason}",
 	"settings_checking": "Vérification",

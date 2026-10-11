@@ -348,6 +348,8 @@
 	"settings_radius_small": "Pequeno",
 	"settings_radius_default": "Padrão",
 	"settings_radius_large": "Grande",
+	"settings_reduce_motion": "Reduzir movimento",
+	"settings_reduce_motion_hint": "Os elementos aparecem em esmaecimento em vez de se mover. Sempre ativo quando o sistema pede menos movimento.",
 	"settings_reset": "Restaurar padrões",
 	"settings_update_failed": "Não foi possível verificar: {reason}",
 	"settings_checking": "Verificando",

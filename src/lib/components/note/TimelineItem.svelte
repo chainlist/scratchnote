@@ -3,6 +3,7 @@
 	import type { ClassValue, HTMLAttributes } from 'svelte/elements';
 	import { clockMinutes, clockTime, gapRoom, type DayPart } from '#lib/helpers/dates.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { pop } from '#lib/helpers/motion.js';
 
 	/**
 	 * One item of a timeline, as the day draws its notes: the time hanging in
@@ -93,19 +94,19 @@
 	     container the time heads the body and there is no gutter for it. -->
 	<span
 		aria-hidden="true"
-		class="absolute top-0 left-[5.25rem] w-px -translate-x-1/2 bg-neutral-800 @max-[24rem]:hidden [li:first-child_&]:hidden"
+		class="tl-rail-above absolute top-0 left-[5.25rem] w-px -translate-x-1/2 bg-neutral-800 @max-[24rem]:hidden [li:first-child_&]:hidden"
 		style:height="{markTop}rem"
 	></span>
 	<span
 		aria-hidden="true"
-		class="absolute bottom-0 left-[5.25rem] w-px -translate-x-1/2 bg-neutral-800 @max-[24rem]:hidden [li:last-child_&]:hidden"
+		class="tl-rail-below absolute bottom-0 left-[5.25rem] w-px -translate-x-1/2 bg-neutral-800 @max-[24rem]:hidden [li:last-child_&]:hidden"
 		style:top="{markTop}rem"
 	></span>
 	{#if part}
 		<div
 			role="heading"
 			aria-level={partLevel}
-			class="-mx-3 grid grid-cols-[4.5rem_1fr] gap-x-6 px-3 pt-3 @max-[24rem]:grid-cols-1"
+			class="tl-part -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-6 px-3 pt-3 @max-[24rem]:grid-cols-1"
 		>
 			<span
 				class="text-right text-xs leading-5 font-medium whitespace-nowrap text-neutral-400 @max-[24rem]:text-left"
@@ -117,21 +118,21 @@
 	<article
 		{...rest}
 		class={[
-			'group relative isolate -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-6 rounded-lg px-3 py-3 outline-none @max-[24rem]:grid-cols-1 @max-[24rem]:gap-y-1',
+			'tl-item group relative isolate -mx-3 grid grid-cols-[4.5rem_1fr] gap-x-6 rounded-lg px-3 py-3 outline-none @max-[24rem]:grid-cols-1 @max-[24rem]:gap-y-1',
 			className
 		]}
 	>
 		{#if aside}
-			<div class="absolute top-3.5 right-[calc(100%+0.25rem)] flex">{@render aside()}</div>
+			<div class="absolute top-3.5 right-[calc(100%+0.25rem)] flex" in:pop>{@render aside()}</div>
 		{/if}
 		<!-- The item's mark on the rail: a dot, or its icon in a box. -->
 		{#if icon}
 			<span
 				aria-hidden="true"
 				class={[
-					'absolute top-[1.625rem] left-24 flex size-4.5 -translate-1/2 items-center justify-center rounded border border-neutral-700 bg-neutral-950 text-meta transition-colors @max-[24rem]:hidden',
+					'tl-mark absolute top-[1.625rem] left-24 flex size-4.5 -translate-1/2 items-center justify-center rounded border border-neutral-700 bg-neutral-950 text-meta transition-[color,border-color,scale] duration-200 ease-settle @max-[24rem]:hidden',
 					hover &&
-						'group-focus-within:border-primary group-focus-within:text-primary group-hover:border-primary group-hover:text-primary'
+						'group-focus-within:scale-110 group-focus-within:border-primary group-focus-within:text-primary group-hover:scale-110 group-hover:border-primary group-hover:text-primary'
 				]}
 			>
 				{@render icon()}
@@ -140,9 +141,9 @@
 			<span
 				aria-hidden="true"
 				class={[
-					'absolute top-[1.625rem] left-24 size-2 -translate-1/2 rounded-full border border-neutral-700 bg-neutral-950 transition-colors @max-[24rem]:hidden',
+					'tl-mark absolute top-[1.625rem] left-24 size-2 -translate-1/2 rounded-full border border-neutral-700 bg-neutral-950 transition-[background-color,border-color,scale] duration-200 ease-settle @max-[24rem]:hidden',
 					hover &&
-						'group-focus-within:border-primary group-focus-within:bg-primary group-hover:border-primary group-hover:bg-primary'
+						'group-focus-within:scale-150 group-focus-within:border-primary group-focus-within:bg-primary group-hover:scale-150 group-hover:border-primary group-hover:bg-primary'
 				]}
 			></span>
 		{/if}

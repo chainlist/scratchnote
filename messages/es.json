@@ -348,6 +348,8 @@
 	"settings_radius_small": "Pequeño",
 	"settings_radius_default": "Predeterminado",
 	"settings_radius_large": "Grande",
+	"settings_reduce_motion": "Reducir el movimiento",
+	"settings_reduce_motion_hint": "Los elementos aparecen con un fundido en lugar de moverse. Siempre activo cuando tu sistema pide menos movimiento.",
 	"settings_reset": "Restablecer valores predeterminados",
 	"settings_update_failed": "No se pudo comprobar: {reason}",
 	"settings_checking": "Comprobando",

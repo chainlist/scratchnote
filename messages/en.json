@@ -348,6 +348,8 @@
 	"settings_radius_small": "Small",
 	"settings_radius_default": "Default",
 	"settings_radius_large": "Large",
+	"settings_reduce_motion": "Reduce motion",
+	"settings_reduce_motion_hint": "Things fade in place rather than move. Always on when your system asks for less motion.",
 	"settings_reset": "Reset to defaults",
 	"settings_update_failed": "Could not check: {reason}",
 	"settings_checking": "Checking",

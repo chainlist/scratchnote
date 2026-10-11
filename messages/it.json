@@ -348,6 +348,8 @@
 	"settings_radius_small": "Piccolo",
 	"settings_radius_default": "Predefinito",
 	"settings_radius_large": "Grande",
+	"settings_reduce_motion": "Riduci il movimento",
+	"settings_reduce_motion_hint": "Gli elementi appaiono in dissolvenza invece di muoversi. Sempre attivo quando il sistema chiede meno movimento.",
 	"settings_reset": "Ripristina i valori predefiniti",
 	"settings_update_failed": "Impossibile verificare: {reason}",
 	"settings_checking": "Verifica",

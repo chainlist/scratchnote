@@ -7,6 +7,7 @@
 	import NoteEditor from '#lib/components/note/NoteEditor.svelte';
 	import { noteDrafts } from '#lib/notes/note-draft.js';
 	import { m } from '#lib/paraglide/messages.js';
+	import { rise } from '#lib/helpers/motion.js';
 
 	let {
 		draftKey,
@@ -104,16 +105,18 @@
 			: 'col-start-2 max-w-[70ch] min-w-0'}
 	>
 		{#if writing}
-			<NoteEditor
-				bind:this={editor}
-				bind:value={draft}
-				placeholder={m.capture_placeholder()}
-				{saving}
-				{failure}
-				onsave={() => void save()}
-				onclose={() => void close()}
-				{onerror}
-			/>
+			<div in:rise>
+				<NoteEditor
+					bind:this={editor}
+					bind:value={draft}
+					placeholder={m.capture_placeholder()}
+					{saving}
+					{failure}
+					onsave={() => void save()}
+					onclose={() => void close()}
+					{onerror}
+				/>
+			</div>
 		{:else}
 			<!-- Wraps on a phone, where the draft's button would otherwise
 			     shrink under its own label. -->
@@ -130,14 +133,16 @@
 					onclick={start}
 					aria-keyshortcuts="N"
 					title="{excerpt ? m.note_draft_continue() : m.page_add_note()} (N)"
-					class="-mx-1.5 flex min-w-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
+					class="group/add -mx-1.5 flex min-w-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-meta transition-colors hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
 				>
 					{#if excerpt}
 						<PencilLineIcon class="size-3.5 shrink-0" />
 						<span class="shrink-0">{m.note_draft_continue()}</span>
 						<span class="min-w-0 truncate italic">{excerpt}</span>
 					{:else}
-						<PlusIcon class="size-3.5" />{m.page_add_note()}
+						<PlusIcon
+							class="size-3.5 transition-[rotate] duration-200 ease-settle group-hover/add:rotate-90 group-focus-visible/add:rotate-90"
+						/>{m.page_add_note()}
 					{/if}
 				</button>
 				{#if excerpt}
@@ -146,7 +151,7 @@
 						onclick={discard}
 						aria-label={m.note_draft_discard_title()}
 						title={m.note_draft_discard_title()}
-						class="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
+						class="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-sm text-meta transition-colors hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
 					>
 						<XIcon class="size-3.5" />{m.note_draft_discard()}
 					</button>
@@ -154,7 +159,7 @@
 				<button
 					type="button"
 					onclick={onpage}
-					class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-meta hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
+					class="flex shrink-0 cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-sm text-meta transition-colors hover:bg-neutral-900 hover:text-neutral-300 focus-visible:bg-neutral-900 focus-visible:text-neutral-300"
 				>
 					<FileTextIcon class="size-3.5" />{m.pages_new()}
 				</button>

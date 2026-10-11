@@ -242,6 +242,9 @@ impl Space {
         if let Ok(mut map) = self.map.lock() {
             *map = None;
         }
+        if let Ok(mut labels) = self.labels.lock() {
+            *labels = HashMap::new();
+        }
         if let Ok(mut db) = self.db.lock() {
             *db = None;
         }

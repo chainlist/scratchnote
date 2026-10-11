@@ -389,7 +389,8 @@ export class JournalView extends ItemView {
 		const current = this.#spread;
 		const target = await this.#prepare(this.#days[index], sheet, notes);
 		if (!target) return;
-		if (current && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		// The app marks the root while motion is reduced, by its setting or the system's.
+		if (current && !document.documentElement.classList.contains('less-motion')) {
 			const closed = () => this.#closed;
 			if (!(await animateTurn(this.#pages, current.el, target.el, forward, closed))) return;
 		}

@@ -9,6 +9,8 @@
 	import XIcon from '@lucide/svelte/icons/x';
 	import { m } from '#lib/paraglide/messages.js';
 	import { getShell, type ViewTitle } from '#lib/shell.svelte.js';
+	import { rise } from '#lib/helpers/motion.js';
+	import { fade } from 'svelte/transition';
 
 	let {
 		key,
@@ -46,45 +48,48 @@
 	<ViewHeader {...header} />
 
 	<!-- What failed in plain words, another try where one makes sense, and
-	     the error as it came under Details. Read out as it appears. -->
+	     the error as it came under Details. Read out as it appears; it
+	     drops into place, and goes quicker. -->
 	{#if shell.error}
 		{@const retry = shell.errorRetry}
-		<Alert.Root variant="destructive" class="mb-6">
-			<CircleAlertIcon />
-			<Alert.Description class="flex flex-col items-start gap-2">
-				<span>{shell.error}</span>
-				{#if retry || shell.errorDetail}
-					<div class="flex flex-wrap items-center gap-3">
-						{#if retry}
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={() => {
-									shell.error = null;
-									void retry();
-								}}
-							>
-								<RotateCwIcon />{m.error_retry()}
-							</Button>
-						{/if}
-						{#if shell.errorDetail}
-							<ErrorDetails class="text-xs text-meta" detail={shell.errorDetail} />
-						{/if}
-					</div>
-				{/if}
-			</Alert.Description>
-			<Alert.Action>
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					onclick={() => (shell.error = null)}
-					aria-label={m.error_dismiss()}
-					title={m.error_dismiss()}
-				>
-					<XIcon />
-				</Button>
-			</Alert.Action>
-		</Alert.Root>
+		<div in:rise={{ y: -6, duration: 220 }} out:fade={{ duration: 120 }}>
+			<Alert.Root variant="destructive" class="mb-6">
+				<CircleAlertIcon />
+				<Alert.Description class="flex flex-col items-start gap-2">
+					<span>{shell.error}</span>
+					{#if retry || shell.errorDetail}
+						<div class="flex flex-wrap items-center gap-3">
+							{#if retry}
+								<Button
+									variant="outline"
+									size="sm"
+									onclick={() => {
+										shell.error = null;
+										void retry();
+									}}
+								>
+									<RotateCwIcon />{m.error_retry()}
+								</Button>
+							{/if}
+							{#if shell.errorDetail}
+								<ErrorDetails class="text-xs text-meta" detail={shell.errorDetail} />
+							{/if}
+						</div>
+					{/if}
+				</Alert.Description>
+				<Alert.Action>
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						onclick={() => (shell.error = null)}
+						aria-label={m.error_dismiss()}
+						title={m.error_dismiss()}
+					>
+						<XIcon />
+					</Button>
+				</Alert.Action>
+			</Alert.Root>
+		</div>
 	{/if}
 
 	{#key key}

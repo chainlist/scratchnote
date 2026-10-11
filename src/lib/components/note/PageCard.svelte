@@ -104,6 +104,7 @@
 					<span
 						class="flex shrink-0 items-center gap-2 text-xs text-meta opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100"
 					>
+						<!-- Not on a small screen, where a docked page leaves the view no room. -->
 						<button
 							type="button"
 							onclick={(event) => {
@@ -112,7 +113,7 @@
 							}}
 							aria-label={m.pages_open_side()}
 							title={m.pages_open_side()}
-							class="-my-1 flex size-6 cursor-pointer items-center justify-center rounded text-neutral-400 focus-ring outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200"
+							class="-my-1 flex size-6 cursor-pointer items-center justify-center rounded text-neutral-400 focus-ring outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:bg-neutral-800 focus-visible:text-neutral-200 max-sm:hidden"
 						>
 							<PanelRightOpenIcon class="size-3.5" />
 						</button>

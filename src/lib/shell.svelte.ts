@@ -24,6 +24,7 @@ import { afterNavigation, onGuard } from '#lib/app/back.svelte.js';
 import { addToPageDraft } from '#lib/shell/page-draft.js';
 import { m } from '#lib/paraglide/messages.js';
 import { errorText } from '#lib/helpers/errors.js';
+import { moveLess } from '#lib/helpers/motion.js';
 import { pluginPageHref, samePin } from '#lib/shell/pins.js';
 import { threadHref } from '#lib/notes/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
@@ -394,7 +395,7 @@ export class Shell implements WorkspaceHost {
 		this.blinking = id;
 		await tick();
 		const note = within.querySelector<HTMLElement>(`[data-note-id="${CSS.escape(id)}"]`);
-		const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+		const still = moveLess();
 		note?.scrollIntoView({ block: 'center', behavior: still ? 'instant' : 'smooth' });
 		if (note && focus) {
 			// Reachable by script only, so Tab still skips the note itself.

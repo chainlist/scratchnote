@@ -376,7 +376,6 @@ export class Shell implements WorkspaceHost {
 	/** Every note a query matches, from the command center's "See all". */
 	showResults = async (q: string) => {
 		const trimmed = q.trim();
-		this.query = trimmed;
 		if (!trimmed) return this.openDay(this.day);
 		// resolve() takes no query string, so the query follows the path it gives.
 		await goto(`${resolve('search/')}?q=${encodeURIComponent(trimmed)}`);

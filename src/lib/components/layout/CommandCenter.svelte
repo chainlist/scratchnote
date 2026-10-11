@@ -230,9 +230,11 @@
 		void tick().then(() => input?.setSelectionRange(query.length, query.length));
 	});
 
+	/** Picking an item is done with the query; only dismissing keeps it. */
 	function run(action: () => void) {
 		open = false;
 		action();
+		query = '';
 	}
 
 	/** The first line of a body, which is what a result shows. */

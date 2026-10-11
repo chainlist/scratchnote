@@ -172,7 +172,7 @@ A tinted neutral scale carries almost everything; the user's accent appears only
 ### Named Rules
 **The Meta Tone Rule.** All quiet text uses `--color-meta`, tuned to about 5.7:1 on the page in both themes; shadcn's `--muted-foreground` points at it, so `text-muted-foreground` and `text-meta` are one tone. Never reach for neutral-500 (4.2:1) or lower for readable text; neutral-600 measured 2.5:1.
 
-**The Earned Accent Rule.** The accent marks what can be clicked or what has the pointer or focus. It never colours the user's own emphasis, headings, or decoration. Two exceptions: it shades counts in heatmaps (the calendar's days, the Stats plugin's weeks, the startup timings), and it marks the onboarding steps, where the app introduces itself.
+**The Earned Accent Rule.** The accent marks what can be clicked or what has the pointer or focus. It never colours the user's own emphasis, headings, or decoration. Two exceptions: it shades counts in heatmaps (the Stats plugin's weeks, the startup timings) and dots the calendar's days by how many notes they hold, and it marks the onboarding steps, where the app introduces itself.
 
 **The Mirrored Scale Rule.** Use the neutral steps (`neutral-950` page to `neutral-100` text), never light/dark variants: the scale flips with the theme, so one class holds in both. One step is not a straight mirror: in light mode `neutral-900` sits at 0.955 rather than 0.97, so a hover or selection fill shows on the 0.985 page.
 
@@ -257,7 +257,7 @@ A thread's span in time: a hairline axis with one round dot per day that holds n
 ### Motion
 Reduced motion is on when the user turns on Reduce motion in Appearance or the system asks for it: `applyAppearance` then puts `less-motion` on the root, and every fallback below, the `motion-reduce:` variant and `moveLess()` follow that class.
 - **Page in** (350ms, `cubic-bezier(0.22, 1, 0.36, 1)`): a view rises 8px out of a 3px blur. Reduced motion: a 200ms fade.
-- **Note pulse** (1.2s): two soft accent pulses on a note opened from a link. Reduced motion: one slow fade.
+- **Note pulse** (1.2s): two soft accent pulses on a note opened from a link. In a list that is opening, that note pulses rather than rises, as the rest open around it: the rise used to hold the pulse back until the list had opened, so only its last moment showed. Reduced motion: one slow fade.
 - **Calendar wave** (500ms, 30ms per row plus column): days rise into place. Reduced motion: a 300ms fade.
 - **Search glow** (2.4s loop): text being searched by meaning breathes from the meta tone to the accent and back. Reduced motion: still, in the meta tone.
 - **Overlays** (menus, popovers, tooltips, dialogs, 180ms in, 110ms out): shadcn's zoom and slide, on the settle curve whatever duration the component set. Reduced motion: the fade alone.

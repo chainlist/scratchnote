@@ -70,6 +70,7 @@ pub fn run() {
             commands::notes::update_note,
             commands::notes::move_note,
             commands::notes::notes_about,
+            commands::notes::notes_between,
             commands::notes::clear_day_ahead,
             commands::notes::rebuild_index,
             commands::notes::today,

@@ -372,6 +372,18 @@ body {
 	}
 }
 
+/* A note a link led to pulses rather than rises, so the eye finds it at
+   once while the rest of the list opens around it. Otherwise the rise
+   holds its pulse back until the list has opened, and its last moment is
+   all that shows. */
+[data-opening] > li:nth-child(-n + 16) .tl-item.note-blink {
+	animation: note-blink 1.2s ease-in-out;
+}
+
+.less-motion [data-opening] > li:nth-child(-n + 16) .tl-item.note-blink {
+	animation: note-fade 1.2s ease-out;
+}
+
 /* The one mark of a group that glides to whichever is chosen (`follow` in
    #lib/helpers/motion.ts): the ribbon's bar, a tab's underline or pill, a
    segmented picker's fill. Its look and any offset are the caller's

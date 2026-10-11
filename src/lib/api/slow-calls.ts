@@ -61,6 +61,7 @@ const LABELS = {
 	get_day: m.slow_loading,
 	list_days: m.slow_loading,
 	notes_about: m.slow_loading,
+	notes_between: m.slow_loading,
 	get_note: m.slow_loading,
 	get_notes: m.slow_loading,
 	list_pages: m.slow_loading,

@@ -179,6 +179,44 @@ impl Index {
             .map_or(0, |entries| entries.iter().map(|entry| entry.words).sum())
     }
 
+    /// The notes and pages that look forward to a day from `from` to `to`,
+    /// both included, by that day, then oldest first (SPEC 5.3). An id held
+    /// twice, as by a note copied by hand into another day, is listed once,
+    /// as the first `entries` holds.
+    pub fn about(&self, from: &str, to: &str) -> Vec<&IndexEntry> {
+        let mut listed = HashSet::new();
+        let mut about: Vec<&IndexEntry> = self
+            .entries()
+            .filter(|entry| {
+                entry
+                    .on
+                    .as_deref()
+                    .is_some_and(|on| (from..=to).contains(&on))
+            })
+            .filter(|entry| listed.insert(entry.id.as_str()))
+            .collect();
+        about.sort_by(|a, b| (&a.on, &a.date, &a.time).cmp(&(&b.on, &b.date, &b.time)));
+        about
+    }
+
+    /// The notes and pages written from `from` to `to`, both included, by
+    /// day, then time: what a month of the calendar shows in its days.
+    pub fn written(&self, from: &str, to: &str) -> Vec<&IndexEntry> {
+        let range = from.to_string()..=to.to_string();
+        let mut written: Vec<&IndexEntry> = self
+            .by_date
+            .range(range.clone())
+            .flat_map(|(_, entries)| entries)
+            .chain(
+                self.pages
+                    .values()
+                    .filter(|page| range.contains(&page.date)),
+            )
+            .collect();
+        written.sort_by(|a, b| (&a.date, &a.time).cmp(&(&b.date, &b.time)));
+        written
+    }
+
     pub fn len(&self) -> usize {
         self.by_date.values().map(Vec::len).sum::<usize>() + self.pages.len()
     }

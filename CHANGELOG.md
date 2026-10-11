@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0](https://github.com/chainlist/scratchnote/compare/v0.10.0...v0.11.0) (2026-10-11)
+
+
+### Features
+
+* color scrollbars in the accent, faint until hovered ([6602c51](https://github.com/chainlist/scratchnote/commit/6602c5138938187b5d210077ed4f5f9f39ea7b96))
+* find names in the command center by typing @ ([511c989](https://github.com/chainlist/scratchnote/commit/511c98967a06f256491247895f9dcc8da9636497))
+
+
+### Bug Fixes
+
+* clear the command center's query once an item is picked ([e0fa84c](https://github.com/chainlist/scratchnote/commit/e0fa84c93bdb3a308625f76f51d5b5ae324bd99e))
+
 ## [0.10.0](https://github.com/chainlist/scratchnote/compare/v0.9.1...v0.10.0) (2026-10-11)
 
 

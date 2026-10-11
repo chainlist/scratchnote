@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.10.0](https://github.com/chainlist/scratchnote/compare/v0.9.1...v0.10.0) (2026-10-11)
+
+
+### Features
+
+* animate pins, the dock, onboarding steps and ticked tasks ([e7faa7f](https://github.com/chainlist/scratchnote/commit/e7faa7f4504868f2b73ad6b4b3c1aa05d51d75f7))
+* draw scrollbars over the content, so they take no room ([d4b924d](https://github.com/chainlist/scratchnote/commit/d4b924df1b701e7fe80649c49608e0e661a67488))
+* give the app crisp motion, with a Reduce motion setting ([6603695](https://github.com/chainlist/scratchnote/commit/6603695d0f930f280aa0e352ab8063803531fef8))
+* show what lies ahead in the calendar, beside the month ([25df6db](https://github.com/chainlist/scratchnote/commit/25df6db0060de0344d7cd247794573cad7be262c))
+
+
+### Bug Fixes
+
+* keep the windows responsive while a space is rebuilt or mapped ([52f33d5](https://github.com/chainlist/scratchnote/commit/52f33d50b76ed464fffe80cf11a08695f955f7a5))
+* no "Still working" toast while typing, and steadier thread picker ([5ecb358](https://github.com/chainlist/scratchnote/commit/5ecb35846d2b81e89a90ac72eb097892f2b617a9))
+
+
+### Performance Improvements
+
+* write the index once per batch of edits made outside the app ([41c7bff](https://github.com/chainlist/scratchnote/commit/41c7bff0ce99fdac8c56b87c344c6f78e953eb74))
+
 ## [0.9.1](https://github.com/chainlist/scratchnote/compare/v0.9.0...v0.9.1) (2026-10-10)
 
 

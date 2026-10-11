@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { tick, type Component } from 'svelte';
+	import { tick, untrack, type Component } from 'svelte';
 	import type { EditorView } from '@codemirror/view';
-	import { search, searchMeaning, type Note } from '#lib/api.js';
+	import { listMentions, search, searchMeaning, type MentionSummary, type Note } from '#lib/api.js';
 	import InlineError from '#lib/components/common/InlineError.svelte';
+	import MentionLetter from '#lib/components/common/MentionLetter.svelte';
 	import PluginIcon from '#lib/components/common/PluginIcon.svelte';
 	import * as Command from '#lib/components/ui/command/index.js';
 	import ArrowRightLeftIcon from '@lucide/svelte/icons/arrow-right-left';
@@ -16,6 +17,8 @@
 	import SparklesIcon from '@lucide/svelte/icons/sparkles';
 	import SunIcon from '@lucide/svelte/icons/sun';
 	import { hasEvery, queryWords } from '#lib/helpers/matching.js';
+	import { shortDay } from '#lib/helpers/dates.js';
+	import { mentionHue } from '#lib/notes/mentions.js';
 	import { m } from '#lib/paraglide/messages.js';
 	import { formatHotkey } from '#lib/helpers/hotkeys.js';
 	import { runCommand } from '#lib/plugins/commands.js';
@@ -33,6 +36,7 @@
 		onnewpage,
 		onpages,
 		onmentions,
+		onmention,
 		onthreads,
 		onspaces,
 		onsettings
@@ -57,6 +61,8 @@
 		onpages: () => void;
 		/** List every name the space mentions (SPEC 3.10). */
 		onmentions: () => void;
+		/** Show the notes that mention a name. */
+		onmention: (name: string) => void;
 		/** List the space's threads, while there are threads (SPEC 6.4). */
 		onthreads?: () => void;
 		/** Open the list of spaces, to switch to another. */
@@ -80,6 +86,39 @@
 	let error = $state<string | null>(null);
 
 	const trimmed = $derived(query.trim());
+	/** What follows a leading `@`, which finds names only; null without one. */
+	const mentionQuery = $derived(trimmed.startsWith('@') ? trimmed.slice(1) : null);
+	/** The text searched among the notes: none while finding names. */
+	const noteQuery = $derived(mentionQuery === null ? trimmed : '');
+	const findingNames = $derived(mentionQuery !== null);
+
+	/** The space's names, read once an opening starts finding names, the
+	 *  last mentioned first, the most mentioned first among equals; null until
+	 *  they come. */
+	let mentions = $state<MentionSummary[] | null>(null);
+	$effect(() => {
+		if (!open) {
+			mentions = null;
+			return;
+		}
+		if (!findingNames || untrack(() => mentions)) return;
+		let stale = false;
+		// As in a note's autocompletion, no names is all a failure shows.
+		void listMentions()
+			.catch(() => [])
+			.then((found) => {
+				if (!stale)
+					mentions = found.toSorted((a, b) => b.last.localeCompare(a.last) || b.notes - a.notes);
+			});
+		return () => (stale = true);
+	});
+
+	/** The names holding every word typed after `@`, in the same order. */
+	const foundMentions = $derived.by(() => {
+		if (mentionQuery === null || !mentions) return [];
+		const words = queryWords(mentionQuery);
+		return mentions.filter((mention) => hasEvery(mention.name, words)).slice(0, RESULT_LIMIT);
+	});
 
 	/** A command of the app's own, or a plugin's (SPEC 3.9). */
 	type Action = {
@@ -128,7 +167,7 @@
 
 	/** While typing, the commands whose name has every word typed. */
 	const matchingActions = $derived.by(() => {
-		const words = queryWords(trimmed);
+		const words = queryWords(noteQuery);
 		if (words.length === 0) return [];
 		return [...builtIn, ...pluginActions].filter((action) => hasEvery(action.name, words));
 	});
@@ -137,7 +176,7 @@
 	// keystroke cannot overwrite a newer one.
 	let searchRun = 0;
 	$effect(() => {
-		const q = trimmed;
+		const q = noteQuery;
 		const run = ++searchRun;
 		if (q === '') {
 			results = [];
@@ -163,7 +202,7 @@
 	// Same guard as above, against a slow answer to an earlier pause.
 	let meaningRun = 0;
 	$effect(() => {
-		const q = trimmed;
+		const q = noteQuery;
 		const run = ++meaningRun;
 		related = [];
 		// Kept in a local: read back here, the state would make the answer
@@ -239,7 +278,30 @@
 >
 	<Command.Input bind:value={query} bind:ref={input} placeholder={m.search_placeholder()} />
 	<Command.List class="max-h-[min(28rem,60vh)]">
-		{#if trimmed === ''}
+		{#if mentionQuery !== null}
+			{#if foundMentions.length > 0}
+				<Command.Group heading={m.mentions_title()}>
+					{#each foundMentions as mention (mention.key)}
+						<Command.Item
+							value="m:{mention.key}"
+							onSelect={() => run(() => onmention(mention.name))}
+						>
+							<MentionLetter
+								name={mention.name}
+								hue={mentionHue(mention.key)}
+								class="size-6 rounded-md text-xs"
+							/>
+							<span class="min-w-0 flex-1 truncate">@{mention.name}</span>
+							<span class="shrink-0 text-xs text-muted-foreground">
+								{m.thread_last({ count: mention.notes, date: shortDay(mention.last) })}
+							</span>
+						</Command.Item>
+					{/each}
+				</Command.Group>
+			{:else if mentions}
+				<Command.Empty>{m.mentions_no_match()}</Command.Empty>
+			{/if}
+		{:else if trimmed === ''}
 			<Command.Group heading={m.command_group_commands()}>
 				{#each builtIn as action (action.value)}
 					{@render actionItem(action)}
@@ -310,7 +372,13 @@
 	<!-- What the searches found, read out once both have answered, as the
 	     list itself is not. -->
 	<p class="sr-only" aria-live="polite">
-		{#if trimmed && !meaningPending && !error}
+		{#if mentionQuery !== null}
+			{#if mentions}
+				{foundMentions.length
+					? m.page_results({ count: foundMentions.length })
+					: m.mentions_no_match()}
+			{/if}
+		{:else if trimmed && !meaningPending && !error}
 			{total + related.length
 				? m.page_results({ count: total + related.length })
 				: m.page_no_match()}

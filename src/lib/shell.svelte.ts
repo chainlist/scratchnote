@@ -26,6 +26,7 @@ import { m } from '#lib/paraglide/messages.js';
 import { errorText } from '#lib/helpers/errors.js';
 import { moveLess } from '#lib/helpers/motion.js';
 import { pluginPageHref, samePin } from '#lib/shell/pins.js';
+import { mentionHref } from '#lib/notes/mentions.js';
 import { threadHref } from '#lib/notes/threads.js';
 import { notesChanged, type WorkspaceHost } from '#lib/plugins/app.js';
 import { ThreadsState } from '#lib/shell/threads.svelte.js';
@@ -311,6 +312,9 @@ export class Shell implements WorkspaceHost {
 	showCalendar = () => goto(resolve('calendar/'));
 
 	showMentions = () => goto(resolve('mentions/'));
+
+	/** The notes that mention a name (SPEC 3.10). */
+	showMention = (name: string) => goto(mentionHref(name));
 
 	/** A plugin's page, `/plugin/<type>/`, with its query string. */
 	openPluginPage = (type: string, params: Record<string, string> = {}) => {

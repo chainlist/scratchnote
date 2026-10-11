@@ -247,6 +247,7 @@
 	onnewpage={shell.newPage}
 	onpages={() => void shell.showPages()}
 	onmentions={() => void shell.showMentions()}
+	onmention={(name) => void shell.showMention(name)}
 	onthreads={shell.canSimilar ? () => void shell.showThreads() : undefined}
 	onspaces={() => (shell.spacesOpen = true)}
 	onsettings={() => (shell.settingsOpen = true)}
